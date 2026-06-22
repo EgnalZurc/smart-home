@@ -1,0 +1,74 @@
+## Docker Compose para DESARROLLO en Windows
+## Requiere: python serial_bridge.py corriendo en paralelo (expone COM3 como TCP:8282)
+## En la Raspberry Pi se usará docker-compose.yml (sin bridge, USB directo)
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./infrastructure/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    restart: unless-stopped
+
+  zigbee2mqtt:
+    image: koenkk/zigbee2mqtt
+    container_name: zigbee2mqtt
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./infrastructure/zigbee2mqtt:/app/data
+    depends_on:
+      - mosquitto
+    environment:
+      - TZ=Europe/Madrid
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    container_name: backend
+    ports:
+      - "8080:8080"
+    volumes:
+      - backend_data:/app/data
+      # Montar código fuente en modo desarrollo para hot-reload
+      - ./src/backend:/app
+    environment:
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
+      - SENSOR_NAMES=Despacho,Habitación Cen,Habitación Esq,Habitación Papis,Salón
+      - MELCLOUD_URL=https://app.melcloud.com/Mitsubishi.Wifi.Client
+      - MELCLOUD_EMAIL=${MELCLOUD_EMAIL}
+      - MELCLOUD_PASSWORD=${MELCLOUD_PASSWORD}
+      - MELCLOUD_DEVICE_ID=${MELCLOUD_DEVICE_ID}
+      - MELCLOUD_BUILDING_ID=${MELCLOUD_BUILDING_ID}
+      - TARGET_TEMPERATURE=23.0
+      - HYSTERESIS_ON=0.5
+      - HYSTERESIS_OFF=0.3
+      - LOOP_INTERVAL=45
+      - SENSOR_TIMEOUT=3600
+      - ESIOS_API_KEY=${ESIOS_API_KEY}
+    depends_on:
+      - mosquitto
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+volumes:
+  backend_data:

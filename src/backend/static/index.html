@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Home</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- Cache busting: forzar recarga después de fix de gráfica -->
+    <!-- VERSION: 2026-06-22-09:30:00 - POPUP SIMPLIFICADO + TIMESTAMP SENSORES -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'] },
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .card {
+            background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9));
+            border: 1px solid rgba(51,65,85,0.5);
+            backdrop-filter: blur(10px);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .card:active { transform: scale(0.98); }
+        .card-static { 
+            background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9));
+            border: 1px solid rgba(51,65,85,0.5);
+        }
+        .btn-control {
+            transition: transform 0.1s ease, background-color 0.2s ease;
+            -webkit-touch-callout: none;
+            user-select: none;
+        }
+        .btn-control:active { transform: scale(0.9); }
+        .status-dot { animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .modal-bg { backdrop-filter: blur(8px); }
+        .modal-sheet {
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .modal-visible .modal-sheet { transform: translateY(0); }
+        .fade-in { animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
+<div id="app" class="max-w-md mx-auto px-4 pt-6 pb-10 fade-in">
+
+    <!-- Header -->
+    <header class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-lg font-semibold tracking-tight">🏠 Smart Home</h1>
+        </div>
+        <div class="flex items-center gap-1.5">
+            <span class="status-dot w-1.5 h-1.5 rounded-full bg-green-500" id="status-dot"></span>
+            <span class="text-[11px] text-slate-400" id="status-line">--</span>
+        </div>
+    </header>
+
+    <!-- Temperatura media (clickeable → popup sensores) -->
+    <div class="card rounded-3xl p-6 mb-4 text-center cursor-pointer" onclick="openModal()" role="button" aria-label="Ver detalle de sensores">
+        <p class="text-slate-400 text-[11px] uppercase tracking-widest mb-2">Temperatura media</p>
+        <p class="text-[3.5rem] font-extrabold leading-none tracking-tight" id="avg-temp">--°C</p>
+        <div class="flex justify-center items-center gap-5 mt-3">
+            <span class="text-slate-400 text-xs flex items-center gap-1">💧 <span id="avg-hum">--%</span></span>
+            <span class="text-slate-400 text-xs flex items-center gap-1">📡 <span id="sensors-count">0/5</span></span>
+        </div>
+        <div class="mt-3 text-[11px] text-slate-500" id="outdoor-line">🌍 Exterior: --</div>
+    </div>
+
+    <!-- Estado AC (desde MELCloud) -->
+    <div class="card-static rounded-2xl p-4 mb-3">
+        <div class="flex justify-between items-center mb-3">
+            <p class="text-slate-400 text-[11px] uppercase tracking-wider">Estado AC</p>
+            <span class="text-sm font-bold tracking-wide" id="ac-real-power">--</span>
+        </div>
+        <div class="grid grid-cols-4 gap-2">
+            <div class="bg-slate-900/60 rounded-xl py-2.5 px-2 text-center">
+                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Modo</p>
+                <p class="text-sm font-semibold" id="ac-real-mode">--</p>
+            </div>
+            <div class="bg-slate-900/60 rounded-xl py-2.5 px-2 text-center">
+                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Fuerza</p>
+                <p class="text-sm font-semibold" id="ac-real-fan">--</p>
+            </div>
+            <div class="bg-slate-900/60 rounded-xl py-2.5 px-2 text-center">
+                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Consigna</p>
+                <p class="text-sm font-semibold" id="ac-real-setpoint">--</p>
+            </div>
+            <div class="bg-slate-900/60 rounded-xl py-2.5 px-2 text-center">
+                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Termóst.</p>
+                <p class="text-sm font-semibold" id="ac-real-roomtemp">--</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Control y decisión del controlador -->
+    <div class="card-static rounded-2xl p-4 mb-3">
+        <div class="flex justify-between items-center mb-3">
+            <p class="text-slate-400 text-[11px] uppercase tracking-wider">Controlador</p>
+            <span class="text-xs font-bold px-2 py-0.5 rounded-full" id="controller-decision">--</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="changeTarget(-0.5)" class="btn-control bg-blue-600/80 hover:bg-blue-500 rounded-full w-12 h-12 text-xl font-bold shadow-lg shadow-blue-900/30" aria-label="Bajar temperatura">−</button>
+            <div class="flex-1 text-center">
+                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Objetivo</p>
+                <span class="text-4xl font-extrabold tracking-tight" id="target-display">--°C</span>
+            </div>
+            <button onclick="changeTarget(0.5)" class="btn-control bg-red-600/80 hover:bg-red-500 rounded-full w-12 h-12 text-xl font-bold shadow-lg shadow-red-900/30" aria-label="Subir temperatura">+</button>
+        </div>
+    </div>
+
+    <!-- Override manual -->
+    <div class="card-static rounded-2xl p-4 mb-3">
+        <p class="text-slate-400 text-[11px] uppercase tracking-wider mb-3">Control manual</p>
+        <div class="grid grid-cols-3 gap-2">
+            <button onclick="setOverride(null)" id="btn-auto" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent">Auto</button>
+            <button onclick="openForceOnModal()" id="btn-on" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent">Forzar ON</button>
+            <button onclick="openForceOffModal()" id="btn-off" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent">Forzar OFF</button>
+        </div>
+    </div>
+
+    <!-- Widget Energía (clickeable → popup estadísticas) -->
+    <div class="card rounded-2xl p-4 cursor-pointer" onclick="openEnergyPopup()" role="button" aria-label="Ver estadísticas de consumo">
+        <div class="flex justify-between items-center mb-2">
+            <p class="text-slate-400 text-[11px] uppercase tracking-wider">Energía (24h)</p>
+            <span class="text-xs text-green-400">⚡</span>
+        </div>
+        <div class="flex items-baseline gap-2">
+            <span class="text-3xl font-bold" id="energy-kwh">--</span>
+            <span class="text-sm text-slate-400">kWh</span>
+        </div>
+        <div class="text-xs text-slate-400 mt-1">
+            €<span id="energy-cost">--</span>
+        </div>
+    </div>
+
+</div>
+
+<!-- Modal: Forzar ON -->
+<div id="modal-force-on" class="fixed inset-0 bg-black/60 modal-bg z-50 hidden flex items-end justify-center" onclick="if(event.target===this)closeForceOn()">
+    <div class="modal-sheet bg-[#1e293b] rounded-t-3xl w-full max-w-md p-5 pb-8 border-t border-slate-700/50">
+        <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-5"></div>
+        <h2 class="text-base font-bold mb-4">⚡ Forzar encendido</h2>
+
+        <div class="space-y-4">
+            <!-- Modo -->
+            <div>
+                <label class="text-[11px] text-slate-400 uppercase tracking-wider block mb-1.5">Modo</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="selectMode('cool')" id="mode-cool" class="py-2.5 rounded-xl bg-blue-600/80 border border-blue-500/50 text-sm font-semibold">❄️ Frío</button>
+                    <button onclick="selectMode('heat')" id="mode-heat" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold">🔥 Calor</button>
+                    <button onclick="selectMode('fan')" id="mode-fan" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold">💨 Vent.</button>
+                </div>
+            </div>
+
+            <!-- Fuerza -->
+            <div>
+                <label class="text-[11px] text-slate-400 uppercase tracking-wider block mb-1.5">Fuerza</label>
+                <div class="grid grid-cols-4 gap-2">
+                    <button onclick="selectFan(0)" id="fan-0" class="py-2.5 rounded-xl bg-blue-600/80 border border-blue-500/50 text-sm font-semibold">Auto</button>
+                    <button onclick="selectFan(1)" id="fan-1" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold">Bajo</button>
+                    <button onclick="selectFan(2)" id="fan-2" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold">Medio</button>
+                    <button onclick="selectFan(3)" id="fan-3" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold">Alto</button>
+                </div>
+            </div>
+
+            <!-- Temperatura -->
+            <div>
+                <label class="text-[11px] text-slate-400 uppercase tracking-wider block mb-1.5">Temperatura</label>
+                <div class="flex items-center gap-3">
+                    <button onclick="changeForceTemp(-0.5)" class="btn-control bg-blue-600/80 rounded-full w-11 h-11 text-lg font-bold">−</button>
+                    <span class="flex-1 text-center text-2xl font-bold" id="force-temp-display">23.0°C</span>
+                    <button onclick="changeForceTemp(0.5)" class="btn-control bg-red-600/80 rounded-full w-11 h-11 text-lg font-bold">+</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mt-6">
+            <button onclick="closeForceOn()" class="py-3.5 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors">Cancelar</button>
+            <button onclick="confirmForceOn()" class="py-3.5 bg-green-600 hover:bg-green-500 rounded-2xl text-sm font-semibold transition-colors">Encender</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Confirmar Forzar OFF -->
+<div id="modal-force-off" class="fixed inset-0 bg-black/60 modal-bg z-50 hidden flex items-center justify-center" onclick="if(event.target===this)closeForceOff()">
+    <div class="bg-[#1e293b] rounded-3xl w-[85%] max-w-sm p-6 border border-slate-700/50 text-center">
+        <p class="text-3xl mb-3">⏹</p>
+        <h2 class="text-base font-bold mb-2">¿Apagar el AC?</h2>
+        <p class="text-sm text-slate-400 mb-5">El AC se apagará y el controlador automático quedará desactivado hasta que pulses Auto.</p>
+        <div class="grid grid-cols-2 gap-3">
+            <button onclick="closeForceOff()" class="py-3 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors">Cancelar</button>
+            <button onclick="confirmForceOff()" class="py-3 bg-red-600 hover:bg-red-500 rounded-2xl text-sm font-semibold transition-colors">Apagar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Detalle sensores + gráfica -->
+<div id="modal" class="fixed inset-0 bg-black/60 modal-bg z-50 hidden flex items-end justify-center" onclick="if(event.target===this)closeModal()">
+    <div class="modal-sheet bg-[#1e293b] rounded-t-3xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5 pb-8 border-t border-slate-700/50">
+        <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-5"></div>
+        <h2 class="text-base font-bold mb-4">🌡️ Sensores</h2>
+        <div class="bg-slate-900/50 rounded-2xl p-3 mb-3 border border-slate-700/30">
+            <p class="text-[10px] text-slate-400 uppercase tracking-wider mb-1 px-1">Temperatura</p>
+            <canvas id="chart" height="140"></canvas>
+        </div>
+        <div class="bg-slate-900/50 rounded-2xl p-3 mb-4 border border-slate-700/30">
+            <p class="text-[10px] text-slate-400 uppercase tracking-wider mb-1 px-1">Humedad</p>
+            <canvas id="chart-hum" height="140"></canvas>
+        </div>
+        <div id="sensors-detail" class="space-y-2"></div>
+        <button onclick="closeModal()" class="mt-5 w-full py-3.5 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors">Cerrar</button>
+    </div>
+</div>
+
+<!-- Modal: Estadísticas de Energía -->
+<div id="energy-popup" class="fixed inset-0 bg-black/60 modal-bg z-50 hidden flex items-end justify-center" onclick="if(event.target===this)closeEnergyPopup()">
+    <div class="modal-sheet bg-[#1e293b] rounded-t-3xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5 pb-8 border-t border-slate-700/50">
+        <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-5"></div>
+        <h2 class="text-base font-bold mb-4">⚡ Consumo Energético</h2>
+        
+        <!-- Resumen -->
+        <div class="bg-gradient-to-br from-blue-600/20 to-purple-600/20 rounded-2xl p-4 mb-4 border border-blue-500/30">
+            <div class="grid grid-cols-2 gap-3 text-center">
+                <div>
+                    <p class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Últimas 24h</p>
+                    <p class="text-2xl font-bold"><span id="summary-24h-kwh">--</span> kWh</p>
+                    <p class="text-sm text-green-400">€<span id="summary-24h-cost">--</span></p>
+                </div>
+                <div>
+                    <p class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Promedio/día</p>
+                    <p class="text-2xl font-bold"><span id="summary-avg-kwh">--</span> kWh</p>
+                    <p class="text-sm text-green-400">€<span id="summary-avg-cost">--</span></p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Gráfica horaria -->
+        <div class="bg-slate-900/50 rounded-2xl p-3 mb-3 border border-slate-700/30">
+            <p class="text-[10px] text-slate-400 uppercase tracking-wider mb-2 px-1">Consumo por Horas</p>
+            <canvas id="energy-hourly-chart" height="180"></canvas>
+        </div>
+        
+        <!-- Gráfica mensual -->
+        <div class="bg-slate-900/50 rounded-2xl p-3 mb-4 border border-slate-700/30">
+            <p class="text-[10px] text-slate-400 uppercase tracking-wider mb-2 px-1">Consumo por Mes</p>
+            <canvas id="energy-monthly-chart" height="180"></canvas>
+        </div>
+        
+        <button onclick="closeEnergyPopup()" class="mt-3 w-full py-3.5 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors">Cerrar</button>
+    </div>
+</div>
+
+<script>
+const COLORS = ['#60a5fa','#4ade80','#f87171','#fbbf24','#a78bfa'];
+let chart = null;
+let chartHum = null;
+let energyHourlyChart = null;
+let energyMonthlyChart = null;
+let currentTarget = 23.0;
+
+// --- Colores por rango (F0.10) ---
+function tempColor(t) {
+    if (t === null) return '#64748b';
+    if (t < 18) return '#1e40af';
+    if (t < 20) return '#3b82f6';
+    if (t <= 26) return '#22c55e';
+    if (t <= 28) return '#f97316';
+    return '#ef4444';
+}
+
+function humColor(h) {
+    if (h === null) return '#64748b';
+    if (h < 30) return '#1e40af';
+    if (h < 40) return '#3b82f6';
+    if (h <= 60) return '#22c55e';
+    if (h <= 70) return '#f97316';
+    return '#ef4444';
+}
+
+// Chart init
+(function(){
+    const ctx = document.getElementById('chart').getContext('2d');
+    chart = new Chart(ctx, {
+        type:'line', data:{datasets:[]},
+        options:{
+            responsive:true, animation:false,
+            interaction:{mode:'nearest',intersect:false},
+            scales:{
+                y:{grid:{color:'rgba(148,163,184,0.08)'},ticks:{color:'#64748b',font:{size:10}}},
+                x:{grid:{display:false},ticks:{color:'#475569',font:{size:8},maxTicksLimit:6}}
+            },
+            plugins:{legend:{labels:{color:'#94a3b8',font:{size:10},boxWidth:8,padding:12}}}
+        }
+    });
+    const ctx2 = document.getElementById('chart-hum').getContext('2d');
+    chartHum = new Chart(ctx2, {
+        type:'line', data:{datasets:[]},
+        options:{
+            responsive:true, animation:false,
+            interaction:{mode:'nearest',intersect:false},
+            scales:{
+                y:{grid:{color:'rgba(148,163,184,0.08)'},ticks:{color:'#64748b',font:{size:10},callback:v=>v+'%'}},
+                x:{grid:{display:false},ticks:{color:'#475569',font:{size:8},maxTicksLimit:6}}
+            },
+            plugins:{legend:{labels:{color:'#94a3b8',font:{size:10},boxWidth:8,padding:12}}}
+        }
+    });
+})();
+
+// Sensor history: keyed by sensor name, arrays of {timestamp, temp, hum}
+// Using timestamp (float) as unique key — never duplicate a point with same timestamp per sensor
+let sensorsData = {};  // { sensorName: [{timestamp, temp, hum}, ...] }
+let lastFetchTimestamp = 0;  // Track the most recent timestamp we have
+
+// Load full snapshot on first page load
+async function loadSensorHistory() {
+    try {
+        const resp = await fetch('/api/sensors/history');
+        const data = await resp.json();
+        for (const [name, readings] of Object.entries(data)) {
+            sensorsData[name] = readings.map(r => ({
+                timestamp: r.timestamp,
+                temp: r.temperature,
+                hum: r.humidity,
+            }));
+        }
+        // Find the most recent timestamp across all sensors
+        for (const readings of Object.values(sensorsData)) {
+            for (const r of readings) {
+                if (r.timestamp > lastFetchTimestamp) lastFetchTimestamp = r.timestamp;
+            }
+        }
+    } catch(e) {}
+}
+
+// Incremental update: fetch only data since last known timestamp
+async function updateSensorHistory() {
+    try {
+        const resp = await fetch(`/api/sensors/history?start=${lastFetchTimestamp + 0.001}`);
+        const data = await resp.json();
+        for (const [name, readings] of Object.entries(data)) {
+            if (!sensorsData[name]) sensorsData[name] = [];
+            for (const r of readings) {
+                // Only add if this exact timestamp doesn't exist for this sensor
+                const exists = sensorsData[name].some(existing => existing.timestamp === r.timestamp);
+                if (!exists) {
+                    sensorsData[name].push({timestamp: r.timestamp, temp: r.temperature, hum: r.humidity});
+                    if (r.timestamp > lastFetchTimestamp) lastFetchTimestamp = r.timestamp;
+                }
+            }
+            // Keep max 200
+            if (sensorsData[name].length > 200) {
+                sensorsData[name] = sensorsData[name].slice(-200);
+            }
+        }
+    } catch(e) {}
+}
+
+// Build chart-ready arrays from sensorsData
+function buildChartData(field) {
+    // field = 'temp' or 'hum'
+    const result = {};
+    for (const [name, readings] of Object.entries(sensorsData)) {
+        result[name] = readings.map(r => ({
+            time: new Date(r.timestamp * 1000).toLocaleDateString('es-ES', {day:'2-digit', month:'2-digit'}) + ' ' + new Date(r.timestamp * 1000).toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'}),
+            value: r[field],
+        }));
+    }
+    return result;
+}
+
+async function poll() {
+    try {
+        const sr = await fetch('/api/status');
+        const st = await sr.json();
+
+        // Temperatura media con color
+        const avgTempEl = document.getElementById('avg-temp');
+        if (st.average_temperature !== null) {
+            avgTempEl.textContent = st.average_temperature.toFixed(1)+'°C';
+            avgTempEl.style.color = tempColor(st.average_temperature);
+        } else {
+            avgTempEl.textContent = '--°C';
+            avgTempEl.style.color = '#64748b';
+        }
+
+        // Humedad media
+        const avgHumEl = document.getElementById('avg-hum');
+        if (st.average_humidity !== null) {
+            avgHumEl.textContent = st.average_humidity.toFixed(0)+'%';
+            avgHumEl.style.color = humColor(st.average_humidity);
+        } else {
+            avgHumEl.textContent = '--%';
+        }
+
+        // AC state (real desde MELCloud)
+        try {
+            const acResp = await fetch('/api/ac_real');
+            const ac = await acResp.json();
+            const powerEl = document.getElementById('ac-real-power');
+            const modeEl = document.getElementById('ac-real-mode');
+            const fanEl = document.getElementById('ac-real-fan');
+            const setEl = document.getElementById('ac-real-setpoint');
+
+            if (ac.power === null) {
+                powerEl.textContent = '--';
+                powerEl.style.color = '#64748b';
+                modeEl.textContent = '--';
+                modeEl.style.color = '#64748b';
+                fanEl.textContent = '--';
+                fanEl.style.color = '#64748b';
+                setEl.textContent = '--';
+                setEl.style.color = '#64748b';
+                document.getElementById('ac-real-roomtemp').textContent = '--';
+                document.getElementById('ac-real-roomtemp').style.color = '#64748b';
+            } else if (!ac.power) {
+                powerEl.textContent = 'OFF';
+                powerEl.style.color = '#ef4444';
+                modeEl.textContent = '--';
+                modeEl.style.color = '#64748b';
+                fanEl.textContent = '--';
+                fanEl.style.color = '#64748b';
+                setEl.textContent = '--';
+                setEl.style.color = '#64748b';
+                document.getElementById('ac-real-roomtemp').textContent = '--';
+                document.getElementById('ac-real-roomtemp').style.color = '#64748b';
+            } else {
+                powerEl.textContent = 'ON';
+                powerEl.style.color = '#4ade80';
+                const modeColors = {'COLD':'#60a5fa','HOT':'#f97316','DRY':'#fbbf24','FAN':'#a78bfa','AUTO':'#4ade80'};
+                modeEl.textContent = ac.mode || '--';
+                modeEl.style.color = modeColors[ac.mode] || '#94a3b8';
+                fanEl.textContent = ac.fan_speed !== null ? ac.fan_speed : '—';
+                const fanColors = {'Bajo':'#4ade80','Medio':'#fbbf24','Alto':'#f87171','Auto':'#60a5fa'};
+                fanEl.style.color = fanColors[ac.fan_speed] || '#64748b';
+                setEl.textContent = ac.set_temp !== null ? ac.set_temp.toFixed(1)+'°C' : '—';
+                setEl.style.color = '#e2e8f0';
+                const rtEl = document.getElementById('ac-real-roomtemp');
+                rtEl.textContent = ac.room_temp !== null ? ac.room_temp.toFixed(1)+'°C' : '—';
+                rtEl.style.color = ac.room_temp !== null ? tempColor(ac.room_temp) : '#64748b';
+            }
+        } catch(e) {}
+
+        // Target y decisión del controlador
+        currentTarget = st.target_temperature;
+        document.getElementById('target-display').textContent = currentTarget.toFixed(1)+'°C';
+
+        const decisionEl = document.getElementById('controller-decision');
+        const action = st.ac_state.action;
+        const decisionLabels = {'cooling_max':'COOLING MAX','modulating':'MODULANDO','off':'OFF','cooldown':'COOLDOWN','forced_on':'FORZADO ON','forced_off':'FORZADO OFF','error':'ERROR'};
+        const decisionColors = {'cooling_max':'#60a5fa','modulating':'#fbbf24','off':'#64748b','cooldown':'#a78bfa','forced_on':'#4ade80','forced_off':'#ef4444','error':'#ef4444'};
+        const decisionBg = {'cooling_max':'rgba(96,165,250,0.15)','modulating':'rgba(251,191,36,0.15)','off':'rgba(100,116,139,0.15)','cooldown':'rgba(167,139,250,0.15)','forced_on':'rgba(74,222,128,0.15)','forced_off':'rgba(239,68,68,0.15)','error':'rgba(239,68,68,0.25)'};
+        decisionEl.textContent = decisionLabels[action] || action;
+        decisionEl.style.color = decisionColors[action] || '#94a3b8';
+        decisionEl.style.backgroundColor = decisionBg[action] || 'transparent';
+
+        // Override buttons
+        const ov = st.ac_state.override;
+        const btnAuto = document.getElementById('btn-auto');
+        const btnOn = document.getElementById('btn-on');
+        const btnOff = document.getElementById('btn-off');
+        btnAuto.className = `btn-control py-3 rounded-xl text-sm font-semibold border ${ov===null?'bg-blue-600/80 border-blue-500/50 text-white':'bg-slate-700/60 border-transparent text-slate-300'}`;
+        btnOn.className = `btn-control py-3 rounded-xl text-sm font-semibold border ${ov==='on'?'bg-red-600/80 border-red-500/50 text-white':'bg-slate-700/60 border-transparent text-slate-300'}`;
+        btnOff.className = `btn-control py-3 rounded-xl text-sm font-semibold border ${ov==='off'?'bg-slate-600 border-slate-500/50 text-white':'bg-slate-700/60 border-transparent text-slate-300'}`;
+
+        // Status line
+        const connected = st.mqtt_connected;
+        const dotEl = document.getElementById('status-dot');
+        const lineEl = document.getElementById('status-line');
+        lineEl.textContent = connected ? 'Conectado' : 'Desconectado';
+        dotEl.className = connected ? 'status-dot w-1.5 h-1.5 rounded-full bg-green-500' : 'w-1.5 h-1.5 rounded-full bg-red-400';
+
+        // Sensors
+        const sensResp = await fetch('/api/sensors');
+        const sensData = await sensResp.json();
+        const sensors = sensData.sensors || [];
+        const now = new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+        // Outdoor
+        try {
+            const outResp = await fetch('/api/outdoor');
+            const out = await outResp.json();
+            if (out.temperature !== null) {
+                document.getElementById('outdoor-line').innerHTML = `🌍 Exterior: <span style="color:${tempColor(out.temperature)}">${out.temperature.toFixed(1)}°C</span> · <span style="color:${humColor(out.humidity)}">${out.humidity}%</span>`;
+            }
+        } catch(e) {}
+
+        let activeCount = 0;
+        sensors.forEach(s => { if (s.temperature !== null) activeCount++; });
+
+        // Incremental history update
+        await updateSensorHistory();
+
+        document.getElementById('sensors-count').textContent = `${activeCount}/${sensors.length}`;
+        updateChart(sensors);
+        updateHumChart(sensors);
+        updateDetail(sensors);
+
+    } catch(e) {
+        document.getElementById('status-line').textContent = 'Error';
+        document.getElementById('status-dot').className = 'w-1.5 h-1.5 rounded-full bg-red-400';
+    }
+}
+
+function updateChart(sensors) {
+    const chartData = buildChartData('temp');
+    // Recopilar todos los timestamps únicos y ordenados
+    const allTimes = new Set();
+    sensors.forEach(s => {
+        const h = chartData[s.name] || [];
+        h.forEach(p => allTimes.add(p.time));
+    });
+    const sortedTimes = [...allTimes].sort();
+    if (!sortedTimes.length) return;
+
+    chart.data.labels = sortedTimes;
+
+    // SOLO dataset de media (sin líneas individuales de sensores)
+    if (chart.data.datasets.length !== 1) {
+        chart.data.datasets = [
+            {
+                label: 'Media', data: [], borderColor: '#ffffff',
+                borderWidth: 2, tension: 0.4, pointRadius: 0, pointHoverRadius: 4, fill: false, spanGaps: true
+            }
+        ];
+    }
+
+    // Calcular datos individuales temporalmente para calcular la media
+    const tempDatasets = sensors.map((s, i) => {
+        const h = chartData[s.name] || [];
+        const timeMap = {};
+        h.forEach(p => { timeMap[p.time] = p.value; });
+        return sortedTimes.map(t => timeMap[t] !== undefined ? timeMap[t] : null);
+    });
+
+    // Media: calcular usando el ÚLTIMO valor conocido de cada sensor hasta ese timestamp
+    chart.data.datasets[0].data = sortedTimes.map((t, ti) => {
+        const values = [];
+        sensors.forEach((s, i) => {
+            // Buscar el último valor conocido hasta este timestamp (inclusive)
+            let lastValue = null;
+            for (let j = 0; j <= ti; j++) {
+                const v = tempDatasets[i][j];
+                if (v !== null && v !== undefined) {
+                    lastValue = v;
+                }
+            }
+            if (lastValue !== null) values.push(lastValue);
+        });
+        return values.length > 0 ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : null;
+    });
+
+    chart.update();
+}
+
+function updateHumChart(sensors) {
+    const chartData = buildChartData('hum');
+    const allTimes = new Set();
+    sensors.forEach(s => {
+        const h = chartData[s.name] || [];
+        h.forEach(p => allTimes.add(p.time));
+    });
+    const sortedTimes = [...allTimes].sort();
+    if (!sortedTimes.length) return;
+
+    chartHum.data.labels = sortedTimes;
+
+    // SOLO dataset de media (sin líneas individuales de sensores)
+    if (chartHum.data.datasets.length !== 1) {
+        chartHum.data.datasets = [
+            {
+                label: 'Media', data: [], borderColor: '#ffffff',
+                borderWidth: 2, tension: 0.4, pointRadius: 0, pointHoverRadius: 4, fill: false, spanGaps: true
+            }
+        ];
+    }
+
+    // Calcular datos individuales temporalmente para calcular la media
+    const tempDatasets = sensors.map((s, i) => {
+        const h = chartData[s.name] || [];
+        const timeMap = {};
+        h.forEach(p => { timeMap[p.time] = p.value; });
+        return sortedTimes.map(t => timeMap[t] !== undefined ? timeMap[t] : null);
+    });
+
+    // Media humedad: calcular usando el ÚLTIMO valor conocido de cada sensor hasta ese timestamp
+    chartHum.data.datasets[0].data = sortedTimes.map((t, ti) => {
+        const values = [];
+        sensors.forEach((s, i) => {
+            // Buscar el último valor conocido hasta este timestamp (inclusive)
+            let lastValue = null;
+            for (let j = 0; j <= ti; j++) {
+                const v = tempDatasets[i][j];
+                if (v !== null && v !== undefined) {
+                    lastValue = v;
+                }
+            }
+            if (lastValue !== null) values.push(lastValue);
+        });
+        return values.length > 0 ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : null;
+    });
+
+    chartHum.update();
+}
+
+function updateDetail(sensors) {
+    const el = document.getElementById('sensors-detail');
+    el.innerHTML = sensors.map((s,i) => {
+        const dot = s.online
+            ? `<span class="w-2.5 h-2.5 rounded-full inline-block shadow-sm" style="background:${COLORS[i%COLORS.length]}"></span>`
+            : '<span class="w-2.5 h-2.5 rounded-full inline-block bg-slate-600"></span>';
+        const temp = s.temperature!==null ? s.temperature.toFixed(1)+'°C' : '--';
+        const hum = s.humidity!==null ? s.humidity.toFixed(0)+'%' : '--';
+        const bat = s.battery!==null ? s.battery+'%' : '--';
+        const tColor = tempColor(s.temperature);
+        const hColor = humColor(s.humidity);
+        const batColor = s.battery !== null && s.battery < 20 ? '#ef4444' : '#64748b';
+        
+        // Calcular fecha y hora de última medición
+        let lastSeenText = '--';
+        if (s.timestamp !== null && s.timestamp !== undefined) {
+            const lastSeenDate = new Date(s.timestamp * 1000);
+            const day = lastSeenDate.getDate().toString().padStart(2, '0');
+            const month = (lastSeenDate.getMonth() + 1).toString().padStart(2, '0');
+            const time = lastSeenDate.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'});
+            lastSeenText = `${day}/${month} ${time}`;
+        }
+        
+        return `<div class="bg-slate-900/40 rounded-xl px-3 py-2.5 border border-slate-700/30">
+            <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center gap-2.5">${dot}<span class="text-sm font-medium">${s.name}</span></div>
+                <div class="text-right text-xs flex items-center gap-2">
+                    <span class="font-semibold" style="color:${tColor}">${temp}</span>
+                    <span style="color:${hColor}">${hum}</span>
+                    <span style="color:${batColor}">🔋${bat}</span>
+                </div>
+            </div>
+            <div class="text-[10px] text-slate-500 text-right">Última: ${lastSeenText}</div>
+        </div>`;
+    }).join('');
+}
+
+async function changeTarget(delta) {
+    currentTarget = Math.max(19, Math.min(30, currentTarget + delta));
+    document.getElementById('target-display').textContent = currentTarget.toFixed(1)+'°C';
+    await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target_temperature:currentTarget})});
+}
+
+async function setOverride(mode) {
+    await fetch('/api/override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode})});
+    poll();
+}
+
+function openModal() {
+    const modal = document.getElementById('modal');
+    modal.classList.remove('hidden');
+    requestAnimationFrame(() => modal.classList.add('modal-visible'));
+}
+function closeModal() {
+    const modal = document.getElementById('modal');
+    modal.classList.remove('modal-visible');
+    setTimeout(() => modal.classList.add('hidden'), 300);
+}
+
+// --- Force ON modal ---
+let forceMode = 'cool';
+let forceFan = 0;
+let forceTemp = 23.0;
+
+function openForceOnModal() {
+    forceMode = 'cool'; forceFan = 0; forceTemp = currentTarget;
+    updateModeButtons(); updateFanButtons();
+    document.getElementById('force-temp-display').textContent = forceTemp.toFixed(1)+'°C';
+    const modal = document.getElementById('modal-force-on');
+    modal.classList.remove('hidden');
+    requestAnimationFrame(() => modal.classList.add('modal-visible'));
+}
+function closeForceOn() {
+    const modal = document.getElementById('modal-force-on');
+    modal.classList.remove('modal-visible');
+    setTimeout(() => modal.classList.add('hidden'), 300);
+}
+function selectMode(m) { forceMode = m; updateModeButtons(); }
+function selectFan(f) { forceFan = f; updateFanButtons(); }
+function changeForceTemp(delta) {
+    forceTemp = Math.max(19, Math.min(30, forceTemp + delta));
+    document.getElementById('force-temp-display').textContent = forceTemp.toFixed(1)+'°C';
+}
+function updateModeButtons() {
+    ['cool','heat','fan'].forEach(m => {
+        const el = document.getElementById('mode-'+m);
+        if (m === forceMode) {
+            el.className = 'py-2.5 rounded-xl bg-blue-600/80 border border-blue-500/50 text-sm font-semibold';
+        } else {
+            el.className = 'py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold';
+        }
+    });
+}
+function updateFanButtons() {
+    [0,1,2,3].forEach(f => {
+        const el = document.getElementById('fan-'+f);
+        if (f === forceFan) {
+            el.className = 'py-2.5 rounded-xl bg-blue-600/80 border border-blue-500/50 text-sm font-semibold';
+        } else {
+            el.className = 'py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold';
+        }
+    });
+}
+async function confirmForceOn() {
+    closeForceOn();
+    await fetch('/api/force_on', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ac_mode: forceMode, fan_speed: forceFan, temperature: forceTemp})
+    });
+    poll();
+}
+
+// --- Force OFF modal ---
+function openForceOffModal() {
+    const modal = document.getElementById('modal-force-off');
+    modal.classList.remove('hidden');
+}
+function closeForceOff() {
+    document.getElementById('modal-force-off').classList.add('hidden');
+}
+async function confirmForceOff() {
+    closeForceOff();
+    await fetch('/api/force_off', {method:'POST', headers:{'Content-Type':'application/json'}});
+    poll();
+}
+
+// ===== Funciones de Energía =====
+
+async function updateEnergyWidget() {
+    try {
+        const resp = await fetch('/api/energy/current');
+        const data = await resp.json();
+        document.getElementById('energy-kwh').textContent = data.kwh.toFixed(2);
+        document.getElementById('energy-cost').textContent = data.cost.toFixed(2);
+    } catch (e) {
+        console.error('Error actualizando widget energía:', e);
+    }
+}
+
+function openEnergyPopup() {
+    const modal = document.getElementById('energy-popup');
+    modal.classList.remove('hidden');
+    setTimeout(() => modal.classList.add('modal-visible'), 10);
+    loadEnergyStats();
+}
+
+function closeEnergyPopup() {
+    const modal = document.getElementById('energy-popup');
+    modal.classList.remove('modal-visible');
+    setTimeout(() => modal.classList.add('hidden'), 300);
+}
+
+async function loadEnergyStats() {
+    try {
+        // Cargar datos de todas las APIs
+        const [hourly, monthly, current] = await Promise.all([
+            fetch('/api/energy/hourly').then(r => r.json()),
+            fetch('/api/energy/monthly').then(r => r.json()),
+            fetch('/api/energy/current').then(r => r.json())
+        ]);
+        
+        // Actualizar resumen
+        document.getElementById('summary-24h-kwh').textContent = current.kwh.toFixed(2);
+        document.getElementById('summary-24h-cost').textContent = current.cost.toFixed(2);
+        
+        // Calcular promedio diario (total 24h)
+        document.getElementById('summary-avg-kwh').textContent = current.kwh.toFixed(2);
+        document.getElementById('summary-avg-cost').textContent = current.cost.toFixed(2);
+        
+        // Actualizar gráficas
+        updateEnergyHourlyChart(hourly.data);
+        updateEnergyMonthlyChart(monthly.data);
+    } catch (e) {
+        console.error('Error cargando estadísticas energía:', e);
+    }
+}
+
+function updateEnergyHourlyChart(data) {
+    const hours = Object.keys(data).sort((a,b) => parseInt(a) - parseInt(b));
+    const kwh = hours.map(h => data[h].kwh);
+    const cost = hours.map(h => data[h].cost);
+    
+    const ctx = document.getElementById('energy-hourly-chart').getContext('2d');
+    
+    if (energyHourlyChart) energyHourlyChart.destroy();
+    
+    // Si no hay datos, no crear gráfica (evita bug de crecimiento infinito)
+    if (hours.length === 0) {
+        energyHourlyChart = null;
+        return;
+    }
+    
+    energyHourlyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: hours.map(h => h.padStart(2, '0') + ':00'),
+            datasets: [
+                {
+                    label: 'kWh',
+                    data: kwh,
+                    backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                    borderColor: 'rgba(59, 130, 246, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Coste €',
+                    data: cost,
+                    type: 'line',
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 2,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#10b981',
+                    yAxisID: 'y1',
+                    tension: 0.4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2,
+            interaction: {mode: 'index', intersect: false},
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    beginAtZero: true,
+                    title: {display: true, text: 'kWh', color: '#94a3b8', font: {size: 10}},
+                    grid: {color: 'rgba(148,163,184,0.08)'},
+                    ticks: {color: '#64748b', font: {size: 10}}
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    beginAtZero: true,
+                    title: {display: true, text: '€', color: '#10b981', font: {size: 10}},
+                    grid: {drawOnChartArea: false},
+                    ticks: {color: '#10b981', font: {size: 10}}
+                },
+                x: {
+                    grid: {display: false},
+                    ticks: {color: '#475569', font: {size: 8}, maxRotation: 45, minRotation: 45}
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: {color: '#94a3b8', font: {size: 10}, boxWidth: 10, padding: 10}
+                }
+            }
+        }
+    });
+}
+
+function updateEnergyMonthlyChart(data) {
+    const months = Object.keys(data).sort();
+    const kwh = months.map(m => data[m].kwh);
+    const cost = months.map(m => data[m].cost);
+    
+    // Formatear labels: "2026-06" -> "Jun"
+    const monthNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const labels = months.map(m => {
+        const parts = m.split('-');
+        const monthNum = parseInt(parts[1]) - 1;
+        return monthNames[monthNum] || m.slice(5);
+    });
+    
+    const ctx = document.getElementById('energy-monthly-chart').getContext('2d');
+    
+    if (energyMonthlyChart) energyMonthlyChart.destroy();
+    
+    // Si no hay datos, no crear gráfica (evita bug de crecimiento infinito)
+    if (months.length === 0) {
+        energyMonthlyChart = null;
+        return;
+    }
+    
+    energyMonthlyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'kWh',
+                    data: kwh,
+                    backgroundColor: 'rgba(139, 92, 246, 0.7)',
+                    borderColor: 'rgba(139, 92, 246, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Coste €',
+                    data: cost,
+                    type: 'line',
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    borderWidth: 2,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#f59e0b',
+                    yAxisID: 'y1',
+                    tension: 0.4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2,
+            interaction: {mode: 'index', intersect: false},
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    beginAtZero: true,
+                    title: {display: true, text: 'kWh', color: '#94a3b8', font: {size: 10}},
+                    grid: {color: 'rgba(148,163,184,0.08)'},
+                    ticks: {color: '#64748b', font: {size: 10}}
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    beginAtZero: true,
+                    title: {display: true, text: '€', color: '#f59e0b', font: {size: 10}},
+                    grid: {drawOnChartArea: false},
+                    ticks: {color: '#f59e0b', font: {size: 10}}
+                },
+                x: {
+                    grid: {display: false},
+                    ticks: {color: '#475569', font: {size: 9}}
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: {color: '#94a3b8', font: {size: 10}, boxWidth: 10, padding: 10}
+                }
+            }
+        }
+    });
+}
+
+loadSensorHistory().then(() => {
+    poll();
+    updateEnergyWidget(); // Inicial
+    setInterval(poll, 5000);
+    setInterval(updateEnergyWidget, 60000); // Actualizar energía cada minuto
+});
+</script>
+</body>
+</html>
