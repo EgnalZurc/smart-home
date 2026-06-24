@@ -574,6 +574,7 @@ http://<IP_DE_LA_RASPBERRY>:8080
 
 - **Repositorio GitHub:** https://github.com/EgnalZurc/smart-home
 - **Guía de Despliegue:** [DEPLOY.md](DEPLOY.md)
+- **Estructura Docker:** [DOCKER.md](DOCKER.md) ⭐ **NEW**
 - **Inicio Rápido:** [QUICKSTART.md](QUICKSTART.md)
 - **Requerimientos Completos:** [docs/REQUERIMIENTOS-COMPLETOS.md](docs/REQUERIMIENTOS-COMPLETOS.md)
 - **Diseño Fase 0:** [docs/fase0-ac-override.md](docs/fase0-ac-override.md)

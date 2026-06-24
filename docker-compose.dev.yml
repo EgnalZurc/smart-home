@@ -1,3 +1,9 @@
+## ⚠️ DEPRECATED - USE docker-compose.override.yml INSTEAD
+## This file will be removed in a future version
+## 
+## Migration: docker-compose.override.yml now provides development overrides
+## Usage: docker-compose up (automatically uses override.yml)
+##
 ## Docker Compose para DESARROLLO en Windows
 ## Requiere: python serial_bridge.py corriendo en paralelo (expone COM3 como TCP:8282)
 ## En la Raspberry Pi se usará docker-compose.yml (sin bridge, USB directo)

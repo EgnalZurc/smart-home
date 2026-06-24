@@ -1,0 +1,29 @@
+# Docker Compose Override for LOCAL DEVELOPMENT (Windows)
+# This file is automatically merged with docker-compose.yml when running: docker-compose up
+# 
+# Requirements for local development:
+# - python serial_bridge.py running (exposes COM3 as TCP:8282)
+# 
+# On Raspberry Pi (production), this file is ignored (use only docker-compose.yml)
+
+services:
+  backend:
+    # Mount source code for hot-reload in development
+    volumes:
+      - ./src/backend:/app
+    # Development-specific environment variables (can override .env)
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+
+  zigbee2mqtt:
+    # Development-specific settings
+    environment:
+      - ZIGBEE2MQTT_CONFIG_ADVANCED_LOG_LEVEL=debug
+
+# Add development-only services here if needed
+# Example:
+#  adminer:
+#    image: adminer
+#    ports:
+#      - "8082:8080"
