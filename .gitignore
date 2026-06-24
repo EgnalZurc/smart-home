@@ -21,6 +21,11 @@ infrastructure/zigbee2mqtt/state.json
 infrastructure/zigbee2mqtt/log/
 infrastructure/zigbee2mqtt/*.log
 
+# Zigbee2MQTT: archivos de configuración sensibles y backups
+infrastructure/zigbee2mqtt/configuration.yaml
+infrastructure/zigbee2mqtt/configuration_backup_*.yaml
+infrastructure/zigbee2mqtt/coordinator_backup.json
+
 # IDE
 .vscode/
 .idea/

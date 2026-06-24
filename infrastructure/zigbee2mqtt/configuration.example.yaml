@@ -1,0 +1,19 @@
+homeassistant:
+  enabled: false
+mqtt:
+  base_topic: zigbee2mqtt
+  server: mqtt://mosquitto:1883
+serial:
+  port: tcp://host.docker.internal:8282
+  adapter: ember
+frontend:
+  enabled: true
+  port: 8081
+advanced:
+  log_level: info
+  network_key: GENERATE  # Generate a random network key - DO NOT share this key
+  cache_state: true
+  cache_state_send_on_startup: false
+  last_seen: epoch
+devices: {}  # Add your devices here after pairing
+version: 5
