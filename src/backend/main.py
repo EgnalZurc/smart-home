@@ -170,6 +170,10 @@ async def lifespan(app: FastAPI):
     )
 
     ac_controller = ACController(mqtt_handler, melcloud_client, config)
+    
+    # Restore previous state before starting (minimize AC restarts)
+    ac_controller.restore_state()
+    
     ac_controller.start()
 
     # 4. Inject dependencies into routes

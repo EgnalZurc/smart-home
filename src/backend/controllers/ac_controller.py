@@ -21,6 +21,7 @@ from controllers.state_machine import (
 )
 from melcloud_client import MelCloudClient
 from mqtt_handler import MqttHandler
+from state_persistence import PersistedState, load_state, save_state
 
 logger = logging.getLogger(__name__)
 
@@ -138,17 +139,23 @@ class ACController:
                 if hasattr(self.config, key):
                     setattr(self.config, key, value)
                     logger.info("Config updated: %s = %s", key, value)
+        # Persist state after user change
+        self._persist_state()
 
     def set_override(self, mode: str | None):
         """Sets manual override: None=auto, 'on'=force AC, 'off'=force off."""
         with self._lock:
             self.state.override = mode
         logger.info("Override set: %s", mode)
+        # Persist state after user change
+        self._persist_state()
 
     def set_force_on_params(self, temperature: float, fan_speed: int):
         """Saves force on parameters."""
         with self._lock:
             self.state.force_on_params = ForceOnParams(temperature=temperature, fan_speed=fan_speed)
+        # Persist state after user change
+        self._persist_state()
 
     def start(self):
         """Starts the control loop in a thread."""
@@ -158,11 +165,81 @@ class ACController:
         logger.info("AC controller started (interval=%ds)", self.config.loop_interval)
 
     def stop(self):
-        """Stops the control loop."""
+        """Stops the control loop and persists final state."""
         self._running = False
         if self._thread:
             self._thread.join(timeout=10)
+        # Save state before shutdown
+        self._persist_state()
         logger.info("AC controller stopped")
+
+    def restore_state(self) -> bool:
+        """Restores controller state from disk.
+        
+        Must be called BEFORE start() to restore previous session.
+        
+        Returns:
+            True if state was restored, False if no state found
+        """
+        persisted = load_state()
+        if persisted is None:
+            logger.info("No previous state to restore, using defaults")
+            return False
+        
+        # Restore configuration
+        self.config.target_temperature = persisted.target_temperature
+        self.config.hysteresis_on = persisted.hysteresis_on
+        self.config.hysteresis_off = persisted.hysteresis_off
+        self.config.min_setpoint = persisted.min_setpoint
+        self.config.max_setpoint = persisted.max_setpoint
+        self.config.cooldown_seconds = persisted.cooldown_seconds
+        self.config.sensor_timeout = persisted.sensor_timeout
+        
+        # Restore manual mode
+        with self._lock:
+            self.state.override = persisted.override
+            if persisted.force_on_temperature is not None:
+                self.state.force_on_params = ForceOnParams(
+                    temperature=persisted.force_on_temperature,
+                    fan_speed=persisted.force_on_fan_speed or 0
+                )
+        
+        # Restore internal state machine state
+        try:
+            self._current_sm_state = ControllerState(persisted.current_sm_state)
+        except ValueError:
+            logger.warning("Invalid state '%s', defaulting to FORCED_OFF", persisted.current_sm_state)
+            self._current_sm_state = ControllerState.FORCED_OFF
+        
+        self._last_off_time = persisted.last_off_timestamp
+        self._last_modulating_setpoint = persisted.last_modulating_setpoint
+        
+        logger.info("Controller state restored successfully")
+        return True
+
+    def _persist_state(self):
+        """Saves current controller state to disk."""
+        with self._lock:
+            force_temp = self.state.force_on_params.temperature if self.state.force_on_params else None
+            force_fan = self.state.force_on_params.fan_speed if self.state.force_on_params else None
+            
+            state = PersistedState(
+                target_temperature=self.config.target_temperature,
+                hysteresis_on=self.config.hysteresis_on,
+                hysteresis_off=self.config.hysteresis_off,
+                min_setpoint=self.config.min_setpoint,
+                max_setpoint=self.config.max_setpoint,
+                cooldown_seconds=self.config.cooldown_seconds,
+                sensor_timeout=self.config.sensor_timeout,
+                override=self.state.override,
+                force_on_temperature=force_temp,
+                force_on_fan_speed=force_fan,
+                current_sm_state=self._current_sm_state.value,
+                last_off_timestamp=self._last_off_time,
+                last_modulating_setpoint=self._last_modulating_setpoint,
+            )
+        
+        save_state(state)
 
     def _control_loop(self):
         """Main control loop."""

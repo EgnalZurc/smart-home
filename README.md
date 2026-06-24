@@ -37,7 +37,8 @@ Sistema de domótica modular y expandible por fases. Control inteligente de aire
 - Docker + Docker Compose
 - Zigbee 3.0 (protocolo estándar, abierto)
 - MQTT para comunicación entre servicios
-- Persistencia de datos entre reinicios
+- Persistencia completa: sensores, estado controlador, energía
+- Recuperación automática tras reinicios (protección compresor)
 
 ---
 
@@ -250,7 +251,8 @@ objetivo real.
 **Funcionalidades implementadas:**
 - ✅ Control inteligente del AC con máquina de estados
 - ✅ Interface web PWA responsive y moderna
-- ✅ Persistencia de datos entre reinicios
+- ✅ **Persistencia de estado del controlador** (minimiza ciclos AC, protege compresor)
+- ✅ Persistencia de datos de sensores entre reinicios
 - ✅ Tracking de energía con coste en tiempo real
 - ✅ Gráficas interactivas (temperatura, humedad, energía)
 - ✅ Control manual con override del sistema automático
@@ -289,6 +291,7 @@ Popup → Gráficas horarias (24h) y mensuales (12 meses)
 - Diseño: `docs/DISEÑO-ENERGIA-F0.md`
 - Implementación: `docs/IMPLEMENTACION-ENERGIA-COMPLETA.md`
 - Requerimientos completos: `docs/REQUERIMIENTOS-COMPLETOS.md`
+- Persistencia de estado: `docs/STATE_PERSISTENCE.md` ⭐ **NEW**
 
 **Coste fase 0: ~42,70€** (sensores) + infraestructura base
 
@@ -460,6 +463,7 @@ smart-home/
 │   │   ├── main.py
 │   │   ├── melcloud_client.py
 │   │   ├── mqtt_handler.py
+│   │   ├── state_persistence.py ← Persistencia estado controlador ⭐ NEW
 │   │   ├── controllers/
 │   │   │   ├── ac_controller.py
 │   │   │   ├── state_machine.py
@@ -539,7 +543,7 @@ smart-home/
 - **Estados del controlador:** 7
 - **Sensores Zigbee:** 5
 - **Gráficas en UI:** 4 (temp, humedad, energía horaria, energía mensual)
-- **JSON de persistencia:** 6
+- **JSON de persistencia:** 7 (sensores, outdoor, estado controlador, energía 24h/diaria)
 - **Volúmenes Docker:** 2
 
 ---
