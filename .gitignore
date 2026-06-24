@@ -16,15 +16,10 @@ config.yaml
 
 # Datos persistentes
 src/backend/data/*.json
-infrastructure/zigbee2mqtt/database.db
-infrastructure/zigbee2mqtt/state.json
-infrastructure/zigbee2mqtt/log/
-infrastructure/zigbee2mqtt/*.log
 
-# Zigbee2MQTT: archivos de configuración sensibles y backups
-infrastructure/zigbee2mqtt/configuration.yaml
-infrastructure/zigbee2mqtt/configuration_backup_*.yaml
-infrastructure/zigbee2mqtt/coordinator_backup.json
+# Zigbee2MQTT: separación código/datos
+infrastructure/zigbee2mqtt/config/configuration.yaml
+infrastructure/zigbee2mqtt/data/
 
 # IDE
 .vscode/
