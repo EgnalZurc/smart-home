@@ -2,18 +2,18 @@
 
 ## Directory Structure
 
-This directory contains only configuration files (source code). All runtime data is stored in the centralized `/data/zigbee2mqtt/` directory at the project root.
+This directory contains configuration templates. The actual runtime configuration is stored in `/data/zigbee2mqtt/configuration.yaml`.
 
 ```
 project_root/
 ├── infrastructure/
 │   └── zigbee2mqtt/
-│       └── config/                      # Configuration files (source code - in git)
-│           ├── configuration.yaml       # Your actual config with secrets (NOT in git)
+│       └── config/                      # Configuration templates (in git)
 │           ├── configuration.example.yaml  # Template without secrets (in git)
 │           └── README.md                # This file (in git)
 └── data/
-    └── zigbee2mqtt/                     # Runtime data (NOT in git)
+    └── zigbee2mqtt/                     # Runtime data AND config (NOT in git)
+        ├── configuration.yaml           # Actual config with secrets
         ├── database.db                  # Zigbee2MQTT database
         ├── state.json                   # Current device states
         ├── coordinator_backup.json      # Coordinator backup
@@ -23,7 +23,7 @@ project_root/
 
 ## Setup Instructions
 
-1. Copy `configuration.example.yaml` to `configuration.yaml`
+1. Copy `configuration.example.yaml` to `/data/zigbee2mqtt/configuration.yaml`
 2. Generate a unique network key for your Zigbee network
 3. Configure your devices in the `devices` section after pairing
 
@@ -34,15 +34,16 @@ project_root/
 - `README.md` - This documentation
 
 ### Runtime files (NOT in git - located in `/data/zigbee2mqtt/`):
-- Runtime database, logs, state, and backups are stored in the centralized data directory
+- `configuration.yaml` - Your actual configuration with network_key (sensitive)
+- Runtime database, logs, state, and backups
 
 ## Important Notes
 
-⚠️ **Never commit `configuration.yaml` to git** - it contains your network_key which should remain private.
+⚠️ **Configuration is in `/data/zigbee2mqtt/configuration.yaml`** - NOT in this directory.
+
+⚠️ **Never commit `/data/` to git** - it contains your network_key and runtime data.
 
 ⚠️ **Keep backups safe** - The coordinator_backup.json and configuration.yaml are critical for recovering your Zigbee network if you need to reinstall.
-
-⚠️ **All runtime data is centralized** - Check `/data/zigbee2mqtt/` at the project root for all runtime files.
 
 ## Serial Bridge Configuration
 

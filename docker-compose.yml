@@ -23,7 +23,6 @@ services:
     ports:
       - "8081:8081"  # Exponer frontend para acceso desde navegador
     volumes:
-      - ./infrastructure/zigbee2mqtt/config/configuration.yaml:/app/data/configuration.yaml:ro
       - ./data/zigbee2mqtt:/app/data
       - /run/udev:/run/udev:ro
     # devices:

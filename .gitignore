@@ -17,9 +17,6 @@ config.yaml
 # Runtime data (centralized)
 data/
 
-# Infrastructure: sensitive configuration files
-infrastructure/zigbee2mqtt/config/configuration.yaml
-
 # IDE
 .vscode/
 .idea/
