@@ -18,7 +18,6 @@ from controllers.state_machine import (
     StateMachineInputs,
     StateMachineOutputs,
     evaluate,
-    COOLDOWN_SECONDS,
 )
 from melcloud_client import MelCloudClient
 from mqtt_handler import MqttHandler
@@ -30,19 +29,25 @@ logger = logging.getLogger(__name__)
 class ControlConfig:
     """Parámetros de control."""
 
-    target_temperature: float = 23.0
+    target_temperature: float = 26.0
     hysteresis_on: float = 0.5
     hysteresis_off: float = 0.3
     min_setpoint: float = 19.0
     max_setpoint: float = 30.0
-    cooldown_seconds: int = COOLDOWN_SECONDS
+    cooldown_seconds: int = 180
     loop_interval: int = 45
     sensor_timeout: int = 600
     ac_mode: str = "cool"
     fan_speed_max: int = 3
     fan_speed_modulate: int = 0
-    device_id: int = 12345
-    building_id: int = 67890
+    device_id: int = 0
+    building_id: int = 0
+    melcloud_max_failures: int = 100
+    # Potencias para cálculo de energía (kW)
+    ac_power_cooling_max: float = 2.5
+    ac_power_cooling_mid: float = 1.75
+    ac_power_modulating: float = 1.25
+    ac_power_forced_on: float = 2.5
 
 
 @dataclass
@@ -56,7 +61,7 @@ class ControlState:
     active_sensors: int = 0
     total_sensors: int = 5
     last_update: float = 0.0
-    override: str | None = None  # None=auto, "on", "off"
+    override: str | None = "off"  # None=auto, "on", "off" - INICIA EN FORCE OFF
     sensor_alert: bool = False
     melcloud_error: bool = False
     force_on_params: ForceOnParams | None = None
@@ -92,7 +97,7 @@ class ACController:
         self._lock = threading.Lock()
 
         # Variables internas de la máquina de estados
-        self._current_sm_state: ControllerState = ControllerState.OFF
+        self._current_sm_state: ControllerState = ControllerState.FORCED_OFF
         self._last_off_time: float = 0.0
         self._last_sensor_update_time: float = time.time()
         self._consecutive_melcloud_failures: int = 0
@@ -274,6 +279,9 @@ class ACController:
             hysteresis_off=self.config.hysteresis_off,
             min_setpoint=self.config.min_setpoint,
             max_setpoint=self.config.max_setpoint,
+            cooldown_seconds=self.config.cooldown_seconds,
+            sensor_alert_seconds=self.config.sensor_timeout,
+            melcloud_max_failures=self.config.melcloud_max_failures,
         )
 
     def _apply_outputs(self, outputs: StateMachineOutputs):
@@ -409,10 +417,10 @@ class ACController:
             Potencia en kW
         """
         power_map = {
-            'cooling_max': 2.5,
-            'cooling_mid': 1.75,
-            'modulating': 1.25,
-            'forced_on': 2.5,  # Asumimos máximo
+            'cooling_max': self.config.ac_power_cooling_max,
+            'cooling_mid': self.config.ac_power_cooling_mid,
+            'modulating': self.config.ac_power_modulating,
+            'forced_on': self.config.ac_power_forced_on,
         }
         return power_map.get(state, 0.0)
     

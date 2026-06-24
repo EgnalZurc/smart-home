@@ -18,8 +18,6 @@ logger = logging.getLogger(__name__)
 Z2M_LOG_DIR = os.environ.get("Z2M_LOG_DIR", "/app/data/log")
 # Días de retención de logs
 LOG_RETENTION_DAYS = int(os.environ.get("LOG_RETENTION_DAYS", "3"))
-# Intervalo de ejecución (24h en segundos)
-CLEANUP_INTERVAL = 86400
 
 
 def cleanup_old_logs(log_dir: str, max_age_days: int) -> int:
@@ -73,9 +71,17 @@ def run_cleanup():
 class CleanupScheduler:
     """Ejecuta la limpieza periódicamente en un thread."""
 
-    def __init__(self):
+    def __init__(self, interval: int = 86400, grace_period: int = 60):
+        """Inicializa el scheduler.
+        
+        Args:
+            interval: Intervalo entre limpiezas (segundos), default 24h
+            grace_period: Tiempo de espera antes de la primera limpieza (segundos)
+        """
         self._running = False
         self._thread: threading.Thread | None = None
+        self._interval = interval
+        self._grace_period = grace_period
 
     def start(self):
         """Inicia el scheduler de limpieza."""
@@ -83,7 +89,7 @@ class CleanupScheduler:
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
         logger.info("Scheduler de limpieza iniciado (cada %dh, retención %d días)",
-                    CLEANUP_INTERVAL // 3600, LOG_RETENTION_DAYS)
+                    self._interval // 3600, LOG_RETENTION_DAYS)
 
     def stop(self):
         """Detiene el scheduler."""
@@ -92,14 +98,14 @@ class CleanupScheduler:
             self._thread.join(timeout=5)
 
     def _loop(self):
-        """Loop que ejecuta limpieza cada 24h. Ejecuta una vez al arrancar."""
-        # Ejecutar limpieza al arrancar (tras 60s de gracia)
-        time.sleep(60)
+        """Loop que ejecuta limpieza periódicamente. Ejecuta una vez al arrancar."""
+        # Ejecutar limpieza al arrancar (tras grace period)
+        time.sleep(self._grace_period)
         if self._running:
             run_cleanup()
 
-        # Luego cada 24h
+        # Luego periódicamente
         while self._running:
-            time.sleep(CLEANUP_INTERVAL)
+            time.sleep(self._interval)
             if self._running:
                 run_cleanup()

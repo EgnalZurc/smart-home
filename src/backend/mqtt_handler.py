@@ -47,18 +47,28 @@ class SensorReading:
         )
 
 
-MAX_HISTORY_PER_SENSOR = 200
-
-
 class MqttHandler:
     """Gestiona la conexión MQTT y las lecturas de sensores."""
 
-    def __init__(self, broker: str, port: int, sensor_names: list[str]):
+    def __init__(
+        self, 
+        broker: str, 
+        port: int, 
+        sensor_names: list[str],
+        connect_retries: int = 30,
+        retry_delay: int = 2,
+        keepalive: int = 60,
+        max_history: int = 200
+    ):
         self.broker = broker
         self.port = port
         self.sensor_names = sensor_names
+        self.connect_retries = connect_retries
+        self.retry_delay = retry_delay
+        self.keepalive = keepalive
+        self.max_history = max_history
         self.readings: dict[str, SensorReading] = {}  # Última lectura por sensor
-        self.history: dict[str, list[SensorReading]] = {}  # Historial FIFO (max 200) por sensor
+        self.history: dict[str, list[SensorReading]] = {}  # Historial FIFO por sensor
         self._lock = threading.Lock()
         self._client: mqtt.Client | None = None
         self._connected = False
@@ -78,7 +88,7 @@ class MqttHandler:
                     # Formato nuevo: lista de lecturas
                     if isinstance(sensor_data, list):
                         readings_list = [SensorReading.from_dict(d) for d in sensor_data]
-                        self.history[name] = readings_list[-MAX_HISTORY_PER_SENSOR:]
+                        self.history[name] = readings_list[-self.max_history:]
                         if readings_list:
                             self.readings[name] = readings_list[-1]
                     else:
@@ -93,14 +103,17 @@ class MqttHandler:
             logger.warning("Error cargando datos de disco: %s", e)
 
     def _save_to_disk(self):
-        """Guarda el historial de lecturas de cada sensor a disco."""
+        """Guarda el historial de lecturas de cada sensor a disco.
+        
+        IMPORTANTE: Debe llamarse CON el lock activo o con copia de datos.
+        """
         try:
             path = Path(PERSIST_FILE)
             path.parent.mkdir(parents=True, exist_ok=True)
+            # Hacer copia dentro del lock para evitar race conditions
             data = {}
-            with self._lock:
-                for name, readings_list in self.history.items():
-                    data[name] = [r.to_dict() for r in readings_list]
+            for name, readings_list in self.history.items():
+                data[name] = [r.to_dict() for r in readings_list]
             path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         except Exception as e:
             logger.warning("Error guardando datos a disco: %s", e)
@@ -115,14 +128,14 @@ class MqttHandler:
         logger.info("Conectando a MQTT %s:%d", self.broker, self.port)
 
         # Reintentar conexión
-        for attempt in range(30):
+        for attempt in range(self.connect_retries):
             try:
-                self._client.connect(self.broker, self.port, 60)
+                self._client.connect(self.broker, self.port, self.keepalive)
                 self._client.loop_start()
                 return
             except Exception as e:
                 logger.warning("Intento %d conexión MQTT: %s", attempt + 1, e)
-                time.sleep(2)
+                time.sleep(self.retry_delay)
 
         raise ConnectionError(f"No se pudo conectar a MQTT {self.broker}:{self.port}")
 
@@ -169,17 +182,28 @@ class MqttHandler:
                 timestamp=time.time(),
             )
 
+            # Hacer TODA la manipulación dentro del lock (fix race condition)
             with self._lock:
                 self.readings[sensor_name] = reading
-                # Guardar cada lectura como un punto en el historial (FIFO, max 200)
+                # Guardar cada lectura como un punto en el historial (FIFO)
                 if sensor_name not in self.history:
                     self.history[sensor_name] = []
                 self.history[sensor_name].append(reading)
-                if len(self.history[sensor_name]) > MAX_HISTORY_PER_SENSOR:
-                    self.history[sensor_name] = self.history[sensor_name][-MAX_HISTORY_PER_SENSOR:]
-
-            # Persistir a disco
-            self._save_to_disk()
+                if len(self.history[sensor_name]) > self.max_history:
+                    self.history[sensor_name] = self.history[sensor_name][-self.max_history:]
+                
+                # Hacer copia de datos para persistir
+                data_to_save = {}
+                for name, readings_list in self.history.items():
+                    data_to_save[name] = [r.to_dict() for r in readings_list]
+            
+            # Persistir a disco FUERA del lock para no bloquear
+            try:
+                path = Path(PERSIST_FILE)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(data_to_save, ensure_ascii=False), encoding="utf-8")
+            except Exception as e:
+                logger.warning("Error guardando datos a disco: %s", e)
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             logger.warning("Error procesando mensaje de %s: %s", msg.topic, e)

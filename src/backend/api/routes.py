@@ -9,15 +9,15 @@ from pydantic import BaseModel
 # Estas referencias se inyectan desde main.py
 mqtt_handler = None
 ac_controller = None
-energy_tracker = None  # Añadido para tracking de energía
+energy_tracker = None
+
+# Configuraciones inyectadas
+outdoor_cache_ttl = 600
+location_lat = 40.396644
+location_lon = -3.622511
 
 # Cache para temperatura exterior (no llamar a la API cada 5s)
 _outdoor_cache = {"temperature": None, "humidity": None, "timestamp": 0}
-_OUTDOOR_CACHE_TTL = 600  # 10 minutos
-
-# Valdebernardo, Madrid, España (C.P. 28032)
-_LATITUDE = 40.396644
-_LONGITUDE = -3.622511
 
 router = APIRouter(prefix="/api")
 
@@ -160,9 +160,14 @@ def update_config(update: ConfigUpdate):
     if not changes:
         raise HTTPException(400, "No hay cambios")
 
-    # Limitar objetivo al rango real del AC (19-30°C)
+    # Validar rangos (devolver error 400 si están fuera de rango)
     if "target_temperature" in changes:
-        changes["target_temperature"] = max(19.0, min(30.0, changes["target_temperature"]))
+        temp = changes["target_temperature"]
+        if temp < ac_controller.config.min_setpoint or temp > ac_controller.config.max_setpoint:
+            raise HTTPException(
+                400, 
+                f"Temperatura objetivo debe estar entre {ac_controller.config.min_setpoint}°C y {ac_controller.config.max_setpoint}°C"
+            )
 
     ac_controller.update_config(**changes)
     return {"status": "updated", "changes": changes}
@@ -187,17 +192,34 @@ class ForceOnRequest(BaseModel):
 @router.post("/force_on")
 def force_on(req: ForceOnRequest):
     """Forzar encendido del AC con parámetros personalizados."""
-    # Validar rangos
-    temp = max(19.0, min(30.0, req.temperature))
-    fan = max(0, min(3, req.fan_speed))
+    # Validar rangos (devolver error 400 si están fuera de rango)
+    min_temp = ac_controller.config.min_setpoint
+    max_temp = ac_controller.config.max_setpoint
+    
+    if req.temperature < min_temp or req.temperature > max_temp:
+        raise HTTPException(
+            400,
+            f"Temperatura debe estar entre {min_temp}°C y {max_temp}°C"
+        )
+    
+    if req.fan_speed < 0 or req.fan_speed > ac_controller.config.fan_speed_max:
+        raise HTTPException(
+            400,
+            f"Velocidad de ventilador debe estar entre 0 (auto) y {ac_controller.config.fan_speed_max}"
+        )
+    
     valid_modes = ("cool", "heat", "dry", "fan", "auto")
-    mode = req.ac_mode if req.ac_mode in valid_modes else "cool"
+    if req.ac_mode not in valid_modes:
+        raise HTTPException(
+            400,
+            f"Modo debe ser uno de: {', '.join(valid_modes)}"
+        )
 
     # Actualizar temperatura objetivo del controlador (sincronizar)
-    ac_controller.update_config(target_temperature=temp)
+    ac_controller.update_config(target_temperature=req.temperature)
 
     # Guardar parámetros de forzar encendido
-    ac_controller.set_force_on_params(temperature=temp, fan_speed=fan)
+    ac_controller.set_force_on_params(temperature=req.temperature, fan_speed=req.fan_speed)
 
     # Activar override ON en el controlador
     ac_controller.set_override("on")
@@ -205,13 +227,20 @@ def force_on(req: ForceOnRequest):
     # Enviar directamente a MELCloud con los parámetros elegidos
     success = ac_controller.melcloud.set_temperature(
         ac_controller.config.device_id,
-        temp,
+        req.temperature,
         power=True,
-        mode=mode,
-        fan_speed=fan,
+        mode=req.ac_mode,
+        fan_speed=req.fan_speed,
     )
 
-    return {"status": "ok" if success else "error", "applied": {"mode": mode, "fan_speed": fan, "temperature": temp}}
+    return {
+        "status": "ok" if success else "error", 
+        "applied": {
+            "mode": req.ac_mode, 
+            "fan_speed": req.fan_speed, 
+            "temperature": req.temperature
+        }
+    }
 
 
 @router.post("/force_off")
@@ -267,7 +296,7 @@ def get_outdoor():
         _load_outdoor_from_disk()
 
     # Devolver cache si es reciente
-    if (now - _outdoor_cache["timestamp"]) < _OUTDOOR_CACHE_TTL and _outdoor_cache["temperature"] is not None:
+    if (now - _outdoor_cache["timestamp"]) < outdoor_cache_ttl and _outdoor_cache["temperature"] is not None:
         return _outdoor_cache
 
     # Llamar a Open-Meteo
@@ -275,8 +304,8 @@ def get_outdoor():
         resp = httpx.get(
             "https://api.open-meteo.com/v1/forecast",
             params={
-                "latitude": _LATITUDE,
-                "longitude": _LONGITUDE,
+                "latitude": location_lat,
+                "longitude": location_lon,
                 "current": "temperature_2m,relative_humidity_2m",
                 "timezone": "Europe/Madrid",
             },

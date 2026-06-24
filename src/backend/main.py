@@ -18,6 +18,7 @@ from cleanup import CleanupScheduler
 from controllers.ac_controller import ACController, ControlConfig
 from melcloud_client import MelCloudClient
 from mqtt_handler import MqttHandler
+from zigbee2mqtt_client import Zigbee2MQTTClient
 
 # Configurar logging
 logging.basicConfig(
@@ -28,22 +29,71 @@ logger = logging.getLogger(__name__)
 
 # --- Configuración desde variables de entorno ---
 
+# MQTT
 MQTT_BROKER = os.environ.get("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
+MQTT_CONNECT_RETRIES = int(os.environ.get("MQTT_CONNECT_RETRIES", "30"))
+MQTT_RETRY_DELAY = int(os.environ.get("MQTT_RETRY_DELAY", "2"))
+MQTT_KEEPALIVE = int(os.environ.get("MQTT_KEEPALIVE", "60"))
+
+# MELCloud (OBLIGATORIOS - sin defaults inseguros)
 MELCLOUD_URL = os.environ.get("MELCLOUD_URL", "https://app.melcloud.com")
-MELCLOUD_EMAIL = os.environ.get("MELCLOUD_EMAIL", "")
-MELCLOUD_PASSWORD = os.environ.get("MELCLOUD_PASSWORD", "")
-MELCLOUD_DEVICE_ID = int(os.environ.get("MELCLOUD_DEVICE_ID", "12345"))
-MELCLOUD_BUILDING_ID = int(os.environ.get("MELCLOUD_BUILDING_ID", "67890"))
-TARGET_TEMPERATURE = float(os.environ.get("TARGET_TEMPERATURE", "23.0"))
+MELCLOUD_EMAIL = os.environ.get("MELCLOUD_EMAIL")
+MELCLOUD_PASSWORD = os.environ.get("MELCLOUD_PASSWORD")
+MELCLOUD_TIMEOUT = float(os.environ.get("MELCLOUD_TIMEOUT", "30.0"))
+MELCLOUD_MAX_FAILURES = int(os.environ.get("MELCLOUD_MAX_FAILURES", "100"))
+MELCLOUD_APP_VERSION = os.environ.get("MELCLOUD_APP_VERSION", "1.32.1.0")
+
+# Validar credenciales obligatorias
+if not MELCLOUD_EMAIL or not MELCLOUD_PASSWORD:
+    logger.error("MELCLOUD_EMAIL y MELCLOUD_PASSWORD son obligatorios")
+    raise RuntimeError("Credenciales MELCloud no configuradas")
+
+# Device IDs (OBLIGATORIOS - sin defaults)
+if "MELCLOUD_DEVICE_ID" not in os.environ:
+    logger.error("MELCLOUD_DEVICE_ID no configurado")
+    raise RuntimeError("MELCLOUD_DEVICE_ID es obligatorio. Obtenerlo de la app MELCloud.")
+if "MELCLOUD_BUILDING_ID" not in os.environ:
+    logger.error("MELCLOUD_BUILDING_ID no configurado")
+    raise RuntimeError("MELCLOUD_BUILDING_ID es obligatorio. Obtenerlo de la app MELCloud.")
+
+MELCLOUD_DEVICE_ID = int(os.environ["MELCLOUD_DEVICE_ID"])
+MELCLOUD_BUILDING_ID = int(os.environ["MELCLOUD_BUILDING_ID"])
+
+# Control AC
+TARGET_TEMPERATURE = float(os.environ.get("TARGET_TEMPERATURE", "26.0"))
 HYSTERESIS_ON = float(os.environ.get("HYSTERESIS_ON", "0.5"))
 HYSTERESIS_OFF = float(os.environ.get("HYSTERESIS_OFF", "0.3"))
+MIN_SETPOINT_TEMP = float(os.environ.get("MIN_SETPOINT_TEMP", "19.0"))
+MAX_SETPOINT_TEMP = float(os.environ.get("MAX_SETPOINT_TEMP", "30.0"))
+COOLDOWN_SECONDS = int(os.environ.get("COOLDOWN_SECONDS", "180"))
 LOOP_INTERVAL = int(os.environ.get("LOOP_INTERVAL", "10"))
 SENSOR_TIMEOUT = int(os.environ.get("SENSOR_TIMEOUT", "3600"))
-SENSOR_NAMES = os.environ.get(
-    "SENSOR_NAMES", "sensor_hab1,sensor_hab2,sensor_hab3,sensor_salon,sensor_despacho"
-).split(",")
-ESIOS_API_KEY = os.environ.get("ESIOS_API_KEY", "")  # API key para precios PVPC
+FAN_SPEED_MAX = int(os.environ.get("FAN_SPEED_MAX", "3"))
+
+# Zigbee2MQTT discovery
+Z2M_DISCOVERY_TIMEOUT = float(os.environ.get("Z2M_DISCOVERY_TIMEOUT", "10.0"))
+
+# Historial
+MAX_HISTORY_PER_SENSOR = int(os.environ.get("MAX_HISTORY_PER_SENSOR", "200"))
+
+# CORS (por seguridad, restringir origins)
+CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
+
+# Outdoor API
+OUTDOOR_CACHE_TTL = int(os.environ.get("OUTDOOR_CACHE_TTL", "600"))
+LOCATION_LATITUDE = float(os.environ.get("LOCATION_LATITUDE", "40.396644"))
+LOCATION_LONGITUDE = float(os.environ.get("LOCATION_LONGITUDE", "-3.622511"))
+
+# Cleanup
+CLEANUP_INTERVAL_SECONDS = int(os.environ.get("CLEANUP_INTERVAL_SECONDS", "86400"))
+CLEANUP_GRACE_PERIOD = int(os.environ.get("CLEANUP_GRACE_PERIOD", "60"))
+
+# Energía (potencias en kW por estado)
+AC_POWER_COOLING_MAX = float(os.environ.get("AC_POWER_COOLING_MAX", "2.5"))
+AC_POWER_COOLING_MID = float(os.environ.get("AC_POWER_COOLING_MID", "1.75"))
+AC_POWER_MODULATING = float(os.environ.get("AC_POWER_MODULATING", "1.25"))
+AC_POWER_FORCED_ON = float(os.environ.get("AC_POWER_FORCED_ON", "2.5"))
 
 # --- Componentes globales ---
 
@@ -51,27 +101,51 @@ mqtt_handler: MqttHandler | None = None
 melcloud_client: MelCloudClient | None = None
 ac_controller: ACController | None = None
 cleanup_scheduler: CleanupScheduler | None = None
-energy_tracker = None  # EnergyTracker
-scheduler = None  # APScheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Ciclo de vida de la aplicación."""
-    global mqtt_handler, melcloud_client, ac_controller, cleanup_scheduler, energy_tracker, scheduler
+    global mqtt_handler, melcloud_client, ac_controller, cleanup_scheduler
 
     logger.info("=== Smart Home Backend iniciando ===")
     logger.info("MQTT Broker: %s:%d", MQTT_BROKER, MQTT_PORT)
     logger.info("MELCloud URL: %s", MELCLOUD_URL)
-    logger.info("Sensores: %s", SENSOR_NAMES)
+    
+    # 0. Descubrir sensores automáticamente desde Zigbee2MQTT
+    logger.info("Descubriendo sensores desde Zigbee2MQTT vía MQTT...")
+    z2m_client = Zigbee2MQTTClient(MQTT_BROKER, MQTT_PORT, timeout=Z2M_DISCOVERY_TIMEOUT)
+    sensor_names = z2m_client.discover_temperature_sensors()
+    
+    if not sensor_names:
+        logger.warning("No se descubrieron sensores. Verifica que Zigbee2MQTT esté funcionando.")
+        logger.warning("El sistema continuará sin sensores.")
+    else:
+        logger.info("Sensores descubiertos: %s", sensor_names)
+    
     logger.info("Objetivo: %.1f°C (histéresis: +%.1f/-%.1f)", TARGET_TEMPERATURE, HYSTERESIS_ON, HYSTERESIS_OFF)
 
     # 1. Iniciar handler MQTT
-    mqtt_handler = MqttHandler(MQTT_BROKER, MQTT_PORT, SENSOR_NAMES)
+    mqtt_handler = MqttHandler(
+        MQTT_BROKER, 
+        MQTT_PORT, 
+        sensor_names, 
+        connect_retries=MQTT_CONNECT_RETRIES,
+        retry_delay=MQTT_RETRY_DELAY,
+        keepalive=MQTT_KEEPALIVE,
+        max_history=MAX_HISTORY_PER_SENSOR
+    )
     mqtt_handler.start()
 
     # 2. Iniciar cliente MELCloud
-    melcloud_client = MelCloudClient(MELCLOUD_URL, MELCLOUD_EMAIL, MELCLOUD_PASSWORD, MELCLOUD_BUILDING_ID)
+    melcloud_client = MelCloudClient(
+        MELCLOUD_URL, 
+        MELCLOUD_EMAIL, 
+        MELCLOUD_PASSWORD, 
+        MELCLOUD_BUILDING_ID,
+        timeout=MELCLOUD_TIMEOUT,
+        app_version=MELCLOUD_APP_VERSION
+    )
     if not melcloud_client.login():
         logger.error("No se pudo autenticar en MELCloud. El controlador no actuará.")
 
@@ -80,59 +154,36 @@ async def lifespan(app: FastAPI):
         target_temperature=TARGET_TEMPERATURE,
         hysteresis_on=HYSTERESIS_ON,
         hysteresis_off=HYSTERESIS_OFF,
-        min_setpoint=19.0,
-        max_setpoint=30.0,
-        cooldown_seconds=180,
+        min_setpoint=MIN_SETPOINT_TEMP,
+        max_setpoint=MAX_SETPOINT_TEMP,
+        cooldown_seconds=COOLDOWN_SECONDS,
         loop_interval=LOOP_INTERVAL,
         sensor_timeout=SENSOR_TIMEOUT,
+        fan_speed_max=FAN_SPEED_MAX,
         device_id=MELCLOUD_DEVICE_ID,
         building_id=MELCLOUD_BUILDING_ID,
+        melcloud_max_failures=MELCLOUD_MAX_FAILURES,
+        ac_power_cooling_max=AC_POWER_COOLING_MAX,
+        ac_power_cooling_mid=AC_POWER_COOLING_MID,
+        ac_power_modulating=AC_POWER_MODULATING,
+        ac_power_forced_on=AC_POWER_FORCED_ON,
     )
 
     ac_controller = ACController(mqtt_handler, melcloud_client, config)
     ac_controller.start()
 
-    # 4. Inicializar tracking de energía
-    from energy.esios_client import ESIOSClient
-    from energy.tracker import EnergyTracker
-    
-    data_dir = Path("/app/data")
-    esios_client = ESIOSClient(ESIOS_API_KEY, data_dir / "energy_prices_cache.json")
-    energy_tracker = EnergyTracker(ac_controller, esios_client, data_dir)
-    logger.info("Energy tracking inicializado")
-    
-    # 5. Inicializar scheduler para registros horarios/diarios
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
-    
-    scheduler = AsyncIOScheduler()
-    
-    # Job horario: cada hora en punto (:00)
-    scheduler.add_job(
-        energy_tracker.record_hourly,
-        trigger='cron',
-        minute=0,
-        id='record_hourly'
-    )
-    
-    # Job diario: cada día a las 00:00
-    scheduler.add_job(
-        energy_tracker.record_daily,
-        trigger='cron',
-        hour=0,
-        minute=0,
-        id='record_daily'
-    )
-    
-    scheduler.start()
-    logger.info("Scheduler de energía iniciado (registro cada :00 y diario a las 00:00)")
-
-    # 6. Inyectar dependencias en las rutas
+    # 4. Inyectar dependencias en las rutas
     routes.mqtt_handler = mqtt_handler
     routes.ac_controller = ac_controller
-    routes.energy_tracker = energy_tracker
+    routes.outdoor_cache_ttl = OUTDOOR_CACHE_TTL
+    routes.location_lat = LOCATION_LATITUDE
+    routes.location_lon = LOCATION_LONGITUDE
 
-    # 7. Iniciar scheduler de limpieza diaria
-    cleanup_scheduler = CleanupScheduler()
+    # 5. Iniciar scheduler de limpieza diaria
+    cleanup_scheduler = CleanupScheduler(
+        interval=CLEANUP_INTERVAL_SECONDS,
+        grace_period=CLEANUP_GRACE_PERIOD
+    )
     cleanup_scheduler.start()
 
     logger.info("=== Smart Home Backend listo ===")
@@ -141,8 +192,6 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("=== Apagando Smart Home Backend ===")
-    if scheduler:
-        scheduler.shutdown()
     cleanup_scheduler.stop()
     ac_controller.stop()
     mqtt_handler.stop()
@@ -157,10 +206,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS para desarrollo
+# CORS - Configurar origins permitidos por seguridad
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

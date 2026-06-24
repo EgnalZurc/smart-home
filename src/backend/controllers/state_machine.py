@@ -58,10 +58,9 @@ class StateMachineOutputs:
     melcloud_error: bool
 
 
-# --- Constantes (no configurables) ---
-COOLDOWN_SECONDS = 300  # 5 minutos
-SENSOR_ALERT_SECONDS = 3600  # 60 minutos
-MELCLOUD_MAX_FAILURES = 100
+# --- Constantes técnicas (no configurables directamente) ---
+# El cooldown y sensor_alert vienen de la configuración
+MELCLOUD_MAX_FAILURES_DEFAULT = 100
 
 # --- Constantes por defecto (configurables) ---
 DEFAULT_HYSTERESIS_ON = 0.5
@@ -77,6 +76,9 @@ class StateMachineConfig:
     hysteresis_off: float = DEFAULT_HYSTERESIS_OFF
     min_setpoint: float = DEFAULT_MIN_SETPOINT
     max_setpoint: float = DEFAULT_MAX_SETPOINT
+    cooldown_seconds: int = 180
+    sensor_alert_seconds: int = 3600
+    melcloud_max_failures: int = MELCLOUD_MAX_FAILURES_DEFAULT
 
 
 def _calculate_proportional_setpoint(
@@ -177,8 +179,8 @@ def evaluate(
         StateMachineOutputs con el nuevo estado y los outputs para MELCloud.
     """
     # Flags transversales
-    sensor_alert = inputs.seconds_since_last_sensor_update >= SENSOR_ALERT_SECONDS
-    melcloud_error = inputs.consecutive_melcloud_failures >= MELCLOUD_MAX_FAILURES
+    sensor_alert = inputs.seconds_since_last_sensor_update >= config.sensor_alert_seconds
+    melcloud_error = inputs.consecutive_melcloud_failures >= config.melcloud_max_failures
 
     # --- Prioridad 1: Error MELCloud (100 fallos consecutivos) ---
     if melcloud_error:
@@ -220,7 +222,7 @@ def evaluate(
     target = inputs.target_temp
     hot_threshold = target + config.hysteresis_on
     cold_threshold = target - config.hysteresis_off
-    cooldown_done = inputs.seconds_since_last_off >= COOLDOWN_SECONDS
+    cooldown_done = inputs.seconds_since_last_off >= config.cooldown_seconds
 
     # Sub-función para evaluar la decisión automática
     def _auto_decision() -> StateMachineOutputs:

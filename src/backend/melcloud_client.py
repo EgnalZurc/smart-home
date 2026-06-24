@@ -29,7 +29,15 @@ MODE_MAP = {
 class MelCloudClient:
     """Cliente HTTP para la API de MELCloud."""
 
-    def __init__(self, base_url: str, email: str, password: str, building_id: int = 0):
+    def __init__(
+        self, 
+        base_url: str, 
+        email: str, 
+        password: str, 
+        building_id: int = 0,
+        timeout: float = 30.0,
+        app_version: str = "1.32.1.0"
+    ):
         # Normalizar: si la URL ya incluye el path base, usarla tal cual.
         # Si no, añadirlo.
         base = base_url.rstrip("/")
@@ -38,10 +46,12 @@ class MelCloudClient:
         else:
             self.base_url = f"{base}/Mitsubishi.Wifi.Client"
         self.email = email
-        self.password = password
+        self.password = password  # Se borrará después del login
         self._building_id = building_id
+        self._timeout = timeout
+        self._app_version = app_version
         self.context_key: str | None = None
-        self.client = httpx.Client(timeout=30.0)
+        self.client = httpx.Client(timeout=timeout)
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -58,7 +68,7 @@ class MelCloudClient:
                     "Email": self.email,
                     "Password": self.password,
                     "Language": 0,
-                    "AppVersion": "1.32.1.0",
+                    "AppVersion": self._app_version,
                     "Persist": True,
                     "CaptchaResponse": None,
                 },
@@ -77,6 +87,10 @@ class MelCloudClient:
                 return False
 
             logger.info("Login exitoso en MELCloud")
+            
+            # Seguridad: Borrar contraseña de memoria después del login exitoso
+            del self.password
+            
             return True
 
         except httpx.HTTPError as e:
