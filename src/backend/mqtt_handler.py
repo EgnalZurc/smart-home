@@ -1,8 +1,8 @@
-"""Handler MQTT para sensores Zigbee.
+"""MQTT handler for Zigbee sensors.
 
-Se suscribe a los topics de los sensores, mantiene un registro
-de la última lectura de cada uno, y persiste los datos en disco
-para que sobrevivan reinicios.
+Subscribes to sensor topics, maintains a registry
+of the last reading from each one, and persists data to disk
+so they survive restarts.
 """
 
 import json
@@ -16,12 +16,12 @@ import paho.mqtt.client as mqtt
 
 logger = logging.getLogger(__name__)
 
-# Fichero de persistencia (dentro del contenedor, montado como volumen en producción)
+# Persistence file (inside container, mounted as volume in production)
 PERSIST_FILE = os.environ.get("SENSOR_PERSIST_FILE", "/app/data/sensor_readings.json")
 
 
 class SensorReading:
-    """Lectura de un sensor."""
+    """Reading from a sensor."""
 
     def __init__(self, temperature: float, humidity: float, battery: int, timestamp: float):
         self.temperature = temperature
@@ -48,7 +48,7 @@ class SensorReading:
 
 
 class MqttHandler:
-    """Gestiona la conexión MQTT y las lecturas de sensores."""
+    """Manages MQTT connection and sensor readings."""
 
     def __init__(
         self, 
@@ -67,17 +67,17 @@ class MqttHandler:
         self.retry_delay = retry_delay
         self.keepalive = keepalive
         self.max_history = max_history
-        self.readings: dict[str, SensorReading] = {}  # Última lectura por sensor
-        self.history: dict[str, list[SensorReading]] = {}  # Historial FIFO por sensor
+        self.readings: dict[str, SensorReading] = {}  # Last reading per sensor
+        self.history: dict[str, list[SensorReading]] = {}  # FIFO history per sensor
         self._lock = threading.Lock()
         self._client: mqtt.Client | None = None
         self._connected = False
 
-        # Cargar datos persistidos del disco
+        # Load persisted data from disk
         self._load_from_disk()
 
     def _load_from_disk(self):
-        """Carga el historial de lecturas de cada sensor desde disco."""
+        """Loads reading history for each sensor from disk."""
         try:
             path = Path(PERSIST_FILE)
             if path.exists():
@@ -85,79 +85,79 @@ class MqttHandler:
                 for name, sensor_data in data.items():
                     if name not in self.sensor_names:
                         continue
-                    # Formato nuevo: lista de lecturas
+                    # New format: list of readings
                     if isinstance(sensor_data, list):
                         readings_list = [SensorReading.from_dict(d) for d in sensor_data]
                         self.history[name] = readings_list[-self.max_history:]
                         if readings_list:
                             self.readings[name] = readings_list[-1]
                     else:
-                        # Formato antiguo: un solo dict → migrar
+                        # Old format: single dict → migrate
                         reading = SensorReading.from_dict(sensor_data)
                         self.readings[name] = reading
                         self.history[name] = [reading]
-                logger.info("Cargados %d sensores desde disco (%s)", len(self.readings), PERSIST_FILE)
+                logger.info("Loaded %d sensors from disk (%s)", len(self.readings), PERSIST_FILE)
             else:
-                logger.info("No hay datos persistidos en %s (primer arranque)", PERSIST_FILE)
+                logger.info("No persisted data at %s (first boot)", PERSIST_FILE)
         except Exception as e:
-            logger.warning("Error cargando datos de disco: %s", e)
+            logger.warning("Error loading data from disk: %s", e)
 
     def _save_to_disk(self):
-        """Guarda el historial de lecturas de cada sensor a disco.
+        """Saves reading history for each sensor to disk.
         
-        IMPORTANTE: Debe llamarse CON el lock activo o con copia de datos.
+        IMPORTANT: Must be called WITH active lock or with data copy.
         """
         try:
             path = Path(PERSIST_FILE)
             path.parent.mkdir(parents=True, exist_ok=True)
-            # Hacer copia dentro del lock para evitar race conditions
+            # Make copy inside lock to avoid race conditions
             data = {}
             for name, readings_list in self.history.items():
                 data[name] = [r.to_dict() for r in readings_list]
             path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         except Exception as e:
-            logger.warning("Error guardando datos a disco: %s", e)
+            logger.warning("Error saving data to disk: %s", e)
 
     def start(self):
-        """Inicia la conexión MQTT y se suscribe a los topics."""
+        """Starts MQTT connection and subscribes to topics."""
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
         self._client.on_disconnect = self._on_disconnect
 
-        logger.info("Conectando a MQTT %s:%d", self.broker, self.port)
+        logger.info("Connecting to MQTT %s:%d", self.broker, self.port)
 
-        # Reintentar conexión
+        # Retry connection
         for attempt in range(self.connect_retries):
             try:
                 self._client.connect(self.broker, self.port, self.keepalive)
                 self._client.loop_start()
                 return
             except Exception as e:
-                logger.warning("Intento %d conexión MQTT: %s", attempt + 1, e)
+                logger.warning("MQTT connection attempt %d: %s", attempt + 1, e)
                 time.sleep(self.retry_delay)
 
-        raise ConnectionError(f"No se pudo conectar a MQTT {self.broker}:{self.port}")
+        raise ConnectionError(f"Could not connect to MQTT {self.broker}:{self.port}")
 
     def stop(self):
-        """Detiene la conexión MQTT y guarda datos a disco."""
+        """Stops MQTT connection and saves data to disk."""
         self._save_to_disk()
         if self._client:
             self._client.loop_stop()
             self._client.disconnect()
 
     def _on_connect(self, client, userdata, flags, reason_code, properties):
-        logger.info("Conectado a MQTT (rc=%s)", reason_code)
+        logger.info("Connected to MQTT (rc=%s)", reason_code)
         self._connected = True
         client.subscribe("zigbee2mqtt/+")
-        logger.info("Suscrito a zigbee2mqtt/+ (sensores: %s)", self.sensor_names)
+        logger.info("Subscribed to zigbee2mqtt/+ (sensors: %s)", self.sensor_names)
 
     def _on_disconnect(self, client, userdata, flags, reason_code, properties):
-        logger.warning("Desconectado de MQTT (rc=%s)", reason_code)
+        logger.warning("Disconnected from MQTT (rc=%s)", reason_code)
         self._connected = False
 
     def _on_message(self, client, userdata, msg):
-        """Procesa un mensaje MQTT de un sensor."""
+        """Processes an MQTT message from a sensor."""
         try:
             parts = msg.topic.split("/")
             if len(parts) < 2:
@@ -182,34 +182,34 @@ class MqttHandler:
                 timestamp=time.time(),
             )
 
-            # Hacer TODA la manipulación dentro del lock (fix race condition)
+            # Do ALL manipulation inside the lock (fix race condition)
             with self._lock:
                 self.readings[sensor_name] = reading
-                # Guardar cada lectura como un punto en el historial (FIFO)
+                # Save each reading as a point in history (FIFO)
                 if sensor_name not in self.history:
                     self.history[sensor_name] = []
                 self.history[sensor_name].append(reading)
                 if len(self.history[sensor_name]) > self.max_history:
                     self.history[sensor_name] = self.history[sensor_name][-self.max_history:]
                 
-                # Hacer copia de datos para persistir
+                # Make copy of data to persist
                 data_to_save = {}
                 for name, readings_list in self.history.items():
                     data_to_save[name] = [r.to_dict() for r in readings_list]
             
-            # Persistir a disco FUERA del lock para no bloquear
+            # Persist to disk OUTSIDE lock to not block
             try:
                 path = Path(PERSIST_FILE)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(json.dumps(data_to_save, ensure_ascii=False), encoding="utf-8")
             except Exception as e:
-                logger.warning("Error guardando datos a disco: %s", e)
+                logger.warning("Error saving data to disk: %s", e)
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
-            logger.warning("Error procesando mensaje de %s: %s", msg.topic, e)
+            logger.warning("Error processing message from %s: %s", msg.topic, e)
 
     def get_active_readings(self, max_age_seconds: int = 600) -> dict[str, SensorReading]:
-        """Devuelve sensores con dato reciente (< max_age)."""
+        """Returns sensors with recent data (< max_age)."""
         now = time.time()
         active = {}
         with self._lock:
@@ -219,7 +219,7 @@ class MqttHandler:
         return active
 
     def get_average_temperature(self, max_age_seconds: int = 600) -> float | None:
-        """Calcula la media de temperatura de sensores activos."""
+        """Calculates average temperature from active sensors."""
         active = self.get_active_readings(max_age_seconds)
         if not active:
             return None
@@ -227,7 +227,7 @@ class MqttHandler:
         return sum(temps) / len(temps)
 
     def get_average_humidity(self, max_age_seconds: int = 600) -> float | None:
-        """Calcula la media de humedad de sensores activos."""
+        """Calculates average humidity from active sensors."""
         active = self.get_active_readings(max_age_seconds)
         if not active:
             return None

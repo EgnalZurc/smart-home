@@ -1,6 +1,6 @@
-"""Cliente para obtener información de Zigbee2MQTT.
+"""Client to get information from Zigbee2MQTT.
 
-Permite descubrir automáticamente dispositivos conectados mediante MQTT.
+Allows automatic discovery of connected devices via MQTT.
 """
 
 import json
@@ -13,15 +13,15 @@ logger = logging.getLogger(__name__)
 
 
 class Zigbee2MQTTClient:
-    """Cliente para interactuar con Zigbee2MQTT vía MQTT."""
+    """Client to interact with Zigbee2MQTT via MQTT."""
 
     def __init__(self, mqtt_broker: str, mqtt_port: int = 1883, timeout: float = 10.0):
-        """Inicializa el cliente.
+        """Initializes the client.
 
         Args:
-            mqtt_broker: Host del broker MQTT (ej: mosquitto)
-            mqtt_port: Puerto del broker MQTT (default: 1883)
-            timeout: Timeout en segundos para obtener respuestas
+            mqtt_broker: MQTT broker host (e.g., mosquitto)
+            mqtt_port: MQTT broker port (default: 1883)
+            timeout: Timeout in seconds to get responses
         """
         self.mqtt_broker = mqtt_broker
         self.mqtt_port = mqtt_port
@@ -30,54 +30,54 @@ class Zigbee2MQTTClient:
         self.response_received = False
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
-        """Callback al conectar."""
+        """Callback on connect."""
         if rc == 0:
-            logger.debug("Conectado a MQTT %s:%d", self.mqtt_broker, self.mqtt_port)
-            # Suscribirse al topic de dispositivos
+            logger.debug("Connected to MQTT %s:%d", self.mqtt_broker, self.mqtt_port)
+            # Subscribe to devices topic
             client.subscribe("zigbee2mqtt/bridge/devices")
         else:
-            logger.error("Error al conectar a MQTT: rc=%d", rc)
+            logger.error("Error connecting to MQTT: rc=%d", rc)
 
     def _on_message(self, client, userdata, msg):
-        """Callback al recibir mensaje."""
+        """Callback on message received."""
         if msg.topic == "zigbee2mqtt/bridge/devices":
             try:
                 self.devices = json.loads(msg.payload.decode())
                 self.response_received = True
-                logger.debug("Recibidos %d dispositivos", len(self.devices))
+                logger.debug("Received %d devices", len(self.devices))
             except json.JSONDecodeError as e:
-                logger.error("Error al decodificar JSON de dispositivos: %s", e)
+                logger.error("Error decoding devices JSON: %s", e)
 
     def get_devices(self) -> list[dict[str, Any]]:
-        """Obtiene la lista de dispositivos conectados a Zigbee2MQTT vía MQTT.
+        """Gets the list of devices connected to Zigbee2MQTT via MQTT.
 
         Returns:
-            Lista de dispositivos. Cada dispositivo es un dict con:
-            - friendly_name: Nombre del dispositivo
-            - ieee_address: Dirección IEEE
-            - type: Tipo (Coordinator, Router, EndDevice)
-            - model_id: ID del modelo
-            - manufacturer: Fabricante
-            - definition: Definición del dispositivo (contiene 'supported', 'exposes', etc.)
+            List of devices. Each device is a dict with:
+            - friendly_name: Device name
+            - ieee_address: IEEE address
+            - type: Type (Coordinator, Router, EndDevice)
+            - model_id: Model ID
+            - manufacturer: Manufacturer
+            - definition: Device definition (contains 'supported', 'exposes', etc.)
 
         Raises:
-            Exception: Si no se puede conectar o no se recibe respuesta
+            Exception: If cannot connect or no response received
         """
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         client.on_connect = self._on_connect
         client.on_message = self._on_message
 
         try:
-            logger.info("Conectando a MQTT %s:%d para obtener dispositivos...", self.mqtt_broker, self.mqtt_port)
+            logger.info("Connecting to MQTT %s:%d to get devices...", self.mqtt_broker, self.mqtt_port)
             client.connect(self.mqtt_broker, self.mqtt_port, 60)
             
-            # Iniciar loop en background
+            # Start loop in background
             client.loop_start()
 
-            # Solicitar lista de dispositivos
+            # Request device list
             client.publish("zigbee2mqtt/bridge/request/devices", "")
 
-            # Esperar respuesta con timeout
+            # Wait for response with timeout
             import time
             elapsed = 0.0
             poll_interval = 0.1
@@ -86,38 +86,38 @@ class Zigbee2MQTTClient:
                 elapsed += poll_interval
 
             if not self.response_received:
-                raise Exception(f"Timeout esperando respuesta de Zigbee2MQTT después de {self.timeout}s")
+                raise Exception(f"Timeout waiting for Zigbee2MQTT response after {self.timeout}s")
 
-            logger.info("Obtenidos %d dispositivos de Zigbee2MQTT", len(self.devices))
+            logger.info("Got %d devices from Zigbee2MQTT", len(self.devices))
             return self.devices
 
         except Exception as e:
-            logger.error("Error al obtener dispositivos: %s", e)
+            logger.error("Error getting devices: %s", e)
             raise
         finally:
             client.loop_stop()
             client.disconnect()
 
     def discover_temperature_sensors(self) -> list[str]:
-        """Descubre automáticamente sensores de temperatura/humedad.
+        """Automatically discovers temperature/humidity sensors.
 
-        Filtra dispositivos que:
-        - No sean Coordinador
-        - Tengan capacidad de medir temperatura (exposes temperature)
+        Filters devices that:
+        - Are not Coordinator
+        - Have temperature measurement capability (exposes temperature)
 
         Returns:
-            Lista de friendly_names de sensores descubiertos
+            List of friendly_names of discovered sensors
         """
         try:
             devices = self.get_devices()
             sensors = []
 
             for device in devices:
-                # Ignorar coordinador
+                # Ignore coordinator
                 if device.get("type") == "Coordinator":
                     continue
 
-                # Verificar si tiene sensor de temperatura en 'exposes'
+                # Check if it has temperature sensor in 'exposes'
                 definition = device.get("definition")
                 if not definition:
                     continue
@@ -137,17 +137,17 @@ class Zigbee2MQTTClient:
                     if friendly_name:
                         sensors.append(friendly_name)
                         logger.info(
-                            "Sensor descubierto: %s (%s - %s)",
+                            "Sensor discovered: %s (%s - %s)",
                             friendly_name,
                             device.get("manufacturer", "Unknown"),
                             device.get("model_id", "Unknown"),
                         )
 
-            logger.info("Total sensores de temperatura descubiertos: %d", len(sensors))
+            logger.info("Total temperature sensors discovered: %d", len(sensors))
             return sensors
 
         except Exception as e:
-            logger.error("Error al descubrir sensores: %s", e)
-            # Devolver lista vacía en lugar de fallar - el sistema puede funcionar
-            # con configuración manual si Zigbee2MQTT no está disponible
+            logger.error("Error discovering sensors: %s", e)
+            # Return empty list instead of failing - system can work
+            # with manual configuration if Zigbee2MQTT is not available
             return []

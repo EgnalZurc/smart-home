@@ -1,7 +1,7 @@
-"""Cliente para la API de MELCloud.
+"""Client for the MELCloud API.
 
-Funciona tanto con la API real como con el mock del POC.
-La URL base se configura vía variable de entorno MELCLOUD_URL.
+Works with both the real API and the POC mock.
+The base URL is configured via the MELCLOUD_URL environment variable.
 """
 
 import logging
@@ -27,7 +27,7 @@ MODE_MAP = {
 
 
 class MelCloudClient:
-    """Cliente HTTP para la API de MELCloud."""
+    """HTTP client for the MELCloud API."""
 
     def __init__(
         self, 
@@ -38,15 +38,15 @@ class MelCloudClient:
         timeout: float = 30.0,
         app_version: str = "1.32.1.0"
     ):
-        # Normalizar: si la URL ya incluye el path base, usarla tal cual.
-        # Si no, añadirlo.
+        # Normalize: if the URL already includes the base path, use it as is.
+        # Otherwise, add it.
         base = base_url.rstrip("/")
         if base.endswith("/Mitsubishi.Wifi.Client"):
             self.base_url = base
         else:
             self.base_url = f"{base}/Mitsubishi.Wifi.Client"
         self.email = email
-        self.password = password  # Se borrará después del login
+        self.password = password  # Will be deleted after login
         self._building_id = building_id
         self._timeout = timeout
         self._app_version = app_version
@@ -60,7 +60,7 @@ class MelCloudClient:
         return headers
 
     def login(self) -> bool:
-        """Autenticarse y obtener ContextKey."""
+        """Authenticate and get ContextKey."""
         try:
             resp = self.client.post(
                 f"{self.base_url}/Login/ClientLogin",
@@ -78,27 +78,27 @@ class MelCloudClient:
             data = resp.json()
 
             if data.get("ErrorId"):
-                logger.error("Login fallido: %s", data.get("ErrorMessage"))
+                logger.error("Login failed: %s", data.get("ErrorMessage"))
                 return False
 
             self.context_key = data.get("LoginData", {}).get("ContextKey")
             if not self.context_key:
-                logger.error("Login OK pero sin ContextKey")
+                logger.error("Login OK but no ContextKey")
                 return False
 
-            logger.info("Login exitoso en MELCloud")
+            logger.info("Successful login to MELCloud")
             
-            # Seguridad: Borrar contraseña de memoria después del login exitoso
+            # Security: Delete password from memory after successful login
             del self.password
             
             return True
 
         except httpx.HTTPError as e:
-            logger.error("Error HTTP en login: %s", e)
+            logger.error("HTTP error on login: %s", e)
             return False
 
     def get_device_state(self, device_id: int, building_id: int) -> dict | None:
-        """Obtiene el estado completo del AC (dict raw de la API)."""
+        """Gets complete AC state (raw dict from API)."""
         try:
             resp = self.client.get(
                 f"{self.base_url}/Device/Get",
@@ -109,7 +109,7 @@ class MelCloudClient:
             return resp.json()
 
         except httpx.HTTPError as e:
-            logger.error("Error obteniendo estado: %s", e)
+            logger.error("Error getting state: %s", e)
             return None
 
     def set_temperature(
@@ -121,31 +121,31 @@ class MelCloudClient:
         fan_speed: int = 0,
         building_id: int | None = None,
     ) -> bool:
-        """Configura el AC.
+        """Configures the AC.
 
-        Método: GET estado completo → modificar campos → POST estado completo.
-        La API de MELCloud requiere enviar el estado entero del dispositivo,
-        no solo los campos a modificar.
+        Method: GET complete state → modify fields → POST complete state.
+        The MELCloud API requires sending the entire device state,
+        not just the fields to modify.
 
         Args:
-            device_id: ID del dispositivo en MELCloud.
-            setpoint: Temperatura objetivo (16-31°C).
-            power: Encender/apagar.
+            device_id: Device ID in MELCloud.
+            setpoint: Target temperature (16-31°C).
+            power: Turn on/off.
             mode: "cool", "heat", "auto", "dry", "fan".
             fan_speed: 0=auto, 1-5=manual.
-            building_id: ID del building (necesario para GET previo).
+            building_id: Building ID (needed for previous GET).
         """
         setpoint = max(16.0, min(31.0, setpoint))
         operation_mode = MODE_MAP.get(mode, AC_MODE_COOL)
 
         try:
-            # 1. Obtener estado actual completo
+            # 1. Get current complete state
             state = self.get_device_state(device_id, building_id or self._building_id)
             if state is None:
-                logger.error("No se pudo obtener estado actual para SetAta")
+                logger.error("Could not get current state for SetAta")
                 return False
 
-            # 2. Modificar los campos necesarios
+            # 2. Modify necessary fields
             state["Power"] = power
             state["OperationMode"] = operation_mode
             state["SetTemperature"] = setpoint
@@ -153,7 +153,7 @@ class MelCloudClient:
             state["EffectiveFlags"] = 0x1F  # Power + Mode + Temp + Fan + Vane
             state["HasPendingCommand"] = True
 
-            # 3. Enviar estado completo modificado
+            # 3. Send modified complete state
             resp = self.client.post(
                 f"{self.base_url}/Device/SetAta",
                 json=state,
@@ -162,25 +162,25 @@ class MelCloudClient:
             resp.raise_for_status()
             data = resp.json()
 
-            # Verificar que se aplicó
+            # Verify it was applied
             applied_temp = data.get("SetTemperature")
             if applied_temp != setpoint:
                 logger.warning(
-                    "SetAta respondió con SetTemp=%.1f (esperado %.1f). "
-                    "Puede estar offline temporalmente.",
+                    "SetAta responded with SetTemp=%.1f (expected %.1f). "
+                    "May be temporarily offline.",
                     applied_temp or 0, setpoint,
                 )
 
             logger.info(
-                "AC configurado: power=%s, mode=%s, setpoint=%.1f°C, fan=%d",
+                "AC configured: power=%s, mode=%s, setpoint=%.1f°C, fan=%d",
                 power, mode, setpoint, fan_speed,
             )
             return True
 
         except httpx.HTTPError as e:
-            logger.error("Error configurando AC: %s", e)
+            logger.error("Error configuring AC: %s", e)
             return False
 
     def close(self):
-        """Cierra el cliente HTTP."""
+        """Closes the HTTP client."""
         self.client.close()
