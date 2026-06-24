@@ -18,7 +18,7 @@ Modular and expandable home automation system developed in phases. Intelligent a
 ### 🌡️ Intelligent AC Control
 - Override internal thermostat with average of 5 Zigbee sensors
 - Formal state machine with 7 states
-- Manual control (force ON/OFF) with system override
+- 3 control modes: Auto, Manual, OFF
 - Hysteresis and cooldown to avoid rapid cycles
 
 ### 📱 Web Interface
@@ -227,7 +227,7 @@ target.
 | F0.19 | Connection criteria (1 hour timeout) | ✅ |
 | F0.20 | Automatic log cleanup | ✅ |
 | F0.21 | Show controller decision in real-time | ✅ |
-| F0.22 | Manual control popups (force ON/OFF) | ✅ |
+| F0.22 | Manual control interface (3 modes: Auto/Manual/OFF) | ✅ |
 | F0.23 | Deployment on Raspberry Pi | ✅ |
 
 **Implemented features:**
