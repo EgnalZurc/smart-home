@@ -63,16 +63,16 @@
             position: relative;
         }
         .flag-img {
-            width: 32px;
-            height: 22px;
+            width: 24px;
+            height: 16px;
             object-fit: cover;
-            border-radius: 3px;
+            border-radius: 2px;
             display: block;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         }
         .lang-current {
-            padding: 6px;
-            border-radius: 8px;
+            padding: 4px;
+            border-radius: 6px;
             cursor: pointer;
             border: 2px solid rgba(100, 116, 139, 0.3);
             background: rgba(30, 41, 59, 0.4);
@@ -106,8 +106,8 @@
             display: flex;
         }
         .lang-option {
-            padding: 6px;
-            border-radius: 6px;
+            padding: 4px;
+            border-radius: 4px;
             cursor: pointer;
             transition: all 0.2s ease;
             display: flex;
@@ -159,13 +159,13 @@
 
     <!-- Average temperature (clickable → sensors popup) -->
     <div class="card rounded-3xl p-6 mb-4 text-center cursor-pointer" onclick="openModal()" role="button" aria-label="View sensors detail">
-        <p class="text-slate-400 text-[11px] uppercase tracking-widest mb-2">Average Temperature</p>
+        <p class="text-slate-400 text-[11px] uppercase tracking-widest mb-2" data-i18n="main.avgTemp">Average Temperature</p>
         <p class="text-[3.5rem] font-extrabold leading-none tracking-tight" id="avg-temp">--°C</p>
         <div class="flex justify-center items-center gap-5 mt-3">
             <span class="text-slate-400 text-xs flex items-center gap-1">💧 <span id="avg-hum">--%</span></span>
             <span class="text-slate-400 text-xs flex items-center gap-1">📡 <span id="sensors-count">0/5</span></span>
         </div>
-        <div class="mt-3 text-[11px] text-slate-500" id="outdoor-line">🌍 Outdoor: --</div>
+        <div class="mt-3 text-[11px] text-slate-500" id="outdoor-line">🌍 <span data-i18n="main.outdoor">Outdoor</span>: --</div>
     </div>
 
     <!-- AC State (from MELCloud) -->
@@ -569,7 +569,7 @@ async function poll() {
             const outResp = await fetch('/api/outdoor');
             const out = await outResp.json();
             if (out.temperature !== null) {
-                document.getElementById('outdoor-line').innerHTML = `🌍 Exterior: <span style="color:${tempColor(out.temperature)}">${out.temperature.toFixed(1)}°C</span> · <span style="color:${humColor(out.humidity)}">${out.humidity}%</span>`;
+                document.getElementById('outdoor-line').innerHTML = `🌍 <span data-i18n="main.outdoor">${i18n.t('main.outdoor')}</span>: <span style="color:${tempColor(out.temperature)}">${out.temperature.toFixed(1)}°C</span> · <span style="color:${humColor(out.humidity)}">${out.humidity}%</span>`;
             }
         } catch(e) {}
 
@@ -723,7 +723,7 @@ function updateDetail(sensors) {
                     <span style="color:${batColor}">🔋${bat}</span>
                 </div>
             </div>
-            <div class="text-[10px] text-slate-500 text-right">Última: ${lastSeenText}</div>
+            <div class="text-[10px] text-slate-500 text-right">${i18n.t('modals.sensors.lastSeen')}: ${lastSeenText}</div>
         </div>`;
     }).join('');
 }
