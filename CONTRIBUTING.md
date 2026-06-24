@@ -1,165 +1,165 @@
 # Contributing to Smart Home Control
 
-¡Gracias por tu interés en contribuir! Este documento explica cómo colaborar en el proyecto.
+Thank you for your interest in contributing! This document explains how to collaborate on the project.
 
 ---
 
-## 🌟 Formas de Contribuir
+## 🌟 Ways to Contribute
 
-- 🐛 Reportar bugs
-- 💡 Sugerir nuevas funcionalidades
-- 📝 Mejorar documentación
-- 🔧 Enviar código (pull requests)
-- 🧪 Probar en diferentes entornos
-- 🌍 Traducir documentación
-
----
-
-## 🐛 Reportar Bugs
-
-### Antes de reportar
-
-1. Buscar en [Issues](https://github.com/EgnalZurc/smart-home/issues) existentes
-2. Probar con la última versión del código
-3. Verificar que el problema es reproducible
-
-### Crear Issue
-
-Incluir:
-- **Descripción clara** del problema
-- **Pasos para reproducir** (1, 2, 3...)
-- **Comportamiento esperado** vs **comportamiento actual**
-- **Logs relevantes** (usar `docker-compose logs`)
-- **Entorno**: SO, versión Docker, modelo Raspberry Pi
-- **Capturas de pantalla** (si aplica)
+- 🐛 Report bugs
+- 💡 Suggest new features
+- 📝 Improve documentation
+- 🔧 Submit code (pull requests)
+- 🧪 Test in different environments
+- 🌍 Translate documentation
 
 ---
 
-## 💡 Sugerir Funcionalidades
+## 🐛 Reporting Bugs
 
-### Proponer nueva feature
+### Before reporting
 
-1. Abrir [Issue](https://github.com/EgnalZurc/smart-home/issues/new) con etiqueta `enhancement`
-2. Describir:
-   - ¿Qué problema resuelve?
-   - ¿Cómo funcionaría?
-   - ¿Afecta a hardware existente o requiere nuevo hardware?
-   - ¿Encaja en alguna fase existente o requiere nueva fase?
+1. Search existing [Issues](https://github.com/EgnalZurc/smart-home/issues)
+2. Test with latest code version
+3. Verify problem is reproducible
 
-### Proponer nueva fase
+### Create Issue
 
-Ver [README.md - Añadir nuevas fases](README.md#añadir-nuevas-fases)
-
-1. Crear documento `docs/faseN-nombre.md`
-2. Definir requerimientos (F{N}.1, F{N}.2, ...)
-3. Especificar hardware adicional
-4. Diseñar lógica/arquitectura
-5. Abrir Pull Request con la propuesta
+Include:
+- **Clear description** of the problem
+- **Steps to reproduce** (1, 2, 3...)
+- **Expected behavior** vs **actual behavior**
+- **Relevant logs** (use `docker-compose logs`)
+- **Environment**: OS, Docker version, Raspberry Pi model
+- **Screenshots** (if applicable)
 
 ---
 
-## 🔧 Contribuir Código
+## 💡 Suggesting Features
 
-### Setup de Desarrollo
+### Propose new feature
+
+1. Open [Issue](https://github.com/EgnalZurc/smart-home/issues/new) with `enhancement` label
+2. Describe:
+   - What problem does it solve?
+   - How would it work?
+   - Does it affect existing hardware or require new hardware?
+   - Does it fit in existing phase or require new phase?
+
+### Propose new phase
+
+See [README.md - Adding new phases](README.md#adding-new-phases)
+
+1. Create document `docs/phaseN-name.md`
+2. Define requirements (F{N}.1, F{N}.2, ...)
+3. Specify additional hardware
+4. Design logic/architecture
+5. Open Pull Request with proposal
+
+---
+
+## 🔧 Contributing Code
+
+### Development Setup
 
 ```bash
-# Fork del repositorio en GitHub
+# Fork repository on GitHub
 
-# Clonar tu fork
-git clone https://github.com/TU_USUARIO/smart-home.git
+# Clone your fork
+git clone https://github.com/YOUR_USERNAME/smart-home.git
 cd smart-home
 
-# Añadir upstream
+# Add upstream
 git remote add upstream https://github.com/EgnalZurc/smart-home.git
 
-# Crear rama para tu feature
-git checkout -b feature/nombre-descriptivo
+# Create branch for your feature
+git checkout -b feature/descriptive-name
 ```
 
-### Desarrollo Local
+### Local Development
 
 ```bash
-# Usar docker-compose.dev.yml para desarrollo
-docker-compose -f docker-compose.dev.yml up -d --build
+# Use docker-compose.override.yml for development
+docker-compose up -d --build
 
-# Ver logs
-docker-compose -f docker-compose.dev.yml logs -f
+# View logs
+docker-compose logs -f
 
-# Reiniciar backend tras cambios
+# Restart backend after changes
 docker restart smart-home-backend
 ```
 
-### Antes de Commit
+### Before Commit
 
 ```bash
-# Verificar que no hay credenciales
+# Verify no credentials
 git status
 git diff
 
-# Verificar que .env NO está staged
+# Verify .env is NOT staged
 git status | grep .env
 
-# Verificar Python (si modificaste backend)
+# Verify Python (if you modified backend)
 cd src/backend
-python -m pytest  # Si hay tests
+python -m pytest  # If tests exist
 
-# Verificar que no rompes nada
+# Verify nothing breaks
 docker-compose up -d --build
 curl http://localhost:8080/api/status
 ```
 
-### Commit y Push
+### Commit and Push
 
 ```bash
-# Commits descriptivos
+# Descriptive commits
 git add .
-git commit -m "feat: Descripción clara de la feature"
+git commit -m "feat: Clear description of feature"
 
-# Push a tu fork
-git push origin feature/nombre-descriptivo
+# Push to your fork
+git push origin feature/descriptive-name
 ```
 
 ### Pull Request
 
-1. Ir a tu fork en GitHub
+1. Go to your fork on GitHub
 2. Click "Compare & pull request"
-3. Rellenar template:
-   - **Descripción**: ¿Qué hace tu PR?
-   - **Issue relacionado**: Fixes #123
-   - **Tests**: ¿Cómo lo probaste?
-   - **Checklist**: Marcar items completados
+3. Fill template:
+   - **Description**: What does your PR do?
+   - **Related issue**: Fixes #123
+   - **Tests**: How did you test it?
+   - **Checklist**: Mark completed items
 
 ---
 
-## 📝 Estilo de Código
+## 📝 Code Style
 
 ### Python (Backend)
 
-- **PEP 8** (style guide estándar)
-- **Type hints** cuando sea posible
-- **Docstrings** para funciones públicas
-- **Logs** con niveles apropiados (INFO, WARNING, ERROR)
+- **PEP 8** (standard style guide)
+- **Type hints** when possible
+- **Docstrings** for public functions
+- **Logs** with appropriate levels (INFO, WARNING, ERROR)
 
 ```python
 async def get_sensor_reading(sensor_id: str) -> dict | None:
-    """Obtiene la última lectura de un sensor.
+    """Get latest reading from a sensor.
     
     Args:
-        sensor_id: ID único del sensor Zigbee
+        sensor_id: Unique ID of Zigbee sensor
         
     Returns:
-        Dict con temperatura, humedad, batería y timestamp.
-        None si el sensor no existe.
+        Dict with temperature, humidity, battery and timestamp.
+        None if sensor doesn't exist.
     """
-    # Implementación
+    # Implementation
 ```
 
 ### JavaScript (Frontend)
 
 - **ES6+** modern syntax
-- **camelCase** para variables y funciones
-- **Comentarios** en partes complejas
-- **Async/await** para promesas
+- **camelCase** for variables and functions
+- **Comments** in complex parts
+- **Async/await** for promises
 
 ```javascript
 async function updateSensorData() {
@@ -175,22 +175,22 @@ async function updateSensorData() {
 
 ### Commits
 
-Seguir [Conventional Commits](https://www.conventionalcommits.org/):
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
-feat: Añadir soporte para sensores de movimiento
-fix: Corregir cálculo de temperatura media
-docs: Actualizar guía de despliegue
-refactor: Simplificar lógica del controlador AC
-test: Añadir tests para state machine
-chore: Actualizar dependencias
+feat: Add support for motion sensors
+fix: Fix temperature average calculation
+docs: Update deployment guide
+refactor: Simplify AC controller logic
+test: Add tests for state machine
+chore: Update dependencies
 ```
 
 ---
 
 ## 🧪 Tests
 
-### Ejecutar Tests
+### Run Tests
 
 ```bash
 cd src/backend
@@ -198,15 +198,15 @@ python -m pytest
 python -m pytest tests/test_state_machine.py -v
 ```
 
-### Añadir Tests
+### Add Tests
 
-- Tests unitarios para lógica de negocio
-- Tests de integración para API endpoints
-- Tests en `src/backend/tests/`
+- Unit tests for business logic
+- Integration tests for API endpoints
+- Tests in `src/backend/tests/`
 
 ```python
 def test_temperature_average():
-    """Test cálculo de temperatura media"""
+    """Test temperature average calculation"""
     sensors = [
         {'temperature': 25.0},
         {'temperature': 26.0},
@@ -217,117 +217,117 @@ def test_temperature_average():
 
 ---
 
-## 📚 Documentación
+## 📚 Documentation
 
-### Actualizar Documentación
+### Update Documentation
 
-Si tu PR afecta:
-- **Funcionalidad**: Actualizar README.md
-- **Despliegue**: Actualizar DEPLOY.md
-- **Uso**: Actualizar QUICKSTART.md
-- **Arquitectura**: Actualizar docs/ correspondiente
+If your PR affects:
+- **Functionality**: Update README.md
+- **Deployment**: Update DEPLOY.md
+- **Usage**: Update QUICKSTART.md
+- **Architecture**: Update corresponding docs/
 
-### Crear Nueva Documentación
+### Create New Documentation
 
-- Markdown con formato consistente
-- Ejemplos de código cuando sea relevante
-- Screenshots si ayudan a entender
-- Links a documentación externa
+- Markdown with consistent formatting
+- Code examples when relevant
+- Screenshots if they help understanding
+- Links to external documentation
 
 ---
 
-## 🔐 Seguridad
+## 🔐 Security
 
-### Reportar Vulnerabilidad
+### Report Vulnerability
 
-**NO** abrir issue público. Enviar email privado a:
+**DO NOT** open public issue. Send private email to:
 - **Email**: [acmlsn@gmail.com](mailto:acmlsn@gmail.com)
-- **Asunto**: `[SECURITY] Descripción breve`
+- **Subject**: `[SECURITY] Brief description`
 
-Incluir:
-- Descripción de la vulnerabilidad
-- Pasos para reproducir
-- Impacto potencial
-- Posible solución (si la conoces)
+Include:
+- Vulnerability description
+- Steps to reproduce
+- Potential impact
+- Possible solution (if you know it)
 
-### Buenas Prácticas
+### Best Practices
 
-- ❌ **NUNCA** commitear credenciales (`.env`, passwords, API keys)
-- ✅ Usar `.env.example` para plantillas
-- ✅ Verificar `.gitignore` antes de commit
-- ✅ Usar secrets de GitHub Actions para CI/CD
+- ❌ **NEVER** commit credentials (`.env`, passwords, API keys)
+- ✅ Use `.env.example` for templates
+- ✅ Verify `.gitignore` before commit
+- ✅ Use GitHub Actions secrets for CI/CD
 
 ---
 
 ## 📦 Releases
 
-### Versionado
+### Versioning
 
-Seguir [Semantic Versioning](https://semver.org/):
-- `MAJOR.MINOR.PATCH` (ej: `1.2.3`)
-- **MAJOR**: Cambios incompatibles
-- **MINOR**: Nueva funcionalidad compatible
-- **PATCH**: Bug fixes compatibles
+Follow [Semantic Versioning](https://semver.org/):
+- `MAJOR.MINOR.PATCH` (e.g.: `1.2.3`)
+- **MAJOR**: Incompatible changes
+- **MINOR**: New compatible functionality
+- **PATCH**: Compatible bug fixes
 
-### Crear Release
+### Create Release
 
-1. Actualizar `CHANGELOG.md` (si existe)
-2. Tag en Git: `git tag v1.2.0`
+1. Update `CHANGELOG.md` (if exists)
+2. Tag in Git: `git tag v1.2.0`
 3. Push tag: `git push origin v1.2.0`
-4. GitHub Actions construye imagen Docker automáticamente
-5. Crear release en GitHub con notas
+4. GitHub Actions builds Docker image automatically
+5. Create release on GitHub with notes
 
 ---
 
-## 🤝 Código de Conducta
+## 🤝 Code of Conduct
 
-### Nuestro Compromiso
+### Our Commitment
 
-- 🤗 Entorno acogedor e inclusivo
-- 🎯 Enfoque en lo que es mejor para la comunidad
-- 😊 Respeto y empatía hacia otros colaboradores
-- 🙏 Aceptar críticas constructivas
-- 🌍 Diversidad de experiencias y perspectivas
+- 🤗 Welcoming and inclusive environment
+- 🎯 Focus on what's best for the community
+- 😊 Respect and empathy towards other contributors
+- 🙏 Accept constructive criticism
+- 🌍 Diversity of experiences and perspectives
 
-### Comportamiento Esperado
+### Expected Behavior
 
-- ✅ Lenguaje acogedor e inclusivo
-- ✅ Respetar puntos de vista diferentes
-- ✅ Aceptar críticas constructivas
-- ✅ Enfocarse en lo mejor para la comunidad
+- ✅ Welcoming and inclusive language
+- ✅ Respect different viewpoints
+- ✅ Accept constructive criticism
+- ✅ Focus on what's best for community
 
-### Comportamiento Inaceptable
+### Unacceptable Behavior
 
-- ❌ Lenguaje ofensivo o inapropiado
-- ❌ Trolling o comentarios despectivos
-- ❌ Acoso público o privado
-- ❌ Publicar información privada de otros
+- ❌ Offensive or inappropriate language
+- ❌ Trolling or derogatory comments
+- ❌ Public or private harassment
+- ❌ Publishing others' private information
 
 ---
 
-## 📧 Contacto
+## 📧 Contact
 
 - **Issues**: [GitHub Issues](https://github.com/EgnalZurc/smart-home/issues)
 - **Email**: acmlsn@gmail.com
-- **Twitter**: _Próximamente_
+- **Twitter**: _Coming soon_
 
 ---
 
-## ⭐ Reconocimientos
+## ⭐ Acknowledgments
 
-Todos los contribuidores serán reconocidos en:
-- README.md (sección Contributors)
-- CHANGELOG.md (por release)
+All contributors will be recognized in:
+- README.md (Contributors section)
+- CHANGELOG.md (per release)
 - GitHub contributors page
 
 ---
 
-## 📄 Licencia
+## 📄 License
 
-Al contribuir, aceptas que tus contribuciones se licenciarán bajo la [MIT License](LICENSE).
+By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
 
 ---
 
-**¡Gracias por contribuir!** 🎉
+**Thank you for contributing!** 🎉
 
-Tu ayuda hace que este proyecto sea mejor para todos.
+Your help makes this project better for everyone.

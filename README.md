@@ -4,148 +4,142 @@
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
 
-Sistema de domótica modular y expandible por fases. Control inteligente de aire acondicionado con sensores Zigbee, tracking de energía y costes, todo accesible desde una PWA moderna.
+Modular and expandable home automation system developed in phases. Intelligent air conditioning control with Zigbee sensors, accessible from a modern PWA.
 
-**🚀 Demo:** _Próximamente_  
+**🚀 Demo:** _Coming soon_  
 **⚡ Quick Start:** [QUICKSTART.md](QUICKSTART.md)  
-**📖 Guía de Despliegue:** [DEPLOY.md](DEPLOY.md)  
-**📋 Requerimientos:** [docs/REQUERIMIENTOS-COMPLETOS.md](docs/REQUERIMIENTOS-COMPLETOS.md)
+**📖 Deployment Guide:** [DEPLOY.md](DEPLOY.md)  
+**📋 Requirements:** [.kiro/docs/REQUIREMENTS.md](.kiro/docs/REQUIREMENTS.md)
 
 ---
 
-## ✨ Características Principales
+## ✨ Main Features
 
-### 🌡️ Control Inteligente de AC
-- Override del termostato interno con media de 5 sensores Zigbee
-- Máquina de estados formal con 7 estados
-- Control manual (forzar ON/OFF) con override del sistema
-- Histéresis y cooldown para evitar ciclos rápidos
+### 🌡️ Intelligent AC Control
+- Override internal thermostat with average of 5 Zigbee sensors
+- Formal state machine with 7 states
+- Manual control (force ON/OFF) with system override
+- Hysteresis and cooldown to avoid rapid cycles
 
-### ⚡ Tracking de Energía
-- Consumo en kWh y coste en € (últimas 24h)
-- Integración con API ESIOS para precios PVPC reales
-- Gráficas interactivas (horarias y mensuales)
-- Registros históricos (24h rolling + 365 días)
+### 📱 Web Interface
+- Modern PWA, mobile-first, responsive
+- Chart.js graphs (temperature, humidity)
+- Dynamic colors by ranges
+- Installable on mobile as native app
 
-### 📱 Interface Web
-- PWA moderna, mobile-first, responsive
-- Gráficas Chart.js (temperatura, humedad, energía)
-- Colores dinámicos por rangos
-- Instalable en móvil como app nativa
-
-### 🏠 Arquitectura
+### 🏠 Architecture
 - Docker + Docker Compose
-- Zigbee 3.0 (protocolo estándar, abierto)
-- MQTT para comunicación entre servicios
-- Persistencia completa: sensores, estado controlador, energía
-- Recuperación automática tras reinicios (protección compresor)
+- Zigbee 3.0 (standard, open protocol)
+- MQTT for inter-service communication
+- Complete persistence: sensors, controller state
+- Automatic recovery after restarts (compressor protection)
 
 ---
 
-## Índice
+## Table of Contents
 
-1. [Visión General](#visión-general)
-2. [Requerimientos Globales](#requerimientos-globales)
-3. [Infraestructura Base](#infraestructura-base)
-4. [Fases del Proyecto](#fases-del-proyecto)
-5. [Presupuesto](#presupuesto)
-6. [Guía para futuras sesiones](#guía-para-futuras-sesiones)
-
----
-
-## Visión General
-
-Un servidor central (SBC) corre Docker y gestiona todos los servicios domóticos.
-Los dispositivos se comunican vía Zigbee (protocolo estándar, abierto).
-El control se hace desde una web PWA accesible tanto en local como en remoto.
-
-El proyecto se desarrolla en fases incrementales. Cada fase:
-- Tiene su propio documento de diseño en `docs/faseX-nombre.md`
-- Añade funcionalidad sin romper las anteriores
-- Puede requerir hardware adicional (documentado en la fase)
+1. [Overview](#overview)
+2. [Global Requirements](#global-requirements)
+3. [Base Infrastructure](#base-infrastructure)
+4. [Project Phases](#project-phases)
+5. [Budget](#budget)
+6. [Guide for Future Sessions](#guide-for-future-sessions)
 
 ---
 
-## Requerimientos Globales
+## Overview
 
-Estos requerimientos aplican a TODAS las fases:
+A central server (SBC) runs Docker and manages all home automation services.
+Devices communicate via Zigbee (standard, open protocol).
+Control is done from a PWA web interface accessible both locally and remotely.
 
-| # | Requerimiento | Categoría |
+The project is developed in incremental phases. Each phase:
+- Has its own design document in `docs/phaseX-name.md`
+- Adds functionality without breaking previous ones
+- May require additional hardware (documented in the phase)
+
+---
+
+## Global Requirements
+
+These requirements apply to ALL phases:
+
+| # | Requirement | Category |
 |---|---|---|
-| G1 | Control desde teléfono móvil (iOS/Android) vía web PWA | UX |
-| G2 | Acceso desde fuera de la red WiFi de casa (Tailscale VPN) | Acceso remoto |
-| G3 | Web con diseño moderno, mobile-first, responsive | UX |
-| G4 | Protocolos y dispositivos estándar (Zigbee 3.0) para facilitar añadir/quitar sin modificar código | Extensibilidad |
-| G5 | Opción más económica dentro de las eficientes | Coste |
-| G6 | Dispositivos comprables desde Madrid, España | Disponibilidad |
-| G7 | Infraestructura expandible (Docker): añadir servicios = añadir contenedor | Extensibilidad |
-| G8 | Resiliencia: si un sensor falla, el sistema sigue funcionando con los restantes | Resiliencia |
-| G9 | Documentación completa para que cualquier sesión pueda continuar el trabajo | Mantenibilidad |
+| G1 | Control from mobile phone (iOS/Android) via PWA web | UX |
+| G2 | Access from outside home WiFi (Tailscale VPN) | Remote access |
+| G3 | Modern web design, mobile-first, responsive | UX |
+| G4 | Standard protocols and devices (Zigbee 3.0) to easily add/remove without code changes | Extensibility |
+| G5 | Most economical option among efficient ones | Cost |
+| G6 | Devices purchasable from Madrid, Spain | Availability |
+| G7 | Expandable infrastructure (Docker): add services = add container | Extensibility |
+| G8 | Resilience: if a sensor fails, system continues with remaining ones | Resilience |
+| G9 | Complete documentation so any session can continue work | Maintainability |
 
 ---
 
-## Infraestructura Base
+## Base Infrastructure
 
-### Hardware compartido (todas las fases)
+### Shared hardware (all phases)
 
-| Componente | Modelo exacto | Precio real | Estado |
+| Component | Exact model | Real price | Status |
 |---|---|---|---|
-| Servidor (SBC) | Raspberry Pi 5 (4GB) — Kit iRasptek | 180,99€ | ✅ Comprado (Amazon.es, jun 2026) |
-| Coordinador Zigbee | SONOFF ZBDongle-E V2 (antena externa) | 15,19€ | ✅ Comprado |
-| Alimentación | Fuente USB-C PD 27W (incluida en kit) | — | ✅ Incluido en kit |
-| Almacenamiento | MicroSD 64GB (incluida en kit, OS Bookworm preinstalado) | — | ✅ Incluido en kit |
-| Carcasa + cooler | iRasptek Active Cooler + carcasa (incluida en kit) | — | ✅ Incluido en kit |
+| Server (SBC) | Raspberry Pi 5 (4GB) — iRasptek Kit | €180.99 | ✅ Purchased (Amazon.es, Jun 2026) |
+| Zigbee Coordinator | SONOFF ZBDongle-E V2 (external antenna) | €15.19 | ✅ Purchased |
+| Power supply | USB-C PD 27W power supply (included in kit) | — | ✅ Included in kit |
+| Storage | MicroSD 64GB (included in kit, Bookworm OS preinstalled) | — | ✅ Included in kit |
+| Case + cooler | iRasptek Active Cooler + case (included in kit) | — | ✅ Included in kit |
 
-**Total infraestructura base: ~196€** (kit Pi + dongle Zigbee)
+**Total base infrastructure: ~€196** (Pi kit + Zigbee dongle)
 
-### Decisión de servidor
+### Server decision
 
-La Raspberry Pi 4 tiene rotura de stock y precio excesivo. Alternativas evaluadas:
+Raspberry Pi 4 has stock shortage and excessive price. Evaluated alternatives:
 
-| Opción | RAM | CPU | Precio | Estado |
+| Option | RAM | CPU | Price | Status |
 |---|---|---|---|---|
-| ~~Raspberry Pi 4 (4GB)~~ | 4GB | 4x A72 1.5GHz | ~~65€~~ >100€ | Sin stock / inflado |
-| **Raspberry Pi 5 (2GB)** ✓ | 2GB | 4x A76 2.4GHz | ~55€ | Disponible (RS Online, distribuidores EU) |
-| Raspberry Pi 5 (4GB) | 4GB | 4x A76 2.4GHz | ~75-85€ | Disponible pero más caro |
-| Orange Pi 3B (4GB) | 4GB | 4x A55 2.0GHz | ~50€ | Amazon.es (plan B) |
+| ~~Raspberry Pi 4 (4GB)~~ | 4GB | 4x A72 1.5GHz | ~~€65~~ >€100 | Out of stock / inflated |
+| **Raspberry Pi 5 (2GB)** ✓ | 2GB | 4x A76 2.4GHz | ~€55 | Available (RS Online, EU distributors) |
+| Raspberry Pi 5 (4GB) | 4GB | 4x A76 2.4GHz | ~€75-85 | Available but more expensive |
+| Orange Pi 3B (4GB) | 4GB | 4x A55 2.0GHz | ~€50 | Amazon.es (plan B) |
 
-**Elección: Raspberry Pi 5 (4GB)** (ADR-011)
-- CPU A76 2.4GHz, la más potente en SBC a este precio.
-- 4GB da margen para domótica futura sin preocuparse por RAM.
-- USB 3.0 para almacenamiento externo futuro.
-- Ecosistema maduro: Docker, Zigbee2MQTT, Tailscale funcionan sin hacks.
-- Precio: 180,99€ (kit completo iRasptek en Amazon.es, incluye Pi 5 4GB + fuente 27W + carcasa + cooler + SD 64GB).
+**Choice: Raspberry Pi 5 (4GB)** (ADR-011)
+- A76 2.4GHz CPU, most powerful in SBC at this price.
+- 4GB gives margin for future home automation without RAM concerns.
+- USB 3.0 for future external storage.
+- Mature ecosystem: Docker, Zigbee2MQTT, Tailscale work without hacks.
+- Price: €180.99 (complete iRasptek kit on Amazon.es, includes Pi 5 4GB + 27W power supply + case + cooler + 64GB SD).
 
-### Software base
+### Base software
 
 ```
 Raspberry Pi 5
-├── Raspberry Pi OS Bookworm 64-bit (preinstalado en SD del kit)
+├── Raspberry Pi OS Bookworm 64-bit (preinstalled on kit SD)
 ├── Docker + Docker Compose
-├── Tailscale (VPN mesh para acceso remoto)
+├── Tailscale (mesh VPN for remote access)
 │
 └── docker-compose.yml
-    ├── zigbee2mqtt       ← Lee todos los dispositivos Zigbee
-    ├── mosquitto         ← Broker MQTT central
-    ├── smart-home-app    ← Backend Python + Web UI (PWA)
-    ├── tailscale         ← Acceso remoto (gratuito)
-    └── ... (contenedores de cada fase)
+    ├── zigbee2mqtt       ← Reads all Zigbee devices
+    ├── mosquitto         ← Central MQTT broker
+    ├── smart-home-app    ← Python backend + Web UI (PWA)
+    ├── tailscale         ← Remote access (free)
+    └── ... (containers for each phase)
 ```
 
-### Arquitectura de la Web UI (G1, G2, G3)
+### Web UI Architecture (G1, G2, G3)
 
-Una **única PWA** sirve como panel de control unificado para todas las fases:
+A **single PWA** serves as unified control panel for all phases:
 
-- **Stack**: FastAPI (Python backend) + Preact + Tailwind CSS (frontend)
-- **Mobile-first**: diseñada para teléfono, responsive a desktop.
-- **Instalable**: se añade a la pantalla de inicio como app nativa.
-- **Acceso remoto**: vía Tailscale desde cualquier lugar (G2). Coste: 0€.
-- **Modular**: cada fase añade una sección/tab al dashboard.
+- **Stack**: FastAPI (Python backend) + vanilla JavaScript (frontend) + Tailwind CSS
+- **Mobile-first**: designed for phone, responsive to desktop.
+- **Installable**: adds to home screen as native app.
+- **Remote access**: via Tailscale from anywhere (G2). Cost: €0.
+- **Modular**: each phase adds a section/tab to dashboard.
 
-**Secciones del dashboard:**
-- Inicio: resumen general (temperatura media, humedad, estado AC)
-- Por fase: cada fase tiene su propia pestaña con controles específicos
-- Configuración: ajustes globales, sensores registrados, estado de servicios
+**Dashboard sections:**
+- Home: general summary (average temperature, humidity, AC status)
+- Per phase: each phase has its own tab with specific controls
+- Settings: global settings, registered sensors, service status
 
 ---
 
@@ -187,410 +181,369 @@ See `/data/README.md` for more details.
 
 ---
 
-## Fases del Proyecto
+## Project Phases
 
-| Fase | Nombre | Descripción | Requerimientos | Estado |
+| Phase | Name | Description | Requirements | Status |
 |---|---|---|---|---|
-| 0 | [AC Override](#fase-0-ac-thermostat-override) | Control inteligente del AC + tracking energético | 30 (F0.0-F0.30) | ✅ 29/30 implementados |
-| 1 | [Control Humedad](#fase-1-control-de-humedad) | Humidificadores inteligentes con control automático | - | 📝 Diseño |
-| 2 | [Backup Fotos](#fase-2-backup-de-fotos) | Sync automático de fotos de 2 Android | - | 📝 Diseño |
-| N | [Futuras](#añadir-nuevas-fases) | Cualquier servicio domótico adicional | - | - |
+| 0 | [AC Override](#phase-0-ac-thermostat-override) | Intelligent AC control | 30 (F0.0-F0.30) | ✅ Implemented |
+| 1 | [Humidity Control](#phase-1-humidity-control) | Smart humidifiers with automatic control | - | 📝 Design |
+| 2 | [Photo Backup](#phase-2-photo-backup) | Auto sync photos from 2 Android phones | - | 📝 Design |
+| N | [Future](#adding-new-phases) | Any additional home automation service | - | - |
 
 ---
 
-### Fase 0: AC Thermostat Override
+### Phase 0: AC Thermostat Override
 
-**Documento detallado:** `docs/fase0-ac-override.md`
+**Detailed document:** `.kiro/docs/REQUIREMENTS.md`
 
-**Problema:** El termostato interno del AC (Mitsubishi PEAD-SM71JA, S/N 3XM10399) recibe
-aire frío directamente y se apaga antes de enfriar la casa.
+**Problem:** Internal AC thermostat (Mitsubishi PEAD-SM71JA, S/N 3XM10399) receives
+cold air directly and turns off before cooling the house.
 
-**Solución:** Usar la media de 5 sensores de temperatura repartidos por la casa como
-referencia real. Forzar al AC (vía MELCloud API) a seguir enfriando hasta alcanzar el
-objetivo real.
+**Solution:** Use average of 5 temperature sensors distributed throughout the house as
+real reference. Force AC (via MELCloud API) to continue cooling until reaching real
+target.
 
-**Requerimientos específicos:**
+**Specific requirements:**
 
-#### Control de Temperatura (F0.1 - F0.23)
+#### Temperature Control (F0.1 - F0.23)
 
-| # | Requerimiento | Estado |
+| # | Requirement | Status |
 |---|---|---|
-| F0.1 | Sobreescribir termostato interno usando media de 5 sensores externos | ✅ |
-| F0.2 | Soportar 5 sensores: 3 habitaciones + salón + despacho | ✅ |
-| F0.3 | Temperatura de referencia = media aritmética de sensores activos | ✅ |
-| F0.4 | Control del AC vía MELCloud API (WiFi adapter oficial ya instalado) | ✅ |
-| F0.5 | Si un sensor falla, media con los restantes | ✅ |
-| F0.6 | POC virtualizado antes de comprar hardware | ✅ |
-| F0.7 | Histéresis y cooldown (5 min) para evitar ciclos rápidos | ✅ |
-| F0.8 | Log de acciones del controlador | ✅ |
-| F0.9 | Acceso desde cualquier dispositivo en la red local | ✅ |
-| F0.10 | Colores por rango de temperatura y humedad | ✅ |
-| F0.11 | Mostrar temperatura exterior (Madrid, Open-Meteo API) | ✅ |
-| F0.12 | Límites de temperatura objetivo (19-30°C) | ✅ |
-| F0.13 | Máquina de estados formal (7 estados) | ✅ |
-| F0.14-F0.17 | UI moderna mobile-first con estado real del AC | ✅ |
-| F0.18 | Persistencia de lecturas de sensores | ✅ |
-| F0.19 | Criterio de conexión (timeout 1 hora) | ✅ |
-| F0.20 | Limpieza automática de logs | ✅ |
-| F0.21 | Mostrar decisión del controlador en tiempo real | ✅ |
-| F0.22 | Popups de control manual (forzar ON/OFF) | ✅ |
-| F0.23 | Deployment en Raspberry Pi | ⏳ Pendiente |
+| F0.1 | Override internal thermostat using average of 5 external sensors | ✅ |
+| F0.2 | Support 5 sensors: 3 bedrooms + living room + office | ✅ |
+| F0.3 | Reference temperature = arithmetic mean of active sensors | ✅ |
+| F0.4 | AC control via MELCloud API (official WiFi adapter already installed) | ✅ |
+| F0.5 | If one sensor fails, average with remaining ones | ✅ |
+| F0.6 | Virtualized POC before buying hardware | ✅ |
+| F0.7 | Hysteresis and cooldown (5 min) to avoid rapid cycles | ✅ |
+| F0.8 | Controller action log | ✅ |
+| F0.9 | Access from any device on local network | ✅ |
+| F0.10 | Colors by temperature and humidity ranges | ✅ |
+| F0.11 | Show outdoor temperature (Madrid, Open-Meteo API) | ✅ |
+| F0.12 | Target temperature limits (19-30°C) | ✅ |
+| F0.13 | Formal state machine (7 states) | ✅ |
+| F0.14-F0.17 | Modern mobile-first UI with real AC status | ✅ |
+| F0.18 | Sensor readings persistence | ✅ |
+| F0.19 | Connection criteria (1 hour timeout) | ✅ |
+| F0.20 | Automatic log cleanup | ✅ |
+| F0.21 | Show controller decision in real-time | ✅ |
+| F0.22 | Manual control popups (force ON/OFF) | ✅ |
+| F0.23 | Deployment on Raspberry Pi | ✅ |
 
-#### Seguimiento Energético (F0.24 - F0.30)
+**Implemented features:**
+- ✅ Intelligent AC control with state machine
+- ✅ Modern responsive PWA web interface
+- ✅ **Controller state persistence** (minimizes AC cycles, protects compressor)
+- ✅ Sensor data persistence between restarts
+- ✅ Interactive graphs (temperature, humidity)
+- ✅ Manual control with automatic system override
+- ✅ Automatic scheduler (hourly and daily records)
+- ✅ **Internationalization (i18n)** - English/Spanish support
 
-| # | Requerimiento | Estado |
-|---|---|---|
-| F0.24 | Widget de consumo energético (24h) con kWh y coste en € | ✅ |
-| F0.25 | API ESIOS para precios PVPC (energía regulada España) | ✅ |
-| F0.26 | Registro horario de consumo (JSON con 24 valores rolling) | ✅ |
-| F0.27 | Registro diario de consumo (JSON con hasta 365 valores rolling) | ✅ |
-| F0.28 | Popup de estadísticas con 2 gráficas (horaria y mensual) | ✅ |
-| F0.29 | Coste calculado con precio exacto del momento de consumo | ✅ |
-| F0.30 | Optimización con acumuladores en memoria | ✅ |
+**Additional hardware phase 0:**
 
-**Funcionalidades implementadas:**
-- ✅ Control inteligente del AC con máquina de estados
-- ✅ Interface web PWA responsive y moderna
-- ✅ **Persistencia de estado del controlador** (minimiza ciclos AC, protege compresor)
-- ✅ Persistencia de datos de sensores entre reinicios
-- ✅ Tracking de energía con coste en tiempo real
-- ✅ Gráficas interactivas (temperatura, humedad, energía)
-- ✅ Control manual con override del sistema automático
-- ✅ Integración con API ESIOS para precios PVPC
-- ✅ Scheduler automático (registros horarios y diarios)
-
-**Hardware adicional fase 0:**
-
-| Componente | Modelo exacto | Cant. | Precio real | Estado |
+| Component | Exact model | Qty. | Real price | Status |
 |---|---|---|---|---|
-| Sensor temperatura/humedad | SONOFF SNZB-02D (Zigbee 3.0, pantalla LCD) | 5 | 42,70€ (8,54€/ud) | ✅ Comprado |
+| Temperature/humidity sensor | SONOFF SNZB-02D (Zigbee 3.0, LCD display) | 5 | €42.70 (€8.54/unit) | ✅ Purchased |
 
-**Lógica de control:**
-
-```
-Cada 45 segundos:
-  temps = [leer sensores activos via MQTT]
-  media = promedio(temps)
-
-  Si media > objetivo + 0.5°C → AC ON, consigna 19°C, fan=max (forzar enfriamiento)
-  Si objetivo - 0.3°C < media < objetivo + 0.5°C → AC ON, consigna proporcional (19-30°C)
-  Si media ≤ objetivo - 0.3°C → AC OFF (con cooldown 5 min antes de re-encender)
-```
-
-**Tracking de energía:**
+**Control logic:**
 
 ```
-Transiciones de estado → Calcular consumo (potencia × tiempo)
-Cada hora (:00) → Registrar kWh + obtener precio ESIOS + calcular coste
-Cada día (00:00) → Registrar total diario
-Widget → Mostrar últimas 24h (kWh + €)
-Popup → Gráficas horarias (24h) y mensuales (12 meses)
+Every 45 seconds:
+  temps = [read active sensors via MQTT]
+  average = mean(temps)
+
+  If average > target + 0.5°C → AC ON, setpoint 19°C, fan=max (force cooling)
+  If target - 0.3°C < average < target + 0.5°C → AC ON, proportional setpoint (19-30°C)
+  If average ≤ target - 0.3°C → AC OFF (with 5 min cooldown before re-enabling)
 ```
 
-**Documentación técnica:**
-- Diseño: `docs/DISEÑO-ENERGIA-F0.md`
-- Implementación: `docs/IMPLEMENTACION-ENERGIA-COMPLETA.md`
-- Requerimientos completos: `docs/REQUERIMIENTOS-COMPLETOS.md`
-- Persistencia de estado: `docs/STATE_PERSISTENCE.md` ⭐ **NEW**
+**Technical documentation:**
+- Requirements: `.kiro/docs/REQUIREMENTS.md`
+- State persistence: `.kiro/docs/STATE_PERSISTENCE.md` ⭐ **NEW**
+- i18n implementation: `.kiro/docs/I18N_PHASE1_COMPLETE.md`, `.kiro/docs/I18N_PHASE2_COMPLETE.md`
 
-**Coste fase 0: ~42,70€** (sensores) + infraestructura base
+**Phase 0 cost: ~€42.70** (sensors) + base infrastructure
 
 ---
 
-### Fase 1: Control de Humedad
+### Phase 1: Humidity Control
 
-**Documento detallado:** `docs/fase1-control-humedad.md`
+**Detailed document:** `docs/phase1-humidity-control.md` (to be created)
 
-**Objetivo:** Mantener la humedad de la casa en un rango saludable (40-60%) usando
-humidificadores controlados automáticamente por el sistema.
+**Objective:** Maintain house humidity in healthy range (40-60%) using
+humidifiers automatically controlled by the system.
 
-**Requerimientos específicos:**
+**Specific requirements:**
 
-| # | Requerimiento |
+| # | Requirement |
 |---|---|
-| F1.1 | Medir humedad en las mismas 5 zonas (ya cubierto: los SNZB-02D miden humedad) |
-| F1.2 | Controlar humidificadores on/off vía Zigbee |
-| F1.3 | Lógica automática: si humedad media < umbral → encender humidificadores |
-| F1.4 | Los humidificadores deben cubrir toda la casa |
-| F1.5 | Los dispositivos de control (enchufes) deben ser Zigbee estándar |
+| F1.1 | Measure humidity in same 5 zones (already covered: SNZB-02D measure humidity) |
+| F1.2 | Control on/off humidifiers via Zigbee |
+| F1.3 | Automatic logic: if average humidity < threshold → turn on humidifiers |
+| F1.4 | Humidifiers must cover entire house |
+| F1.5 | Control devices (smart plugs) must be standard Zigbee |
 
-**Estrategia:**
-- Los **sensores de humedad ya existen** (fase 0): los SONOFF SNZB-02D miden temperatura Y humedad.
-- Se necesitan **enchufes inteligentes Zigbee** para encender/apagar humidificadores convencionales.
-- Se necesitan **humidificadores evaporativos** (los más eficientes y seguros) conectados a los enchufes.
+**Strategy:**
+- **Humidity sensors already exist** (phase 0): SONOFF SNZB-02D measure temperature AND humidity.
+- Need **Zigbee smart plugs** to turn on/off conventional humidifiers.
+- Need **evaporative humidifiers** (most efficient and safe) connected to plugs.
 
-**¿Por qué enchufe Zigbee + humidificador normal?**
-- Los humidificadores "inteligentes" (WiFi/Zigbee nativos) son caros y pocos son estándar.
-- Un humidificador evaporativo normal + enchufe Zigbeew = control inteligente por 1/3 del precio.
-- El humidificador se enciende/apaga vía enchufe. La lógica la pone nuestro sistema.
-- Si el humidificador se rompe, lo cambias por cualquier otro (no estás atado a un modelo smart).
+**Why Zigbee plug + normal humidifier?**
+- "Smart" humidifiers (WiFi/Zigbee native) are expensive and few are standard.
+- Normal evaporative humidifier + Zigbee plug = smart control for 1/3 the price.
+- Humidifier turns on/off via plug. Our system provides the logic.
+- If humidifier breaks, replace it with any other (not tied to a smart model).
 
-**Hardware adicional fase 1:**
+**Additional hardware phase 1:**
 
-| Componente | Modelo | Cant. | Precio aprox. |
+| Component | Model | Qty. | Approx. price |
 |---|---|---|---|
-| Enchufe Zigbee (tipo F, EU) | SONOFF S26R2ZB | 2-3 | ~15€/ud = 30-45€ |
-| Humidificador evaporativo | Cualquier modelo 3-5L, >150ml/h | 2-3 | ~30-50€/ud = 60-150€ |
+| Zigbee plug (type F, EU) | SONOFF S26R2ZB | 2-3 | ~€15/unit = €30-45 |
+| Evaporative humidifier | Any model 3-5L, >150ml/h | 2-3 | ~€30-50/unit = €60-150 |
 
-**Nota sobre cantidad de humidificadores:**
-- Para una casa estándar (80-120m²) con aire acondicionado (que reseca), 2-3 humidificadores
-  repartidos en zonas principales (salón + pasillo/zona noche) suelen ser suficientes.
-- La decisión final depende del layout concreto de la casa.
-
-**Lógica de control:**
+**Control logic:**
 
 ```
-Cada 60 segundos:
-  humedades = [leer sensores activos via MQTT]
-  media_humedad = promedio(humedades)
+Every 60 seconds:
+  humidities = [read active sensors via MQTT]
+  average_humidity = mean(humidities)
 
-  Si media_humedad < 40% → Enchufes humidificadores ON
-  Si media_humedad > 55% → Enchufes humidificadores OFF
-  (histéresis para evitar ciclos rápidos)
+  If average_humidity < 40% → Humidifier plugs ON
+  If average_humidity > 55% → Humidifier plugs OFF
+  (hysteresis to avoid rapid cycles)
 ```
 
-**Coste fase 1: ~90-195€** (enchufes + humidificadores)
+**Phase 1 cost: ~€90-195** (plugs + humidifiers)
 
 ---
 
-### Fase 2: Backup de Fotos
+### Phase 2: Photo Backup
 
-**Documento detallado:** `docs/fase2-backup-fotos.md`
+**Detailed document:** `docs/phase2-photo-backup.md` (to be created)
 
-**Objetivo:** Backup automático de fotos de 2 teléfonos Android al servidor central,
-permitiendo liberar espacio en los teléfonos con seguridad.
+**Objective:** Automatic photo backup from 2 Android phones to central server,
+allowing phone storage to be freed safely.
 
-**Requerimientos específicos:**
+**Specific requirements:**
 
-| # | Requerimiento |
+| # | Requirement |
 |---|---|
-| F2.1 | Sincronización automática de fotos de 2 Android al servidor |
-| F2.2 | La copia es unidireccional: teléfono → servidor (no al revés) |
-| F2.3 | Borrar en el teléfono no borra en el servidor |
-| F2.4 | Funcionar automáticamente cuando el teléfono está en WiFi |
-| F2.5 | Estándar y ligero (no requiere mucha RAM/CPU) |
+| F2.1 | Automatic photo sync from 2 Android to server |
+| F2.2 | Copy is unidirectional: phone → server (not reverse) |
+| F2.3 | Deleting on phone doesn't delete on server |
+| F2.4 | Work automatically when phone is on WiFi |
+| F2.5 | Standard and lightweight (doesn't require much RAM/CPU) |
 
-**Solución: Syncthing**
-- Open-source, P2P, sin nube.
-- App Android gratuita (Syncthing-Fork en F-Droid/Play Store).
-- Contenedor Docker en el servidor.
-- Consume ~50-100MB RAM.
-- Configuración "Send Only" en teléfonos, "Receive Only" en servidor.
+**Solution: Syncthing**
+- Open-source, P2P, no cloud.
+- Free Android app (Syncthing-Fork on F-Droid/Play Store).
+- Docker container on server.
+- Consumes ~50-100MB RAM.
+- "Send Only" configuration on phones, "Receive Only" on server.
 
-**Hardware adicional fase 2:**
+**Additional hardware phase 2:**
 
-| Componente | Modelo | Precio aprox. |
+| Component | Model | Approx. price |
 |---|---|---|
-| SSD externo USB | Kingston XS1000 256GB (o 1TB) | 35-70€ |
+| External USB SSD | Kingston XS1000 256GB (or 1TB) | €35-70 |
 
-**Coste fase 2: ~35-70€** (solo el SSD)
-
----
-
-### Añadir nuevas fases
-
-Para añadir una fase N al proyecto:
-
-1. Crear `docs/faseN-nombre.md` con:
-   - Problema/objetivo
-   - Requerimientos específicos (F{N}.1, F{N}.2, ...)
-   - Hardware adicional necesario
-   - Lógica/diseño
-   - Impacto en la infraestructura (nuevo contenedor Docker, nuevo dispositivo Zigbee, etc.)
-
-2. Actualizar la tabla de fases en este README.
-
-3. Añadir el contenedor correspondiente a `docker-compose.yml`.
-
-4. Añadir la sección/tab correspondiente a la Web UI.
-
-**Ejemplos de fases futuras posibles:**
-- Control de iluminación (bombillas Zigbee)
-- Pi-hole (bloqueo publicidad a nivel DNS)
-- Monitorización de consumo eléctrico
-- Riego automático
-- Alarma/sensores de presencia
-- Control de persianas motorizadas
+**Phase 2 cost: ~€35-70** (only the SSD)
 
 ---
 
-## Presupuesto
+### Adding New Phases
 
-### Desglose por fase
+To add phase N to the project:
 
-| Concepto | Precio |
+1. Create `docs/phaseN-name.md` with:
+   - Problem/objective
+   - Specific requirements (F{N}.1, F{N}.2, ...)
+   - Additional hardware needed
+   - Logic/design
+   - Infrastructure impact (new Docker container, new Zigbee device, etc.)
+
+2. Update phase table in this README.
+
+3. Add corresponding container to `docker-compose.yml`.
+
+4. Add corresponding section/tab to Web UI.
+
+**Examples of possible future phases:**
+- Lighting control (Zigbee bulbs)
+- Pi-hole (DNS-level ad blocking)
+- Electrical consumption monitoring
+- Automatic irrigation
+- Alarm/presence sensors
+- Motorized blind control
+
+---
+
+## Budget
+
+### Breakdown by phase
+
+| Concept | Price |
 |---|---|
-| **Infraestructura base** (kit Pi 5 + Zigbee dongle) | **196€** |
-| **Fase 0** (5 sensores temperatura) | **42,70€** |
-| **Fase 1** (2-3 enchufes + 2-3 humidificadores) | **90-195€** |
-| **Fase 2** (SSD externo) | **35-70€** |
+| **Base infrastructure** (Pi 5 kit + Zigbee dongle) | **€196** |
+| **Phase 0** (5 temperature sensors) | **€42.70** |
+| **Phase 1** (2-3 plugs + 2-3 humidifiers) | **€90-195** |
+| **Phase 2** (external SSD) | **€35-70** |
 
-### Totales
+### Totals
 
-| Escenario | Total |
+| Scenario | Total |
 |---|---|
-| Solo Fase 0 (AC override) | **~239€** |
-| Fases 0 + 1 (AC + humedad) | **~329-434€** |
-| Fases 0 + 1 + 2 (todo) | **~364-504€** |
+| Only Phase 0 (AC override) | **~€239** |
+| Phases 0 + 1 (AC + humidity) | **~€329-434** |
+| Phases 0 + 1 + 2 (all) | **~€364-504** |
 
-> **Software gratuito en todas las fases:** Tailscale (VPN), Zigbee2MQTT, Mosquitto, Docker,
-> Syncthing, Preact, Tailwind CSS, FastAPI. Sin suscripciones ni costes recurrentes.
+> **Free software in all phases:** Tailscale (VPN), Zigbee2MQTT, Mosquitto, Docker,
+> Syncthing, Tailwind CSS, FastAPI. No subscriptions or recurring costs.
 
 ---
 
-## Guía para futuras sesiones
+## Guide for Future Sessions
 
-### Estructura del repositorio
+### Repository structure
 
 ```
 smart-home/
-├── README.md                    ← Este archivo (visión global, fases, presupuesto)
-├── docs/
-│   ├── fase0-ac-override.md     ← Diseño detallado fase 0
-│   ├── fase1-control-humedad.md ← Diseño detallado fase 1
-│   ├── fase2-backup-fotos.md    ← Diseño detallado fase 2
-│   ├── REQUERIMIENTOS-COMPLETOS.md ← Lista completa de 30 requerimientos
-│   ├── DISEÑO-ENERGIA-F0.md     ← Diseño sistema de energía
-│   ├── IMPLEMENTACION-ENERGIA-COMPLETA.md ← Guía implementación energía
-│   └── decisiones.md            ← Registro de decisiones de diseño (ADR)
+├── README.md                    ← This file (global vision, phases, budget)
+├── .kiro/docs/
+│   ├── REQUIREMENTS.md          ← Complete requirements list
+│   ├── STATE_PERSISTENCE.md     ← Controller state persistence
+│   ├── I18N_*.md                ← Internationalization docs
+│   └── ...                      ← Other technical docs
 ├── infrastructure/
-│   ├── docker-compose.yml       ← Todos los servicios
-│   ├── tailscale/               ← Config Tailscale
-│   ├── zigbee2mqtt/             ← Config Zigbee2MQTT
-│   └── mosquitto/               ← Config Mosquitto
+│   ├── docker-compose.yml       ← All services
+│   ├── tailscale/               ← Tailscale config
+│   ├── zigbee2mqtt/             ← Zigbee2MQTT config
+│   └── mosquitto/               ← Mosquitto config
 ├── src/
-│   ├── backend/                 ← FastAPI app (lógica de todas las fases)
-│   │   ├── main.py
-│   │   ├── melcloud_client.py
-│   │   ├── mqtt_handler.py
-│   │   ├── state_persistence.py ← Persistencia estado controlador ⭐ NEW
-│   │   ├── controllers/
-│   │   │   ├── ac_controller.py
-│   │   │   ├── state_machine.py
-│   │   │   └── ...
-│   │   ├── energy/              ← Módulo de tracking energético
-│   │   │   ├── esios_client.py  ← Cliente API ESIOS (precios PVPC)
-│   │   │   └── tracker.py       ← Tracker de consumo y coste
-│   │   ├── api/
-│   │   │   └── routes.py        ← Endpoints REST (incl. /api/energy/*)
-│   │   ├── static/
-│   │   │   └── index.html       ← PWA frontend con gráficas Chart.js
-│   │   └── config.py
-├── poc/                         ← Proof of Concept (virtualizado)
-│   ├── mock_sensors.py
-│   ├── mock_melcloud.py
-│   └── docker-compose.poc.yml
-└── config.example.yaml          ← Configuración de ejemplo
+│   └── backend/                 ← FastAPI app (logic for all phases)
+│       ├── main.py
+│       ├── melcloud_client.py
+│       ├── mqtt_handler.py
+│       ├── state_persistence.py ← Controller state persistence ⭐ NEW
+│       ├── controllers/
+│       │   ├── ac_controller.py
+│       │   ├── state_machine.py
+│       │   └── ...
+│       ├── api/
+│       │   └── routes.py        ← REST endpoints
+│       ├── static/
+│       │   ├── index.html       ← PWA frontend
+│       │   ├── i18n.js          ← i18n translation engine ⭐ NEW
+│       │   └── locales/         ← Translation files (en.json, es.json) ⭐ NEW
+│       └── config.py
+└── config.example.yaml          ← Example configuration
 ```
 
-### Cómo continuar el trabajo en una nueva sesión
+### How to continue work in a new session
 
-1. **Leer este README** para contexto general.
-2. **Leer `docs/decisiones.md`** para entender las decisiones ya tomadas.
-3. **Leer la fase específica** en `docs/faseX-nombre.md` para el detalle.
-4. **Ver el estado actual** del código en `src/` y `infrastructure/`.
-5. **El POC** está en `poc/` y puede ejecutarse para validar cambios.
+1. **Read this README** for general context.
+2. **Read `.kiro/docs/REQUIREMENTS.md`** to understand implemented requirements.
+3. **See current code status** in `src/` and `infrastructure/`.
 
-### Convenciones
+### Conventions
 
-- **Requerimientos globales**: G1, G2, G3...
-- **Requerimientos por fase**: F{N}.1, F{N}.2... (ej: F0.1, F1.3)
-- **Decisiones de diseño**: documentadas en `docs/decisiones.md` con fecha y contexto.
-- **Config**: todo configurable vía YAML sin tocar código.
-- **Comunicación entre servicios**: MQTT (topic pattern: `zigbee2mqtt/{device_name}`)
-- **Control de dispositivos**: publicar en MQTT topics de Zigbee2MQTT.
+- **Global requirements**: G1, G2, G3...
+- **Requirements per phase**: F{N}.1, F{N}.2... (e.g.: F0.1, F1.3)
+- **Config**: everything configurable via env vars without touching code.
+- **Inter-service communication**: MQTT (topic pattern: `zigbee2mqtt/{device_name}`)
+- **Device control**: publish to Zigbee2MQTT MQTT topics.
 
-### Información del AC
+### AC Information
 
-- **Modelo**: Mitsubishi PEAD-SM71JA
+- **Model**: Mitsubishi PEAD-SM71JA
 - **Serial**: 3XM10399
-- **Control**: MELCloud API (WiFi adapter oficial instalado)
-- **Rango consigna**: 16°C - 31°C
-- **API endpoint principal**: `POST /Mitsubishi.Wifi.Client/Device/SetAta`
+- **Control**: MELCloud API (official WiFi adapter installed)
+- **Setpoint range**: 16°C - 31°C
+- **Main API endpoint**: `POST /Mitsubishi.Wifi.Client/Device/SetAta`
 
-### Stack Tecnológico Fase 0
+### Phase 0 Tech Stack
 
 **Backend:**
 - Python 3.12
 - FastAPI + Uvicorn
-- Paho-MQTT (comunicación con sensores)
-- httpx (cliente HTTP async)
-- APScheduler (jobs horarios/diarios para energía)
+- Paho-MQTT (sensor communication)
+- httpx (async HTTP client)
 
 **Frontend:**
 - HTML + JavaScript vanilla
-- Tailwind CSS (diseño)
-- Chart.js (gráficas)
-- PWA (instalable en móvil)
+- Tailwind CSS (design)
+- Chart.js (graphs)
+- PWA (installable on mobile)
 
-**Infraestructura:**
+**Infrastructure:**
 - Docker + Docker Compose
-- Zigbee2MQTT (gateway Zigbee → MQTT)
-- Eclipse Mosquitto (broker MQTT)
-- Volúmenes Docker para persistencia
+- Zigbee2MQTT (Zigbee → MQTT gateway)
+- Eclipse Mosquitto (MQTT broker)
+- Docker volumes for persistence
 
-**APIs Externas:**
-- MELCloud API (control AC)
-- Open-Meteo API (temperatura exterior)
-- ESIOS API (precios PVPC energía regulada España)
+**External APIs:**
+- MELCloud API (AC control)
+- Open-Meteo API (outdoor temperature)
 
-### Métricas del Proyecto (Fase 0)
+### Project Metrics (Phase 0)
 
-- **Requerimientos totales:** 30 (29 implementados ✅, 1 pendiente ⏳)
-- **Archivos Python:** 15+
-- **Tests unitarios:** 53 (state_machine)
-- **Endpoints API:** 15+
-- **Estados del controlador:** 7
-- **Sensores Zigbee:** 5
-- **Gráficas en UI:** 4 (temp, humedad, energía horaria, energía mensual)
-- **JSON de persistencia:** 7 (sensores, outdoor, estado controlador, energía 24h/diaria)
-- **Volúmenes Docker:** 2
+- **Total requirements:** 30 (30 implemented ✅)
+- **Python files:** 15+
+- **Unit tests:** 53 (state_machine)
+- **API endpoints:** 15+
+- **Controller states:** 7
+- **Zigbee sensors:** 5
+- **UI graphs:** 2 (temp, humidity)
+- **JSON persistence files:** 4 (sensors, outdoor, controller state, sensor history)
+- **Docker volumes:** 2
+- **Supported languages:** 2 (English, Spanish)
 
 ---
 
-## Siguiente paso
+## Next Step
 
-**Despliegue en Raspberry Pi 5:**
+**Deploy on Raspberry Pi 5:**
 
-Ver guía completa en [DEPLOY.md](DEPLOY.md)
+See complete guide in [DEPLOY.md](DEPLOY.md)
 
-**Resumen rápido:**
+**Quick summary:**
 
 ```bash
-# 1. Clonar repositorio
+# 1. Clone repository
 git clone https://github.com/EgnalZurc/smart-home.git
 cd smart-home
 
-# 2. Configurar credenciales
+# 2. Configure credentials
 cp .env.example .env
-nano .env  # Editar con tus credenciales MELCloud
+nano .env  # Edit with your MELCloud credentials
 
-# 3. Iniciar servicios (construye imagen localmente)
+# 3. Start services (builds image locally)
 docker-compose up -d --build
 
-# 4. Acceder a la web UI
-http://<IP_DE_LA_RASPBERRY>:8080
+# 4. Access web UI
+http://<RASPBERRY_IP>:8080
 ```
 
 ---
 
-## 🔗 Enlaces Útiles
+## 🔗 Useful Links
 
-- **Repositorio GitHub:** https://github.com/EgnalZurc/smart-home
-- **Guía de Despliegue:** [DEPLOY.md](DEPLOY.md)
-- **Estructura Docker:** [DOCKER.md](DOCKER.md) ⭐ **NEW**
-- **Inicio Rápido:** [QUICKSTART.md](QUICKSTART.md)
-- **Requerimientos Completos:** [docs/REQUERIMIENTOS-COMPLETOS.md](docs/REQUERIMIENTOS-COMPLETOS.md)
-- **Diseño Fase 0:** [docs/fase0-ac-override.md](docs/fase0-ac-override.md)
-
----
-
-## 📝 Licencia
-
-MIT License - Ver [LICENSE](LICENSE) para más detalles.
+- **GitHub Repository:** https://github.com/EgnalZurc/smart-home
+- **Deployment Guide:** [DEPLOY.md](DEPLOY.md)
+- **Docker Structure:** [DOCKER.md](DOCKER.md)
+- **Quick Start:** [QUICKSTART.md](QUICKSTART.md)
+- **Complete Requirements:** [.kiro/docs/REQUIREMENTS.md](.kiro/docs/REQUIREMENTS.md)
+- **State Persistence:** [.kiro/docs/STATE_PERSISTENCE.md](.kiro/docs/STATE_PERSISTENCE.md)
 
 ---
 
-**Última actualización:** 22 de junio de 2026  
-**Estado:** Fase 0 completa (29/30 requerimientos implementados)  
-**Mantenedor:** [@EgnalZurc](https://github.com/EgnalZurc)
+## 📝 License
+
+MIT License - See [LICENSE](LICENSE) for details.
+
+---
+
+**Last update:** June 24, 2026  
+**Status:** Phase 0 complete (30/30 requirements implemented)  
+**Maintainer:** [@EgnalZurc](https://github.com/EgnalZurc)
