@@ -137,7 +137,7 @@ def get_sensors_history(start: float | None = None, end: float | None = None, la
 
 @router.get("/config")
 def get_config():
-    """Configuración actual."""
+    """Current configuration."""
     cfg = ac_controller.config
     return {
         "target_temperature": cfg.target_temperature,

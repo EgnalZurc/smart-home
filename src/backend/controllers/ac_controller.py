@@ -323,7 +323,7 @@ class ACController:
                     self._consecutive_melcloud_failures, outputs.state.value,
                 )
 
-        # Actualizar estado interno de la máquina
+        # Update internal state machine state
         old_sm_state = self._current_sm_state
         self._current_sm_state = outputs.state
         
@@ -358,7 +358,7 @@ class ACController:
         return False
 
     def _update_state(self, outputs: StateMachineOutputs, avg_temp: float | None, avg_hum: float | None, active_count: int):
-        """Actualiza el estado visible (para API/UI) y el histórico."""
+        """Updates visible state (for API/UI) and history."""
         with self._lock:
             self.state.state = outputs.state.value
             self.state.setpoint = outputs.setpoint
@@ -394,7 +394,7 @@ class ACController:
         kwh_consumed = power_kw * elapsed_hours
         self._energy_state['kwh_session'] += kwh_consumed
         
-        # Actualizar estado
+        # Update state
         self._energy_state['last_state'] = new_state
         self._energy_state['last_transition'] = now
         
