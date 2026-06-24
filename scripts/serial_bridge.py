@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Serial Bridge - Puente TCP/IP para dongle Zigbee USB
-Permite que Docker en Windows acceda al dongle USB a través de TCP
+Serial Bridge - TCP/IP bridge for USB Zigbee dongle
+Allows Docker on Windows to access USB dongle through TCP
 """
 
 import serial
@@ -10,8 +10,8 @@ import threading
 import time
 import sys
 
-# Configuración
-SERIAL_PORT = "COM3"  # Cambiar según tu puerto COM
+# Configuration
+SERIAL_PORT = "COM3"  # Change according to your COM port
 SERIAL_BAUDRATE = 115200
 TCP_HOST = "0.0.0.0"
 TCP_PORT = 8282
@@ -24,7 +24,7 @@ class SerialBridge:
         self.running = False
         
     def connect_serial(self):
-        """Conecta al puerto serial"""
+        """Connect to serial port"""
         try:
             self.serial_port = serial.Serial(
                 port=SERIAL_PORT,
@@ -34,27 +34,27 @@ class SerialBridge:
                 rtscts=False,
                 dsrdtr=False
             )
-            print(f"✓ Conectado a {SERIAL_PORT} @ {SERIAL_BAUDRATE} baud")
+            print(f"✓ Connected to {SERIAL_PORT} @ {SERIAL_BAUDRATE} baud")
             return True
         except Exception as e:
-            print(f"✗ Error conectando a {SERIAL_PORT}: {e}")
+            print(f"✗ Error connecting to {SERIAL_PORT}: {e}")
             return False
     
     def start_server(self):
-        """Inicia el servidor TCP"""
+        """Start TCP server"""
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.server_socket.bind((TCP_HOST, TCP_PORT))
             self.server_socket.listen(1)
-            print(f"✓ Servidor TCP iniciado en {TCP_HOST}:{TCP_PORT}")
+            print(f"✓ TCP server started on {TCP_HOST}:{TCP_PORT}")
             return True
         except Exception as e:
-            print(f"✗ Error iniciando servidor TCP: {e}")
+            print(f"✗ Error starting TCP server: {e}")
             return False
     
     def serial_to_tcp(self):
-        """Lee del serial y envía a TCP"""
+        """Read from serial and send to TCP"""
         while self.running:
             try:
                 if self.serial_port and self.serial_port.in_waiting > 0:
@@ -67,7 +67,7 @@ class SerialBridge:
             time.sleep(0.001)
     
     def tcp_to_serial(self):
-        """Lee de TCP y envía al serial"""
+        """Read from TCP and send to serial"""
         while self.running:
             try:
                 if self.client_socket:
@@ -82,45 +82,45 @@ class SerialBridge:
             time.sleep(0.001)
     
     def run(self):
-        """Ejecuta el bridge"""
+        """Run the bridge"""
         if not self.connect_serial():
             return
         
         if not self.start_server():
             return
         
-        print("\n🔌 Serial Bridge activo")
+        print("\n🔌 Serial Bridge active")
         print(f"   Serial: {SERIAL_PORT} @ {SERIAL_BAUDRATE}")
         print(f"   TCP: {TCP_HOST}:{TCP_PORT}")
-        print("\n⏳ Esperando conexión de Zigbee2MQTT...")
+        print("\n⏳ Waiting for Zigbee2MQTT connection...")
         
         while True:
             try:
                 self.client_socket, addr = self.server_socket.accept()
-                print(f"\n✓ Cliente conectado desde {addr}")
+                print(f"\n✓ Client connected from {addr}")
                 
                 self.running = True
                 
-                # Threads para bidireccional
+                # Threads for bidirectional communication
                 t1 = threading.Thread(target=self.serial_to_tcp, daemon=True)
                 t2 = threading.Thread(target=self.tcp_to_serial, daemon=True)
                 
                 t1.start()
                 t2.start()
                 
-                # Esperar a que terminen
+                # Wait for threads to finish
                 t1.join()
                 t2.join()
                 
-                print("\n✗ Cliente desconectado")
+                print("\n✗ Client disconnected")
                 self.running = False
                 self.client_socket.close()
                 self.client_socket = None
                 
-                print("⏳ Esperando nueva conexión...")
+                print("⏳ Waiting for new connection...")
                 
             except KeyboardInterrupt:
-                print("\n\n🛑 Deteniendo Serial Bridge...")
+                print("\n\n🛑 Stopping Serial Bridge...")
                 break
             except Exception as e:
                 print(f"\n✗ Error: {e}")
@@ -132,26 +132,26 @@ class SerialBridge:
         if self.server_socket:
             self.server_socket.close()
         
-        print("✓ Serial Bridge detenido")
+        print("✓ Serial Bridge stopped")
 
 if __name__ == "__main__":
-    # Mostrar puertos COM disponibles
-    print("🔍 Buscando puertos COM disponibles...")
+    # Show available COM ports
+    print("🔍 Looking for available COM ports...")
     try:
         from serial.tools import list_ports
         ports = list(list_ports.comports())
         if ports:
-            print("\nPuertos COM detectados:")
+            print("\nDetected COM ports:")
             for port in ports:
                 print(f"  - {port.device}: {port.description}")
         else:
-            print("  No se encontraron puertos COM")
+            print("  No COM ports found")
     except:
         pass
     
-    print(f"\n⚙️  Configuración actual:")
-    print(f"   Puerto COM: {SERIAL_PORT}")
-    print(f"   Cambiar en línea 11 si es necesario\n")
+    print(f"\n⚙️  Current configuration:")
+    print(f"   COM Port: {SERIAL_PORT}")
+    print(f"   Change in line 14 if needed\n")
     
     bridge = SerialBridge()
     bridge.run()
