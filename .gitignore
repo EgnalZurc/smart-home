@@ -14,12 +14,11 @@ mosquitto_data/
 config.yaml
 .env
 
-# Datos persistentes
-src/backend/data/*.json
+# Runtime data (centralized)
+data/
 
-# Zigbee2MQTT: separación código/datos
+# Infrastructure: sensitive configuration files
 infrastructure/zigbee2mqtt/config/configuration.yaml
-infrastructure/zigbee2mqtt/data/
 
 # IDE
 .vscode/

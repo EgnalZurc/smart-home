@@ -24,7 +24,7 @@ services:
       - "8081:8081"  # Exponer frontend para acceso desde navegador
     volumes:
       - ./infrastructure/zigbee2mqtt/config/configuration.yaml:/app/data/configuration.yaml:ro
-      - ./infrastructure/zigbee2mqtt/data:/app/data
+      - ./data/zigbee2mqtt:/app/data
       - /run/udev:/run/udev:ro
     # devices:
     #   - /dev/ttyUSB0:/dev/ttyACM0  # No necesario en Windows - usamos serial_bridge.py via TCP
