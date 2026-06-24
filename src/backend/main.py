@@ -1,6 +1,6 @@
-"""Punto de entrada de la aplicación Smart Home Backend.
+"""Entry point of the Smart Home Backend application.
 
-Orquesta todos los componentes: MQTT, MELCloud, controlador AC, API REST.
+Orchestrates all components: MQTT, MELCloud, AC controller, REST API.
 """
 
 import logging
@@ -20,14 +20,14 @@ from melcloud_client import MelCloudClient
 from mqtt_handler import MqttHandler
 from zigbee2mqtt_client import Zigbee2MQTTClient
 
-# Configurar logging
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# --- Configuración desde variables de entorno ---
+# --- Configuration from environment variables ---
 
 # MQTT
 MQTT_BROKER = os.environ.get("MQTT_BROKER", "localhost")
@@ -36,7 +36,7 @@ MQTT_CONNECT_RETRIES = int(os.environ.get("MQTT_CONNECT_RETRIES", "30"))
 MQTT_RETRY_DELAY = int(os.environ.get("MQTT_RETRY_DELAY", "2"))
 MQTT_KEEPALIVE = int(os.environ.get("MQTT_KEEPALIVE", "60"))
 
-# MELCloud (OBLIGATORIOS - sin defaults inseguros)
+# MELCloud (REQUIRED - no unsafe defaults)
 MELCLOUD_URL = os.environ.get("MELCLOUD_URL", "https://app.melcloud.com")
 MELCLOUD_EMAIL = os.environ.get("MELCLOUD_EMAIL")
 MELCLOUD_PASSWORD = os.environ.get("MELCLOUD_PASSWORD")
@@ -44,18 +44,18 @@ MELCLOUD_TIMEOUT = float(os.environ.get("MELCLOUD_TIMEOUT", "30.0"))
 MELCLOUD_MAX_FAILURES = int(os.environ.get("MELCLOUD_MAX_FAILURES", "100"))
 MELCLOUD_APP_VERSION = os.environ.get("MELCLOUD_APP_VERSION", "1.32.1.0")
 
-# Validar credenciales obligatorias
+# Validate required credentials
 if not MELCLOUD_EMAIL or not MELCLOUD_PASSWORD:
-    logger.error("MELCLOUD_EMAIL y MELCLOUD_PASSWORD son obligatorios")
-    raise RuntimeError("Credenciales MELCloud no configuradas")
+    logger.error("MELCLOUD_EMAIL and MELCLOUD_PASSWORD are required")
+    raise RuntimeError("MELCloud credentials not configured")
 
-# Device IDs (OBLIGATORIOS - sin defaults)
+# Device IDs (REQUIRED - no defaults)
 if "MELCLOUD_DEVICE_ID" not in os.environ:
-    logger.error("MELCLOUD_DEVICE_ID no configurado")
-    raise RuntimeError("MELCLOUD_DEVICE_ID es obligatorio. Obtenerlo de la app MELCloud.")
+    logger.error("MELCLOUD_DEVICE_ID not configured")
+    raise RuntimeError("MELCLOUD_DEVICE_ID is required. Get it from MELCloud app.")
 if "MELCLOUD_BUILDING_ID" not in os.environ:
-    logger.error("MELCLOUD_BUILDING_ID no configurado")
-    raise RuntimeError("MELCLOUD_BUILDING_ID es obligatorio. Obtenerlo de la app MELCloud.")
+    logger.error("MELCLOUD_BUILDING_ID not configured")
+    raise RuntimeError("MELCLOUD_BUILDING_ID is required. Get it from MELCloud app.")
 
 MELCLOUD_DEVICE_ID = int(os.environ["MELCLOUD_DEVICE_ID"])
 MELCLOUD_BUILDING_ID = int(os.environ["MELCLOUD_BUILDING_ID"])
@@ -74,10 +74,10 @@ FAN_SPEED_MAX = int(os.environ.get("FAN_SPEED_MAX", "3"))
 # Zigbee2MQTT discovery
 Z2M_DISCOVERY_TIMEOUT = float(os.environ.get("Z2M_DISCOVERY_TIMEOUT", "10.0"))
 
-# Historial
+# History
 MAX_HISTORY_PER_SENSOR = int(os.environ.get("MAX_HISTORY_PER_SENSOR", "200"))
 
-# CORS (por seguridad, restringir origins)
+# CORS (for security, restrict origins)
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
 
 # Outdoor API
@@ -89,13 +89,13 @@ LOCATION_LONGITUDE = float(os.environ.get("LOCATION_LONGITUDE", "-3.622511"))
 CLEANUP_INTERVAL_SECONDS = int(os.environ.get("CLEANUP_INTERVAL_SECONDS", "86400"))
 CLEANUP_GRACE_PERIOD = int(os.environ.get("CLEANUP_GRACE_PERIOD", "60"))
 
-# Energía (potencias en kW por estado)
+# Energy (power in kW per state)
 AC_POWER_COOLING_MAX = float(os.environ.get("AC_POWER_COOLING_MAX", "2.5"))
 AC_POWER_COOLING_MID = float(os.environ.get("AC_POWER_COOLING_MID", "1.75"))
 AC_POWER_MODULATING = float(os.environ.get("AC_POWER_MODULATING", "1.25"))
 AC_POWER_FORCED_ON = float(os.environ.get("AC_POWER_FORCED_ON", "2.5"))
 
-# --- Componentes globales ---
+# --- Global components ---
 
 mqtt_handler: MqttHandler | None = None
 melcloud_client: MelCloudClient | None = None
@@ -105,27 +105,27 @@ cleanup_scheduler: CleanupScheduler | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Ciclo de vida de la aplicación."""
+    """Application lifecycle."""
     global mqtt_handler, melcloud_client, ac_controller, cleanup_scheduler
 
-    logger.info("=== Smart Home Backend iniciando ===")
+    logger.info("=== Smart Home Backend starting ===")
     logger.info("MQTT Broker: %s:%d", MQTT_BROKER, MQTT_PORT)
     logger.info("MELCloud URL: %s", MELCLOUD_URL)
     
-    # 0. Descubrir sensores automáticamente desde Zigbee2MQTT
-    logger.info("Descubriendo sensores desde Zigbee2MQTT vía MQTT...")
+    # 0. Auto-discover sensors from Zigbee2MQTT
+    logger.info("Discovering sensors from Zigbee2MQTT via MQTT...")
     z2m_client = Zigbee2MQTTClient(MQTT_BROKER, MQTT_PORT, timeout=Z2M_DISCOVERY_TIMEOUT)
     sensor_names = z2m_client.discover_temperature_sensors()
     
     if not sensor_names:
-        logger.warning("No se descubrieron sensores. Verifica que Zigbee2MQTT esté funcionando.")
-        logger.warning("El sistema continuará sin sensores.")
+        logger.warning("No sensors discovered. Check that Zigbee2MQTT is running.")
+        logger.warning("System will continue without sensors.")
     else:
-        logger.info("Sensores descubiertos: %s", sensor_names)
+        logger.info("Sensors discovered: %s", sensor_names)
     
-    logger.info("Objetivo: %.1f°C (histéresis: +%.1f/-%.1f)", TARGET_TEMPERATURE, HYSTERESIS_ON, HYSTERESIS_OFF)
+    logger.info("Target: %.1f°C (hysteresis: +%.1f/-%.1f)", TARGET_TEMPERATURE, HYSTERESIS_ON, HYSTERESIS_OFF)
 
-    # 1. Iniciar handler MQTT
+    # 1. Start MQTT handler
     mqtt_handler = MqttHandler(
         MQTT_BROKER, 
         MQTT_PORT, 
@@ -137,7 +137,7 @@ async def lifespan(app: FastAPI):
     )
     mqtt_handler.start()
 
-    # 2. Iniciar cliente MELCloud
+    # 2. Start MELCloud client
     melcloud_client = MelCloudClient(
         MELCLOUD_URL, 
         MELCLOUD_EMAIL, 
@@ -147,9 +147,9 @@ async def lifespan(app: FastAPI):
         app_version=MELCLOUD_APP_VERSION
     )
     if not melcloud_client.login():
-        logger.error("No se pudo autenticar en MELCloud. El controlador no actuará.")
+        logger.error("Failed to authenticate with MELCloud. Controller will not act.")
 
-    # 3. Configurar e iniciar controlador
+    # 3. Configure and start controller
     config = ControlConfig(
         target_temperature=TARGET_TEMPERATURE,
         hysteresis_on=HYSTERESIS_ON,
@@ -172,33 +172,33 @@ async def lifespan(app: FastAPI):
     ac_controller = ACController(mqtt_handler, melcloud_client, config)
     ac_controller.start()
 
-    # 4. Inyectar dependencias en las rutas
+    # 4. Inject dependencies into routes
     routes.mqtt_handler = mqtt_handler
     routes.ac_controller = ac_controller
     routes.outdoor_cache_ttl = OUTDOOR_CACHE_TTL
     routes.location_lat = LOCATION_LATITUDE
     routes.location_lon = LOCATION_LONGITUDE
 
-    # 5. Iniciar scheduler de limpieza diaria
+    # 5. Start daily cleanup scheduler
     cleanup_scheduler = CleanupScheduler(
         interval=CLEANUP_INTERVAL_SECONDS,
         grace_period=CLEANUP_GRACE_PERIOD
     )
     cleanup_scheduler.start()
 
-    logger.info("=== Smart Home Backend listo ===")
+    logger.info("=== Smart Home Backend ready ===")
 
     yield
 
     # Shutdown
-    logger.info("=== Apagando Smart Home Backend ===")
+    logger.info("=== Shutting down Smart Home Backend ===")
     cleanup_scheduler.stop()
     ac_controller.stop()
     mqtt_handler.stop()
     melcloud_client.close()
 
 
-# --- App FastAPI ---
+# --- FastAPI App ---
 
 app = FastAPI(
     title="Smart Home Control",
@@ -206,7 +206,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - Configurar origins permitidos por seguridad
+# CORS - Configure allowed origins for security
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -214,20 +214,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Rutas API
+# API routes
 app.include_router(routes.router)
 
-# Ruta especial para index.html con no-cache (forzar actualización después de bug fix)
+# Special route for index.html with no-cache (force update after bug fix)
 @app.get("/")
 async def serve_index():
-    """Sirve index.html con headers no-cache para forzar actualización."""
+    """Serves index.html with no-cache headers to force update."""
     import time
     frontend_path = Path(__file__).parent / "static" / "index.html"
     
-    # Leer el contenido y añadir timestamp único para forzar recarga
+    # Read content and add unique timestamp to force reload
     content = frontend_path.read_text(encoding="utf-8")
     
-    # Insertar timestamp único en el HTML para garantizar recarga
+    # Insert unique timestamp in HTML to guarantee reload
     timestamp_marker = f"<!-- CACHE_BUST: {int(time.time())} -->"
     content = content.replace("</head>", f"{timestamp_marker}\n</head>")
     
@@ -242,7 +242,7 @@ async def serve_index():
         }
     )
 
-# Servir otros archivos estáticos normalmente
+# Serve other static files normally
 frontend_path = Path(__file__).parent / "static"
 if frontend_path.exists():
     app.mount("/static", StaticFiles(directory=str(frontend_path)), name="frontend")

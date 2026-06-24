@@ -36,3 +36,6 @@ Thumbs.db
 *.bat
 configure_sensors.ps1
 configure_sensors.sh
+
+# Documentación de soporte y desarrollo (Kiro workspace)
+.kiro/
