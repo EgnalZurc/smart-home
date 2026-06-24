@@ -58,31 +58,66 @@
         .modal-visible .modal-sheet { transform: translateY(0); }
         .fade-in { animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        /* Language selector styles - Flag only */
-        .lang-flag {
-            font-size: 20px;
-            padding: 4px;
-            border-radius: 6px;
-            transition: all 0.2s ease;
+        /* Language selector - Dropdown style */
+        .lang-dropdown {
+            position: relative;
+        }
+        .lang-current {
+            font-size: 24px;
+            padding: 6px 10px;
+            border-radius: 8px;
             cursor: pointer;
-            border: 2px solid transparent;
-            background: transparent;
-            line-height: 1;
+            border: 2px solid rgba(100, 116, 139, 0.3);
+            background: rgba(30, 41, 59, 0.4);
+            transition: all 0.2s ease;
             display: flex;
             align-items: center;
             justify-content: center;
+            line-height: 1;
         }
-        .lang-flag.active {
-            border-color: rgba(59, 130, 246, 0.6);
+        .lang-current:hover {
+            border-color: rgba(59, 130, 246, 0.5);
             background: rgba(59, 130, 246, 0.1);
-            transform: scale(1.1);
         }
-        .lang-flag.inactive {
-            opacity: 0.5;
+        .lang-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            background: rgba(30, 41, 59, 0.95);
+            border: 1px solid rgba(100, 116, 139, 0.4);
+            border-radius: 8px;
+            padding: 4px;
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            min-width: 60px;
         }
-        .lang-flag.inactive:hover {
-            opacity: 0.8;
+        .lang-menu.open {
+            display: flex;
+        }
+        .lang-option {
+            font-size: 24px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            border: 2px solid transparent;
+        }
+        .lang-option:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.4);
             transform: scale(1.05);
+        }
+        .lang-option.active {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: rgba(59, 130, 246, 0.5);
         }
     </style>
 </head>
@@ -95,10 +130,19 @@
             <h1 class="text-lg font-semibold tracking-tight" data-i18n="header.title">🏠 Smart Home</h1>
         </div>
         <div class="flex items-center gap-3">
-            <!-- Language Selector -->
-            <div class="flex items-center gap-2">
-                <button id="lang-en" onclick="i18n.switchLocale('en')" class="lang-flag active" title="English">🇬🇧</button>
-                <button id="lang-es" onclick="i18n.switchLocale('es')" class="lang-flag inactive" title="Español">🇪🇸</button>
+            <!-- Language Selector Dropdown -->
+            <div class="lang-dropdown">
+                <div class="lang-current" onclick="toggleLanguageMenu()" id="lang-current">
+                    <span id="current-flag">🇬🇧</span>
+                </div>
+                <div class="lang-menu" id="lang-menu">
+                    <div class="lang-option" onclick="selectLanguage('en')" data-lang="en" title="English">
+                        🇬🇧
+                    </div>
+                    <div class="lang-option" onclick="selectLanguage('es')" data-lang="es" title="Español">
+                        🇪🇸
+                    </div>
+                </div>
             </div>
             <!-- Status -->
             <div class="flex items-center gap-1.5">
@@ -256,7 +300,47 @@ let chart = null;
 let chartHum = null;
 let currentTarget = 26.0;
 
-// --- Colores por rango (F0.10) ---
+// Language selector dropdown functions
+function toggleLanguageMenu() {
+    const menu = document.getElementById('lang-menu');
+    menu.classList.toggle('open');
+}
+
+function selectLanguage(locale) {
+    // Close menu
+    const menu = document.getElementById('lang-menu');
+    menu.classList.remove('open');
+    
+    // Update flag display
+    const flags = {
+        'en': '🇬🇧',
+        'es': '🇪🇸'
+    };
+    document.getElementById('current-flag').textContent = flags[locale];
+    
+    // Update active state in menu
+    document.querySelectorAll('.lang-option').forEach(opt => {
+        if (opt.dataset.lang === locale) {
+            opt.classList.add('active');
+        } else {
+            opt.classList.remove('active');
+        }
+    });
+    
+    // Switch language
+    i18n.switchLocale(locale);
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(event) {
+    const dropdown = document.querySelector('.lang-dropdown');
+    if (dropdown && !dropdown.contains(event.target)) {
+        const menu = document.getElementById('lang-menu');
+        if (menu) menu.classList.remove('open');
+    }
+});
+
+// --- Color ranges (F0.10) ---
 function tempColor(t) {
     if (t === null) return '#64748b';
     if (t < 18) return '#1e40af';
