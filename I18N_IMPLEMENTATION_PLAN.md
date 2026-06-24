@@ -59,6 +59,14 @@ Current state:
 - ❌ No language selector
 - ❌ No locale persistence
 
+Target state:
+- ✅ Default language: **English** (on first visit)
+- ✅ Supported languages: English, Spanish
+- ✅ Language selector in UI
+- ✅ Preference saved in **cookies** (not localStorage)
+- ✅ Cookie expiration: 365 days (1 year)
+- ✅ Automatic language load from cookie on subsequent visits
+
 ---
 
 ## 🗺️ IMPLEMENTATION PHASES
@@ -145,7 +153,7 @@ Priority order:
 
 ---
 
-### Phase 3: Frontend i18n System (2-3 hours)
+### Frontend i18n System (2-3 hours)
 
 **Goal**: Implement multi-language support in web UI
 
@@ -153,9 +161,10 @@ Priority order:
 
 **Option A: Vanilla JS (Recommended)**
 - No dependencies
-- Lightweight (~100 lines of code)
+- Lightweight (~150 lines of code with cookies)
 - Full control
 - Easy to maintain
+- Cookie-based persistence
 
 **Option B: Library (i18next)**
 - More features
@@ -173,23 +182,46 @@ src/backend/static/
 ├── index.html           (updated with data-i18n attributes)
 ├── i18n.js             (translation engine)
 └── locales/
-    ├── en.json         (English translations)
+    ├── en.json         (English translations - DEFAULT)
     └── es.json         (Spanish translations)
 ```
 
-**i18n.js** (translation engine):
+**i18n.js** (translation engine with cookies):
 ```javascript
 class I18n {
     constructor(defaultLocale = 'en') {
-        this.locale = localStorage.getItem('locale') || defaultLocale;
+        // Check cookie first, then browser language, then default to 'en'
+        this.locale = this.getLocaleFromCookie() || defaultLocale;
         this.translations = {};
+    }
+    
+    getLocaleFromCookie() {
+        // Read locale from cookie
+        const name = 'locale=';
+        const decodedCookie = decodeURIComponent(document.cookie);
+        const ca = decodedCookie.split(';');
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i].trim();
+            if (c.indexOf(name) === 0) {
+                return c.substring(name.length, c.length);
+            }
+        }
+        return null;
+    }
+    
+    setLocaleCookie(locale) {
+        // Save locale to cookie (expires in 1 year)
+        const d = new Date();
+        d.setTime(d.getTime() + (365 * 24 * 60 * 60 * 1000));
+        const expires = "expires=" + d.toUTCString();
+        document.cookie = `locale=${locale};${expires};path=/;SameSite=Strict`;
     }
     
     async loadLocale(locale) {
         const response = await fetch(`/static/locales/${locale}.json`);
         this.translations = await response.json();
         this.locale = locale;
-        localStorage.setItem('locale', locale);
+        this.setLocaleCookie(locale);  // Save to cookie
     }
     
     t(key) {
@@ -205,9 +237,25 @@ class I18n {
             const key = el.getAttribute('data-i18n');
             el.textContent = this.t(key);
         });
+        
+        // Update active language button
+        document.querySelectorAll('.lang-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.lang === this.locale);
+        });
     }
 }
+
+// Initialize on page load
+const i18n = new I18n('en');  // Default to English
+i18n.loadLocale(i18n.locale).then(() => i18n.updateUI());
 ```
+
+**Key features**:
+- ✅ **Default language**: English (always on first visit)
+- ✅ **Cookie persistence**: User preference saved for 1 year
+- ✅ **Automatic load**: Reads cookie on every page load
+- ✅ **Privacy-friendly**: SameSite=Strict cookie attribute
+- ✅ **Long expiration**: 365 days (1 year)
 
 #### Step 3.3: Extract Translatable Strings
 
@@ -236,7 +284,29 @@ UI component:
         🇪🇸 ES
     </button>
 </div>
+
+<style>
+.lang-btn.active {
+    font-weight: bold;
+    border-bottom: 2px solid #3b82f6;
+}
+</style>
 ```
+
+**Behavior**:
+1. **First visit**: App loads in English (default)
+2. **User changes language**: Selected language saved to cookie (expires in 1 year)
+3. **Next visit**: App automatically loads in saved language from cookie
+4. **Cookie expires**: Falls back to English default after 1 year
+5. **Visual feedback**: Active language button highlighted
+
+**Cookie details**:
+- Name: `locale`
+- Values: `en` or `es`
+- Expiration: 365 days (1 year)
+- Path: `/` (entire site)
+- SameSite: `Strict` (security)
+- HttpOnly: `false` (needs JS access)
 
 ---
 
@@ -325,15 +395,18 @@ raise HTTPException(
 - [ ] Update README badges/links
 
 ### Phase 3: Frontend i18n ⏳
-- [ ] Create `i18n.js` translation engine
+- [ ] Create `i18n.js` translation engine with **cookie support**
 - [ ] Create `locales/en.json` with English translations
 - [ ] Create `locales/es.json` with Spanish translations
 - [ ] Add `data-i18n` attributes to all UI elements
 - [ ] Create language selector component
-- [ ] Implement locale persistence (localStorage)
+- [ ] Implement **cookie** persistence (365 days expiration)
 - [ ] Update Chart.js labels with translations
 - [ ] Add language indicator in UI
 - [ ] Test with both languages
+- [ ] Test **default English on first visit**
+- [ ] Test **automatic language load from cookie**
+- [ ] Test cookie expiration behavior
 - [ ] Add RTL support (future: Arabic, Hebrew)
 
 ### Phase 4: API i18n ⏳
