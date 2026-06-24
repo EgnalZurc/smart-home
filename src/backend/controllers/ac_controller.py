@@ -1,8 +1,8 @@
-"""Controlador del AC.
+"""AC controller.
 
-Orquesta la máquina de estados, lee sensores, aplica outputs vía MELCloud.
-La lógica de decisión está 100% en state_machine.py (función pura).
-Este módulo solo hace I/O y mantiene el estado temporal.
+Orchestrates the state machine, reads sensors, applies outputs via MELCloud.
+Decision logic is 100% in state_machine.py (pure function).
+This module only does I/O and maintains temporal state.
 """
 
 import logging
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ControlConfig:
-    """Parámetros de control."""
+    """Control parameters."""
 
     target_temperature: float = 26.0
     hysteresis_on: float = 0.5
@@ -43,7 +43,7 @@ class ControlConfig:
     device_id: int = 0
     building_id: int = 0
     melcloud_max_failures: int = 100
-    # Potencias para cálculo de energía (kW)
+    # Power for energy calculation (kW)
     ac_power_cooling_max: float = 2.5
     ac_power_cooling_mid: float = 1.75
     ac_power_modulating: float = 1.25
@@ -52,16 +52,16 @@ class ControlConfig:
 
 @dataclass
 class ControlState:
-    """Estado observable del controlador (para API/UI)."""
+    """Observable controller state (for API/UI)."""
 
     state: str = "off"
     setpoint: float = 24.0
     average_temp: float | None = None
-    average_humidity: float | None = None  # Añadido para evitar recalcular en API
+    average_humidity: float | None = None  # Added to avoid recalculating in API
     active_sensors: int = 0
     total_sensors: int = 5
     last_update: float = 0.0
-    override: str | None = "off"  # None=auto, "on", "off" - INICIA EN FORCE OFF
+    override: str | None = "off"  # None=auto, "on", "off" - STARTS IN FORCE OFF
     sensor_alert: bool = False
     melcloud_error: bool = False
     force_on_params: ForceOnParams | None = None
@@ -69,7 +69,7 @@ class ControlState:
 
 @dataclass
 class HistoryRecord:
-    """Registro del histórico."""
+    """History record."""
 
     timestamp: float
     average_temp: float | None
@@ -79,7 +79,7 @@ class HistoryRecord:
 
 
 class ACController:
-    """Controlador del termostato virtual. Usa la máquina de estados para decidir."""
+    """Virtual thermostat controller. Uses state machine to decide."""
 
     def __init__(
         self,
@@ -96,7 +96,7 @@ class ACController:
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
 
-        # Variables internas de la máquina de estados
+        # Internal state machine variables
         self._current_sm_state: ControllerState = ControllerState.FORCED_OFF
         self._last_off_time: float = 0.0
         self._last_sensor_update_time: float = time.time()
@@ -104,11 +104,11 @@ class ACController:
         self._last_outputs: StateMachineOutputs | None = None
         self._last_modulating_setpoint: float = 24.0
 
-        # Tracking de energía
+        # Energy tracking
         self._energy_state = {
             'last_state': 'off',
             'last_transition': time.time(),
-            'kwh_session': 0.0  # kWh acumulados en la sesión actual
+            'kwh_session': 0.0  # kWh accumulated in current session
         }
 
     @property
@@ -117,7 +117,7 @@ class ACController:
             return self.state
 
     def get_history(self, limit: int = 100) -> list[dict]:
-        """Devuelve las últimas N entradas del histórico."""
+        """Returns the last N history entries."""
         with self._lock:
             records = self.history[-limit:]
         return [
@@ -132,40 +132,40 @@ class ACController:
         ]
 
     def update_config(self, **kwargs):
-        """Actualiza parámetros de configuración en caliente."""
+        """Updates configuration parameters on the fly."""
         with self._lock:
             for key, value in kwargs.items():
                 if hasattr(self.config, key):
                     setattr(self.config, key, value)
-                    logger.info("Config actualizada: %s = %s", key, value)
+                    logger.info("Config updated: %s = %s", key, value)
 
     def set_override(self, mode: str | None):
-        """Establece override manual: None=auto, 'on'=forzar AC, 'off'=forzar apagado."""
+        """Sets manual override: None=auto, 'on'=force AC, 'off'=force off."""
         with self._lock:
             self.state.override = mode
-        logger.info("Override establecido: %s", mode)
+        logger.info("Override set: %s", mode)
 
     def set_force_on_params(self, temperature: float, fan_speed: int):
-        """Guarda los parámetros de forzar encendido."""
+        """Saves force on parameters."""
         with self._lock:
             self.state.force_on_params = ForceOnParams(temperature=temperature, fan_speed=fan_speed)
 
     def start(self):
-        """Inicia el loop de control en un thread."""
+        """Starts the control loop in a thread."""
         self._running = True
         self._thread = threading.Thread(target=self._control_loop, daemon=True)
         self._thread.start()
-        logger.info("Controlador AC iniciado (intervalo=%ds)", self.config.loop_interval)
+        logger.info("AC controller started (interval=%ds)", self.config.loop_interval)
 
     def stop(self):
-        """Detiene el loop de control."""
+        """Stops the control loop."""
         self._running = False
         if self._thread:
             self._thread.join(timeout=10)
-        logger.info("Controlador AC detenido")
+        logger.info("AC controller stopped")
 
     def _control_loop(self):
-        """Loop principal de control."""
+        """Main control loop."""
         while self._running:
             try:
                 self._tick()
@@ -175,13 +175,13 @@ class ACController:
             time.sleep(self.config.loop_interval)
 
     def _tick(self):
-        """Un ciclo de control: leer → evaluar → aplicar → registrar."""
-        # 1. LEER: Obtener inputs (calcula temp_media y hum_media UNA SOLA VEZ)
+        """One control cycle: read → evaluate → apply → record."""
+        # 1. READ: Get inputs (calculate avg_temp and avg_hum ONCE)
         avg_temp, avg_hum, active_count, last_sensor_time = self._read_sensors()
         inputs = self._build_inputs(avg_temp, last_sensor_time)
         sm_config = self._build_sm_config()
 
-        # 2. EVALUAR: Llamar a la máquina de estados
+        # 2. EVALUATE: Call state machine
         outputs = evaluate(
             current_state=self._current_sm_state,
             inputs=inputs,
@@ -189,28 +189,28 @@ class ACController:
             last_modulating_setpoint=self._last_modulating_setpoint,
         )
 
-        # 3. APLICAR: Enviar a MELCloud si cambió
+        # 3. APPLY: Send to MELCloud if changed
         self._apply_outputs(outputs)
 
-        # 4. REGISTRAR: Actualizar estado visible y histórico (incluye avg_temp y avg_hum)
+        # 4. RECORD: Update visible state and history (includes avg_temp and avg_hum)
         self._update_state(outputs, avg_temp, avg_hum, active_count)
 
         # 5. LOG
         if avg_temp is not None:
             logger.info(
-                "Tick: media=%.1f°C, objetivo=%.1f°C, estado=%s, consigna=%.1f°C, sensores=%d/%d%s%s",
+                "Tick: avg=%.1f°C, target=%.1f°C, state=%s, setpoint=%.1f°C, sensors=%d/%d%s%s",
                 avg_temp,
                 self.config.target_temperature,
                 outputs.state.value,
                 outputs.setpoint,
                 active_count,
                 self.state.total_sensors,
-                " [ALERTA SENSORES]" if outputs.sensor_alert else "",
-                " [ERROR MELCLOUD]" if outputs.melcloud_error else "",
+                " [SENSOR ALERT]" if outputs.sensor_alert else "",
+                " [MELCLOUD ERROR]" if outputs.melcloud_error else "",
             )
 
     def _read_sensors(self) -> tuple[float | None, float | None, int, float]:
-        """Lee sensores y devuelve (temp_media, hum_media, activos, timestamp más reciente)."""
+        """Reads sensors and returns (avg_temp, avg_hum, active_count, most recent timestamp)."""
         avg_temp = None
         avg_hum = None
         last_sensor_time = self._last_sensor_update_time
@@ -218,17 +218,17 @@ class ACController:
         with self.mqtt._lock:
             readings = self.mqtt.readings
             if readings:
-                # Calcular temperatura media
+                # Calculate average temperature
                 temps = [r.temperature for r in readings.values() if r.temperature is not None]
                 if temps:
                     avg_temp = sum(temps) / len(temps)
                 
-                # Calcular humedad media
+                # Calculate average humidity
                 hums = [r.humidity for r in readings.values() if r.humidity is not None]
                 if hums:
                     avg_hum = sum(hums) / len(hums)
                 
-                # Encontrar el timestamp más reciente
+                # Find most recent timestamp
                 timestamps = [r.timestamp for r in readings.values()]
                 if timestamps:
                     most_recent = max(timestamps)
@@ -240,12 +240,12 @@ class ACController:
         return avg_temp, avg_hum, active_count, last_sensor_time
 
     def _build_inputs(self, avg_temp: float | None, last_sensor_time: float) -> StateMachineInputs:
-        """Construye los inputs para la máquina de estados."""
+        """Builds inputs for state machine."""
         with self._lock:
             override = self.state.override
             force_params = self.state.force_on_params or ForceOnParams()
 
-        # Mapear override string a ManualMode enum
+        # Map override string to ManualMode enum
         if override == "off":
             manual_mode = ManualMode.FORCE_OFF
         elif override == "on":
@@ -253,13 +253,13 @@ class ACController:
         else:
             manual_mode = ManualMode.AUTO
 
-        # Tiempo desde último apagado
+        # Time since last off
         if self._last_off_time == 0.0:
             seconds_since_off = 99999.0
         else:
             seconds_since_off = time.time() - self._last_off_time
 
-        # Tiempo desde última actualización de sensores
+        # Time since last sensor update
         seconds_since_sensor = time.time() - last_sensor_time
 
         return StateMachineInputs(
@@ -273,7 +273,7 @@ class ACController:
         )
 
     def _build_sm_config(self) -> StateMachineConfig:
-        """Construye la config para la máquina de estados."""
+        """Builds config for state machine."""
         return StateMachineConfig(
             hysteresis_on=self.config.hysteresis_on,
             hysteresis_off=self.config.hysteresis_off,

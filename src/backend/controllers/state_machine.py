@@ -1,8 +1,8 @@
-"""Máquina de estados del controlador AC.
+"""AC controller state machine.
 
-Define de forma determinista todos los estados, transiciones y outputs.
-Cada tick recibe inputs y produce outputs sin efectos secundarios.
-Es pura lógica — no hace I/O, no llama a MELCloud, no lee MQTT.
+Defines all states, transitions and outputs deterministically.
+Each tick receives inputs and produces outputs without side effects.
+It's pure logic — does not do I/O, does not call MELCloud, does not read MQTT.
 """
 
 from dataclasses import dataclass
@@ -10,7 +10,7 @@ from enum import Enum
 
 
 class ControllerState(str, Enum):
-    """Estados posibles del controlador."""
+    """Possible controller states."""
     OFF = "off"
     COOLDOWN = "cooldown"
     COOLING_MAX = "cooling_max"
@@ -29,14 +29,14 @@ class ManualMode(str, Enum):
 
 @dataclass(frozen=True)
 class ForceOnParams:
-    """Parámetros del encendido manual."""
+    """Manual turn on parameters."""
     temperature: float = 23.0
     fan_speed: int = 0
 
 
 @dataclass(frozen=True)
 class StateMachineInputs:
-    """Inputs de un tick de la máquina de estados."""
+    """Inputs of a state machine tick."""
     average_temp: float | None
     target_temp: float
     manual_mode: ManualMode
@@ -48,7 +48,7 @@ class StateMachineInputs:
 
 @dataclass(frozen=True)
 class StateMachineOutputs:
-    """Outputs producidos por la máquina de estados."""
+    """Outputs produced by the state machine."""
     state: ControllerState
     power: bool
     mode: str  # Siempre "cool"
@@ -58,11 +58,11 @@ class StateMachineOutputs:
     melcloud_error: bool
 
 
-# --- Constantes técnicas (no configurables directamente) ---
-# El cooldown y sensor_alert vienen de la configuración
+# --- Technical constants (not directly configurable) ---
+# Cooldown and sensor_alert come from configuration
 MELCLOUD_MAX_FAILURES_DEFAULT = 100
 
-# --- Constantes por defecto (configurables) ---
+# --- Default constants (configurable) ---
 DEFAULT_HYSTERESIS_ON = 0.5
 DEFAULT_HYSTERESIS_OFF = 0.3
 DEFAULT_MIN_SETPOINT = 19.0
@@ -71,7 +71,7 @@ DEFAULT_MAX_SETPOINT = 30.0
 
 @dataclass(frozen=True)
 class StateMachineConfig:
-    """Parámetros configurables de la máquina de estados."""
+    """Configurable state machine parameters."""
     hysteresis_on: float = DEFAULT_HYSTERESIS_ON
     hysteresis_off: float = DEFAULT_HYSTERESIS_OFF
     min_setpoint: float = DEFAULT_MIN_SETPOINT
@@ -86,10 +86,10 @@ def _calculate_proportional_setpoint(
     target_temp: float,
     config: StateMachineConfig,
 ) -> float:
-    """Calcula la consigna proporcional para MODULATING.
+    """Calculates proportional setpoint for MODULATING.
 
-    position=1 (borde caliente) → consigna mínima (19°C, máxima potencia)
-    position=0 (borde frío) → consigna máxima (30°C, mínima potencia)
+    position=1 (hot edge) → minimum setpoint (19°C, maximum power)
+    position=0 (cold edge) → maximum setpoint (30°C, minimum power)
     """
     range_size = config.hysteresis_on + config.hysteresis_off
     if range_size == 0:
@@ -105,7 +105,7 @@ def _calculate_proportional_setpoint(
 
 
 def _off_outputs(sensor_alert: bool, melcloud_error: bool) -> StateMachineOutputs:
-    """Outputs estándar para estados apagados."""
+    """Standard outputs for off states."""
     return StateMachineOutputs(
         state=ControllerState.OFF,
         power=False,
@@ -118,7 +118,7 @@ def _off_outputs(sensor_alert: bool, melcloud_error: bool) -> StateMachineOutput
 
 
 def _cooldown_outputs(sensor_alert: bool, melcloud_error: bool) -> StateMachineOutputs:
-    """Outputs estándar para COOLDOWN."""
+    """Standard outputs for COOLDOWN."""
     return StateMachineOutputs(
         state=ControllerState.COOLDOWN,
         power=False,
@@ -131,7 +131,7 @@ def _cooldown_outputs(sensor_alert: bool, melcloud_error: bool) -> StateMachineO
 
 
 def _cooling_max_outputs(sensor_alert: bool, melcloud_error: bool, config: StateMachineConfig) -> StateMachineOutputs:
-    """Outputs estándar para COOLING_MAX."""
+    """Standard outputs for COOLING_MAX."""
     return StateMachineOutputs(
         state=ControllerState.COOLING_MAX,
         power=True,
@@ -146,7 +146,7 @@ def _cooling_max_outputs(sensor_alert: bool, melcloud_error: bool, config: State
 def _modulating_outputs(
     setpoint: float, sensor_alert: bool, melcloud_error: bool
 ) -> StateMachineOutputs:
-    """Outputs estándar para MODULATING."""
+    """Standard outputs for MODULATING."""
     return StateMachineOutputs(
         state=ControllerState.MODULATING,
         power=True,
@@ -164,25 +164,25 @@ def evaluate(
     config: StateMachineConfig,
     last_modulating_setpoint: float = 24.0,
 ) -> StateMachineOutputs:
-    """Evalúa un tick de la máquina de estados.
+    """Evaluates one state machine tick.
 
-    Función pura: dados un estado actual + inputs + config, devuelve outputs.
-    No tiene efectos secundarios.
+    Pure function: given current state + inputs + config, returns outputs.
+    Has no side effects.
 
     Args:
-        current_state: Estado actual del controlador.
-        inputs: Inputs del tick actual.
-        config: Parámetros configurables.
-        last_modulating_setpoint: Última consigna usada en MODULATING (para mantener si no hay datos).
+        current_state: Current controller state.
+        inputs: Current tick inputs.
+        config: Configurable parameters.
+        last_modulating_setpoint: Last setpoint used in MODULATING (to maintain if no data).
 
     Returns:
-        StateMachineOutputs con el nuevo estado y los outputs para MELCloud.
+        StateMachineOutputs with new state and outputs for MELCloud.
     """
-    # Flags transversales
+    # Cross-cutting flags
     sensor_alert = inputs.seconds_since_last_sensor_update >= config.sensor_alert_seconds
     melcloud_error = inputs.consecutive_melcloud_failures >= config.melcloud_max_failures
 
-    # --- Prioridad 1: Error MELCloud (100 fallos consecutivos) ---
+    # --- Priority 1: MELCloud error (100 consecutive failures) ---
     if melcloud_error:
         return StateMachineOutputs(
             state=ControllerState.ERROR,
@@ -194,7 +194,7 @@ def evaluate(
             melcloud_error=True,
         )
 
-    # --- Prioridad 2: Override manual ---
+    # --- Priority 2: Manual override ---
     if inputs.manual_mode == ManualMode.FORCE_OFF:
         return StateMachineOutputs(
             state=ControllerState.FORCED_OFF,
@@ -217,14 +217,14 @@ def evaluate(
             melcloud_error=False,
         )
 
-    # --- Prioridad 3: Modo automático ---
+    # --- Priority 3: Automatic mode ---
     avg = inputs.average_temp
     target = inputs.target_temp
     hot_threshold = target + config.hysteresis_on
     cold_threshold = target - config.hysteresis_off
     cooldown_done = inputs.seconds_since_last_off >= config.cooldown_seconds
 
-    # Sub-función para evaluar la decisión automática
+    # Sub-function to evaluate automatic decision
     def _auto_decision() -> StateMachineOutputs:
         match current_state:
             case ControllerState.OFF:
@@ -249,21 +249,21 @@ def evaluate(
                 )
 
             case ControllerState.FORCED_OFF | ControllerState.FORCED_ON:
-                # Volviendo a auto desde override: re-evalúa sin cooldown
+                # Returning to auto from override: re-evaluate without cooldown
                 return _evaluate_from_override(
                     avg, hot_threshold, cold_threshold,
                     target, config, sensor_alert,
                 )
 
             case ControllerState.ERROR:
-                # Recuperado de error: re-evalúa
+                # Recovered from error: re-evaluate
                 return _evaluate_from_override(
                     avg, hot_threshold, cold_threshold,
                     target, config, sensor_alert,
                 )
 
             case _:
-                # Fallback seguro
+                # Safe fallback
                 return _off_outputs(sensor_alert, False)
 
     return _auto_decision()
@@ -272,7 +272,7 @@ def evaluate(
 def _evaluate_off(
     avg: float | None, hot_threshold: float, sensor_alert: bool, config: StateMachineConfig
 ) -> StateMachineOutputs:
-    """Transiciones desde OFF."""
+    """Transitions from OFF."""
     if avg is None:
         return _off_outputs(sensor_alert, False)
 
@@ -291,11 +291,11 @@ def _evaluate_cooldown(
     config: StateMachineConfig,
     sensor_alert: bool,
 ) -> StateMachineOutputs:
-    """Transiciones desde COOLDOWN."""
+    """Transitions from COOLDOWN."""
     if not cooldown_done:
         return _cooldown_outputs(sensor_alert, False)
 
-    # Cooldown terminado: re-evalúa
+    # Cooldown finished: re-evaluate
     if avg is None:
         return _off_outputs(sensor_alert, False)
 
@@ -317,21 +317,21 @@ def _evaluate_cooling_max(
     config: StateMachineConfig,
     sensor_alert: bool,
 ) -> StateMachineOutputs:
-    """Transiciones desde COOLING_MAX."""
+    """Transitions from COOLING_MAX."""
     if avg is None:
-        # Sin datos: mantener enfriando
+        # No data: keep cooling
         return _cooling_max_outputs(sensor_alert, False, config)
 
     if avg < cold_threshold:
-        # Objetivo alcanzado → apagar → cooldown
+        # Target reached → turn off → cooldown
         return _cooldown_outputs(sensor_alert, False)
 
     if avg <= hot_threshold:
-        # Zona intermedia → modular
+        # Intermediate zone → modulate
         setpoint = _calculate_proportional_setpoint(avg, target, config)
         return _modulating_outputs(setpoint, sensor_alert, False)
 
-    # Sigue caliente → mantener cooling max
+    # Still hot → keep cooling max
     return _cooling_max_outputs(sensor_alert, False, config)
 
 
@@ -344,19 +344,19 @@ def _evaluate_modulating(
     sensor_alert: bool,
     last_setpoint: float,
 ) -> StateMachineOutputs:
-    """Transiciones desde MODULATING."""
+    """Transitions from MODULATING."""
     if avg is None:
-        # Sin datos: mantener última consigna
+        # No data: keep last setpoint
         return _modulating_outputs(last_setpoint, sensor_alert, False)
 
     if avg > hot_threshold:
         return _cooling_max_outputs(sensor_alert, False, config)
 
     if avg < cold_threshold:
-        # Objetivo alcanzado → apagar → cooldown
+        # Target reached → turn off → cooldown
         return _cooldown_outputs(sensor_alert, False)
 
-    # Sigue en zona intermedia → recalcular consigna
+    # Still in intermediate zone → recalculate setpoint
     setpoint = _calculate_proportional_setpoint(avg, target, config)
     return _modulating_outputs(setpoint, sensor_alert, False)
 
@@ -369,7 +369,7 @@ def _evaluate_from_override(
     config: StateMachineConfig,
     sensor_alert: bool,
 ) -> StateMachineOutputs:
-    """Re-evaluación al volver a auto desde override o error. Sin cooldown."""
+    """Re-evaluation when returning to auto from override or error. No cooldown."""
     if avg is None:
         return _off_outputs(sensor_alert, False)
 

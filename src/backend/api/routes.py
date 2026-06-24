@@ -1,4 +1,4 @@
-"""API REST endpoints para la Web UI."""
+"""REST API endpoints for the Web UI."""
 
 import time
 
@@ -6,17 +6,17 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-# Estas referencias se inyectan desde main.py
+# These references are injected from main.py
 mqtt_handler = None
 ac_controller = None
 energy_tracker = None
 
-# Configuraciones inyectadas
+# Injected configurations
 outdoor_cache_ttl = 600
 location_lat = 40.396644
 location_lon = -3.622511
 
-# Cache para temperatura exterior (no llamar a la API cada 5s)
+# Outdoor temperature cache (don't call API every 5s)
 _outdoor_cache = {"temperature": None, "humidity": None, "timestamp": 0}
 
 router = APIRouter(prefix="/api")
@@ -35,15 +35,15 @@ class OverrideRequest(BaseModel):
 
 @router.get("/status")
 def get_status():
-    """Estado general del sistema."""
+    """General system status."""
     state = ac_controller.current_state
 
-    # Usar valores YA CALCULADOS por el controlador (optimización)
-    # El controlador calcula temp/hum media cada tick (10s) y las guarda en state
-    # No recalcular aquí para evitar duplicación innecesaria
+    # Use values ALREADY CALCULATED by controller (optimization)
+    # Controller calculates avg temp/hum every tick (10s) and saves them in state
+    # Don't recalculate here to avoid unnecessary duplication
     return {
-        "average_temperature": state.average_temp,  # Ya calculado y redondeado
-        "average_humidity": state.average_humidity,  # Ya calculado y redondeado
+        "average_temperature": state.average_temp,  # Already calculated and rounded
+        "average_humidity": state.average_humidity,  # Already calculated and rounded
         "target_temperature": ac_controller.config.target_temperature,
         "ac_state": {
             "action": state.state,
@@ -61,7 +61,7 @@ def get_status():
 
 @router.get("/sensors")
 def get_sensors():
-    """Información de cada sensor."""
+    """Information from each sensor."""
     all_sensors = mqtt_handler.sensor_names
     now = time.time()
 
@@ -95,19 +95,19 @@ def get_sensors():
 
 @router.get("/history")
 def get_history(limit: int = 100):
-    """Histórico de acciones del controlador."""
+    """Controller action history."""
     return {"history": ac_controller.get_history(limit)}
 
 
 @router.get("/sensors/history")
 def get_sensors_history(start: float | None = None, end: float | None = None, last: int | None = None):
-    """Historial de lecturas de todos los sensores.
+    """Reading history from all sensors.
 
-    Modos:
-    - Sin argumentos: snapshot completo (todos los datos disponibles, max 200 por sensor)
-    - ?last=N: últimos N valores por sensor
-    - ?start=X&end=Y: valores en el rango de timestamps [start, end]
-    - ?start=X: valores desde start hasta ahora
+    Modes:
+    - No arguments: complete snapshot (all available data, max 200 per sensor)
+    - ?last=N: last N values per sensor
+    - ?start=X&end=Y: values in timestamp range [start, end]
+    - ?start=X: values from start until now
     """
     result = {}
     with mqtt_handler._lock:
@@ -155,18 +155,18 @@ def get_config():
 
 @router.post("/config")
 def update_config(update: ConfigUpdate):
-    """Actualiza la configuración."""
+    """Updates configuration."""
     changes = update.model_dump(exclude_none=True)
     if not changes:
-        raise HTTPException(400, "No hay cambios")
+        raise HTTPException(400, "No changes")
 
-    # Validar rangos (devolver error 400 si están fuera de rango)
+    # Validate ranges (return error 400 if out of range)
     if "target_temperature" in changes:
         temp = changes["target_temperature"]
         if temp < ac_controller.config.min_setpoint or temp > ac_controller.config.max_setpoint:
             raise HTTPException(
                 400, 
-                f"Temperatura objetivo debe estar entre {ac_controller.config.min_setpoint}°C y {ac_controller.config.max_setpoint}°C"
+                f"Target temperature must be between {ac_controller.config.min_setpoint}°C and {ac_controller.config.max_setpoint}°C"
             )
 
     ac_controller.update_config(**changes)
@@ -175,9 +175,9 @@ def update_config(update: ConfigUpdate):
 
 @router.post("/override")
 def set_override(req: OverrideRequest):
-    """Control manual del AC."""
+    """Manual AC control."""
     if req.mode not in (None, "on", "off"):
-        raise HTTPException(400, "mode debe ser 'on', 'off' o null (auto)")
+        raise HTTPException(400, "mode must be 'on', 'off' or null (auto)")
 
     ac_controller.set_override(req.mode)
     return {"status": "ok", "override": req.mode}
@@ -191,40 +191,40 @@ class ForceOnRequest(BaseModel):
 
 @router.post("/force_on")
 def force_on(req: ForceOnRequest):
-    """Forzar encendido del AC con parámetros personalizados."""
-    # Validar rangos (devolver error 400 si están fuera de rango)
+    """Force AC on with custom parameters."""
+    # Validate ranges (return error 400 if out of range)
     min_temp = ac_controller.config.min_setpoint
     max_temp = ac_controller.config.max_setpoint
     
     if req.temperature < min_temp or req.temperature > max_temp:
         raise HTTPException(
             400,
-            f"Temperatura debe estar entre {min_temp}°C y {max_temp}°C"
+            f"Temperature must be between {min_temp}°C and {max_temp}°C"
         )
     
     if req.fan_speed < 0 or req.fan_speed > ac_controller.config.fan_speed_max:
         raise HTTPException(
             400,
-            f"Velocidad de ventilador debe estar entre 0 (auto) y {ac_controller.config.fan_speed_max}"
+            f"Fan speed must be between 0 (auto) and {ac_controller.config.fan_speed_max}"
         )
     
     valid_modes = ("cool", "heat", "dry", "fan", "auto")
     if req.ac_mode not in valid_modes:
         raise HTTPException(
             400,
-            f"Modo debe ser uno de: {', '.join(valid_modes)}"
+            f"Mode must be one of: {', '.join(valid_modes)}"
         )
 
-    # Actualizar temperatura objetivo del controlador (sincronizar)
+    # Update controller target temperature (synchronize)
     ac_controller.update_config(target_temperature=req.temperature)
 
-    # Guardar parámetros de forzar encendido
+    # Save force on parameters
     ac_controller.set_force_on_params(temperature=req.temperature, fan_speed=req.fan_speed)
 
-    # Activar override ON en el controlador
+    # Activate override ON in controller
     ac_controller.set_override("on")
 
-    # Enviar directamente a MELCloud con los parámetros elegidos
+    # Send directly to MELCloud with chosen parameters
     success = ac_controller.melcloud.set_temperature(
         ac_controller.config.device_id,
         req.temperature,
@@ -245,7 +245,7 @@ def force_on(req: ForceOnRequest):
 
 @router.post("/force_off")
 def force_off():
-    """Forzar apagado del AC."""
+    """Force AC off."""
     ac_controller.set_override("off")
 
     success = ac_controller.melcloud.set_temperature(
@@ -260,7 +260,7 @@ def force_off():
 
 @router.get("/ac_real")
 def get_ac_real():
-    """Estado real del AC leído de MELCloud."""
+    """Real AC state read from MELCloud."""
     try:
         from melcloud_client import MelCloudClient
         state = ac_controller.melcloud.get_device_state(
@@ -286,20 +286,20 @@ def get_ac_real():
 
 @router.get("/outdoor")
 def get_outdoor():
-    """Temperatura exterior en Valdebernardo (Open-Meteo, sin API key).
-    Persiste en el mismo volumen que los sensores."""
+    """Outdoor temperature in Valdebernardo (Open-Meteo, no API key).
+    Persists in same volume as sensors."""
     global _outdoor_cache
     now = time.time()
 
-    # Cargar de disco si cache vacío (tras reinicio)
+    # Load from disk if cache empty (after restart)
     if _outdoor_cache["temperature"] is None:
         _load_outdoor_from_disk()
 
-    # Devolver cache si es reciente
+    # Return cache if recent
     if (now - _outdoor_cache["timestamp"]) < outdoor_cache_ttl and _outdoor_cache["temperature"] is not None:
         return _outdoor_cache
 
-    # Llamar a Open-Meteo
+    # Call Open-Meteo
     try:
         resp = httpx.get(
             "https://api.open-meteo.com/v1/forecast",
@@ -320,7 +320,7 @@ def get_outdoor():
             "timestamp": now,
         }
 
-        # Persistir a disco
+        # Persist to disk
         _save_outdoor_to_disk()
 
         return _outdoor_cache
@@ -330,7 +330,7 @@ def get_outdoor():
 
 
 def _load_outdoor_from_disk():
-    """Carga temperatura exterior persistida."""
+    """Loads persisted outdoor temperature."""
     global _outdoor_cache
     try:
         import json
@@ -343,7 +343,7 @@ def _load_outdoor_from_disk():
 
 
 def _save_outdoor_to_disk():
-    """Guarda temperatura exterior a disco."""
+    """Saves outdoor temperature to disk."""
     try:
         import json
         from pathlib import Path
@@ -357,7 +357,7 @@ def _save_outdoor_to_disk():
 
 @router.get("/energy/current")
 def get_energy_current():
-    """Consumo y coste de últimas 24h."""
+    """Consumption and cost of last 24h."""
     if energy_tracker is None:
         return {"kwh": 0.0, "cost": 0.0, "last_update": 0, "error": "Energy tracker not initialized"}
     
@@ -371,7 +371,7 @@ def get_energy_current():
 
 @router.get("/energy/hourly")
 def get_energy_hourly():
-    """Datos para gráfica horaria (24h)."""
+    """Data for hourly chart (24h)."""
     if energy_tracker is None:
         return {"data": {}}
     
@@ -380,7 +380,7 @@ def get_energy_hourly():
 
 @router.get("/energy/monthly")
 def get_energy_monthly():
-    """Datos para gráfica mensual (12 meses)."""
+    """Data for monthly chart (12 months)."""
     if energy_tracker is None:
         return {"data": {}}
     
