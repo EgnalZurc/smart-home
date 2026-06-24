@@ -1,0 +1,78 @@
+{
+  "header": {
+    "title": "Smart Home",
+    "connected": "Connected",
+    "disconnected": "Disconnected"
+  },
+  "main": {
+    "avgTemp": "Average Temperature",
+    "outdoor": "Outdoor",
+    "sensors": "sensors"
+  },
+  "acState": {
+    "title": "AC State",
+    "mode": "Mode",
+    "power": "Power",
+    "setpoint": "Setpoint",
+    "thermostat": "Thermost."
+  },
+  "controller": {
+    "title": "Controller",
+    "objective": "Target",
+    "states": {
+      "cooling_max": "COOLING MAX",
+      "modulating": "MODULATING",
+      "off": "OFF",
+      "cooldown": "COOLDOWN",
+      "forced_on": "FORCED ON",
+      "forced_off": "FORCED OFF",
+      "error": "ERROR"
+    }
+  },
+  "manualControl": {
+    "title": "Manual Control",
+    "auto": "Auto",
+    "forceOn": "Force ON",
+    "forceOff": "Force OFF"
+  },
+  "modals": {
+    "forceOn": {
+      "title": "Force turn on",
+      "mode": "Mode",
+      "modes": {
+        "cool": "Cool",
+        "heat": "Heat",
+        "fan": "Fan"
+      },
+      "power": "Power",
+      "powerLevels": {
+        "auto": "Auto",
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      },
+      "temperature": "Temperature",
+      "cancel": "Cancel",
+      "confirm": "Turn On"
+    },
+    "forceOff": {
+      "title": "Turn off AC?",
+      "message": "The AC will turn off and the automatic controller will be disabled until you press Auto.",
+      "cancel": "Cancel",
+      "confirm": "Turn Off"
+    },
+    "sensors": {
+      "title": "Sensors",
+      "temperature": "Temperature",
+      "humidity": "Humidity",
+      "close": "Close",
+      "online": "Online",
+      "offline": "Offline",
+      "battery": "Battery",
+      "lastSeen": "Last seen"
+    }
+  },
+  "chart": {
+    "average": "Average"
+  }
+}

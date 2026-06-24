@@ -1,0 +1,78 @@
+{
+  "header": {
+    "title": "Smart Home",
+    "connected": "Conectado",
+    "disconnected": "Desconectado"
+  },
+  "main": {
+    "avgTemp": "Temperatura media",
+    "outdoor": "Exterior",
+    "sensors": "sensores"
+  },
+  "acState": {
+    "title": "Estado AC",
+    "mode": "Modo",
+    "power": "Fuerza",
+    "setpoint": "Consigna",
+    "thermostat": "Termóst."
+  },
+  "controller": {
+    "title": "Controlador",
+    "objective": "Objetivo",
+    "states": {
+      "cooling_max": "COOLING MAX",
+      "modulating": "MODULANDO",
+      "off": "OFF",
+      "cooldown": "COOLDOWN",
+      "forced_on": "FORZADO ON",
+      "forced_off": "FORZADO OFF",
+      "error": "ERROR"
+    }
+  },
+  "manualControl": {
+    "title": "Control manual",
+    "auto": "Auto",
+    "forceOn": "Forzar ON",
+    "forceOff": "Forzar OFF"
+  },
+  "modals": {
+    "forceOn": {
+      "title": "Forzar encendido",
+      "mode": "Modo",
+      "modes": {
+        "cool": "Frío",
+        "heat": "Calor",
+        "fan": "Vent."
+      },
+      "power": "Fuerza",
+      "powerLevels": {
+        "auto": "Auto",
+        "low": "Bajo",
+        "medium": "Medio",
+        "high": "Alto"
+      },
+      "temperature": "Temperatura",
+      "cancel": "Cancelar",
+      "confirm": "Encender"
+    },
+    "forceOff": {
+      "title": "¿Apagar el AC?",
+      "message": "El AC se apagará y el controlador automático quedará desactivado hasta que pulses Auto.",
+      "cancel": "Cancelar",
+      "confirm": "Apagar"
+    },
+    "sensors": {
+      "title": "Sensores",
+      "temperature": "Temperatura",
+      "humidity": "Humedad",
+      "close": "Cerrar",
+      "online": "Online",
+      "offline": "Offline",
+      "battery": "Batería",
+      "lastSeen": "Última medición"
+    }
+  },
+  "chart": {
+    "average": "Media"
+  }
+}

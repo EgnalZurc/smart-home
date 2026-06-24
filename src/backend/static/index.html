@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -8,11 +8,12 @@
     <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <!-- Cache busting: forzar recarga después de fix de gráfica -->
-    <!-- VERSION: 2026-06-22-09:30:00 - POPUP SIMPLIFICADO + TIMESTAMP SENSORES -->
+    <!-- Cache busting: force reload after chart fix -->
+    <!-- VERSION: 2026-06-24-11:30:00 - I18N: ENGLISH TRANSLATION -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+    <script src="/static/i18n.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -57,6 +58,29 @@
         .modal-visible .modal-sheet { transform: translateY(0); }
         .fade-in { animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* Language selector styles */
+        .lang-btn {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+        .lang-btn.active {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.5);
+            color: #60a5fa;
+        }
+        .lang-btn.inactive {
+            background: transparent;
+            color: #64748b;
+        }
+        .lang-btn.inactive:hover {
+            background: rgba(100, 116, 139, 0.1);
+            color: #94a3b8;
+        }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
@@ -65,110 +89,118 @@
     <!-- Header -->
     <header class="flex items-center justify-between mb-6">
         <div>
-            <h1 class="text-lg font-semibold tracking-tight">🏠 Smart Home</h1>
+            <h1 class="text-lg font-semibold tracking-tight" data-i18n="header.title">🏠 Smart Home</h1>
         </div>
-        <div class="flex items-center gap-1.5">
-            <span class="status-dot w-1.5 h-1.5 rounded-full bg-green-500" id="status-dot"></span>
-            <span class="text-[11px] text-slate-400" id="status-line">--</span>
+        <div class="flex items-center gap-3">
+            <!-- Language Selector -->
+            <div class="flex items-center gap-1 bg-slate-900/40 rounded-full p-0.5 border border-slate-700/50">
+                <button id="lang-en" onclick="i18n.switchLocale('en')" class="lang-btn active">🇬🇧</button>
+                <button id="lang-es" onclick="i18n.switchLocale('es')" class="lang-btn inactive">🇪🇸</button>
+            </div>
+            <!-- Status -->
+            <div class="flex items-center gap-1.5">
+                <span class="status-dot w-1.5 h-1.5 rounded-full bg-green-500" id="status-dot"></span>
+                <span class="text-[11px] text-slate-400" id="status-line">--</span>
+            </div>
         </div>
     </header>
 
-    <!-- Temperatura media (clickeable → popup sensores) -->
-    <div class="card rounded-3xl p-6 mb-4 text-center cursor-pointer" onclick="openModal()" role="button" aria-label="Ver detalle de sensores">
-        <p class="text-slate-400 text-[11px] uppercase tracking-widest mb-2">Temperatura media</p>
+    <!-- Average temperature (clickable → sensors popup) -->
+    <div class="card rounded-3xl p-6 mb-4 text-center cursor-pointer" onclick="openModal()" role="button" aria-label="View sensors detail">
+        <p class="text-slate-400 text-[11px] uppercase tracking-widest mb-2">Average Temperature</p>
         <p class="text-[3.5rem] font-extrabold leading-none tracking-tight" id="avg-temp">--°C</p>
         <div class="flex justify-center items-center gap-5 mt-3">
             <span class="text-slate-400 text-xs flex items-center gap-1">💧 <span id="avg-hum">--%</span></span>
             <span class="text-slate-400 text-xs flex items-center gap-1">📡 <span id="sensors-count">0/5</span></span>
         </div>
-        <div class="mt-3 text-[11px] text-slate-500" id="outdoor-line">🌍 Exterior: --</div>
+        <div class="mt-3 text-[11px] text-slate-500" id="outdoor-line">🌍 Outdoor: --</div>
     </div>
 
-    <!-- Estado AC (desde MELCloud) -->
+    <!-- AC State (from MELCloud) -->
     <div class="card-static rounded-2xl p-4 mb-3">
         <div class="flex justify-between items-center mb-3">
-            <p class="text-slate-400 text-[11px] uppercase tracking-wider">Estado AC</p>
+            <p class="text-slate-400 text-[11px] uppercase tracking-wider" data-i18n="acState.title">AC State</p>
             <span class="text-sm font-bold tracking-wide" id="ac-real-power">--</span>
         </div>
         <div class="grid grid-cols-4 gap-2">
             <div class="bg-slate-900/60 rounded-xl py-2.5 px-2 text-center">
-                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Modo</p>
+                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5" data-i18n="acState.mode">Mode</p>
                 <p class="text-sm font-semibold" id="ac-real-mode">--</p>
             </div>
             <div class="bg-slate-900/60 rounded-xl py-2.5 px-2 text-center">
-                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Fuerza</p>
+                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5" data-i18n="acState.power">Power</p>
                 <p class="text-sm font-semibold" id="ac-real-fan">--</p>
             </div>
             <div class="bg-slate-900/60 rounded-xl py-2.5 px-2 text-center">
-                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Consigna</p>
+                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5" data-i18n="acState.setpoint">Setpoint</p>
                 <p class="text-sm font-semibold" id="ac-real-setpoint">--</p>
             </div>
             <div class="bg-slate-900/60 rounded-xl py-2.5 px-2 text-center">
-                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Termóst.</p>
+                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5" data-i18n="acState.thermostat">Thermost.</p>
                 <p class="text-sm font-semibold" id="ac-real-roomtemp">--</p>
             </div>
         </div>
     </div>
 
-    <!-- Control y decisión del controlador -->
+    <!-- Controller and decision -->
     <div class="card-static rounded-2xl p-4 mb-3">
         <div class="flex justify-between items-center mb-3">
-            <p class="text-slate-400 text-[11px] uppercase tracking-wider">Controlador</p>
+            <p class="text-slate-400 text-[11px] uppercase tracking-wider" data-i18n="controller.title">Controller</p>
             <span class="text-xs font-bold px-2 py-0.5 rounded-full" id="controller-decision">--</span>
         </div>
         <div class="flex items-center gap-3">
-            <button onclick="changeTarget(-0.5)" class="btn-control bg-blue-600/80 hover:bg-blue-500 rounded-full w-12 h-12 text-xl font-bold shadow-lg shadow-blue-900/30" aria-label="Bajar temperatura">−</button>
+            <button onclick="changeTarget(-0.5)" class="btn-control bg-blue-600/80 hover:bg-blue-500 rounded-full w-12 h-12 text-xl font-bold shadow-lg shadow-blue-900/30" aria-label="Decrease temperature">−</button>
             <div class="flex-1 text-center">
-                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Objetivo</p>
+                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-1" data-i18n="controller.objective">Target</p>
                 <span class="text-4xl font-extrabold tracking-tight" id="target-display">--°C</span>
             </div>
-            <button onclick="changeTarget(0.5)" class="btn-control bg-red-600/80 hover:bg-red-500 rounded-full w-12 h-12 text-xl font-bold shadow-lg shadow-red-900/30" aria-label="Subir temperatura">+</button>
+            <button onclick="changeTarget(0.5)" class="btn-control bg-red-600/80 hover:bg-red-500 rounded-full w-12 h-12 text-xl font-bold shadow-lg shadow-red-900/30" aria-label="Increase temperature">+</button>
         </div>
     </div>
 
-    <!-- Override manual -->
+    <!-- Manual override -->
     <div class="card-static rounded-2xl p-4 mb-3">
-        <p class="text-slate-400 text-[11px] uppercase tracking-wider mb-3">Control manual</p>
+        <p class="text-slate-400 text-[11px] uppercase tracking-wider mb-3" data-i18n="manualControl.title">Manual Control</p>
         <div class="grid grid-cols-3 gap-2">
-            <button onclick="setOverride(null)" id="btn-auto" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent">Auto</button>
-            <button onclick="openForceOnModal()" id="btn-on" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent">Forzar ON</button>
-            <button onclick="openForceOffModal()" id="btn-off" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent">Forzar OFF</button>
+            <button onclick="setOverride(null)" id="btn-auto" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent" data-i18n="manualControl.auto">Auto</button>
+            <button onclick="openForceOnModal()" id="btn-on" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent" data-i18n="manualControl.forceOn">Force ON</button>
+            <button onclick="openForceOffModal()" id="btn-off" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent" data-i18n="manualControl.forceOff">Force OFF</button>
         </div>
     </div>
 
 </div>
 
-<!-- Modal: Forzar ON -->
+<!-- Modal: Force ON -->
 <div id="modal-force-on" class="fixed inset-0 bg-black/60 modal-bg z-50 hidden flex items-end justify-center" onclick="if(event.target===this)closeForceOn()">
     <div class="modal-sheet bg-[#1e293b] rounded-t-3xl w-full max-w-md p-5 pb-8 border-t border-slate-700/50">
         <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-5"></div>
-        <h2 class="text-base font-bold mb-4">⚡ Forzar encendido</h2>
+        <h2 class="text-base font-bold mb-4"><span data-i18n="modals.forceOn.title">⚡ Force turn on</span></h2>
 
         <div class="space-y-4">
-            <!-- Modo -->
+            <!-- Mode -->
             <div>
-                <label class="text-[11px] text-slate-400 uppercase tracking-wider block mb-1.5">Modo</label>
+                <label class="text-[11px] text-slate-400 uppercase tracking-wider block mb-1.5" data-i18n="modals.forceOn.mode">Mode</label>
                 <div class="grid grid-cols-3 gap-2">
-                    <button onclick="selectMode('cool')" id="mode-cool" class="py-2.5 rounded-xl bg-blue-600/80 border border-blue-500/50 text-sm font-semibold">❄️ Frío</button>
-                    <button onclick="selectMode('heat')" id="mode-heat" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold">🔥 Calor</button>
-                    <button onclick="selectMode('fan')" id="mode-fan" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold">💨 Vent.</button>
+                    <button onclick="selectMode('cool')" id="mode-cool" class="py-2.5 rounded-xl bg-blue-600/80 border border-blue-500/50 text-sm font-semibold"><span data-i18n="modals.forceOn.modes.cool">❄️ Cool</span></button>
+                    <button onclick="selectMode('heat')" id="mode-heat" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold"><span data-i18n="modals.forceOn.modes.heat">🔥 Heat</span></button>
+                    <button onclick="selectMode('fan')" id="mode-fan" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold"><span data-i18n="modals.forceOn.modes.fan">💨 Fan</span></button>
                 </div>
             </div>
 
-            <!-- Fuerza -->
+            <!-- Power -->
             <div>
-                <label class="text-[11px] text-slate-400 uppercase tracking-wider block mb-1.5">Fuerza</label>
+                <label class="text-[11px] text-slate-400 uppercase tracking-wider block mb-1.5" data-i18n="modals.forceOn.power">Power</label>
                 <div class="grid grid-cols-4 gap-2">
-                    <button onclick="selectFan(0)" id="fan-0" class="py-2.5 rounded-xl bg-blue-600/80 border border-blue-500/50 text-sm font-semibold">Auto</button>
-                    <button onclick="selectFan(1)" id="fan-1" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold">Bajo</button>
-                    <button onclick="selectFan(2)" id="fan-2" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold">Medio</button>
-                    <button onclick="selectFan(3)" id="fan-3" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold">Alto</button>
+                    <button onclick="selectFan(0)" id="fan-0" class="py-2.5 rounded-xl bg-blue-600/80 border border-blue-500/50 text-sm font-semibold"><span data-i18n="modals.forceOn.powerLevels.auto">Auto</span></button>
+                    <button onclick="selectFan(1)" id="fan-1" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold"><span data-i18n="modals.forceOn.powerLevels.low">Low</span></button>
+                    <button onclick="selectFan(2)" id="fan-2" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold"><span data-i18n="modals.forceOn.powerLevels.medium">Medium</span></button>
+                    <button onclick="selectFan(3)" id="fan-3" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold"><span data-i18n="modals.forceOn.powerLevels.high">High</span></button>
                 </div>
             </div>
 
-            <!-- Temperatura -->
+            <!-- Temperature -->
             <div>
-                <label class="text-[11px] text-slate-400 uppercase tracking-wider block mb-1.5">Temperatura</label>
+                <label class="text-[11px] text-slate-400 uppercase tracking-wider block mb-1.5" data-i18n="modals.forceOn.temperature">Temperature</label>
                 <div class="flex items-center gap-3">
                     <button onclick="changeForceTemp(-0.5)" class="btn-control bg-blue-600/80 rounded-full w-11 h-11 text-lg font-bold">−</button>
                     <span class="flex-1 text-center text-2xl font-bold" id="force-temp-display">23.0°C</span>
@@ -178,40 +210,40 @@
         </div>
 
         <div class="grid grid-cols-2 gap-3 mt-6">
-            <button onclick="closeForceOn()" class="py-3.5 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors">Cancelar</button>
-            <button onclick="confirmForceOn()" class="py-3.5 bg-green-600 hover:bg-green-500 rounded-2xl text-sm font-semibold transition-colors">Encender</button>
+            <button onclick="closeForceOn()" class="py-3.5 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors"><span data-i18n="modals.forceOn.cancel">Cancel</span></button>
+            <button onclick="confirmForceOn()" class="py-3.5 bg-green-600 hover:bg-green-500 rounded-2xl text-sm font-semibold transition-colors"><span data-i18n="modals.forceOn.confirm">Turn On</span></button>
         </div>
     </div>
 </div>
 
-<!-- Modal: Confirmar Forzar OFF -->
+<!-- Modal: Confirm Force OFF -->
 <div id="modal-force-off" class="fixed inset-0 bg-black/60 modal-bg z-50 hidden flex items-center justify-center" onclick="if(event.target===this)closeForceOff()">
     <div class="bg-[#1e293b] rounded-3xl w-[85%] max-w-sm p-6 border border-slate-700/50 text-center">
         <p class="text-3xl mb-3">⏹</p>
-        <h2 class="text-base font-bold mb-2">¿Apagar el AC?</h2>
-        <p class="text-sm text-slate-400 mb-5">El AC se apagará y el controlador automático quedará desactivado hasta que pulses Auto.</p>
+        <h2 class="text-base font-bold mb-2"><span data-i18n="modals.forceOff.title">Turn off AC?</span></h2>
+        <p class="text-sm text-slate-400 mb-5"><span data-i18n="modals.forceOff.message">The AC will turn off and the automatic controller will be disabled until you press Auto.</span></p>
         <div class="grid grid-cols-2 gap-3">
-            <button onclick="closeForceOff()" class="py-3 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors">Cancelar</button>
-            <button onclick="confirmForceOff()" class="py-3 bg-red-600 hover:bg-red-500 rounded-2xl text-sm font-semibold transition-colors">Apagar</button>
+            <button onclick="closeForceOff()" class="py-3 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors"><span data-i18n="modals.forceOff.cancel">Cancel</span></button>
+            <button onclick="confirmForceOff()" class="py-3 bg-red-600 hover:bg-red-500 rounded-2xl text-sm font-semibold transition-colors"><span data-i18n="modals.forceOff.confirm">Turn Off</span></button>
         </div>
     </div>
 </div>
 
-<!-- Modal: Detalle sensores + gráfica -->
+<!-- Modal: Sensors detail + chart -->
 <div id="modal" class="fixed inset-0 bg-black/60 modal-bg z-50 hidden flex items-end justify-center" onclick="if(event.target===this)closeModal()">
     <div class="modal-sheet bg-[#1e293b] rounded-t-3xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5 pb-8 border-t border-slate-700/50">
         <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-5"></div>
-        <h2 class="text-base font-bold mb-4">🌡️ Sensores</h2>
+        <h2 class="text-base font-bold mb-4"><span data-i18n="modals.sensors.title">🌡️ Sensors</span></h2>
         <div class="bg-slate-900/50 rounded-2xl p-3 mb-3 border border-slate-700/30">
-            <p class="text-[10px] text-slate-400 uppercase tracking-wider mb-1 px-1">Temperatura</p>
+            <p class="text-[10px] text-slate-400 uppercase tracking-wider mb-1 px-1" data-i18n="modals.sensors.temperature">Temperature</p>
             <canvas id="chart" height="140"></canvas>
         </div>
         <div class="bg-slate-900/50 rounded-2xl p-3 mb-4 border border-slate-700/30">
-            <p class="text-[10px] text-slate-400 uppercase tracking-wider mb-1 px-1">Humedad</p>
+            <p class="text-[10px] text-slate-400 uppercase tracking-wider mb-1 px-1" data-i18n="modals.sensors.humidity">Humidity</p>
             <canvas id="chart-hum" height="140"></canvas>
         </div>
         <div id="sensors-detail" class="space-y-2"></div>
-        <button onclick="closeModal()" class="mt-5 w-full py-3.5 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors">Cerrar</button>
+        <button onclick="closeModal()" class="mt-5 w-full py-3.5 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors"><span data-i18n="modals.sensors.close">Close</span></button>
     </div>
 </div>
 
@@ -337,7 +369,7 @@ async function poll() {
         const sr = await fetch('/api/status');
         const st = await sr.json();
 
-        // Temperatura media con color
+        // Average temperature with color
         const avgTempEl = document.getElementById('avg-temp');
         if (st.average_temperature !== null) {
             avgTempEl.textContent = st.average_temperature.toFixed(1)+'°C';
@@ -347,7 +379,7 @@ async function poll() {
             avgTempEl.style.color = '#64748b';
         }
 
-        // Humedad media
+        // Average humidity
         const avgHumEl = document.getElementById('avg-hum');
         if (st.average_humidity !== null) {
             avgHumEl.textContent = st.average_humidity.toFixed(0)+'%';
@@ -394,7 +426,7 @@ async function poll() {
                 modeEl.textContent = ac.mode || '--';
                 modeEl.style.color = modeColors[ac.mode] || '#94a3b8';
                 fanEl.textContent = ac.fan_speed !== null ? ac.fan_speed : '—';
-                const fanColors = {'Bajo':'#4ade80','Medio':'#fbbf24','Alto':'#f87171','Auto':'#60a5fa'};
+                const fanColors = {'Low':'#4ade80','Medium':'#fbbf24','High':'#f87171','Auto':'#60a5fa'};
                 fanEl.style.color = fanColors[ac.fan_speed] || '#64748b';
                 setEl.textContent = ac.set_temp !== null ? ac.set_temp.toFixed(1)+'°C' : '—';
                 setEl.style.color = '#e2e8f0';
@@ -430,7 +462,7 @@ async function poll() {
         const connected = st.mqtt_connected;
         const dotEl = document.getElementById('status-dot');
         const lineEl = document.getElementById('status-line');
-        lineEl.textContent = connected ? 'Conectado' : 'Desconectado';
+        lineEl.textContent = i18n.t(connected ? 'header.connected' : 'header.disconnected');
         dotEl.className = connected ? 'status-dot w-1.5 h-1.5 rounded-full bg-green-500' : 'w-1.5 h-1.5 rounded-full bg-red-400';
 
         // Sensors
@@ -478,17 +510,17 @@ function updateChart(sensors) {
 
     chart.data.labels = sortedTimes;
 
-    // SOLO dataset de media (sin líneas individuales de sensores)
+    // Temperature chart: ONLY average dataset (no individual sensor lines)
     if (chart.data.datasets.length !== 1) {
         chart.data.datasets = [
             {
-                label: 'Media', data: [], borderColor: '#ffffff',
+                label: i18n.t('chart.average'), data: [], borderColor: '#ffffff',
                 borderWidth: 2, tension: 0.4, pointRadius: 0, pointHoverRadius: 4, fill: false, spanGaps: true
             }
         ];
     }
 
-    // Calcular datos individuales temporalmente para calcular la media
+    // Calculate individual datasets temporarily to compute average
     const tempDatasets = sensors.map((s, i) => {
         const h = chartData[s.name] || [];
         const timeMap = {};
@@ -496,7 +528,7 @@ function updateChart(sensors) {
         return sortedTimes.map(t => timeMap[t] !== undefined ? timeMap[t] : null);
     });
 
-    // Media: calcular usando el ÚLTIMO valor conocido de cada sensor hasta ese timestamp
+    // Average: calculate using LAST known value from each sensor up to this timestamp
     chart.data.datasets[0].data = sortedTimes.map((t, ti) => {
         const values = [];
         sensors.forEach((s, i) => {
@@ -528,17 +560,17 @@ function updateHumChart(sensors) {
 
     chartHum.data.labels = sortedTimes;
 
-    // SOLO dataset de media (sin líneas individuales de sensores)
+    // Humidity chart: ONLY average dataset (no individual sensor lines)
     if (chartHum.data.datasets.length !== 1) {
         chartHum.data.datasets = [
             {
-                label: 'Media', data: [], borderColor: '#ffffff',
+                label: i18n.t('chart.average'), data: [], borderColor: '#ffffff',
                 borderWidth: 2, tension: 0.4, pointRadius: 0, pointHoverRadius: 4, fill: false, spanGaps: true
             }
         ];
     }
 
-    // Calcular datos individuales temporalmente para calcular la media
+    // Calculate individual datasets temporarily to compute average humidity
     const tempDatasets = sensors.map((s, i) => {
         const h = chartData[s.name] || [];
         const timeMap = {};
@@ -546,7 +578,7 @@ function updateHumChart(sensors) {
         return sortedTimes.map(t => timeMap[t] !== undefined ? timeMap[t] : null);
     });
 
-    // Media humedad: calcular usando el ÚLTIMO valor conocido de cada sensor hasta ese timestamp
+    // Average humidity: calculate using LAST known value from each sensor up to this timestamp
     chartHum.data.datasets[0].data = sortedTimes.map((t, ti) => {
         const values = [];
         sensors.forEach((s, i) => {
