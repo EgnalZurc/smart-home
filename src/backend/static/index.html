@@ -58,28 +58,31 @@
         .modal-visible .modal-sheet { transform: translateY(0); }
         .fade-in { animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        /* Language selector styles */
-        .lang-btn {
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
+        /* Language selector styles - Flag only */
+        .lang-flag {
+            font-size: 20px;
+            padding: 4px;
+            border-radius: 6px;
             transition: all 0.2s ease;
             cursor: pointer;
-            border: 1px solid transparent;
-        }
-        .lang-btn.active {
-            background: rgba(59, 130, 246, 0.2);
-            border-color: rgba(59, 130, 246, 0.5);
-            color: #60a5fa;
-        }
-        .lang-btn.inactive {
+            border: 2px solid transparent;
             background: transparent;
-            color: #64748b;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .lang-btn.inactive:hover {
-            background: rgba(100, 116, 139, 0.1);
-            color: #94a3b8;
+        .lang-flag.active {
+            border-color: rgba(59, 130, 246, 0.6);
+            background: rgba(59, 130, 246, 0.1);
+            transform: scale(1.1);
+        }
+        .lang-flag.inactive {
+            opacity: 0.5;
+        }
+        .lang-flag.inactive:hover {
+            opacity: 0.8;
+            transform: scale(1.05);
         }
     </style>
 </head>
@@ -93,9 +96,9 @@
         </div>
         <div class="flex items-center gap-3">
             <!-- Language Selector -->
-            <div class="flex items-center gap-1 bg-slate-900/40 rounded-full p-0.5 border border-slate-700/50">
-                <button id="lang-en" onclick="i18n.switchLocale('en')" class="lang-btn active">🇬🇧</button>
-                <button id="lang-es" onclick="i18n.switchLocale('es')" class="lang-btn inactive">🇪🇸</button>
+            <div class="flex items-center gap-2">
+                <button id="lang-en" onclick="i18n.switchLocale('en')" class="lang-flag active" title="English">🇬🇧</button>
+                <button id="lang-es" onclick="i18n.switchLocale('es')" class="lang-flag inactive" title="Español">🇪🇸</button>
             </div>
             <!-- Status -->
             <div class="flex items-center gap-1.5">

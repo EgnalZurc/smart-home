@@ -172,25 +172,25 @@ class I18n {
     }
 
     /**
-     * Update language selector button states
+     * Update language selector flag states
      */
     updateLanguageSelector() {
-        const enBtn = document.getElementById('lang-en');
-        const esBtn = document.getElementById('lang-es');
+        const enFlag = document.getElementById('lang-en');
+        const esFlag = document.getElementById('lang-es');
         
-        if (!enBtn || !esBtn) return;
+        if (!enFlag || !esFlag) return;
         
         // Update active states
         if (this.currentLocale === 'en') {
-            enBtn.classList.add('active');
-            enBtn.classList.remove('inactive');
-            esBtn.classList.remove('active');
-            esBtn.classList.add('inactive');
+            enFlag.classList.add('active');
+            enFlag.classList.remove('inactive');
+            esFlag.classList.remove('active');
+            esFlag.classList.add('inactive');
         } else {
-            esBtn.classList.add('active');
-            esBtn.classList.remove('inactive');
-            enBtn.classList.remove('active');
-            enBtn.classList.add('inactive');
+            esFlag.classList.add('active');
+            esFlag.classList.remove('inactive');
+            enFlag.classList.remove('active');
+            enFlag.classList.add('inactive');
         }
     }
 }
