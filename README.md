@@ -148,6 +148,44 @@ Una **única PWA** sirve como panel de control unificado para todas las fases:
 
 ---
 
+## Project Structure
+
+### ⚠️ Data Directory Rule
+
+**ALL runtime files and configuration files MUST be generated in `/data/`**
+
+The ONLY exception is `.env` which remains in the project root for Docker Compose compatibility.
+
+```
+smart-home/
+├── infrastructure/          # Service configurations (in git)
+│   ├── mosquitto/
+│   │   └── mosquitto.conf
+│   └── zigbee2mqtt/
+│       └── config/
+│           ├── configuration.example.yaml
+│           └── README.md
+├── data/                    # ALL runtime data (NOT in git)
+│   ├── backend/             # Backend data files
+│   ├── mosquitto/           # MQTT broker data & logs
+│   └── zigbee2mqtt/         # Zigbee config, database, logs
+├── src/                     # Source code (in git)
+│   └── backend/
+│       └── *.py
+├── .env                     # Environment variables (ONLY exception to data/ rule)
+└── docker-compose.yml
+```
+
+**Why this structure?**
+- **Centralized backups**: Just backup `/data/`
+- **Clean repository**: Only source code in git  
+- **Docker best practice**: Data separate from application
+- **Easy deployment**: Clone repo + add .env + restore /data/
+
+See `/data/README.md` for more details.
+
+---
+
 ## Fases del Proyecto
 
 | Fase | Nombre | Descripción | Requerimientos | Estado |
