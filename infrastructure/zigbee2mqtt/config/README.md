@@ -47,7 +47,7 @@ project_root/
 
 ## Serial Bridge Configuration
 
-This setup uses a TCP serial bridge (`serial_bridge.py` in project root) to connect the Zigbee coordinator to Docker:
+This setup uses a TCP serial bridge (`scripts/serial_bridge.py`) to connect the Zigbee coordinator to Docker:
 - Serial port: `COM3` (Windows)
 - TCP endpoint: `tcp://host.docker.internal:8282`
 - Adapter: `ember`

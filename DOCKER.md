@@ -114,6 +114,9 @@ smart-home/
 │   └── .dockerignore
 ├── 🔧 Infrastructure            # Service configurations (in git)
 │   └── infrastructure/
+├── 📜 Scripts                   # Auxiliary scripts (in git)
+│   └── scripts/
+│       └── serial_bridge.py
 ├── 💾 Runtime data              # Generated data (NOT in git)
 │   └── data/
 └── 💻 Source code               # Application code (in git)
@@ -145,7 +148,7 @@ docker/
 ### Local Development (Windows)
 
 **Requirements**:
-- `serial_bridge.py` running (COM3 → TCP:8282)
+- `scripts/serial_bridge.py` running (COM3 → TCP:8282)
 - `.env` configured with credentials
 
 **Commands**:
