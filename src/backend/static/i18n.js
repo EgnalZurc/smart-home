@@ -179,12 +179,12 @@ class I18n {
         
         if (!currentFlag) return;
         
-        // Update displayed flag
-        const flags = {
-            'en': '🇬🇧',
-            'es': '🇪🇸'
+        // Update displayed flag image
+        const flagPaths = {
+            'en': '/static/flags/gb.svg',
+            'es': '/static/flags/es.svg'
         };
-        currentFlag.textContent = flags[this.currentLocale];
+        currentFlag.src = flagPaths[this.currentLocale];
         
         // Update active state in dropdown menu
         document.querySelectorAll('.lang-option').forEach(opt => {

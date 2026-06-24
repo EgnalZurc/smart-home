@@ -62,9 +62,16 @@
         .lang-dropdown {
             position: relative;
         }
+        .flag-img {
+            width: 32px;
+            height: 22px;
+            object-fit: cover;
+            border-radius: 3px;
+            display: block;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
         .lang-current {
-            font-size: 24px;
-            padding: 6px 10px;
+            padding: 6px;
             border-radius: 8px;
             cursor: pointer;
             border: 2px solid rgba(100, 116, 139, 0.3);
@@ -73,11 +80,11 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            line-height: 1;
         }
         .lang-current:hover {
             border-color: rgba(59, 130, 246, 0.5);
             background: rgba(59, 130, 246, 0.1);
+            transform: scale(1.05);
         }
         .lang-menu {
             position: absolute;
@@ -93,21 +100,19 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             backdrop-filter: blur(10px);
             z-index: 1000;
-            min-width: 60px;
+            min-width: 50px;
         }
         .lang-menu.open {
             display: flex;
         }
         .lang-option {
-            font-size: 24px;
-            padding: 8px 12px;
+            padding: 6px;
             border-radius: 6px;
             cursor: pointer;
             transition: all 0.2s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            line-height: 1;
             border: 2px solid transparent;
         }
         .lang-option:hover {
@@ -133,14 +138,14 @@
             <!-- Language Selector Dropdown -->
             <div class="lang-dropdown">
                 <div class="lang-current" onclick="toggleLanguageMenu()" id="lang-current">
-                    <span id="current-flag">🇬🇧</span>
+                    <img id="current-flag" src="/static/flags/gb.svg" alt="Language" class="flag-img">
                 </div>
                 <div class="lang-menu" id="lang-menu">
                     <div class="lang-option" onclick="selectLanguage('en')" data-lang="en" title="English">
-                        🇬🇧
+                        <img src="/static/flags/gb.svg" alt="English" class="flag-img">
                     </div>
                     <div class="lang-option" onclick="selectLanguage('es')" data-lang="es" title="Español">
-                        🇪🇸
+                        <img src="/static/flags/es.svg" alt="Español" class="flag-img">
                     </div>
                 </div>
             </div>
@@ -311,12 +316,13 @@ function selectLanguage(locale) {
     const menu = document.getElementById('lang-menu');
     menu.classList.remove('open');
     
-    // Update flag display
-    const flags = {
-        'en': '🇬🇧',
-        'es': '🇪🇸'
+    // Update flag image
+    const flagPaths = {
+        'en': '/static/flags/gb.svg',
+        'es': '/static/flags/es.svg'
     };
-    document.getElementById('current-flag').textContent = flags[locale];
+    const currentFlag = document.getElementById('current-flag');
+    currentFlag.src = flagPaths[locale];
     
     // Update active state in menu
     document.querySelectorAll('.lang-option').forEach(opt => {
