@@ -116,6 +116,50 @@ Este documento lista todos los requisitos del proyecto Smart Home y su estado de
 
 ## REQUISITOS PENDIENTES ⏳
 
+### 12. **Internacionalización (i18n)** 🆕
+**Estado**: ⏳ PENDIENTE  
+**Prioridad**: ALTA  
+**Descripción**: Soporte multiidioma en toda la aplicación con inglés como idioma principal.
+
+**Requisitos específicos**:
+1. **Código y documentación en inglés**:
+   - Todo el código Python debe tener nombres de variables, funciones, clases y comentarios en inglés
+   - Toda la documentación (README, guides, comments) debe estar en inglés
+   - Logs del sistema en inglés
+   - Nombres de archivos en inglés
+
+2. **Frontend multiidioma**:
+   - Sistema de traducción para la interfaz web
+   - Soporte inicial para: Inglés (default), Español
+   - Selector de idioma en la UI
+   - Persistencia de preferencia de idioma (localStorage)
+   - Todos los textos visibles traducibles
+
+3. **API con soporte i18n**:
+   - Mensajes de error en el idioma seleccionado
+   - Respuestas configurables por idioma
+   - Header `Accept-Language` para determinar idioma
+
+**Beneficios**:
+- Código más profesional y mantenible
+- Colaboración internacional facilitada
+- Mayor alcance de usuarios
+- Estándar de la industria
+
+**Plan de implementación**:
+- Fase 1: Refactorizar código Python a inglés (variables, funciones, comentarios)
+- Fase 2: Traducir documentación a inglés
+- Fase 3: Implementar sistema i18n en frontend (biblioteca o manual)
+- Fase 4: Añadir selector de idioma y traducciones
+- Fase 5: Traducir mensajes de API y logs
+
+**Archivos afectados** (estimado):
+- Backend: ~10 archivos Python a refactorizar
+- Frontend: index.html + archivos de traducción
+- Documentación: ~6 archivos markdown a traducir
+
+---
+
 ### Fase 1: Control de humedad con deshumidificador
 **Estado**: ⏳ PENDIENTE  
 **Descripción**: Sistema de control de humedad para mantenerla entre 50-60%.
@@ -155,6 +199,7 @@ Este documento lista todos los requisitos del proyecto Smart Home y su estado de
 - **Sin hardcoded values**: Toda configuración vía variables de entorno
 - **Datos reales únicamente**: NUNCA se inventan valores de temperatura
 - **Persistencia**: Datos históricos en JSON, logs persistentes con volúmenes Docker
+- **Idioma**: Inglés como idioma principal del proyecto (código, documentación, logs)
 
 ### Variables de Entorno Disponibles
 ```bash
@@ -180,12 +225,21 @@ SENSOR_TIMEOUT=3600            # Timeout de sensores (default: 3600s)
 
 ## CHANGELOG
 
-### 2026-06-24
+### 2026-06-24 (Tarde)
+- 📋 Añadido requisito #12: Internacionalización (i18n)
+- 📋 Inglés establecido como idioma principal del proyecto
+- 📋 Planificada refactorización de código y documentación a inglés
+- 📋 Planificado sistema multiidioma en frontend
+
+### 2026-06-24 (Mañana)
 - ✅ Implementado auto-discovery de sensores desde Zigbee2MQTT vía MQTT
 - ✅ Eliminada variable `ZIGBEE2MQTT_URL` (ya no se usa HTTP API)
 - ✅ Cliente `Zigbee2MQTTClient` migrado de HTTP a MQTT
 - ✅ Sensores ahora se descubren automáticamente en startup
 - ✅ Fallback seguro si Zigbee2MQTT no responde
+- ✅ Refactorización completa: eliminados 47 valores hardcodeados
+- ✅ Corregidos 8 riesgos críticos de seguridad
+- ✅ Sistema 100% configurable via variables de entorno
 
 ### 2026-06-23
 - ✅ Cambiada temperatura objetivo por defecto a 26°C
