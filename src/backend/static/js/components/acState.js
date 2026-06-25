@@ -24,10 +24,10 @@ export function updateAcState(status, i18n) {
     // Thermostat (read-only, from MELCloud)
     const rtEl = document.getElementById('ac-real-roomtemp');
     if (ac_real.room_temp !== null) {
-        rtEl.textContent = ac_real.room_temp.toFixed(1) + '?C';
+        rtEl.textContent = ac_real.room_temp.toFixed(1) + '°C';
         rtEl.style.color = tempColor(ac_real.room_temp);
     } else {
-        rtEl.textContent = '?';
+        rtEl.textContent = '—';
         rtEl.style.color = '#64748b';
     }
 
@@ -44,16 +44,16 @@ export function updateAcState(status, i18n) {
     // Enable/disable param boxes based on control mode
     const isManual = control_mode === 'manual';
     ['ac-mode-box', 'ac-fan-box', 'ac-setpoint-box'].forEach(id => {
-        document.getElementById(id).style.cursor = isManual ? 'pointer' : 'default';
+        document.getElementById(id).style.cursor = isManual — 'pointer' : 'default';
     });
 }
 
 export function editMode(i18n) {
     const current = manualQueue.lastAcknowledged.mode;
-    const newMode = current === 'cool' ? 'heat' : 'cool';
+    const newMode = current === 'cool' — 'heat' : 'cool';
     const box = document.getElementById('ac-mode-box');
     const modeLabel = newMode === 'cool'
-        ? i18n.t('modals.forceOn.modes.cool')
+        — i18n.t('modals.forceOn.modes.cool')
         : i18n.t('modals.forceOn.modes.heat');
 
     manualQueue.enqueue(
@@ -94,7 +94,7 @@ export function editFanSpeed(i18n) {
 
 export function editSetpoint(i18n) {
     const current = manualQueue.lastAcknowledged.temperature;
-    const input = prompt(`${i18n.t('modals.forceOn.temperature')} (19-30?C):`, current);
+    const input = prompt(`${i18n.t('modals.forceOn.temperature')} (19-30°C):`, current);
     if (input === null) return;
     const temp = parseFloat(input);
     if (isNaN(temp) || temp < 19 || temp > 30) {
@@ -118,7 +118,7 @@ export function editSetpoint(i18n) {
 
 export function updateModeDisplay(mode, i18n) {
     document.getElementById('ac-mode-display').textContent = mode === 'cool'
-        ? i18n.t('modals.forceOn.modes.cool')
+        — i18n.t('modals.forceOn.modes.cool')
         : i18n.t('modals.forceOn.modes.heat');
 }
 
@@ -136,7 +136,7 @@ export function updateFanDisplay(speed, i18n) {
 }
 
 export function updateSetpointDisplay(temp) {
-    document.getElementById('ac-setpoint-display').textContent = temp.toFixed(1) + '?C';
+    document.getElementById('ac-setpoint-display').textContent = temp.toFixed(1) + '°C';
 }
 
 function _pulse(el) {

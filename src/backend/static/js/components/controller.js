@@ -20,7 +20,7 @@ const DECISION_BG = {
 
 export function updateController(status) {
     currentTarget = status.target_temperature;
-    document.getElementById('target-display').textContent = currentTarget.toFixed(1) + '?C';
+    document.getElementById('target-display').textContent = currentTarget.toFixed(1) + '°C';
     const el = document.getElementById('controller-decision');
     const action = status.ac_state.action;
     el.textContent           = DECISION_LABELS[action] || action;
@@ -32,7 +32,7 @@ export function updateController(status) {
 export async function changeTarget(delta) {
     const i18n = window.i18n;
     currentTarget = Math.max(19, Math.min(30, currentTarget + delta));
-    document.getElementById('target-display').textContent = currentTarget.toFixed(1) + '?C';
+    document.getElementById('target-display').textContent = currentTarget.toFixed(1) + '°C';
     try {
         await postConfig(currentTarget);
         showToast(

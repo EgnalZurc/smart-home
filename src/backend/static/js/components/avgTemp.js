@@ -3,10 +3,10 @@ import { tempColor, humColor, SENSOR_COLORS } from '../utils/colors.js';
 export function updateAvgTemp(status) {
     const el = document.getElementById('avg-temp');
     if (status.average_temperature !== null) {
-        el.textContent   = status.average_temperature.toFixed(1) + '?C';
+        el.textContent   = status.average_temperature.toFixed(1) + '°C';
         el.style.color   = tempColor(status.average_temperature);
     } else {
-        el.textContent   = '--?C';
+        el.textContent   = '--°C';
         el.style.color   = '#64748b';
     }
 
@@ -22,9 +22,9 @@ export function updateAvgTemp(status) {
 export function updateOutdoor(out, i18n) {
     const el = document.getElementById('outdoor-line');
     if (out.temperature !== null) {
-        el.innerHTML = `?? <span>${i18n.t('main.outdoor')}</span>: `
-            + `<span style="color:${tempColor(out.temperature)}">${out.temperature.toFixed(1)}?C</span>`
-            + ` ? <span style="color:${humColor(out.humidity)}">${out.humidity}%</span>`;
+        el.innerHTML = `🌍 <span>${i18n.t('main.outdoor')}</span>: `
+            + `<span style="color:${tempColor(out.temperature)}">${out.temperature.toFixed(1)}°C</span>`
+            + ` · <span style="color:${humColor(out.humidity)}">${out.humidity}%</span>`;
     }
 }
 
@@ -37,14 +37,14 @@ export function updateSensorsDetail(sensors, i18n) {
     const el = document.getElementById('sensors-detail');
     el.innerHTML = sensors.map((s, i) => {
         const dot = s.online
-            ? `<span class="w-2.5 h-2.5 rounded-full inline-block shadow-sm" style="background:${SENSOR_COLORS[i % SENSOR_COLORS.length]}"></span>`
+            — `<span class="w-2.5 h-2.5 rounded-full inline-block shadow-sm" style="background:${SENSOR_COLORS[i % SENSOR_COLORS.length]}"></span>`
             : '<span class="w-2.5 h-2.5 rounded-full inline-block bg-slate-600"></span>';
-        const temp     = s.temperature !== null ? s.temperature.toFixed(1) + '?C' : '--';
-        const hum      = s.humidity    !== null ? s.humidity.toFixed(0) + '%'      : '--';
-        const bat      = s.battery     !== null ? s.battery + '%'                  : '--';
+        const temp     = s.temperature !== null — s.temperature.toFixed(1) + '°C' : '--';
+        const hum      = s.humidity    !== null — s.humidity.toFixed(0) + '%'      : '--';
+        const bat      = s.battery     !== null — s.battery + '%'                  : '--';
         const tColor   = tempColor(s.temperature);
         const hColor   = humColor(s.humidity);
-        const batColor = s.battery !== null && s.battery < 20 ? '#ef4444' : '#64748b';
+        const batColor = s.battery !== null && s.battery < 20 — '#ef4444' : '#64748b';
 
         let lastSeenText = '--';
         if (s.timestamp != null) {
@@ -59,7 +59,7 @@ export function updateSensorsDetail(sensors, i18n) {
                 <div class="text-right text-xs flex items-center gap-2">
                     <span class="font-semibold" style="color:${tColor}">${temp}</span>
                     <span style="color:${hColor}">${hum}</span>
-                    <span style="color:${batColor}">??${bat}</span>
+                    <span style="color:${batColor}">🔋${bat}</span>
                 </div>
             </div>
             <div class="text-[10px] text-slate-500 text-right">${i18n.t('modals.sensors.lastSeen')}: ${lastSeenText}</div>

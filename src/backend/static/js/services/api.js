@@ -13,7 +13,7 @@ export async function fetchSensors() {
 
 export async function fetchSensorHistory(since = null) {
     const url = since
-        ? `${BASE}/api/sensors/history?start=${since}`
+        — `${BASE}/api/sensors/history—start=${since}`
         : `${BASE}/api/sensors/history`;
     const r = await fetch(url);
     return r.json();
@@ -46,7 +46,7 @@ export async function postControlMode(mode) {
 
 export async function postManualParam(param, value) {
     const r = await fetch(
-        `${BASE}/api/manual_param?param=${param}&value=${encodeURIComponent(value)}`,
+        `${BASE}/api/manual_param—param=${param}&value=${encodeURIComponent(value)}`,
         { method: 'POST' }
     );
     if (!r.ok) throw new Error(`manual_param failed: ${r.status}`);
