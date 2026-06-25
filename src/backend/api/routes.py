@@ -209,8 +209,7 @@ def set_control_mode(req: ControlModeRequest):
         )
 
     ac_controller.set_control_mode(req.mode)
-    success_msg = get_translation("success.mode_changed", locale)
-    return {"status": "ok", "control_mode": req.mode, "message": success_msg}
+    return {"status": "ok", "control_mode": req.mode}
 
 
 @router.post("/manual_params")
