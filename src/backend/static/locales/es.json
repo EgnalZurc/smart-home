@@ -40,8 +40,8 @@
       "title": "Modo Manual",
       "mode": "Modo AC",
       "modes": {
-        "cool": "?? Fr?o",
-        "heat": "?? Calor"
+        "cool": "❄️ Frío",
+        "heat": "🔥 Calor"
       },
       "power": "Ventilador",
       "powerLevels": {
@@ -75,17 +75,17 @@
     "average": "Media"
   },
   "toast": {
-    "targetSet":       "Objetivo: {{value}}?C",
+    "targetSet":       "Objetivo: {{value}}°C",
     "targetError":     "Error al actualizar la temperatura objetivo",
     "modeSet":         "Modo cambiado a {{value}}",
     "modeError":       "Error al cambiar el modo",
     "fanSet":          "Velocidad ventilador: {{value}}",
     "fanError":        "Error al cambiar la velocidad del ventilador",
-    "setpointSet":     "Consigna AC: {{value}}?C",
+    "setpointSet":     "Consigna AC: {{value}}°C",
     "setpointError":   "Error al cambiar la consigna",
     "controlModeSet":  "Modo de control: {{value}}",
     "controlModeError":"Error al cambiar el modo de control",
     "connectionLost":  "Conexi?n perdida",
-    "invalidTemp":     "La temperatura debe estar entre 19 y 30?C"
+    "invalidTemp":     "La temperatura debe estar entre 19 y 30°C"
   }
 }
