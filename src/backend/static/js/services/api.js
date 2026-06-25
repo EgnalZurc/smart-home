@@ -52,3 +52,8 @@ export async function postManualParam(param, value) {
     if (!r.ok) throw new Error(`manual_param failed: ${r.status}`);
     return r.json();
 }
+
+export async function fetchErrors() {
+    const r = await fetch(`${BASE}/api/errors`);
+    return r.json();
+}

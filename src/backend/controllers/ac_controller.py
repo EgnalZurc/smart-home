@@ -115,6 +115,7 @@ class ACController:
         self._last_off_time: float = 0.0
         self._last_sensor_update_time: float = time.time()
         self._consecutive_melcloud_failures: int = 0
+        self._error_tracker = None  # injected via set_error_tracker()
         self._last_outputs: StateMachineOutputs | None = None
         self._last_modulating_setpoint: float = 24.0
 
@@ -220,6 +221,10 @@ class ACController:
         # Save state before shutdown
         self._persist_state()
         logger.info("AC controller stopped")
+
+    def set_error_tracker(self, tracker) -> None:
+        """Inject error tracker (F0.30)."""
+        self._error_tracker = tracker
 
     def restore_state(self) -> bool:
         """Restores controller state from disk.
@@ -526,6 +531,25 @@ class ACController:
             self.state.last_update = time.time()
             self.state.sensor_alert = outputs.sensor_alert
             self.state.melcloud_error = outputs.melcloud_error
+
+            # F0.30 - Register/clear errors in error tracker
+            if self._error_tracker:
+                if outputs.sensor_alert:
+                    self._error_tracker.register(
+                        "sensor_alert", "warning",
+                        "One or more sensors are offline or not reporting", "sensors"
+                    )
+                else:
+                    self._error_tracker.clear("sensor_alert")
+
+                if outputs.melcloud_error:
+                    self._error_tracker.register(
+                        "melcloud_error", "error",
+                        f"MELCloud unreachable ({self._consecutive_melcloud_failures} consecutive failures)",
+                        "melcloud"
+                    )
+                else:
+                    self._error_tracker.clear("melcloud_error")
 
             # History
             self.history.append(HistoryRecord(

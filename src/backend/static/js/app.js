@@ -1,5 +1,5 @@
 // app.js - Main orchestrator. Wires all modules together.
-import { fetchStatus, fetchSensors, fetchOutdoor } from './services/api.js';
+import { fetchStatus, fetchSensors, fetchOutdoor, fetchErrors } from './services/api.js';
 import { loadHistory, updateHistory }              from './services/sensorHistory.js';
 import { updateAvgTemp, updateOutdoor, updateSensorsCount, updateSensorsDetail, openModal, closeModal } from './components/avgTemp.js';
 import { updateAcState, editMode, editFanSpeed, editSetpoint } from './components/acState.js';
@@ -8,6 +8,7 @@ import { syncControlMode, setControlMode }         from './components/manualCont
 import { initCharts, updateTempChart, updateHumChart } from './components/charts.js';
 import { updateConnectionStatus, toggleLanguageMenu, selectLanguage, initLanguageDropdown } from './components/header.js';
 import { showToast }                               from './components/toast.js';
+import { updateErrorIndicator, openErrorsModal, closeErrorsModal } from './components/errors.js';
 
 const i18n = window.i18n;
 
@@ -35,6 +36,12 @@ async function poll() {
             const out = await fetchOutdoor();
             updateOutdoor(out, i18n);
         } catch { /* outdoor is optional, no toast */ }
+
+        // F0.30 - Check backend errors
+        try {
+            const errData = await fetchErrors();
+            updateErrorIndicator(errData, i18n);
+        } catch { /* errors endpoint is optional */ }
 
         await updateHistory();
         updateSensorsCount(sensors);
@@ -73,5 +80,7 @@ window.setControlMode = mode => setControlMode(mode);
 window.editMode       = () => editMode(i18n);
 window.editFanSpeed   = () => editFanSpeed(i18n);
 window.editSetpoint   = () => editSetpoint(i18n);
+window.openErrorsModal  = () => { fetchErrors().then(d => openErrorsModal(d.errors || [], i18n)).catch(() => openErrorsModal([], i18n)); };
+window.closeErrorsModal = closeErrorsModal;
 window.toggleLanguageMenu = toggleLanguageMenu;
 window.selectLanguage     = locale => selectLanguage(locale, i18n);

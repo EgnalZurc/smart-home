@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from api import routes
+from error_tracker import ErrorTracker
 from cleanup import CleanupScheduler
 from controllers.ac_controller import ACController, ControlConfig
 from melcloud_client import MelCloudClient
@@ -107,12 +108,16 @@ melcloud_client: MelCloudClient | None = None
 ac_controller: ACController | None = None
 cleanup_scheduler: CleanupScheduler | None = None
 subscription_manager: SubscriptionManager | None = None
+error_tracker: ErrorTracker | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle."""
-    global mqtt_handler, melcloud_client, ac_controller, cleanup_scheduler, subscription_manager
+    global mqtt_handler, melcloud_client, ac_controller, cleanup_scheduler, subscription_manager, error_tracker
+
+    # F0.30 - Create error tracker first (other components need it)
+    error_tracker = ErrorTracker()
 
     logger.info("=== Smart Home Backend starting ===")
     logger.info("MQTT Broker: %s:%d", MQTT_BROKER, MQTT_PORT)
@@ -142,6 +147,7 @@ async def lifespan(app: FastAPI):
         max_history=MAX_HISTORY_PER_SENSOR
     )
     mqtt_handler.start()
+    mqtt_handler.set_error_tracker(error_tracker)
 
     # 2. Start MELCloud client
     melcloud_client = MelCloudClient(
@@ -154,6 +160,9 @@ async def lifespan(app: FastAPI):
     )
     if not melcloud_client.login():
         logger.error("Failed to authenticate with MELCloud. Controller will not act.")
+        error_tracker.register("melcloud_auth", "error", "MELCloud authentication failed", "melcloud")
+    else:
+        error_tracker.clear("melcloud_auth")
 
     # 3. Configure and start controller
     config = ControlConfig(
@@ -179,7 +188,7 @@ async def lifespan(app: FastAPI):
     
     # Restore previous state before starting (minimize AC restarts)
     ac_controller.restore_state()
-    
+    ac_controller.set_error_tracker(error_tracker)
     ac_controller.start()
 
     # 4. Initialize Subscription Manager
@@ -222,12 +231,14 @@ async def lifespan(app: FastAPI):
             )
             data = resp.json()
             current = data.get("current", {})
+            error_tracker.clear("outdoor_fetch")
             return {
                 "temperature": current.get("temperature_2m"),
                 "humidity": current.get("relative_humidity_2m"),
             }
         except Exception as e:
             logger.error("Failed to fetch outdoor temperature: %s", e)
+            error_tracker.register("outdoor_fetch", "warning", f"Outdoor temperature unavailable: {e}", "outdoor")
             return None
     
     subscription_manager.subscribe(
@@ -244,6 +255,7 @@ async def lifespan(app: FastAPI):
     routes.mqtt_handler = mqtt_handler
     routes.ac_controller = ac_controller
     routes.subscription_manager = subscription_manager
+    routes.error_tracker = error_tracker  # F0.30
     routes.outdoor_cache_ttl = OUTDOOR_CACHE_TTL
     routes.location_lat = LOCATION_LATITUDE
     routes.location_lon = LOCATION_LONGITUDE

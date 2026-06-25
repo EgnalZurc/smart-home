@@ -11,6 +11,7 @@ mqtt_handler = None
 ac_controller = None
 energy_tracker = None
 subscription_manager = None
+error_tracker = None  # F0.30
 
 # Injected configurations
 outdoor_cache_ttl = 600
@@ -407,6 +408,15 @@ def _save_outdoor_to_disk():
     pass
 
 
+
+
+@router.get("/errors")
+def get_errors():
+    """Active backend errors and warnings (F0.30)."""
+    if error_tracker is None:
+        return {"errors": [], "has_errors": False}
+    active = error_tracker.get_active()
+    return {"errors": active, "has_errors": bool(active)}
 
 @router.get("/energy/current")
 def get_energy_current():

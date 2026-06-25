@@ -121,6 +121,7 @@ class MqttHandler:
     def start(self):
         """Starts MQTT connection and subscribes to topics."""
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        self._error_tracker = None  # F0.30 - injected via set_error_tracker()
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
         self._client.on_disconnect = self._on_disconnect
@@ -146,15 +147,23 @@ class MqttHandler:
             self._client.loop_stop()
             self._client.disconnect()
 
+    def set_error_tracker(self, tracker) -> None:
+        """Inject error tracker (F0.30)."""
+        self._error_tracker = tracker
+
     def _on_connect(self, client, userdata, flags, reason_code, properties):
         logger.info("Connected to MQTT (rc=%s)", reason_code)
         self._connected = True
+        if self._error_tracker:
+            self._error_tracker.clear("mqtt_disconnected")
         client.subscribe("zigbee2mqtt/+")
         logger.info("Subscribed to zigbee2mqtt/+ (sensors: %s)", self.sensor_names)
 
     def _on_disconnect(self, client, userdata, flags, reason_code, properties):
         logger.warning("Disconnected from MQTT (rc=%s)", reason_code)
         self._connected = False
+        if self._error_tracker:
+            self._error_tracker.register("mqtt_disconnected", "error", "Disconnected from MQTT broker", "mqtt")
 
     def _on_message(self, client, userdata, msg):
         """Processes an MQTT message from a sensor."""
