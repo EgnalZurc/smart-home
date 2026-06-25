@@ -82,5 +82,7 @@ window.editFanSpeed   = () => editFanSpeed(i18n);
 window.editSetpoint   = () => editSetpoint(i18n);
 window.openErrorsModal  = () => { fetchErrors().then(d => openErrorsModal(d.errors || [], i18n)).catch(() => openErrorsModal([], i18n)); };
 window.closeErrorsModal = closeErrorsModal;
+// Clicking the status indicator opens errors modal only when there are errors
+window.onStatusClick    = () => { fetchErrors().then(d => { if (d.has_errors) openErrorsModal(d.errors || [], i18n); }).catch(() => {}); };
 window.toggleLanguageMenu = toggleLanguageMenu;
 window.selectLanguage     = locale => selectLanguage(locale, i18n);
