@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Smart Home</title>
-    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏠</text></svg>">
     <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -118,6 +118,86 @@
         .lang-option:hover {
             background: rgba(59, 130, 246, 0.2);
             border-color: rgba(59, 130, 246, 0.4);
+        }
+        /* AC State - Optimistic UI */
+        .ac-params-group {
+            transition: all 0.3s ease;
+        }
+        .ac-params-group.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .ac-params-group.editable {
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            border-radius: 12px;
+            padding: 8px;
+            margin: -8px;
+            background: rgba(59, 130, 246, 0.02);
+        }
+        .ac-param-box {
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .ac-param-box:hover {
+            background: rgba(59, 130, 246, 0.15) !important;
+            transform: scale(1.02);
+        }
+        .ac-param-box.disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .ac-param-readonly {
+            opacity: 0.7;
+            cursor: default;
+        }
+        /* Optimistic update animation */
+        .optimistic-update {
+            animation: optimisticPulse 0.6s ease;
+        }
+        @keyframes optimisticPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); background: rgba(34, 197, 94, 0.2); }
+            100% { transform: scale(1); }
+        }
+        /* Error revert animation */
+        .revert-error {
+            animation: revertShake 0.5s ease;
+        }
+        @keyframes revertShake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); background: rgba(239, 68, 68, 0.2); }
+            75% { transform: translateX(8px); background: rgba(239, 68, 68, 0.2); }
+        }
+        /* Notification toast */
+        .notification-toast {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: rgba(30, 41, 59, 0.95);
+            border: 1px solid rgba(100, 116, 139, 0.5);
+            padding: 12px 20px;
+            border-radius: 12px;
+            z-index: 9999;
+            opacity: 0;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        .notification-toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+        .notification-toast.error {
+            border-color: rgba(239, 68, 68, 0.5);
+            background: rgba(239, 68, 68, 0.1);
+        }
+        .notification-toast.success {
+            border-color: rgba(34, 197, 94, 0.5);
+            background: rgba(34, 197, 94, 0.1);
+        }
             transform: scale(1.05);
         }
         .lang-option.active {
@@ -174,22 +254,28 @@
             <p class="text-slate-400 text-[11px] uppercase tracking-wider" data-i18n="acState.title">AC State</p>
             <span class="text-sm font-bold tracking-wide" id="ac-real-power">--</span>
         </div>
+        
+        <!-- All parameters in ONE line, visually grouped -->
         <div class="grid grid-cols-4 gap-2">
-            <div class="bg-slate-900/60 rounded-xl py-2.5 px-2 text-center">
+            <!-- MODE (editable) -->
+            <div class="bg-slate-900/60 rounded-xl py-2 px-2 text-center ac-param-box border border-slate-700/50" id="ac-mode-box" onclick="editMode()">
                 <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5" data-i18n="acState.mode">Mode</p>
-                <p class="text-sm font-semibold" id="ac-real-mode">--</p>
+                <p class="text-xs font-semibold" id="ac-mode-display">--</p>
             </div>
-            <div class="bg-slate-900/60 rounded-xl py-2.5 px-2 text-center">
+            <!-- POWER (editable) -->
+            <div class="bg-slate-900/60 rounded-xl py-2 px-2 text-center ac-param-box border border-slate-700/50" id="ac-fan-box" onclick="editFanSpeed()">
                 <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5" data-i18n="acState.power">Power</p>
-                <p class="text-sm font-semibold" id="ac-real-fan">--</p>
+                <p class="text-xs font-semibold" id="ac-fan-display">--</p>
             </div>
-            <div class="bg-slate-900/60 rounded-xl py-2.5 px-2 text-center">
+            <!-- SETPOINT (editable) -->
+            <div class="bg-slate-900/60 rounded-xl py-2 px-2 text-center ac-param-box border border-slate-700/50" id="ac-setpoint-box" onclick="editSetpoint()">
                 <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5" data-i18n="acState.setpoint">Setpoint</p>
-                <p class="text-sm font-semibold" id="ac-real-setpoint">--</p>
+                <p class="text-xs font-semibold" id="ac-setpoint-display">--</p>
             </div>
-            <div class="bg-slate-900/60 rounded-xl py-2.5 px-2 text-center">
-                <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5" data-i18n="acState.thermostat">Thermost.</p>
-                <p class="text-sm font-semibold" id="ac-real-roomtemp">--</p>
+            <!-- THERMOSTAT (read-only, visually separated) -->
+            <div class="bg-slate-800/80 rounded-xl py-2 px-2 text-center border border-slate-600/50">
+                <p class="text-[9px] text-slate-400 uppercase tracking-wider mb-0.5" data-i18n="acState.thermostat">Thermost.</p>
+                <p class="text-xs font-semibold text-blue-400" id="ac-real-roomtemp">--</p>
             </div>
         </div>
     </div>
@@ -210,75 +296,21 @@
         </div>
     </div>
 
-    <!-- Manual override -->
+    <!-- Manual Control -->
     <div class="card-static rounded-2xl p-4 mb-3">
         <p class="text-slate-400 text-[11px] uppercase tracking-wider mb-3" data-i18n="manualControl.title">Manual Control</p>
         <div class="grid grid-cols-3 gap-2">
-            <button onclick="setOverride(null)" id="btn-auto" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent" data-i18n="manualControl.auto">Auto</button>
-            <button onclick="openForceOnModal()" id="btn-on" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent" data-i18n="manualControl.forceOn">Force ON</button>
-            <button onclick="openForceOffModal()" id="btn-off" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent" data-i18n="manualControl.forceOff">Force OFF</button>
+            <button onclick="setControlMode('auto')" id="btn-auto" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent" data-i18n="manualControl.auto">Auto</button>
+            <button onclick="setControlMode('manual')" id="btn-manual" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent" data-i18n="manualControl.manual">Manual</button>
+            <button onclick="setControlMode('off')" id="btn-off" class="btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent" data-i18n="manualControl.off">OFF</button>
         </div>
     </div>
 
 </div>
 
-<!-- Modal: Force ON -->
-<div id="modal-force-on" class="fixed inset-0 bg-black/60 modal-bg z-50 hidden flex items-end justify-center" onclick="if(event.target===this)closeForceOn()">
-    <div class="modal-sheet bg-[#1e293b] rounded-t-3xl w-full max-w-md p-5 pb-8 border-t border-slate-700/50">
-        <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-5"></div>
-        <h2 class="text-base font-bold mb-4"><span data-i18n="modals.forceOn.title">⚡ Force turn on</span></h2>
-
-        <div class="space-y-4">
-            <!-- Mode -->
-            <div>
-                <label class="text-[11px] text-slate-400 uppercase tracking-wider block mb-1.5" data-i18n="modals.forceOn.mode">Mode</label>
-                <div class="grid grid-cols-3 gap-2">
-                    <button onclick="selectMode('cool')" id="mode-cool" class="py-2.5 rounded-xl bg-blue-600/80 border border-blue-500/50 text-sm font-semibold"><span data-i18n="modals.forceOn.modes.cool">❄️ Cool</span></button>
-                    <button onclick="selectMode('heat')" id="mode-heat" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold"><span data-i18n="modals.forceOn.modes.heat">🔥 Heat</span></button>
-                    <button onclick="selectMode('fan')" id="mode-fan" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold"><span data-i18n="modals.forceOn.modes.fan">💨 Fan</span></button>
-                </div>
-            </div>
-
-            <!-- Power -->
-            <div>
-                <label class="text-[11px] text-slate-400 uppercase tracking-wider block mb-1.5" data-i18n="modals.forceOn.power">Power</label>
-                <div class="grid grid-cols-4 gap-2">
-                    <button onclick="selectFan(0)" id="fan-0" class="py-2.5 rounded-xl bg-blue-600/80 border border-blue-500/50 text-sm font-semibold"><span data-i18n="modals.forceOn.powerLevels.auto">Auto</span></button>
-                    <button onclick="selectFan(1)" id="fan-1" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold"><span data-i18n="modals.forceOn.powerLevels.low">Low</span></button>
-                    <button onclick="selectFan(2)" id="fan-2" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold"><span data-i18n="modals.forceOn.powerLevels.medium">Medium</span></button>
-                    <button onclick="selectFan(3)" id="fan-3" class="py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold"><span data-i18n="modals.forceOn.powerLevels.high">High</span></button>
-                </div>
-            </div>
-
-            <!-- Temperature -->
-            <div>
-                <label class="text-[11px] text-slate-400 uppercase tracking-wider block mb-1.5" data-i18n="modals.forceOn.temperature">Temperature</label>
-                <div class="flex items-center gap-3">
-                    <button onclick="changeForceTemp(-0.5)" class="btn-control bg-blue-600/80 rounded-full w-11 h-11 text-lg font-bold">−</button>
-                    <span class="flex-1 text-center text-2xl font-bold" id="force-temp-display">23.0°C</span>
-                    <button onclick="changeForceTemp(0.5)" class="btn-control bg-red-600/80 rounded-full w-11 h-11 text-lg font-bold">+</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3 mt-6">
-            <button onclick="closeForceOn()" class="py-3.5 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors"><span data-i18n="modals.forceOn.cancel">Cancel</span></button>
-            <button onclick="confirmForceOn()" class="py-3.5 bg-green-600 hover:bg-green-500 rounded-2xl text-sm font-semibold transition-colors"><span data-i18n="modals.forceOn.confirm">Turn On</span></button>
-        </div>
-    </div>
-</div>
-
-<!-- Modal: Confirm Force OFF -->
-<div id="modal-force-off" class="fixed inset-0 bg-black/60 modal-bg z-50 hidden flex items-center justify-center" onclick="if(event.target===this)closeForceOff()">
-    <div class="bg-[#1e293b] rounded-3xl w-[85%] max-w-sm p-6 border border-slate-700/50 text-center">
-        <p class="text-3xl mb-3">⏹</p>
-        <h2 class="text-base font-bold mb-2"><span data-i18n="modals.forceOff.title">Turn off AC?</span></h2>
-        <p class="text-sm text-slate-400 mb-5"><span data-i18n="modals.forceOff.message">The AC will turn off and the automatic controller will be disabled until you press Auto.</span></p>
-        <div class="grid grid-cols-2 gap-3">
-            <button onclick="closeForceOff()" class="py-3 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors"><span data-i18n="modals.forceOff.cancel">Cancel</span></button>
-            <button onclick="confirmForceOff()" class="py-3 bg-red-600 hover:bg-red-500 rounded-2xl text-sm font-semibold transition-colors"><span data-i18n="modals.forceOff.confirm">Turn Off</span></button>
-        </div>
-    </div>
+<!-- Notification Toast -->
+<div id="notification-toast" class="notification-toast">
+    <p id="notification-text" class="text-sm font-semibold"></p>
 </div>
 
 <!-- Modal: Sensors detail + chart -->
@@ -481,53 +513,45 @@ async function poll() {
             avgHumEl.textContent = '--%';
         }
 
-        // AC state (real desde MELCloud)
-        try {
-            const acResp = await fetch('/api/ac_real');
-            const ac = await acResp.json();
-            const powerEl = document.getElementById('ac-real-power');
-            const modeEl = document.getElementById('ac-real-mode');
-            const fanEl = document.getElementById('ac-real-fan');
-            const setEl = document.getElementById('ac-real-setpoint');
+        // AC state from status endpoint (manual params)
+        currentControlMode = st.ac_state.control_mode || 'auto';
+        updateControlModeButtons();
+        
+        // Update manual queue's last acknowledged values (for editing in manual mode)
+        if (st.manual_params) {
+            manualQueue.lastAcknowledged = {
+                mode: st.manual_params.mode,
+                fan_speed: st.manual_params.fan_speed,
+                temperature: st.manual_params.temperature
+            };
+        }
+        
+        // Always display AC state from controller (shows what AC is doing)
+        updateModeDisplay(st.ac_state.mode);
+        updateFanDisplay(st.ac_state.fan_speed);
+        updateSetpointDisplay(st.ac_state.setpoint);
+        
+        // Update thermostat and power indicator from cached real state (no direct MELCloud call)
+        const rtEl = document.getElementById('ac-real-roomtemp');
+        if (st.ac_real.room_temp !== null) {
+            rtEl.textContent = st.ac_real.room_temp.toFixed(1)+'°C';
+            rtEl.style.color = tempColor(st.ac_real.room_temp);
+        } else {
+            rtEl.textContent = '—';
+            rtEl.style.color = '#64748b';
+        }
 
-            if (ac.power === null) {
-                powerEl.textContent = '--';
-                powerEl.style.color = '#64748b';
-                modeEl.textContent = '--';
-                modeEl.style.color = '#64748b';
-                fanEl.textContent = '--';
-                fanEl.style.color = '#64748b';
-                setEl.textContent = '--';
-                setEl.style.color = '#64748b';
-                document.getElementById('ac-real-roomtemp').textContent = '--';
-                document.getElementById('ac-real-roomtemp').style.color = '#64748b';
-            } else if (!ac.power) {
-                powerEl.textContent = 'OFF';
-                powerEl.style.color = '#ef4444';
-                modeEl.textContent = '--';
-                modeEl.style.color = '#64748b';
-                fanEl.textContent = '--';
-                fanEl.style.color = '#64748b';
-                setEl.textContent = '--';
-                setEl.style.color = '#64748b';
-                document.getElementById('ac-real-roomtemp').textContent = '--';
-                document.getElementById('ac-real-roomtemp').style.color = '#64748b';
-            } else {
-                powerEl.textContent = 'ON';
-                powerEl.style.color = '#4ade80';
-                const modeColors = {'COLD':'#60a5fa','HOT':'#f97316','DRY':'#fbbf24','FAN':'#a78bfa','AUTO':'#4ade80'};
-                modeEl.textContent = ac.mode || '--';
-                modeEl.style.color = modeColors[ac.mode] || '#94a3b8';
-                fanEl.textContent = ac.fan_speed !== null ? ac.fan_speed : '—';
-                const fanColors = {'Low':'#4ade80','Medium':'#fbbf24','High':'#f87171','Auto':'#60a5fa'};
-                fanEl.style.color = fanColors[ac.fan_speed] || '#64748b';
-                setEl.textContent = ac.set_temp !== null ? ac.set_temp.toFixed(1)+'°C' : '—';
-                setEl.style.color = '#e2e8f0';
-                const rtEl = document.getElementById('ac-real-roomtemp');
-                rtEl.textContent = ac.room_temp !== null ? ac.room_temp.toFixed(1)+'°C' : '—';
-                rtEl.style.color = ac.room_temp !== null ? tempColor(ac.room_temp) : '#64748b';
-            }
-        } catch(e) {}
+        const powerEl = document.getElementById('ac-real-power');
+        if (st.ac_real.power === null) {
+            powerEl.textContent = '--';
+            powerEl.style.color = '#64748b';
+        } else if (!st.ac_real.power) {
+            powerEl.textContent = 'OFF';
+            powerEl.style.color = '#ef4444';
+        } else {
+            powerEl.textContent = 'ON';
+            powerEl.style.color = '#4ade80';
+        }
 
         // Target y decisión del controlador
         currentTarget = st.target_temperature;
@@ -535,21 +559,36 @@ async function poll() {
 
         const decisionEl = document.getElementById('controller-decision');
         const action = st.ac_state.action;
-        const decisionLabels = {'cooling_max':'COOLING MAX','modulating':'MODULANDO','off':'OFF','cooldown':'COOLDOWN','forced_on':'FORZADO ON','forced_off':'FORZADO OFF','error':'ERROR'};
-        const decisionColors = {'cooling_max':'#60a5fa','modulating':'#fbbf24','off':'#64748b','cooldown':'#a78bfa','forced_on':'#4ade80','forced_off':'#ef4444','error':'#ef4444'};
-        const decisionBg = {'cooling_max':'rgba(96,165,250,0.15)','modulating':'rgba(251,191,36,0.15)','off':'rgba(100,116,139,0.15)','cooldown':'rgba(167,139,250,0.15)','forced_on':'rgba(74,222,128,0.15)','forced_off':'rgba(239,68,68,0.15)','error':'rgba(239,68,68,0.25)'};
+        const decisionLabels = {
+            'cooling_max':'COOLING MAX',
+            'modulating':'MODULANDO',
+            'off':'OFF',
+            'cooldown':'COOLDOWN',
+            'manual':'MANUAL',
+            'system_off':'SYSTEM OFF',
+            'error':'ERROR'
+        };
+        const decisionColors = {
+            'cooling_max':'#60a5fa',
+            'modulating':'#fbbf24',
+            'off':'#64748b',
+            'cooldown':'#a78bfa',
+            'manual':'#4ade80',
+            'system_off':'#ef4444',
+            'error':'#ef4444'
+        };
+        const decisionBg = {
+            'cooling_max':'rgba(96,165,250,0.15)',
+            'modulating':'rgba(251,191,36,0.15)',
+            'off':'rgba(100,116,139,0.15)',
+            'cooldown':'rgba(167,139,250,0.15)',
+            'manual':'rgba(74,222,128,0.15)',
+            'system_off':'rgba(239,68,68,0.15)',
+            'error':'rgba(239,68,68,0.25)'
+        };
         decisionEl.textContent = decisionLabels[action] || action;
         decisionEl.style.color = decisionColors[action] || '#94a3b8';
         decisionEl.style.backgroundColor = decisionBg[action] || 'transparent';
-
-        // Override buttons
-        const ov = st.ac_state.override;
-        const btnAuto = document.getElementById('btn-auto');
-        const btnOn = document.getElementById('btn-on');
-        const btnOff = document.getElementById('btn-off');
-        btnAuto.className = `btn-control py-3 rounded-xl text-sm font-semibold border ${ov===null?'bg-blue-600/80 border-blue-500/50 text-white':'bg-slate-700/60 border-transparent text-slate-300'}`;
-        btnOn.className = `btn-control py-3 rounded-xl text-sm font-semibold border ${ov==='on'?'bg-red-600/80 border-red-500/50 text-white':'bg-slate-700/60 border-transparent text-slate-300'}`;
-        btnOff.className = `btn-control py-3 rounded-xl text-sm font-semibold border ${ov==='off'?'bg-slate-600 border-slate-500/50 text-white':'bg-slate-700/60 border-transparent text-slate-300'}`;
 
         // Status line
         const connected = st.mqtt_connected;
@@ -585,6 +624,7 @@ async function poll() {
         updateDetail(sensors);
 
     } catch(e) {
+        console.error('Poll error:', e);
         document.getElementById('status-line').textContent = 'Error';
         document.getElementById('status-dot').className = 'w-1.5 h-1.5 rounded-full bg-red-400';
     }
@@ -734,9 +774,242 @@ async function changeTarget(delta) {
     await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target_temperature:currentTarget})});
 }
 
-async function setOverride(mode) {
-    await fetch('/api/override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode})});
-    poll();
+// ===== Manual Control Queue (Optimistic UI) =====
+class ManualControlQueue {
+    constructor() {
+        this.queue = [];
+        this.processing = false;
+        this.lastAcknowledged = {
+            mode: 'cool',
+            fan_speed: 0,
+            temperature: 23.0
+        };
+    }
+    
+    async enqueue(param, value, updateFn, revertFn) {
+        // Update UI immediately (optimistic)
+        updateFn(value);
+        
+        // Add to queue
+        this.queue.push({ param, value, updateFn, revertFn });
+        
+        // Process queue
+        if (!this.processing) {
+            this.process();
+        }
+    }
+    
+    async process() {
+        this.processing = true;
+        
+        while (this.queue.length > 0) {
+            const { param, value, revertFn } = this.queue.shift();
+            
+            try {
+                const response = await fetch(
+                    `/api/manual_param?param=${param}&value=${encodeURIComponent(value)}`,
+                    { method: 'POST' }
+                );
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    // Store acknowledged value
+                    if (param === 'mode') {
+                        this.lastAcknowledged.mode = data.applied.mode;
+                    } else if (param === 'fan_speed') {
+                        this.lastAcknowledged.fan_speed = data.applied.fan_speed;
+                    } else if (param === 'temperature') {
+                        this.lastAcknowledged.temperature = data.applied.temperature;
+                    }
+                } else {
+                    // Failed: revert to last acknowledged value
+                    const lastValue = this.lastAcknowledged[param];
+                    revertFn(lastValue);
+                    showNotification(i18n.t('Failed to update ' + param), 'error');
+                }
+            } catch (err) {
+                // Network error: revert
+                const lastValue = this.lastAcknowledged[param];
+                revertFn(lastValue);
+                showNotification(i18n.t('Network error'), 'error');
+            }
+        }
+        
+        this.processing = false;
+    }
+}
+
+const manualQueue = new ManualControlQueue();
+let currentControlMode = 'off';
+
+// Notification system
+function showNotification(message, type = 'info') {
+    const toast = document.getElementById('notification-toast');
+    const text = document.getElementById('notification-text');
+    
+    text.textContent = message;
+    toast.className = 'notification-toast show ' + (type === 'error' ? 'error' : type === 'success' ? 'success' : '');
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
+// Control mode buttons
+async function setControlMode(mode) {
+    try {
+        const response = await fetch('/api/control_mode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode })
+        });
+        
+        if (response.ok) {
+            currentControlMode = mode;
+            updateControlModeButtons();
+            poll(); // Refresh UI
+        }
+    } catch (err) {
+        showNotification('Failed to change mode', 'error');
+    }
+}
+
+function updateControlModeButtons() {
+    document.getElementById('btn-auto').className = currentControlMode === 'auto' 
+        ? 'btn-control py-3 rounded-xl bg-green-600 text-sm font-semibold border border-green-500'
+        : 'btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent';
+    
+    document.getElementById('btn-manual').className = currentControlMode === 'manual' 
+        ? 'btn-control py-3 rounded-xl bg-blue-600 text-sm font-semibold border border-blue-500'
+        : 'btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent';
+    
+    document.getElementById('btn-off').className = currentControlMode === 'off' 
+        ? 'btn-control py-3 rounded-xl bg-red-600 text-sm font-semibold border border-red-500'
+        : 'btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent';
+    
+    // Enable/disable editable params (update cursor style)
+    const modeBox = document.getElementById('ac-mode-box');
+    const fanBox = document.getElementById('ac-fan-box');
+    const setpointBox = document.getElementById('ac-setpoint-box');
+    
+    if (currentControlMode === 'manual') {
+        modeBox.style.cursor = 'pointer';
+        fanBox.style.cursor = 'pointer';
+        setpointBox.style.cursor = 'pointer';
+    } else {
+        modeBox.style.cursor = 'default';
+        fanBox.style.cursor = 'default';
+        setpointBox.style.cursor = 'default';
+    }
+}
+
+// Edit MODE (Cool/Heat)
+function editMode() {
+    if (currentControlMode !== 'manual') return;
+    
+    // Show inline selector with simple prompt
+    const current = manualQueue.lastAcknowledged.mode;
+    const newMode = current === 'cool' ? 'heat' : 'cool';
+    
+    manualQueue.enqueue(
+        'mode',
+        newMode,
+        (val) => updateModeDisplay(val),
+        (val) => {
+            updateModeDisplay(val);
+            document.getElementById('ac-mode-box').classList.add('revert-error');
+            setTimeout(() => document.getElementById('ac-mode-box').classList.remove('revert-error'), 500);
+        }
+    );
+    
+    // Visual feedback
+    document.getElementById('ac-mode-box').classList.add('optimistic-update');
+    setTimeout(() => document.getElementById('ac-mode-box').classList.remove('optimistic-update'), 600);
+}
+
+function updateModeDisplay(mode) {
+    const display = document.getElementById('ac-mode-display');
+    if (mode === 'cool') {
+        display.innerHTML = '<span data-i18n="modals.forceOn.modes.cool">❄️ ' + i18n.t('modals.forceOn.modes.cool').replace('❄️ ', '') + '</span>';
+    } else {
+        display.innerHTML = '<span data-i18n="modals.forceOn.modes.heat">🔥 ' + i18n.t('modals.forceOn.modes.heat').replace('🔥 ', '') + '</span>';
+    }
+}
+
+// Edit FAN SPEED (Auto/Low/Mid/High)
+function editFanSpeed() {
+    if (currentControlMode !== 'manual') return;
+    
+    // Cycle through fan speeds: 0 -> 1 -> 2 -> 3 -> 0
+    const current = manualQueue.lastAcknowledged.fan_speed;
+    const newSpeed = (current + 1) % 4;
+    
+    manualQueue.enqueue(
+        'fan_speed',
+        newSpeed,
+        (val) => updateFanDisplay(val),
+        (val) => {
+            updateFanDisplay(val);
+            document.getElementById('ac-fan-box').classList.add('revert-error');
+            setTimeout(() => document.getElementById('ac-fan-box').classList.remove('revert-error'), 500);
+        }
+    );
+    
+    // Visual feedback
+    document.getElementById('ac-fan-box').classList.add('optimistic-update');
+    setTimeout(() => document.getElementById('ac-fan-box').classList.remove('optimistic-update'), 600);
+}
+
+function updateFanDisplay(speed) {
+    const display = document.getElementById('ac-fan-display');
+    const labels = [
+        i18n.t('modals.forceOn.powerLevels.auto'),
+        i18n.t('modals.forceOn.powerLevels.low'),
+        i18n.t('modals.forceOn.powerLevels.medium'),
+        i18n.t('modals.forceOn.powerLevels.high')
+    ];
+    const colors = ['text-white', 'text-blue-400', 'text-green-400', 'text-red-400'];
+    
+    display.textContent = labels[speed];
+    display.className = 'text-sm font-semibold ' + colors[speed];
+}
+
+// Edit SETPOINT (Temperature)
+let setpointTimeout = null;
+
+function editSetpoint() {
+    if (currentControlMode !== 'manual') return;
+    
+    // Show prompt for new temperature
+    const current = manualQueue.lastAcknowledged.temperature;
+    const newTemp = prompt(i18n.t('modals.forceOn.temperature') + ' (19-30°C):', current);
+    
+    if (newTemp === null) return; // Cancelled
+    
+    const temp = parseFloat(newTemp);
+    if (isNaN(temp) || temp < 19 || temp > 30) {
+        showNotification('Temperature must be between 19-30°C', 'error');
+        return;
+    }
+    
+    manualQueue.enqueue(
+        'temperature',
+        temp,
+        (val) => updateSetpointDisplay(val),
+        (val) => {
+            updateSetpointDisplay(val);
+            document.getElementById('ac-setpoint-box').classList.add('revert-error');
+            setTimeout(() => document.getElementById('ac-setpoint-box').classList.remove('revert-error'), 500);
+        }
+    );
+    
+    // Visual feedback
+    document.getElementById('ac-setpoint-box').classList.add('optimistic-update');
+    setTimeout(() => document.getElementById('ac-setpoint-box').classList.remove('optimistic-update'), 600);
+}
+
+function updateSetpointDisplay(temp) {
+    document.getElementById('ac-setpoint-display').textContent = temp.toFixed(1) + '°C';
 }
 
 function openModal() {
@@ -744,77 +1017,11 @@ function openModal() {
     modal.classList.remove('hidden');
     requestAnimationFrame(() => modal.classList.add('modal-visible'));
 }
+
 function closeModal() {
     const modal = document.getElementById('modal');
     modal.classList.remove('modal-visible');
     setTimeout(() => modal.classList.add('hidden'), 300);
-}
-
-// --- Force ON modal ---
-let forceMode = 'cool';
-let forceFan = 0;
-let forceTemp = 23.0;
-
-function openForceOnModal() {
-    forceMode = 'cool'; forceFan = 0; forceTemp = currentTarget;
-    updateModeButtons(); updateFanButtons();
-    document.getElementById('force-temp-display').textContent = forceTemp.toFixed(1)+'°C';
-    const modal = document.getElementById('modal-force-on');
-    modal.classList.remove('hidden');
-    requestAnimationFrame(() => modal.classList.add('modal-visible'));
-}
-function closeForceOn() {
-    const modal = document.getElementById('modal-force-on');
-    modal.classList.remove('modal-visible');
-    setTimeout(() => modal.classList.add('hidden'), 300);
-}
-function selectMode(m) { forceMode = m; updateModeButtons(); }
-function selectFan(f) { forceFan = f; updateFanButtons(); }
-function changeForceTemp(delta) {
-    forceTemp = Math.max(19, Math.min(30, forceTemp + delta));
-    document.getElementById('force-temp-display').textContent = forceTemp.toFixed(1)+'°C';
-}
-function updateModeButtons() {
-    ['cool','heat','fan'].forEach(m => {
-        const el = document.getElementById('mode-'+m);
-        if (m === forceMode) {
-            el.className = 'py-2.5 rounded-xl bg-blue-600/80 border border-blue-500/50 text-sm font-semibold';
-        } else {
-            el.className = 'py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold';
-        }
-    });
-}
-function updateFanButtons() {
-    [0,1,2,3].forEach(f => {
-        const el = document.getElementById('fan-'+f);
-        if (f === forceFan) {
-            el.className = 'py-2.5 rounded-xl bg-blue-600/80 border border-blue-500/50 text-sm font-semibold';
-        } else {
-            el.className = 'py-2.5 rounded-xl bg-slate-700/60 border border-transparent text-sm font-semibold';
-        }
-    });
-}
-async function confirmForceOn() {
-    closeForceOn();
-    await fetch('/api/force_on', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ac_mode: forceMode, fan_speed: forceFan, temperature: forceTemp})
-    });
-    poll();
-}
-
-// --- Force OFF modal ---
-function openForceOffModal() {
-    const modal = document.getElementById('modal-force-off');
-    modal.classList.remove('hidden');
-}
-function closeForceOff() {
-    document.getElementById('modal-force-off').classList.add('hidden');
-}
-async function confirmForceOff() {
-    closeForceOff();
-    await fetch('/api/force_off', {method:'POST', headers:{'Content-Type':'application/json'}});
-    poll();
 }
 
 loadSensorHistory().then(() => {

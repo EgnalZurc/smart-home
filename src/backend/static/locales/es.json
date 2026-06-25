@@ -24,27 +24,26 @@
       "modulating": "MODULANDO",
       "off": "OFF",
       "cooldown": "COOLDOWN",
-      "forced_on": "FORZADO ON",
-      "forced_off": "FORZADO OFF",
+      "manual": "MANUAL",
+      "system_off": "SISTEMA OFF",
       "error": "ERROR"
     }
   },
   "manualControl": {
     "title": "Control manual",
     "auto": "Auto",
-    "forceOn": "Forzar ON",
-    "forceOff": "Forzar OFF"
+    "manual": "Manual",
+    "off": "OFF"
   },
   "modals": {
     "forceOn": {
-      "title": "Forzar encendido",
-      "mode": "Modo",
+      "title": "Modo Manual",
+      "mode": "Modo AC",
       "modes": {
-        "cool": "Frío",
-        "heat": "Calor",
-        "fan": "Vent."
+        "cool": "❄️ Frío",
+        "heat": "🔥 Calor"
       },
-      "power": "Fuerza",
+      "power": "Ventilador",
       "powerLevels": {
         "auto": "Auto",
         "low": "Bajo",
@@ -53,11 +52,11 @@
       },
       "temperature": "Temperatura",
       "cancel": "Cancelar",
-      "confirm": "Encender"
+      "confirm": "Aplicar"
     },
     "forceOff": {
-      "title": "¿Apagar el AC?",
-      "message": "El AC se apagará y el controlador automático quedará desactivado hasta que pulses Auto.",
+      "title": "¿Apagar el sistema?",
+      "message": "El AC se apagará completamente. Para volver a usar el control automático, pulsa AUTO.",
       "cancel": "Cancelar",
       "confirm": "Apagar"
     },

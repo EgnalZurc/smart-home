@@ -18,6 +18,7 @@ from cleanup import CleanupScheduler
 from controllers.ac_controller import ACController, ControlConfig
 from melcloud_client import MelCloudClient
 from mqtt_handler import MqttHandler
+from subscription_manager import SubscriptionManager, SubscriptionConfig
 from zigbee2mqtt_client import Zigbee2MQTTClient
 
 # Configure logging
@@ -85,6 +86,10 @@ OUTDOOR_CACHE_TTL = int(os.environ.get("OUTDOOR_CACHE_TTL", "600"))
 LOCATION_LATITUDE = float(os.environ.get("LOCATION_LATITUDE", "40.396644"))
 LOCATION_LONGITUDE = float(os.environ.get("LOCATION_LONGITUDE", "-3.622511"))
 
+# Subscription intervals
+MELCLOUD_UPDATE_INTERVAL = int(os.environ.get("MELCLOUD_UPDATE_INTERVAL", "30"))
+OUTDOOR_UPDATE_INTERVAL = int(os.environ.get("OUTDOOR_UPDATE_INTERVAL", "600"))
+
 # Cleanup
 CLEANUP_INTERVAL_SECONDS = int(os.environ.get("CLEANUP_INTERVAL_SECONDS", "86400"))
 CLEANUP_GRACE_PERIOD = int(os.environ.get("CLEANUP_GRACE_PERIOD", "60"))
@@ -101,12 +106,13 @@ mqtt_handler: MqttHandler | None = None
 melcloud_client: MelCloudClient | None = None
 ac_controller: ACController | None = None
 cleanup_scheduler: CleanupScheduler | None = None
+subscription_manager: SubscriptionManager | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle."""
-    global mqtt_handler, melcloud_client, ac_controller, cleanup_scheduler
+    global mqtt_handler, melcloud_client, ac_controller, cleanup_scheduler, subscription_manager
 
     logger.info("=== Smart Home Backend starting ===")
     logger.info("MQTT Broker: %s:%d", MQTT_BROKER, MQTT_PORT)
@@ -176,14 +182,73 @@ async def lifespan(app: FastAPI):
     
     ac_controller.start()
 
-    # 4. Inject dependencies into routes
+    # 4. Initialize Subscription Manager
+    logger.info("=== Initializing Subscription Manager ===")
+    sub_config = SubscriptionConfig(
+        melcloud_interval=MELCLOUD_UPDATE_INTERVAL,
+        outdoor_interval=OUTDOOR_UPDATE_INTERVAL,
+    )
+    subscription_manager = SubscriptionManager(sub_config)
+    
+    # Subscribe to MELCloud (AC state)
+    def fetch_melcloud_state():
+        """Fetcher for MELCloud AC state."""
+        state = melcloud_client.get_device_state(MELCLOUD_DEVICE_ID, MELCLOUD_BUILDING_ID)
+        # Update AC controller cache
+        if state is not None:
+            ac_controller.update_ac_real_cache(state)
+        return state
+    
+    subscription_manager.subscribe(
+        "melcloud",
+        fetch_melcloud_state,
+        interval=MELCLOUD_UPDATE_INTERVAL
+    )
+    
+    # Subscribe to outdoor temperature (Open-Meteo)
+    def fetch_outdoor_temp():
+        """Fetcher for outdoor temperature."""
+        import httpx
+        try:
+            resp = httpx.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": LOCATION_LATITUDE,
+                    "longitude": LOCATION_LONGITUDE,
+                    "current": "temperature_2m,relative_humidity_2m",
+                    "timezone": "Europe/Madrid",
+                },
+                timeout=10.0,
+            )
+            data = resp.json()
+            current = data.get("current", {})
+            return {
+                "temperature": current.get("temperature_2m"),
+                "humidity": current.get("relative_humidity_2m"),
+            }
+        except Exception as e:
+            logger.error("Failed to fetch outdoor temperature: %s", e)
+            return None
+    
+    subscription_manager.subscribe(
+        "outdoor",
+        fetch_outdoor_temp,
+        interval=OUTDOOR_UPDATE_INTERVAL
+    )
+    
+    # Start subscription manager
+    subscription_manager.start()
+    logger.info("=== Subscription Manager active ===")
+
+    # 5. Inject dependencies into routes
     routes.mqtt_handler = mqtt_handler
     routes.ac_controller = ac_controller
+    routes.subscription_manager = subscription_manager
     routes.outdoor_cache_ttl = OUTDOOR_CACHE_TTL
     routes.location_lat = LOCATION_LATITUDE
     routes.location_lon = LOCATION_LONGITUDE
 
-    # 5. Start daily cleanup scheduler
+    # 6. Start daily cleanup scheduler
     cleanup_scheduler = CleanupScheduler(
         interval=CLEANUP_INTERVAL_SECONDS,
         grace_period=CLEANUP_GRACE_PERIOD
@@ -197,6 +262,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("=== Shutting down Smart Home Backend ===")
     cleanup_scheduler.stop()
+    subscription_manager.stop()
     ac_controller.stop()
     mqtt_handler.stop()
     melcloud_client.close()

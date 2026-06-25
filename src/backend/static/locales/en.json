@@ -24,27 +24,26 @@
       "modulating": "MODULATING",
       "off": "OFF",
       "cooldown": "COOLDOWN",
-      "forced_on": "FORCED ON",
-      "forced_off": "FORCED OFF",
+      "manual": "MANUAL",
+      "system_off": "SYSTEM OFF",
       "error": "ERROR"
     }
   },
   "manualControl": {
     "title": "Manual Control",
     "auto": "Auto",
-    "forceOn": "Force ON",
-    "forceOff": "Force OFF"
+    "manual": "Manual",
+    "off": "OFF"
   },
   "modals": {
     "forceOn": {
-      "title": "Force turn on",
-      "mode": "Mode",
+      "title": "Manual Mode",
+      "mode": "AC Mode",
       "modes": {
-        "cool": "Cool",
-        "heat": "Heat",
-        "fan": "Fan"
+        "cool": "❄️ Cool",
+        "heat": "🔥 Heat"
       },
-      "power": "Power",
+      "power": "Fan",
       "powerLevels": {
         "auto": "Auto",
         "low": "Low",
@@ -53,11 +52,11 @@
       },
       "temperature": "Temperature",
       "cancel": "Cancel",
-      "confirm": "Turn On"
+      "confirm": "Apply"
     },
     "forceOff": {
-      "title": "Turn off AC?",
-      "message": "The AC will turn off and the automatic controller will be disabled until you press Auto.",
+      "title": "Turn off system?",
+      "message": "The AC will turn off completely. To use automatic control again, press AUTO.",
       "cancel": "Cancel",
       "confirm": "Turn Off"
     },

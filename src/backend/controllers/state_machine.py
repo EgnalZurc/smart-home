@@ -15,23 +15,24 @@ class ControllerState(str, Enum):
     COOLDOWN = "cooldown"
     COOLING_MAX = "cooling_max"
     MODULATING = "modulating"
-    FORCED_ON = "forced_on"
-    FORCED_OFF = "forced_off"
+    MANUAL = "manual"
+    SYSTEM_OFF = "system_off"
     ERROR = "error"
 
 
 class ManualMode(str, Enum):
-    """Modos de control manual."""
-    AUTO = "auto"
-    FORCE_ON = "force_on"
-    FORCE_OFF = "force_off"
+    """Control modes."""
+    AUTO = "auto"      # Automatic temperature-based control
+    MANUAL = "manual"  # Manual control with user-specified settings
+    OFF = "off"        # System off (AC disabled)
 
 
 @dataclass(frozen=True)
-class ForceOnParams:
-    """Manual turn on parameters."""
+class ManualParams:
+    """Manual mode parameters."""
     temperature: float = 23.0
-    fan_speed: int = 0
+    fan_speed: int = 0  # 0=auto, 1=low, 2=mid, 3=high
+    mode: str = "cool"  # "cool" or "heat"
 
 
 @dataclass(frozen=True)
@@ -40,7 +41,7 @@ class StateMachineInputs:
     average_temp: float | None
     target_temp: float
     manual_mode: ManualMode
-    force_on_params: ForceOnParams
+    manual_params: ManualParams
     seconds_since_last_off: float
     seconds_since_last_sensor_update: float
     consecutive_melcloud_failures: int
@@ -195,9 +196,9 @@ def evaluate(
         )
 
     # --- Priority 2: Manual override ---
-    if inputs.manual_mode == ManualMode.FORCE_OFF:
+    if inputs.manual_mode == ManualMode.OFF:
         return StateMachineOutputs(
-            state=ControllerState.FORCED_OFF,
+            state=ControllerState.SYSTEM_OFF,
             power=False,
             mode="cool",
             setpoint=24.0,
@@ -206,13 +207,13 @@ def evaluate(
             melcloud_error=False,
         )
 
-    if inputs.manual_mode == ManualMode.FORCE_ON:
+    if inputs.manual_mode == ManualMode.MANUAL:
         return StateMachineOutputs(
-            state=ControllerState.FORCED_ON,
+            state=ControllerState.MANUAL,
             power=True,
-            mode="cool",
-            setpoint=inputs.force_on_params.temperature,
-            fan_speed=inputs.force_on_params.fan_speed,
+            mode=inputs.manual_params.mode,
+            setpoint=inputs.manual_params.temperature,
+            fan_speed=inputs.manual_params.fan_speed,
             sensor_alert=sensor_alert,
             melcloud_error=False,
         )
@@ -248,7 +249,7 @@ def evaluate(
                     target, config, sensor_alert, last_modulating_setpoint,
                 )
 
-            case ControllerState.FORCED_OFF | ControllerState.FORCED_ON:
+            case ControllerState.SYSTEM_OFF | ControllerState.MANUAL:
                 # Returning to auto from override: re-evaluate without cooldown
                 return _evaluate_from_override(
                     avg, hot_threshold, cold_threshold,

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from controllers.state_machine import (
     ControllerState,
-    ForceOnParams,
+    ManualParams,
     ManualMode,
     StateMachineConfig,
     StateMachineInputs,
@@ -38,6 +38,7 @@ class ControlConfig:
     cooldown_seconds: int = 180
     loop_interval: int = 45
     sensor_timeout: int = 600
+    ac_state_update_interval: int = 30  # Seconds between AC real state updates
     ac_mode: str = "cool"
     fan_speed_max: int = 3
     fan_speed_modulate: int = 0
@@ -62,10 +63,20 @@ class ControlState:
     active_sensors: int = 0
     total_sensors: int = 5
     last_update: float = 0.0
-    override: str | None = "off"  # None=auto, "on", "off" - STARTS IN FORCE OFF
+    control_mode: str = "auto"  # "auto", "manual", "off" - STARTS IN AUTO (neutral)
     sensor_alert: bool = False
     melcloud_error: bool = False
-    force_on_params: ForceOnParams | None = None
+    manual_params: ManualParams | None = None
+    ac_mode: str = "cool"  # Current AC mode: "cool" or "heat"
+    fan_speed: int = 0  # Current fan speed
+    
+    # Real AC state (cached from MELCloud)
+    ac_real_power: bool | None = None
+    ac_real_mode: str | None = None  # "cool" or "heat"
+    ac_real_fan_speed: int | None = None  # 0-3
+    ac_real_setpoint: float | None = None
+    ac_real_room_temp: float | None = None
+    ac_real_last_update: float = 0.0
 
 
 @dataclass
@@ -92,13 +103,15 @@ class ACController:
         self.melcloud = melcloud
         self.config = config
         self.state = ControlState()
+        # Initialize manual_params with defaults
+        self.state.manual_params = ManualParams(temperature=23.0, fan_speed=0, mode="cool")
         self.history: list[HistoryRecord] = []
         self._running = False
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
 
         # Internal state machine variables
-        self._current_sm_state: ControllerState = ControllerState.FORCED_OFF
+        self._current_sm_state: ControllerState = ControllerState.OFF
         self._last_off_time: float = 0.0
         self._last_sensor_update_time: float = time.time()
         self._consecutive_melcloud_failures: int = 0
@@ -142,18 +155,53 @@ class ACController:
         # Persist state after user change
         self._persist_state()
 
-    def set_override(self, mode: str | None):
-        """Sets manual override: None=auto, 'on'=force AC, 'off'=force off."""
+    def set_control_mode(self, mode: str):
+        """Sets control mode: 'auto', 'manual', or 'off'."""
         with self._lock:
-            self.state.override = mode
-        logger.info("Override set: %s", mode)
+            self.state.control_mode = mode
+        logger.info("Control mode set: %s", mode)
         # Persist state after user change
         self._persist_state()
 
-    def set_force_on_params(self, temperature: float, fan_speed: int):
-        """Saves force on parameters."""
+    def set_manual_params(self, temperature: float, fan_speed: int, mode: str):
+        """Saves manual mode parameters."""
         with self._lock:
-            self.state.force_on_params = ForceOnParams(temperature=temperature, fan_speed=fan_speed)
+            self.state.manual_params = ManualParams(
+                temperature=temperature,
+                fan_speed=fan_speed,
+                mode=mode
+            )
+        logger.info("Manual params set: temp=%.1f°C, fan=%d, mode=%s", temperature, fan_speed, mode)
+        # Persist state after user change
+        self._persist_state()
+
+    def update_manual_param(self, param: str, value):
+        """Updates a single manual parameter (for real-time UI updates)."""
+        with self._lock:
+            if self.state.manual_params is None:
+                self.state.manual_params = ManualParams()
+            
+            current = self.state.manual_params
+            if param == "temperature":
+                self.state.manual_params = ManualParams(
+                    temperature=value,
+                    fan_speed=current.fan_speed,
+                    mode=current.mode
+                )
+            elif param == "fan_speed":
+                self.state.manual_params = ManualParams(
+                    temperature=current.temperature,
+                    fan_speed=value,
+                    mode=current.mode
+                )
+            elif param == "mode":
+                self.state.manual_params = ManualParams(
+                    temperature=current.temperature,
+                    fan_speed=current.fan_speed,
+                    mode=value
+                )
+        
+        logger.info("Manual param updated: %s = %s", param, value)
         # Persist state after user change
         self._persist_state()
 
@@ -197,19 +245,41 @@ class ACController:
         
         # Restore manual mode
         with self._lock:
-            self.state.override = persisted.override
+            # Map old override values to new control_mode
+            if persisted.override == "on":
+                self.state.control_mode = "manual"
+            elif persisted.override == "off":
+                self.state.control_mode = "off"
+            else:
+                self.state.control_mode = "auto"
+            
+            # Always initialize manual_params (even if not in manual mode)
             if persisted.force_on_temperature is not None:
-                self.state.force_on_params = ForceOnParams(
+                self.state.manual_params = ManualParams(
                     temperature=persisted.force_on_temperature,
-                    fan_speed=persisted.force_on_fan_speed or 0
+                    fan_speed=persisted.force_on_fan_speed or 0,
+                    mode="cool"  # Default to cool for backward compatibility
+                )
+            else:
+                # Initialize with defaults if not present
+                self.state.manual_params = ManualParams(
+                    temperature=23.0,
+                    fan_speed=0,
+                    mode="cool"
                 )
         
         # Restore internal state machine state
         try:
-            self._current_sm_state = ControllerState(persisted.current_sm_state)
+            # Map old state names to new ones
+            state_mapping = {
+                "forced_on": "manual",
+                "forced_off": "system_off"
+            }
+            state_value = state_mapping.get(persisted.current_sm_state, persisted.current_sm_state)
+            self._current_sm_state = ControllerState(state_value)
         except ValueError:
-            logger.warning("Invalid state '%s', defaulting to FORCED_OFF", persisted.current_sm_state)
-            self._current_sm_state = ControllerState.FORCED_OFF
+            logger.warning("Invalid state '%s', defaulting to SYSTEM_OFF", persisted.current_sm_state)
+            self._current_sm_state = ControllerState.SYSTEM_OFF
         
         self._last_off_time = persisted.last_off_timestamp
         self._last_modulating_setpoint = persisted.last_modulating_setpoint
@@ -220,8 +290,17 @@ class ACController:
     def _persist_state(self):
         """Saves current controller state to disk."""
         with self._lock:
-            force_temp = self.state.force_on_params.temperature if self.state.force_on_params else None
-            force_fan = self.state.force_on_params.fan_speed if self.state.force_on_params else None
+            manual_temp = self.state.manual_params.temperature if self.state.manual_params else None
+            manual_fan = self.state.manual_params.fan_speed if self.state.manual_params else None
+            
+            # Map new control_mode to old override for backward compatibility
+            override_value = None
+            if self.state.control_mode == "manual":
+                override_value = "on"
+            elif self.state.control_mode == "off":
+                override_value = "off"
+            else:
+                override_value = None
             
             state = PersistedState(
                 target_temperature=self.config.target_temperature,
@@ -231,9 +310,9 @@ class ACController:
                 max_setpoint=self.config.max_setpoint,
                 cooldown_seconds=self.config.cooldown_seconds,
                 sensor_timeout=self.config.sensor_timeout,
-                override=self.state.override,
-                force_on_temperature=force_temp,
-                force_on_fan_speed=force_fan,
+                override=override_value,
+                force_on_temperature=manual_temp,
+                force_on_fan_speed=manual_fan,
                 current_sm_state=self._current_sm_state.value,
                 last_off_timestamp=self._last_off_time,
                 last_modulating_setpoint=self._last_modulating_setpoint,
@@ -319,14 +398,14 @@ class ACController:
     def _build_inputs(self, avg_temp: float | None, last_sensor_time: float) -> StateMachineInputs:
         """Builds inputs for state machine."""
         with self._lock:
-            override = self.state.override
-            force_params = self.state.force_on_params or ForceOnParams()
+            control_mode = self.state.control_mode
+            manual_params = self.state.manual_params or ManualParams()
 
-        # Map override string to ManualMode enum
-        if override == "off":
-            manual_mode = ManualMode.FORCE_OFF
-        elif override == "on":
-            manual_mode = ManualMode.FORCE_ON
+        # Map control_mode string to ManualMode enum
+        if control_mode == "off":
+            manual_mode = ManualMode.OFF
+        elif control_mode == "manual":
+            manual_mode = ManualMode.MANUAL
         else:
             manual_mode = ManualMode.AUTO
 
@@ -343,7 +422,7 @@ class ACController:
             average_temp=avg_temp,
             target_temp=self.config.target_temperature,
             manual_mode=manual_mode,
-            force_on_params=force_params,
+            manual_params=manual_params,
             seconds_since_last_off=seconds_since_off,
             seconds_since_last_sensor_update=seconds_since_sensor,
             consecutive_melcloud_failures=self._consecutive_melcloud_failures,
@@ -384,10 +463,10 @@ class ACController:
                 self._consecutive_melcloud_failures = 0
                 # Registrar apagado para cooldown
                 if not outputs.power and self._current_sm_state not in (
-                    ControllerState.OFF, ControllerState.COOLDOWN, ControllerState.FORCED_OFF
+                    ControllerState.OFF, ControllerState.COOLDOWN, ControllerState.SYSTEM_OFF
                 ):
                     self._last_off_time = time.time()
-                    logger.info("AC apagado. Cooldown de %ds iniciado.", COOLDOWN_SECONDS)
+                    logger.info("AC apagado. Cooldown de %ds iniciado.", self.config.cooldown_seconds)
                 elif outputs.power:
                     logger.info(
                         "AC encendido: consigna=%.1f°C, fan=%d",
@@ -439,6 +518,8 @@ class ACController:
         with self._lock:
             self.state.state = outputs.state.value
             self.state.setpoint = outputs.setpoint
+            self.state.ac_mode = outputs.mode
+            self.state.fan_speed = outputs.fan_speed
             self.state.average_temp = round(avg_temp, 2) if avg_temp else None
             self.state.average_humidity = round(avg_hum, 1) if avg_hum else None  # Guardamos para la API
             self.state.active_sensors = active_count
@@ -458,6 +539,29 @@ class ACController:
             # Limitar histórico
             if len(self.history) > 1000:
                 self.history = self.history[-500:]
+
+    def update_ac_real_cache(self, melcloud_data: dict):
+        """Updates AC real state cache from subscription manager data.
+        
+        Called by SubscriptionManager after fetching from MELCloud.
+        
+        Args:
+            melcloud_data: Raw data from MELCloud API
+        """
+        if melcloud_data is None:
+            return
+        
+        # Map MELCloud format to internal format
+        # OperationMode: 1=HEAT, 2=DRY, 3=COOL, 7=FAN, 8=AUTO
+        mode_map = {1: "heat", 2: "dry", 3: "cool", 7: "fan", 8: "auto"}
+        
+        with self._lock:
+            self.state.ac_real_power = melcloud_data.get("Power", False)
+            self.state.ac_real_mode = mode_map.get(melcloud_data.get("OperationMode"), "cool")
+            self.state.ac_real_fan_speed = melcloud_data.get("SetFanSpeed", 0)
+            self.state.ac_real_setpoint = melcloud_data.get("SetTemperature")
+            self.state.ac_real_room_temp = melcloud_data.get("RoomTemperature")
+            self.state.ac_real_last_update = time.time()
 
     # ===== Métodos de tracking de energía =====
 
