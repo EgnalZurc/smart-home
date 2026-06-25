@@ -1,4 +1,4 @@
-"""AC controller.
+﻿"""AC controller.
 
 Orchestrates the state machine, reads sensors, applies outputs via MELCloud.
 Decision logic is 100% in state_machine.py (pure function).
@@ -441,13 +441,13 @@ class ACController:
         )
 
     def _apply_outputs(self, outputs: StateMachineOutputs):
-        """Aplica los outputs al AC vía MELCloud si es necesario."""
-        # No actuar si estamos en ERROR
+        """Apply outputs to AC via MELCloud if necessary."""
+        # Don't act if we're in ERROR state
         if outputs.state == ControllerState.ERROR:
             self._current_sm_state = outputs.state
             return
 
-        # Detectar si los outputs cambiaron respecto al último envío
+        # Detect if outputs changed compared to last send
         needs_send = self._needs_melcloud_update(outputs)
 
         if needs_send:
@@ -461,7 +461,7 @@ class ACController:
 
             if success:
                 self._consecutive_melcloud_failures = 0
-                # Registrar apagado para cooldown
+                # Register shutdown for cooldown
                 if not outputs.power and self._current_sm_state not in (
                     ControllerState.OFF, ControllerState.COOLDOWN, ControllerState.SYSTEM_OFF
                 ):
@@ -483,15 +483,15 @@ class ACController:
         old_sm_state = self._current_sm_state
         self._current_sm_state = outputs.state
         
-        # Track energy transition si cambió el estado
+        # Track energy transition if state changed
         if old_sm_state != outputs.state:
             self._track_energy_transition(outputs.state.value)
 
-        # Guardar última consigna de modulación
+        # Save last modulation setpoint
         if outputs.state == ControllerState.MODULATING:
             self._last_modulating_setpoint = outputs.setpoint
 
-        # Guardar outputs para comparación en el próximo tick
+        # Save outputs for comparison in next tick
         self._last_outputs = outputs
 
     def _needs_melcloud_update(self, outputs: StateMachineOutputs) -> bool:
@@ -501,7 +501,7 @@ class ACController:
 
         last = self._last_outputs
 
-        # Si cambió power, modo, consigna o fan → enviar
+        # If power, mode, setpoint or fan changed → send
         if outputs.power != last.power:
             return True
         if outputs.mode != last.mode:
@@ -527,7 +527,7 @@ class ACController:
             self.state.sensor_alert = outputs.sensor_alert
             self.state.melcloud_error = outputs.melcloud_error
 
-            # Histórico
+            # History
             self.history.append(HistoryRecord(
                 timestamp=time.time(),
                 average_temp=round(avg_temp, 2) if avg_temp else None,
@@ -536,7 +536,7 @@ class ACController:
                 active_sensors=active_count,
             ))
 
-            # Limitar histórico
+            # Limit history
             if len(self.history) > 1000:
                 self.history = self.history[-500:]
 
@@ -563,10 +563,10 @@ class ACController:
             self.state.ac_real_room_temp = melcloud_data.get("RoomTemperature")
             self.state.ac_real_last_update = time.time()
 
-    # ===== Métodos de tracking de energía =====
+    # ===== Energy tracking methods =====
 
     def _track_energy_transition(self, new_state: str):
-        """Registra transición de estado para cálculo de energía."""
+        """Record state transition for energy calculation."""
         now = time.time()
         elapsed_hours = (now - self._energy_state['last_transition']) / 3600
         
@@ -589,7 +589,7 @@ class ACController:
             )
     
     def _get_power_for_state(self, state: str) -> float:
-        """Devuelve potencia en kW para un estado.
+        """Return power in kW for a state.
         
         Args:
             state: Estado del controlador
@@ -606,12 +606,12 @@ class ACController:
         return power_map.get(state, 0.0)
     
     def get_session_kwh(self) -> float:
-        """Devuelve kWh consumidos en la sesión actual (desde último registro).
+        """Return kWh consumed in current session (since last record).
         
         Returns:
             kWh acumulados en la sesión
         """
-        # Añadir consumo del estado actual hasta ahora
+        # Add current state consumption until now
         now = time.time()
         elapsed_hours = (now - self._energy_state['last_transition']) / 3600
         power_kw = self._get_power_for_state(self._energy_state['last_state'])
@@ -620,7 +620,7 @@ class ACController:
         return total
     
     def reset_session_kwh(self):
-        """Resetea contador de sesión (llamado tras registro horario)."""
-        logger.info("Reseteando sesión de energía (acumulado: %.4f kWh)", self._energy_state['kwh_session'])
+        """Reset session counter (called after hourly log)."""
+        logger.info("Resetting energy session (accumulated: %.4f kWh)", self._energy_state['kwh_session'])
         self._energy_state['kwh_session'] = 0.0
         self._energy_state['last_transition'] = time.time()

@@ -1,12 +1,12 @@
-"""Tests unitarios de la máquina de estados del controlador AC.
+﻿"""Unit tests for the AC controller state machine.
 
-Cubren todas las transiciones, corner cases y reglas transversales.
+Cover all transitions, corner cases and cross-cutting rules.
 """
 
 import sys
 from pathlib import Path
 
-# Añadir el directorio del backend al path
+# Add backend directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "controllers"))
 
@@ -116,7 +116,7 @@ class TestStateOff:
         assert result.power is False
 
     def test_stays_off_when_in_dead_zone(self):
-        # 23.3 está entre obj-0.3 (22.7) y obj+0.5 (23.5)
+        # 23.3 is between target-0.3 (22.7) and target+0.5 (23.5)
         result = evaluate(ControllerState.OFF, make_inputs(average_temp=23.3), DEFAULT_CONFIG)
         assert result.state == ControllerState.OFF
         assert result.power is False
@@ -156,7 +156,7 @@ class TestStateCoolingMax:
         assert result.fan_speed == 3
 
     def test_transitions_to_modulating_in_dead_zone(self):
-        # 23.0 está entre 22.7 y 23.5
+        # 23.0 is between 22.7 and 23.5
         result = evaluate(ControllerState.COOLING_MAX, make_inputs(average_temp=23.0), DEFAULT_CONFIG)
         assert result.state == ControllerState.MODULATING
         assert result.power is True
@@ -211,14 +211,14 @@ class TestStateModulating:
         assert result.setpoint == 25.5
 
     def test_setpoint_proportional_near_hot_edge(self):
-        # 23.4 muy cerca de hot (23.5) → consigna baja (más potencia)
+        # 23.4 very close to hot (23.5) → low setpoint (more power)
         result = evaluate(ControllerState.MODULATING, make_inputs(average_temp=23.4), DEFAULT_CONFIG)
-        assert result.setpoint < 22.0  # Cerca del mínimo
+        assert result.setpoint < 22.0  # Close to minimum
 
     def test_setpoint_proportional_near_cold_edge(self):
-        # 22.8 muy cerca de cold (22.7) → consigna alta (menos potencia)
+        # 22.8 very close to cold (22.7) → high setpoint (less power)
         result = evaluate(ControllerState.MODULATING, make_inputs(average_temp=22.8), DEFAULT_CONFIG)
-        assert result.setpoint > 27.0  # Cerca del máximo
+        assert result.setpoint > 27.0  # Close to maximum
 
 
 # =============================================================================
@@ -338,12 +338,12 @@ class TestManualOverride:
             make_inputs(average_temp=26.0, seconds_since_last_off=0.0),  # 0s desde apagado
             DEFAULT_CONFIG,
         )
-        # Debería ir a COOLING_MAX directamente, sin cooldown
+        # Should go to COOLING_MAX directly, without cooldown
         assert result.state == ControllerState.COOLING_MAX
         assert result.power is True
 
     def test_return_to_auto_from_forced_on_cold(self):
-        """Al volver a auto desde FORCED_ON con casa fría, va a OFF."""
+        """When returning to auto from FORCED_ON with cold house, goes to OFF."""
         result = evaluate(
             ControllerState.FORCED_ON,
             make_inputs(average_temp=22.0),
@@ -404,7 +404,7 @@ class TestMelCloudError:
 # =============================================================================
 
 class TestSensorAlert:
-    """Alerta cuando no hay actualización en 60 minutos."""
+    """Alert when no update in 60 minutes."""
 
     def test_no_alert_when_recent(self):
         result = evaluate(
@@ -439,7 +439,7 @@ class TestSensorAlert:
 # =============================================================================
 
 class TestProportionalSetpoint:
-    """Cálculo de la consigna proporcional."""
+    """Proportional setpoint calculation."""
 
     def test_at_cold_edge_returns_max_setpoint(self):
         # avg = obj - 0.3 = 22.7 → position=0 → setpoint=30
@@ -457,7 +457,7 @@ class TestProportionalSetpoint:
         assert setpoint == 24.5
 
     def test_clamped_below_min(self):
-        # Si somehow avg está fuera del rango, debe clampear
+        # If somehow avg is out of range, must clamp
         setpoint = _calculate_proportional_setpoint(24.0, 23.0, DEFAULT_CONFIG)
         assert setpoint >= 19.0
 
@@ -503,7 +503,7 @@ class TestAlwaysCool:
 # =============================================================================
 
 class TestDeterminism:
-    """La máquina de estados es determinista."""
+    """The state machine is deterministic."""
 
     def test_same_inputs_same_outputs(self):
         inputs = make_inputs(average_temp=25.0)
