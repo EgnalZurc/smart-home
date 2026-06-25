@@ -14,7 +14,7 @@
     "mode": "Modo",
     "power": "Fuerza",
     "setpoint": "Consigna",
-    "thermostat": "Termóst."
+    "thermostat": "Term?st."
   },
   "controller": {
     "title": "Controlador",
@@ -40,8 +40,8 @@
       "title": "Modo Manual",
       "mode": "Modo AC",
       "modes": {
-        "cool": "❄️ Frío",
-        "heat": "🔥 Calor"
+        "cool": "?? Fr?o",
+        "heat": "?? Calor"
       },
       "power": "Ventilador",
       "powerLevels": {
@@ -55,8 +55,8 @@
       "confirm": "Aplicar"
     },
     "forceOff": {
-      "title": "¿Apagar el sistema?",
-      "message": "El AC se apagará completamente. Para volver a usar el control automático, pulsa AUTO.",
+      "title": "?Apagar el sistema?",
+      "message": "El AC se apagar? completamente. Para volver a usar el control autom?tico, pulsa AUTO.",
       "cancel": "Cancelar",
       "confirm": "Apagar"
     },
@@ -67,11 +67,25 @@
       "close": "Cerrar",
       "online": "Online",
       "offline": "Offline",
-      "battery": "Batería",
-      "lastSeen": "Última medición"
+      "battery": "Bater?a",
+      "lastSeen": "?ltima medici?n"
     }
   },
   "chart": {
     "average": "Media"
+  },
+  "toast": {
+    "targetSet":       "Objetivo: {{value}}?C",
+    "targetError":     "Error al actualizar la temperatura objetivo",
+    "modeSet":         "Modo cambiado a {{value}}",
+    "modeError":       "Error al cambiar el modo",
+    "fanSet":          "Velocidad ventilador: {{value}}",
+    "fanError":        "Error al cambiar la velocidad del ventilador",
+    "setpointSet":     "Consigna AC: {{value}}?C",
+    "setpointError":   "Error al cambiar la consigna",
+    "controlModeSet":  "Modo de control: {{value}}",
+    "controlModeError":"Error al cambiar el modo de control",
+    "connectionLost":  "Conexi?n perdida",
+    "invalidTemp":     "La temperatura debe estar entre 19 y 30?C"
   }
 }

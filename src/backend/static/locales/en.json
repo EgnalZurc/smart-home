@@ -40,8 +40,8 @@
       "title": "Manual Mode",
       "mode": "AC Mode",
       "modes": {
-        "cool": "❄️ Cool",
-        "heat": "🔥 Heat"
+        "cool": "?? Cool",
+        "heat": "?? Heat"
       },
       "power": "Fan",
       "powerLevels": {
@@ -73,5 +73,19 @@
   },
   "chart": {
     "average": "Average"
+  },
+  "toast": {
+    "targetSet":       "Target set to {{value}}?C",
+    "targetError":     "Failed to update target temperature",
+    "modeSet":         "Mode changed to {{value}}",
+    "modeError":       "Failed to change mode",
+    "fanSet":          "Fan speed: {{value}}",
+    "fanError":        "Failed to change fan speed",
+    "setpointSet":     "AC setpoint: {{value}}?C",
+    "setpointError":   "Failed to change setpoint",
+    "controlModeSet":  "Control mode: {{value}}",
+    "controlModeError":"Failed to change control mode",
+    "connectionLost":  "Connection lost",
+    "invalidTemp":     "Temperature must be between 19 and 30?C"
   }
 }

@@ -2,21 +2,28 @@
 import { fetchStatus, fetchSensors, fetchOutdoor } from './services/api.js';
 import { loadHistory, updateHistory }              from './services/sensorHistory.js';
 import { updateAvgTemp, updateOutdoor, updateSensorsCount, updateSensorsDetail, openModal, closeModal } from './components/avgTemp.js';
-import { updateAcState, editMode, editFanSpeed, editSetpoint, manualQueue } from './components/acState.js';
+import { updateAcState, editMode, editFanSpeed, editSetpoint } from './components/acState.js';
 import { updateController, changeTarget }          from './components/controller.js';
 import { syncControlMode, setControlMode }         from './components/manualControl.js';
 import { initCharts, updateTempChart, updateHumChart } from './components/charts.js';
 import { updateConnectionStatus, toggleLanguageMenu, selectLanguage, initLanguageDropdown } from './components/header.js';
 import { showToast }                               from './components/toast.js';
 
-// i18n is loaded as a global by i18n.js (legacy script tag)
 const i18n = window.i18n;
+
+let _wasConnected = true; // track connection state for toast on reconnect/disconnect
 
 // ?? Poll ????????????????????????????????????????????????????????????????????
 async function poll() {
     try {
         const [status, sensData] = await Promise.all([fetchStatus(), fetchSensors()]);
         const sensors = sensData.sensors || [];
+
+        // Toast on connection state change
+        if (!_wasConnected) {
+            // Reconnected ? no toast needed, status dot is enough
+            _wasConnected = true;
+        }
 
         updateAvgTemp(status);
         updateConnectionStatus(status.mqtt_connected, i18n);
@@ -27,7 +34,7 @@ async function poll() {
         try {
             const out = await fetchOutdoor();
             updateOutdoor(out, i18n);
-        } catch { /* outdoor optional */ }
+        } catch { /* outdoor is optional, no toast */ }
 
         await updateHistory();
         updateSensorsCount(sensors);
@@ -39,6 +46,11 @@ async function poll() {
         console.error('Poll error:', err);
         document.getElementById('status-line').textContent = 'Error';
         document.getElementById('status-dot').className = 'w-1.5 h-1.5 rounded-full bg-red-400';
+        // Only show toast once when connection is lost, not on every failed poll
+        if (_wasConnected) {
+            showToast(i18n.t('toast.connectionLost'), 'error', 5000);
+            _wasConnected = false;
+        }
     }
 }
 
@@ -52,13 +64,12 @@ async function poll() {
 })();
 
 // ?? Global handlers (called from HTML onclick) ???????????????????????????????
-// These are exposed on window so the HTML onclick attributes still work.
-window.openModal     = openModal;
-window.closeModal    = closeModal;
-window.changeTarget  = changeTarget;
+window.openModal      = openModal;
+window.closeModal     = closeModal;
+window.changeTarget   = changeTarget;
 window.setControlMode = mode => setControlMode(mode);
-window.editMode      = () => editMode(i18n);
-window.editFanSpeed  = () => editFanSpeed(i18n);
-window.editSetpoint  = () => editSetpoint(i18n);
+window.editMode       = () => editMode(i18n);
+window.editFanSpeed   = () => editFanSpeed(i18n);
+window.editSetpoint   = () => editSetpoint(i18n);
 window.toggleLanguageMenu = toggleLanguageMenu;
 window.selectLanguage     = locale => selectLanguage(locale, i18n);
