@@ -11,7 +11,7 @@ export function updateControlModeButtons() {
     };
     const inactive = 'btn-control py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent';
     for (const [mode, id] of [['auto','btn-auto'],['manual','btn-manual'],['off','btn-off']]) {
-        document.getElementById(id).className = currentControlMode === mode — activeClasses[mode] : inactive;
+        document.getElementById(id).className = currentControlMode === mode ? activeClasses[mode] : inactive;
     }
 }
 

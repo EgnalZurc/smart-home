@@ -44,16 +44,16 @@ export function updateAcState(status, i18n) {
     // Enable/disable param boxes based on control mode
     const isManual = control_mode === 'manual';
     ['ac-mode-box', 'ac-fan-box', 'ac-setpoint-box'].forEach(id => {
-        document.getElementById(id).style.cursor = isManual — 'pointer' : 'default';
+        document.getElementById(id).style.cursor = isManual ? 'pointer' : 'default';
     });
 }
 
 export function editMode(i18n) {
     const current = manualQueue.lastAcknowledged.mode;
-    const newMode = current === 'cool' — 'heat' : 'cool';
+    const newMode = current === 'cool' ? 'heat' : 'cool';
     const box = document.getElementById('ac-mode-box');
     const modeLabel = newMode === 'cool'
-        — i18n.t('modals.forceOn.modes.cool')
+        ? i18n.t('modals.forceOn.modes.cool')
         : i18n.t('modals.forceOn.modes.heat');
 
     manualQueue.enqueue(
@@ -118,7 +118,7 @@ export function editSetpoint(i18n) {
 
 export function updateModeDisplay(mode, i18n) {
     document.getElementById('ac-mode-display').textContent = mode === 'cool'
-        — i18n.t('modals.forceOn.modes.cool')
+        ? i18n.t('modals.forceOn.modes.cool')
         : i18n.t('modals.forceOn.modes.heat');
 }
 

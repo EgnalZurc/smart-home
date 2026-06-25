@@ -37,14 +37,14 @@ export function updateSensorsDetail(sensors, i18n) {
     const el = document.getElementById('sensors-detail');
     el.innerHTML = sensors.map((s, i) => {
         const dot = s.online
-            — `<span class="w-2.5 h-2.5 rounded-full inline-block shadow-sm" style="background:${SENSOR_COLORS[i % SENSOR_COLORS.length]}"></span>`
+            ? `<span class="w-2.5 h-2.5 rounded-full inline-block shadow-sm" style="background:${SENSOR_COLORS[i % SENSOR_COLORS.length]}"></span>`
             : '<span class="w-2.5 h-2.5 rounded-full inline-block bg-slate-600"></span>';
-        const temp     = s.temperature !== null — s.temperature.toFixed(1) + '°C' : '--';
-        const hum      = s.humidity    !== null — s.humidity.toFixed(0) + '%'      : '--';
-        const bat      = s.battery     !== null — s.battery + '%'                  : '--';
+        const temp     = s.temperature !== null ? s.temperature.toFixed(1) + '°C' : '--';
+        const hum      = s.humidity    !== null ? s.humidity.toFixed(0) + '%'      : '--';
+        const bat      = s.battery     !== null ? s.battery + '%'                  : '--';
         const tColor   = tempColor(s.temperature);
         const hColor   = humColor(s.humidity);
-        const batColor = s.battery !== null && s.battery < 20 — '#ef4444' : '#64748b';
+        const batColor = s.battery !== null && s.battery < 20 ? '#ef4444' : '#64748b';
 
         let lastSeenText = '--';
         if (s.timestamp != null) {

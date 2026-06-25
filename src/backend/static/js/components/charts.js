@@ -69,7 +69,7 @@ function _updateChart(instance, sensors, field, avgLabel) {
         const h = chartData[s.name] || [];
         const map = {};
         h.forEach(p => { map[p.time] = p.value; });
-        return sortedTimes.map(t => map[t] !== undefined — map[t] : null);
+        return sortedTimes.map(t => map[t] !== undefined ? map[t] : null);
     });
 
     // Average using last-known value per sensor
@@ -80,7 +80,7 @@ function _updateChart(instance, sensors, field, avgLabel) {
             return last;
         }).filter(v => v !== null);
         return values.length
-            — Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10
+            ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10
             : null;
     });
 
