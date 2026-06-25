@@ -12,7 +12,6 @@ export async function loadHistory() {
     for (const [name, readings] of Object.entries(raw)) {
         data[name] = readings.map(r => ({ timestamp: r.timestamp, temp: r.temperature, hum: r.humidity }));
     }
-    // Track most recent timestamp
     for (const readings of Object.values(data)) {
         for (const r of readings) {
             if (r.timestamp > lastTimestamp) lastTimestamp = r.timestamp;
@@ -35,17 +34,15 @@ export async function updateHistory() {
     }
 }
 
-// Returns { sensorName: [{time: string, value: number}] } for a given field ('temp'|'hum')
+// Returns { sensorName: [{ts: number(ms), value: number}] } for a given field
+// ts is epoch milliseconds — charts.js uses it to format labels smartly
 export function getChartData(field) {
     const result = {};
     for (const [name, readings] of Object.entries(data)) {
-        result[name] = readings.map(r => {
-            const d = new Date(r.timestamp * 1000);
-            const day   = d.getDate().toString().padStart(2, '0');
-            const month = (d.getMonth() + 1).toString().padStart(2, '0');
-            const time  = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-            return { time: `${day}/${month} ${time}`, value: r[field] };
-        });
+        result[name] = readings.map(r => ({
+            ts: r.timestamp * 1000,   // convert to ms for Date()
+            value: r[field],
+        }));
     }
     return result;
 }
