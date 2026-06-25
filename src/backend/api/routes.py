@@ -1,4 +1,4 @@
-"""REST API endpoints for the Web UI."""
+﻿"""REST API endpoints for the Web UI."""
 
 import time
 
@@ -209,7 +209,8 @@ def set_control_mode(req: ControlModeRequest):
         )
 
     ac_controller.set_control_mode(req.mode)
-    return {"status": "ok", "control_mode": req.mode}
+    success_msg = get_translation("success.mode_changed", locale)
+    return {"status": "ok", "control_mode": req.mode, "message": success_msg}
 
 
 @router.post("/manual_params")
