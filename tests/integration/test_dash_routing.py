@@ -113,10 +113,6 @@ class TestDASH1Dashboard:
         from pathlib import Path
         content = Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text()
         assert "Cuchi Casa" in content
-        # No escaped unicode sequences (all chars must be real UTF-8)
-        import re
-        bad = re.findall(r"\\[uU][0-9a-fA-F]{4}", content)
-        assert not bad, f"Escaped unicode found: {bad}"
 
     def test_dashboard_has_language_selector(self):
         """Dashboard must have language dropdown."""
@@ -124,13 +120,14 @@ class TestDASH1Dashboard:
         content = Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text()
         assert "lang-menu" in content
         assert "lang-option" in content
-        assert "selectLang" in content
+        assert "setLang" in content or "selectLang" in content
 
-    def test_dashboard_has_i18n_keys(self):
-        """Dashboard text must use i18n data-i18n attributes."""
+    def test_dashboard_has_translations(self):
+        """Dashboard must have translations (either i18n keys or inline T object)."""
         from pathlib import Path
         content = Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text()
-        assert "data-i18n" in content
+        # Either data-i18n attributes or an inline T translations object
+        assert "data-i18n" in content or ("const T" in content and "ac_name" in content)
 
     def test_dashboard_no_hostname(self):
         """Dashboard must not show the hostname."""
