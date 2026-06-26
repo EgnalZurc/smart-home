@@ -90,6 +90,16 @@
             animation: spin 0.8s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+        /* Pending AC command indicator (F0.37) */
+        #pending-indicator {
+            display: none;
+            animation: pendingPulse 1.2s ease-in-out infinite;
+        }
+        #pending-indicator.active { display: inline-flex; }
+        @keyframes pendingPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%       { opacity: 0.5; transform: scale(0.9); }
+        }
         /* Toast */
         .notification-toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(100px); background: rgba(30,41,59,0.95); border: 1px solid rgba(100,116,139,0.5); padding: 12px 20px; border-radius: 12px; z-index: 9999; opacity: 0; transition: all 0.3s ease; backdrop-filter: blur(10px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
         .notification-toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
@@ -143,6 +153,10 @@
         <div class="flex justify-between items-center mb-3">
             <p class="text-slate-400 text-[11px] uppercase tracking-wider" data-i18n="controller.title">Controller</p>
             <div class="flex items-center gap-2">
+                <!-- Pending AC command indicator (F0.37) -->
+                <span id="pending-indicator" class="items-center gap-1 text-[10px] text-amber-400 font-medium" title="Sending command to AC...">
+                    <span class="text-sm">⏳</span>
+                </span>
                 <span class="text-sm font-bold tracking-wide" id="ac-real-power">--</span>
                 <span class="text-xs font-bold px-2 py-0.5 rounded-full" id="controller-decision">--</span>
             </div>
