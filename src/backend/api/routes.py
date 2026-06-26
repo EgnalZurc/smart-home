@@ -12,6 +12,7 @@ ac_controller = None
 energy_tracker = None
 subscription_manager = None
 error_tracker = None  # F0.30
+humidity_scheduler = None  # HUM-0
 
 # Injected configurations
 outdoor_cache_ttl = 600
@@ -417,6 +418,25 @@ def get_errors():
         return {"errors": [], "has_errors": False}
     active = error_tracker.get_active()
     return {"errors": active, "has_errors": bool(active)}
+
+
+@router.get("/humidity/study")
+def get_humidity_study():
+    """Humidity study data for humidifier decision (HUM-0, 3-week analysis)."""
+    from humidity_analysis import get_summary
+    summary = get_summary()
+    if summary is None:
+        return {"status": "no_data", "message": "Analysis not started yet. Check back in 24h."}
+    return summary
+
+
+@router.post("/humidity/study/run")
+def trigger_humidity_analysis():
+    """Manually trigger a humidity analysis snapshot (for testing)."""
+    if humidity_scheduler is None:
+        return {"status": "error", "message": "Humidity scheduler not initialized"}
+    humidity_scheduler.run_now()
+    return {"status": "ok", "message": "Analysis triggered"}
 
 @router.get("/energy/current")
 def get_energy_current():

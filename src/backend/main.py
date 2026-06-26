@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from api import routes
+from humidity_analysis import HumidityAnalysisScheduler
 from error_tracker import ErrorTracker
 from cleanup import CleanupScheduler
 from controllers.ac_controller import ACController, ControlConfig
@@ -109,12 +110,13 @@ ac_controller: ACController | None = None
 cleanup_scheduler: CleanupScheduler | None = None
 subscription_manager: SubscriptionManager | None = None
 error_tracker: ErrorTracker | None = None
+humidity_scheduler: HumidityAnalysisScheduler | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle."""
-    global mqtt_handler, melcloud_client, ac_controller, cleanup_scheduler, subscription_manager, error_tracker
+    global mqtt_handler, melcloud_client, ac_controller, cleanup_scheduler, subscription_manager, error_tracker, humidity_scheduler
 
     # F0.30 - Create error tracker first (other components need it)
     error_tracker = ErrorTracker()
@@ -267,6 +269,15 @@ async def lifespan(app: FastAPI):
     )
     cleanup_scheduler.start()
 
+    # HUM-0: Start daily humidity analysis (3-week study)
+    humidity_scheduler = HumidityAnalysisScheduler(
+        mqtt_handler=mqtt_handler,
+        interval_seconds=int(os.environ.get("HUMIDITY_ANALYSIS_INTERVAL", str(24 * 3600))),
+        grace_period_seconds=int(os.environ.get("HUMIDITY_GRACE_PERIOD", "300")),
+    )
+    humidity_scheduler.start()
+    routes.humidity_scheduler = humidity_scheduler
+
     logger.info("=== Smart Home Backend ready ===")
 
     yield
@@ -274,6 +285,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("=== Shutting down Smart Home Backend ===")
     cleanup_scheduler.stop()
+    humidity_scheduler.stop()
     subscription_manager.stop()
     ac_controller.stop()
     mqtt_handler.stop()
