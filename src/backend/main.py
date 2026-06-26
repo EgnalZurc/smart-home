@@ -272,7 +272,7 @@ async def lifespan(app: FastAPI):
     # HUM-0: Start daily humidity analysis (3-week study)
     humidity_scheduler = HumidityAnalysisScheduler(
         mqtt_handler=mqtt_handler,
-        interval_seconds=int(os.environ.get("HUMIDITY_ANALYSIS_INTERVAL", str(24 * 3600))),
+        sample_interval_seconds=int(os.environ.get("HUMIDITY_ANALYSIS_INTERVAL", str(1 * 3600))),
         grace_period_seconds=int(os.environ.get("HUMIDITY_GRACE_PERIOD", "300")),
     )
     humidity_scheduler.start()
