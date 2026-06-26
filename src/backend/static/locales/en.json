@@ -88,5 +88,17 @@
     "controlModeError": "Failed to change control mode",
     "connectionLost": "Connection lost",
     "invalidTemp": "Temperature must be between 19 and 30°C"
+  },
+  "dashboard": {
+    "title": "Cuchi Casa",
+    "applications": "Applications",
+    "connected": "Connected",
+    "offline": "Offline",
+    "apps": {
+      "ac": {
+        "name": "AC Control",
+        "desc": "Temperature control, Zigbee sensors, MELCloud"
+      }
+    }
   }
 }

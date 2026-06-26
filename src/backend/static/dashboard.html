@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Home</title>
+    <title>Cuchi Casa</title>
     <link rel="icon" href="/static/favicon.ico">
     <meta name="theme-color" content="#0f172a">
     <link rel="stylesheet" href="/static/tailwind.css">
@@ -13,145 +13,153 @@
             background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9));
             border: 1px solid rgba(51,65,85,0.5);
             backdrop-filter: blur(10px);
-            transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.2s ease;
+            transition: transform 0.15s ease, border-color 0.2s ease;
             text-decoration: none;
             display: block;
         }
         .app-card:active { transform: scale(0.97); }
         @media (hover: hover) {
             .app-card:hover {
-                border-color: rgba(99,102,241,0.5);
-                box-shadow: 0 8px 32px rgba(99,102,241,0.15);
-                transform: translateY(-2px);
+                border-color: rgba(99,102,241,0.4);
+                transform: translateY(-1px);
             }
         }
         .status-dot { animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        .fade-in { animation: fadeIn 0.4s ease; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        .app-icon {
-            width: 52px; height: 52px;
-            border-radius: 14px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.6rem;
-        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .fade-in { animation: fadeIn 0.35s ease; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        /* Language dropdown (same as AC app) */
+        .lang-dropdown { position: relative; }
+        .flag-img { width: 24px; height: 16px; object-fit: cover; border-radius: 2px; display: block; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .lang-current { padding: 4px; border-radius: 6px; cursor: pointer; border: 2px solid rgba(100,116,139,0.3); background: rgba(30,41,59,0.4); transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; }
+        .lang-current:hover { border-color: rgba(59,130,246,0.5); background: rgba(59,130,246,0.1); transform: scale(1.05); }
+        .lang-menu { position: absolute; top: calc(100% + 8px); right: 0; background: rgba(30,41,59,0.95); border: 1px solid rgba(100,116,139,0.4); border-radius: 8px; padding: 4px; display: none; flex-direction: column; gap: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); backdrop-filter: blur(10px); z-index: 1000; min-width: 50px; }
+        .lang-menu.open { display: flex; }
+        .lang-option { padding: 4px; border-radius: 4px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; border: 2px solid transparent; }
+        .lang-option:hover { background: rgba(59,130,246,0.2); border-color: rgba(59,130,246,0.4); }
+        .lang-option.active { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.5); }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
 
-<div class="max-w-md mx-auto px-4 pt-8 pb-12 fade-in">
+<div class="max-w-md mx-auto px-4 pt-7 pb-12 fade-in">
 
-    <!-- Header -->
-    <header class="mb-8">
-        <div class="flex items-center gap-3 mb-1">
-            <span class="text-3xl">\U0001f3e0</span>
-            <h1 class="text-2xl font-bold tracking-tight">Smart Home</h1>
+    <!-- Header: title + language selector -->
+    <header class="flex items-center justify-between mb-8">
+        <h1 class="text-xl font-bold tracking-tight" data-i18n="dashboard.title">Cuchi Casa</h1>
+        <div class="lang-dropdown">
+            <div class="lang-current" onclick="toggleLang()" id="lang-btn">
+                <img id="current-flag" src="/static/flags/gb.svg" alt="Language" class="flag-img">
+            </div>
+            <div class="lang-menu" id="lang-menu">
+                <div class="lang-option" onclick="selectLang('en')" data-lang="en" title="English">
+                    <img src="/static/flags/gb.svg" alt="English" class="flag-img">
+                </div>
+                <div class="lang-option" onclick="selectLang('es')" data-lang="es" title="Español">
+                    <img src="/static/flags/es.svg" alt="Español" class="flag-img">
+                </div>
+            </div>
         </div>
-        <p class="text-slate-500 text-sm pl-1">raspberrypi.tailaa37cd.ts.net</p>
     </header>
 
-    <!-- Apps section -->
+    <!-- App list -->
     <section>
-        <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-3 px-1">Applications</p>
-        <div id="apps-grid" class="space-y-3">
-
-            <!-- AC Control -->
-            <a href="/smart-home/ac" class="app-card rounded-2xl p-4">
-                <div class="flex items-center gap-4">
-                    <div class="app-icon" style="background: linear-gradient(135deg, rgba(96,165,250,0.2), rgba(59,130,246,0.1)); border: 1px solid rgba(96,165,250,0.3);">
-                        \u2744\ufe0f
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center justify-between mb-0.5">
-                            <h2 class="text-sm font-semibold">AC Control</h2>
-                            <span id="ac-status" class="text-[10px] text-slate-500 flex items-center gap-1">
-                                <span class="status-dot w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span>
-                                <span>checking...</span>
-                            </span>
-                        </div>
-                        <p class="text-[11px] text-slate-400 truncate">Temperature control \u00b7 Zigbee sensors \u00b7 MELCloud</p>
-                        <p class="text-[10px] text-slate-600 mt-0.5">/smart-home/ac</p>
-                    </div>
-                    <span class="text-slate-600 text-lg">\u203a</span>
-                </div>
-            </a>
-
-            <!-- Placeholder for future apps -->
-            <div class="rounded-2xl p-4 border border-dashed border-slate-700/50 flex items-center gap-4 opacity-40">
-                <div class="app-icon bg-slate-800/60 border border-slate-700/50">
-                    <span class="text-slate-500 text-xl">+</span>
-                </div>
-                <div>
-                    <p class="text-sm font-medium text-slate-500">More apps coming</p>
-                    <p class="text-[11px] text-slate-600">Photos, humidity control...</p>
-                </div>
-            </div>
-
-        </div>
-    </section>
-
-    <!-- System status -->
-    <section class="mt-8">
-        <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-3 px-1">System</p>
-        <div style="background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9)); border: 1px solid rgba(51,65,85,0.5);" class="rounded-2xl p-4">
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Sensors</p>
-                    <p class="text-sm font-semibold" id="sys-sensors">--</p>
-                </div>
-                <div>
-                    <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Avg Temp</p>
-                    <p class="text-sm font-semibold" id="sys-temp">--</p>
-                </div>
-                <div>
-                    <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">AC State</p>
-                    <p class="text-sm font-semibold" id="sys-ac">--</p>
-                </div>
-                <div>
-                    <p class="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Outdoor</p>
-                    <p class="text-sm font-semibold" id="sys-outdoor">--</p>
-                </div>
-            </div>
-        </div>
+        <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-3 px-1" data-i18n="dashboard.applications">Applications</p>
+        <div id="apps-list" class="space-y-2"></div>
     </section>
 
 </div>
 
+<!-- i18n -->
+<script src="/static/i18n.js"></script>
 <script>
-// Fetch AC status to show live data on dashboard
-async function loadStatus() {
-    try {
-        const [status, outdoor] = await Promise.all([
-            fetch('/api/status').then(r => r.json()),
-            fetch('/api/outdoor').then(r => r.json()).catch(() => null),
-        ]);
+// ── App Registry ──────────────────────────────────────────────────────────────
+// Add new apps here. Each entry is rendered as a card automatically.
+const APPS = [
+    {
+        key:       'ac',
+        url:       '/smart-home/ac',
+        nameKey:   'dashboard.apps.ac.name',
+        descKey:   'dashboard.apps.ac.desc',
+        statusUrl: '/api/status',
+        getStatus: (data) => data?.mqtt_connected,
+    },
+];
 
-        // AC card status
-        const dot = document.querySelector('#ac-status .status-dot');
-        const label = document.querySelector('#ac-status span:last-child');
-        const connected = status.mqtt_connected;
-        dot.className = `status-dot w-1.5 h-1.5 rounded-full inline-block ${connected ? 'bg-green-500' : 'bg-red-400'}`;
-        label.textContent = connected ? 'Connected' : 'Offline';
+// ── Language ──────────────────────────────────────────────────────────────────
+function toggleLang() {
+    document.getElementById('lang-menu').classList.toggle('open');
+}
 
-        // System stats
-        document.getElementById('sys-sensors').textContent =
-            `${status.ac_state?.active_sensors ?? '--'}/${status.ac_state?.total_sensors ?? '--'}`;
-        const avg = status.average_temperature;
-        document.getElementById('sys-temp').textContent = avg !== null ? `${avg.toFixed(1)}\u00b0C` : '--';
-        const action = status.ac_state?.action;
-        const labels = { cooling_max: 'Cooling Max', modulating: 'Modulating', off: 'Off',
-                         cooldown: 'Cooldown', manual: 'Manual', system_off: 'System Off' };
-        document.getElementById('sys-ac').textContent = labels[action] || action || '--';
-        const out = outdoor?.temperature;
-        document.getElementById('sys-outdoor').textContent = out !== null && out !== undefined ? `${out.toFixed(1)}\u00b0C` : '--';
+function selectLang(locale) {
+    document.getElementById('lang-menu').classList.remove('open');
+    const flags = { en: '/static/flags/gb.svg', es: '/static/flags/es.svg' };
+    document.getElementById('current-flag').src = flags[locale];
+    document.querySelectorAll('.lang-option').forEach(o => {
+        o.classList.toggle('active', o.dataset.lang === locale);
+    });
+    i18n.switchLocale(locale);
+    // Re-render app cards with new locale
+    renderApps();
+}
 
-    } catch {
-        document.querySelector('#ac-status span:last-child').textContent = 'Offline';
+document.addEventListener('click', e => {
+    const dd = document.querySelector('.lang-dropdown');
+    if (dd && !dd.contains(e.target)) document.getElementById('lang-menu').classList.remove('open');
+});
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderApps() {
+    const list = document.getElementById('apps-list');
+    list.innerHTML = APPS.map(app => `
+        <a href="${app.url}" class="app-card rounded-2xl px-4 py-3.5">
+            <div class="flex items-center justify-between">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-0.5">
+                        <span class="text-sm font-semibold">${i18n.t(app.nameKey)}</span>
+                        <span id="status-${app.key}" class="flex items-center gap-1 text-[10px] text-slate-500">
+                            <span class="status-dot w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span>
+                            <span>—</span>
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 truncate">${i18n.t(app.descKey)}</p>
+                </div>
+                <span class="text-slate-600 ml-3">&rsaquo;</span>
+            </div>
+        </a>
+    `).join('');
+}
+
+// ── Live status ───────────────────────────────────────────────────────────────
+async function refreshStatus() {
+    for (const app of APPS) {
+        try {
+            const data = await fetch(app.statusUrl).then(r => r.json());
+            const online = app.getStatus(data);
+            const el = document.getElementById('status-' + app.key);
+            if (!el) continue;
+            const dot = el.querySelector('span:first-child');
+            const label = el.querySelector('span:last-child');
+            dot.className = `status-dot w-1.5 h-1.5 rounded-full inline-block ${online ? 'bg-green-500' : 'bg-red-400'}`;
+            label.textContent = i18n.t(online ? 'dashboard.connected' : 'dashboard.offline');
+        } catch { /* offline */ }
     }
 }
 
-loadStatus();
-setInterval(loadStatus, 10000);
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async function init() {
+    await window.i18nReady;
+    // Sync flag with loaded locale
+    const flags = { en: '/static/flags/gb.svg', es: '/static/flags/es.svg' };
+    const locale = i18n.currentLocale || 'en';
+    document.getElementById('current-flag').src = flags[locale] || flags.en;
+    document.querySelectorAll('.lang-option').forEach(o => {
+        o.classList.toggle('active', o.dataset.lang === locale);
+    });
+    renderApps();
+    await refreshStatus();
+    setInterval(refreshStatus, 10000);
+})();
 </script>
 </body>
 </html>

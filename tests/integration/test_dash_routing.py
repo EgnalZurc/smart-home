@@ -91,21 +91,68 @@ class TestDASH1Dashboard:
         dashboard = Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html")
         assert dashboard.exists(), "dashboard.html not found"
         content = dashboard.read_text(encoding="utf-8")
-        assert "Smart Home" in content
-        assert "AC Control" in content
+        assert "Cuchi Casa" in content
+        assert "AC Control" in content or "dashboard.apps.ac" in content
         assert "/smart-home/ac" in content
 
     def test_dashboard_has_app_links(self):
-        """Dashboard must contain links to all apps."""
+        """Dashboard must contain links to all apps via APPS registry."""
         from pathlib import Path
         content = Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text()
         assert "/smart-home/ac" in content
+        assert "APPS" in content  # app registry pattern
 
     def test_dashboard_loads_api_status(self):
         """Dashboard JS must call /api/status for live data."""
         from pathlib import Path
         content = Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text()
         assert "/api/status" in content
+
+    def test_dashboard_title_is_cuchi_casa(self):
+        """Dashboard title must be Cuchi Casa, no emoji."""
+        from pathlib import Path
+        content = Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text()
+        assert "Cuchi Casa" in content
+        # No escaped unicode sequences (all chars must be real UTF-8)
+        import re
+        bad = re.findall(r"\\[uU][0-9a-fA-F]{4}", content)
+        assert not bad, f"Escaped unicode found: {bad}"
+
+    def test_dashboard_has_language_selector(self):
+        """Dashboard must have language dropdown."""
+        from pathlib import Path
+        content = Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text()
+        assert "lang-menu" in content
+        assert "lang-option" in content
+        assert "selectLang" in content
+
+    def test_dashboard_has_i18n_keys(self):
+        """Dashboard text must use i18n data-i18n attributes."""
+        from pathlib import Path
+        content = Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text()
+        assert "data-i18n" in content
+
+    def test_dashboard_no_hostname(self):
+        """Dashboard must not show the hostname."""
+        from pathlib import Path
+        content = Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text()
+        assert "raspberrypi.tailaa37cd.ts.net" not in content
+
+    def test_dashboard_no_more_apps_placeholder(self):
+        """Dashboard must not show More apps coming placeholder."""
+        from pathlib import Path
+        content = Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text()
+        assert "More apps coming" not in content
+
+    def test_dashboard_i18n_keys_exist_in_locales(self):
+        """dashboard.* keys must exist in en.json and es.json."""
+        import json
+        from pathlib import Path
+        for lang in ("en", "es"):
+            data = json.loads(Path(f"/home/pi/projects/smart-home/src/backend/static/locales/{lang}.json").read_text())
+            assert "dashboard" in data, f"dashboard key missing in {lang}.json"
+            assert "title" in data["dashboard"]
+            assert "connected" in data["dashboard"]
 
 
 class TestACURL:
