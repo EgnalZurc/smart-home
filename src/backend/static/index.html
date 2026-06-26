@@ -191,7 +191,32 @@
 
 </div>
 
+    <!-- Humidity Study (HUM-0 - temporary) -->
+    <div class="card-static rounded-2xl p-4 mb-3">
+        <div class="flex justify-between items-center mb-3">
+            <p class="text-slate-400 text-[11px] uppercase tracking-wider">Humidity Study</p>
+            <span class="text-[9px] text-amber-400 font-medium px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/20">⏳ 3-week analysis</span>
+        </div>
+        <button onclick="showHumidityStudy()"
+            class="w-full py-3 rounded-xl bg-slate-700/60 text-sm font-semibold border border-transparent hover:bg-slate-600 transition-colors">
+            💧 View Humidity Study
+        </button>
+    </div>
+
 </div><!-- /app-content -->
+
+<!-- Humidity Study Modal (HUM-0 - temporary) -->
+<div id="humidity-modal" class="fixed inset-0 bg-black/60 modal-bg z-50 hidden flex items-end justify-center" onclick="if(event.target===this)closeHumidityModal()">
+    <div class="modal-sheet bg-[#1e293b] rounded-t-3xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5 pb-8 border-t border-slate-700/50">
+        <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-5"></div>
+        <h2 class="text-base font-bold mb-1">💧 Humidity Study</h2>
+        <p class="text-[10px] text-slate-500 mb-4">Daily snapshots · 3-week analysis for humidifier decision</p>
+        <div id="humidity-study-content" class="space-y-3">
+            <p class="text-slate-400 text-sm text-center py-4">Loading...</p>
+        </div>
+        <button onclick="closeHumidityModal()" class="mt-5 w-full py-3.5 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors">Close</button>
+    </div>
+</div>
 
 <!-- Loading Overlay (F0.33) -->
 <div id="loading-overlay">
