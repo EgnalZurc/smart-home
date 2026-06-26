@@ -74,36 +74,32 @@ function showApp() {
 
 // —— Init ————————————————————————————————————————————————————————————————————————————
 (async function init() {
-    // F0.33: Wait for window.i18nReady to be set AND resolved.
-    // We poll for it because i18n.js (classic script) may not have run yet
-    // when this ES module executes, especially on hard refresh.
-    await new Promise(resolve => {
-        const deadline = Date.now() + 6000; // 6s absolute max
-        function check() {
-            if (window.i18nReady) {
-                Promise.race([window.i18nReady, new Promise(r => setTimeout(r, 3000))])
-                    .then(resolve).catch(resolve);
-            } else if (Date.now() < deadline) {
-                setTimeout(check, 50); // retry in 50ms
-            } else {
-                resolve(); // give up, show app anyway
-            }
-        }
-        check();
-    });
+    // F0.33 — control the loading overlay.
+    // Strategy: do NOT depend on window.i18nReady (race condition with classic scripts).
+    // Instead, kick off i18n init ourselves and race it against a timeout.
 
+    // 1. Start i18n if available, but never block forever on it
+    const i18nPromise = (window.i18n && typeof window.i18n.init === 'function')
+        ? window.i18n.init().catch(() => {})
+        : Promise.resolve();
+    await Promise.race([i18nPromise, new Promise(r => setTimeout(r, 4000))]);
+
+    // Re-read i18n in case it loaded
+    const resolvedI18n = window.i18n || { t: k => k };
     initCharts();
-    initLanguageDropdown(i18n);
+    initLanguageDropdown(resolvedI18n);
 
-    // Load history and first poll, each with their own safety timeout
+    // 2. Load history (optional, timeout 4s)
     try {
         await Promise.race([loadHistory(), new Promise(r => setTimeout(r, 4000))]);
-    } catch { /* history is optional */ }
+    } catch { /* non-fatal */ }
 
+    // 3. First data poll (timeout 6s)
     try {
-        await Promise.race([poll(), new Promise(r => setTimeout(r, 4000))]);
-    } catch { /* show app even if first poll fails */ }
+        await Promise.race([poll(), new Promise(r => setTimeout(r, 6000))]);
+    } catch { /* non-fatal */ }
 
+    // 4. Always show the app — even if everything above failed
     showApp();
     setInterval(poll, 5000);
 })();

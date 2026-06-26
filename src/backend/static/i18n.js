@@ -197,19 +197,9 @@ class I18n {
     }
 }
 
-// Global i18n instance
-const i18n = new I18n();
-window.i18n = i18n;
-
-// window.i18nReady: resolves when translations are fully loaded.
-// app.js awaits this before rendering anything (F0.33).
-window.i18nReady = new Promise(function(resolve) {
-    function doInit() {
-        i18n.init().then(resolve).catch(resolve); // resolve even on error to unblock app
-    }
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', doInit, { once: true });
-    } else {
-        doInit();
-    }
-});
+// Idempotent: only create instance once (safe across hard refresh)
+if (!window.i18n) {
+    window.i18n = new I18n();
+}
+// app.js calls window.i18n.init() directly — no auto-init here
+// This avoids the race condition between classic script and ES module load order
