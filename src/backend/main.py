@@ -311,30 +311,43 @@ app.add_middleware(
 # API routes
 app.include_router(routes.router)
 
-# Special route for index.html with no-cache (force update after bug fix)
+# DASH-2: Root redirects to /smart-home
 @app.get("/")
-async def serve_index():
-    """Serves index.html with no-cache headers to force update."""
+async def serve_root():
+    """Redirect / to /smart-home dashboard."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/smart-home", status_code=301)
+
+
+def _serve_html(filename: str):
+    """Serve an HTML file with no-cache headers."""
     import time
-    frontend_path = Path(__file__).parent / "static" / "index.html"
-    
-    # Read content and add unique timestamp to force reload
-    content = frontend_path.read_text(encoding="utf-8")
-    
-    # Insert unique timestamp in HTML to guarantee reload
-    timestamp_marker = f"<!-- CACHE_BUST: {int(time.time())} -->"
-    content = content.replace("</head>", f"{timestamp_marker}\n</head>")
-    
     from fastapi.responses import HTMLResponse
+    frontend_path = Path(__file__).parent / "static" / filename
+    content = frontend_path.read_text(encoding="utf-8")
+    content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")
     return HTMLResponse(
         content=content,
         headers={
             "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
             "Pragma": "no-cache",
             "Expires": "0",
-            "X-Content-Type-Options": "nosniff"
         }
     )
+
+
+# DASH-1: Platform dashboard
+@app.get("/smart-home")
+async def serve_dashboard():
+    """Serves the Smart Home platform dashboard."""
+    return _serve_html("dashboard.html")
+
+
+# AC-URL: AC Control app at /smart-home/ac
+@app.get("/smart-home/ac")
+async def serve_ac():
+    """Serves the AC Control app."""
+    return _serve_html("index.html")
 
 # Serve other static files normally
 frontend_path = Path(__file__).parent / "static"

@@ -13,7 +13,7 @@ CSSEOF
 $SCRIPT_DIR/tailwindcss \
   --input /tmp/tw-input.css \
   --output $STATIC/tailwind.css \
-  --content "$STATIC/index.html" \
+  --content "$STATIC/index.html" --content "$STATIC/dashboard.html" \
   --content "$STATIC/js/**/*.js" \
   --minify
 
