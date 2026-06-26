@@ -20,13 +20,16 @@ export function updateAcState(status, i18n) {
     updateModeDisplay(ac_state.mode, i18n);
     updateFanDisplay(ac_state.fan_speed, i18n);
     // Thermostat (read-only, from MELCloud)
+    // ac-real-roomtemp moved to sensors modal (F0.35) - guard with null check
     const rtEl = document.getElementById('ac-real-roomtemp');
-    if (ac_real.room_temp !== null) {
-        rtEl.textContent = ac_real.room_temp.toFixed(1) + '°C';
-        rtEl.style.color = tempColor(ac_real.room_temp);
-    } else {
-        rtEl.textContent = '—';
-        rtEl.style.color = '#64748b';
+    if (rtEl) {
+        if (ac_real.room_temp !== null) {
+            rtEl.textContent = ac_real.room_temp.toFixed(1) + '°C';
+            rtEl.style.color = tempColor(ac_real.room_temp);
+        } else {
+            rtEl.textContent = '—';
+            rtEl.style.color = '#64748b';
+        }
     }
 
     // Power indicator
