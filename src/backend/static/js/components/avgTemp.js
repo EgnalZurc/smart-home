@@ -33,9 +33,26 @@ export function updateSensorsCount(sensors) {
     document.getElementById('sensors-count').textContent = `${active}/${sensors.length}`;
 }
 
-export function updateSensorsDetail(sensors, i18n) {
+export function updateSensorsDetail(sensors, i18n, acReal = null) {
     const el = document.getElementById('sensors-detail');
-    el.innerHTML = sensors.map((s, i) => {
+    // F0.35: AC thermostat as first entry (not part of average)
+    const acEntry = (() => {
+        if (!acReal || acReal.room_temp === null) return '';
+        const t = acReal.room_temp.toFixed(1) + '°C';
+        const tCol = tempColor(acReal.room_temp);
+        return `<div class="bg-slate-800/60 rounded-xl px-3 py-2.5 border border-slate-600/40 mb-1">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-2.5 h-2.5 rounded-full inline-block bg-slate-500"></span>
+                    <span class="text-sm font-medium text-slate-400">A/C</span>
+                    <span class="text-[9px] text-slate-600 uppercase tracking-wider">∅ avg</span>
+                </div>
+                <span class="text-xs font-semibold" style="color:${tCol}">${t}</span>
+            </div>
+        </div>`;
+    })();
+
+    el.innerHTML = acEntry + sensors.map((s, i) => {
         const dot = s.online
             ? `<span class="w-2.5 h-2.5 rounded-full inline-block shadow-sm" style="background:${SENSOR_COLORS[i % SENSOR_COLORS.length]}"></span>`
             : '<span class="w-2.5 h-2.5 rounded-full inline-block bg-slate-600"></span>';

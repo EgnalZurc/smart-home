@@ -47,7 +47,7 @@ async function poll() {
         updateSensorsCount(sensors);
         updateTempChart(sensors, i18n);
         updateHumChart(sensors, i18n);
-        updateSensorsDetail(sensors, i18n);
+        updateSensorsDetail(sensors, i18n, status.ac_real);
 
     } catch (err) {
         console.error('Poll error:', err);
