@@ -38,10 +38,30 @@
         .lang-option { padding: 4px; border-radius: 4px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; border: 2px solid transparent; }
         .lang-option:hover { background: rgba(59,130,246,0.2); border-color: rgba(59,130,246,0.4); }
         .lang-option.active { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.5); }
+        /* Loading overlay (DASH-1.9 - mirrors AC app F0.33) */
+        #loading-overlay {
+            position: fixed; inset: 0; z-index: 99999;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            background: #0f172a;
+            transition: opacity 0.35s ease;
+        }
+        #loading-overlay.fade-out { opacity: 0; pointer-events: none; }
+        #dash-content { opacity: 0; transition: opacity 0.35s ease; }
+        #dash-content.visible { opacity: 1; }
+        .spinner {
+            width: 32px; height: 32px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top-color: rgba(255,255,255,0.7);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
 
+<div id="dash-content">
 <div class="max-w-md mx-auto px-4 pt-7 pb-12 fade-in">
 
     <!-- Header: title + language selector -->
@@ -68,6 +88,13 @@
         <div id="apps-list" class="space-y-2"></div>
     </section>
 
+</div>
+
+</div><!-- /dash-content -->
+
+<!-- Loading Overlay (DASH-1.9) -->
+<div id="loading-overlay">
+    <div class="spinner"></div>
 </div>
 
 <!-- i18n -->
@@ -154,17 +181,47 @@ async function refreshStatus() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+function showDash() {
+    const overlay = document.getElementById('loading-overlay');
+    const content = document.getElementById('dash-content');
+    if (content) content.classList.add('visible');
+    if (overlay) {
+        overlay.classList.add('fade-out');
+        setTimeout(() => { overlay.style.display = 'none'; }, 380);
+    }
+}
+
 (async function init() {
-    await window.i18nReady;
+    // Wait for i18n with 5s safety timeout (mirrors AC app F0.33)
+    await new Promise(resolve => {
+        const deadline = Date.now() + 6000;
+        function check() {
+            if (window.i18nReady) {
+                Promise.race([window.i18nReady, new Promise(r => setTimeout(r, 3000))])
+                    .then(resolve).catch(resolve);
+            } else if (Date.now() < deadline) {
+                setTimeout(check, 50);
+            } else {
+                resolve();
+            }
+        }
+        check();
+    });
+
     // Sync flag with loaded locale
     const flags = { en: '/static/flags/gb.svg', es: '/static/flags/es.svg' };
-    const locale = i18n.currentLocale || 'en';
-    document.getElementById('current-flag').src = flags[locale] || flags.en;
+    const locale = (window.i18n && i18n.currentLocale) || 'es';
+    document.getElementById('current-flag').src = flags[locale] || flags.es;
     document.querySelectorAll('.lang-option').forEach(o => {
         o.classList.toggle('active', o.dataset.lang === locale);
     });
+
     renderApps();
-    await refreshStatus();
+    try {
+        await Promise.race([refreshStatus(), new Promise(r => setTimeout(r, 5000))]);
+    } catch { /* non-fatal */ }
+
+    showDash();
     setInterval(refreshStatus, 10000);
 })();
 </script>

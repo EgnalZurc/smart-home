@@ -10,9 +10,9 @@
 
 class I18n {
     constructor() {
-        this.currentLocale = 'en';  // Default to English
+        this.currentLocale = 'es';  // Default to Spanish (DASH-3)
         this.translations = {};
-        this.fallbackLocale = 'en';
+        this.fallbackLocale = 'en'; // English as fallback for missing keys
     }
 
     /**
@@ -20,7 +20,7 @@ class I18n {
      */
     async init() {
         // Load locale from cookie or default to English
-        this.currentLocale = this.getLocaleFromCookie() || 'en';
+        this.currentLocale = this.getLocaleFromCookie() || 'es';  // Default: Spanish
         
         // Load translations for current locale
         await this.loadTranslations(this.currentLocale);
