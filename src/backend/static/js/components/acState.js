@@ -32,15 +32,7 @@ export function updateAcState(status, i18n) {
         }
     }
 
-    // Power indicator
-    const powerEl = document.getElementById('ac-real-power');
-    if (ac_real.power === null) {
-        powerEl.textContent = '--'; powerEl.style.color = '#64748b';
-    } else if (!ac_real.power) {
-        powerEl.textContent = 'OFF'; powerEl.style.color = '#ef4444';
-    } else {
-        powerEl.textContent = 'ON'; powerEl.style.color = '#4ade80';
-    }
+    // ac-real-power is managed by controller.js smart badge (F0.34)
 
     // Enable/disable param boxes based on control mode
     const isManual = control_mode === 'manual';

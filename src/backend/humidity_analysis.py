@@ -260,9 +260,10 @@ class HumidityAnalysisScheduler:
 
         # 2. At hour 0 (midnight), consolidate the previous day into a daily snapshot
         if now.hour == 0 and self._last_consolidated_date != today:
-            yesterday = (now.replace(hour=0, minute=0, second=0, microsecond=0)
-                         .replace(day=now.day - 1 if now.day > 1 else 1)
-                         .strftime("%Y-%m-%d"))
+            # Use timedelta to safely get yesterday (handles month/year boundaries)
+            from datetime import timedelta
+            yesterday = (now.replace(hour=12, minute=0, second=0, microsecond=0)
+                         - timedelta(days=1)).strftime("%Y-%m-%d")
             self._consolidate_day(yesterday)
             self._last_consolidated_date = today
 
