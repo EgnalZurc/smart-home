@@ -144,6 +144,18 @@ document.addEventListener('click', e => {
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function renderApps() {
+    // Guard: if i18n hasn't loaded yet, translations will return raw keys.
+    // This can happen if renderApps() is called before i18nReady resolves.
+    // We detect this by checking if the first app name translates properly.
+    if (APPS.length > 0) {
+        const testKey = APPS[0].nameKey;
+        const testVal = (window.i18n && i18n.t) ? i18n.t(testKey) : testKey;
+        if (testVal === testKey) {
+            // Not ready yet - retry in 100ms
+            setTimeout(renderApps, 100);
+            return;
+        }
+    }
     const list = document.getElementById('apps-list');
     list.innerHTML = APPS.map(app => `
         <a href="${app.url}" class="app-card rounded-2xl px-4 py-3.5">
