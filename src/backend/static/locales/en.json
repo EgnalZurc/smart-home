@@ -27,7 +27,8 @@
       "manual": "MANUAL",
       "system_off": "SYSTEM OFF",
       "error": "ERROR"
-    }
+    },
+    "objectiveManual": "AC Temp"
   },
   "manualControl": {
     "title": "Manual Control",
@@ -75,17 +76,17 @@
     "average": "Average"
   },
   "toast": {
-    "targetSet":       "Target set to {{value}}°C",
-    "targetError":     "Failed to update target temperature",
-    "modeSet":         "Mode changed to {{value}}",
-    "modeError":       "Failed to change mode",
-    "fanSet":          "Fan speed: {{value}}",
-    "fanError":        "Failed to change fan speed",
-    "setpointSet":     "AC setpoint: {{value}}°C",
-    "setpointError":   "Failed to change setpoint",
-    "controlModeSet":  "Control mode: {{value}}",
-    "controlModeError":"Failed to change control mode",
-    "connectionLost":  "Connection lost",
-    "invalidTemp":     "Temperature must be between 19 and 30°C"
+    "targetSet": "Target set to {{value}}°C",
+    "targetError": "Failed to update target temperature",
+    "modeSet": "Mode changed to {{value}}",
+    "modeError": "Failed to change mode",
+    "fanSet": "Fan speed: {{value}}",
+    "fanError": "Failed to change fan speed",
+    "setpointSet": "AC setpoint: {{value}}°C",
+    "setpointError": "Failed to change setpoint",
+    "controlModeSet": "Control mode: {{value}}",
+    "controlModeError": "Failed to change control mode",
+    "connectionLost": "Connection lost",
+    "invalidTemp": "Temperature must be between 19 and 30°C"
   }
 }
