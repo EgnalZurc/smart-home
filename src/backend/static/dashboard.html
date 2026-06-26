@@ -98,10 +98,17 @@ function selectLang(locale) {
     document.querySelectorAll('.lang-option').forEach(o => {
         o.classList.toggle('active', o.dataset.lang === locale);
     });
-    i18n.switchLocale(locale);
-    // Re-render app cards with new locale
-    renderApps();
+    // switchLocale is async (loads JSON) - re-render after it completes
+    i18n.switchLocale(locale).then(() => {
+        renderApps();
+        refreshStatus();
+    });
 }
+
+// Re-render whenever locale changes (covers programmatic switches too)
+window.addEventListener('localeChanged', () => {
+    renderApps();
+});
 
 document.addEventListener('click', e => {
     const dd = document.querySelector('.lang-dropdown');
