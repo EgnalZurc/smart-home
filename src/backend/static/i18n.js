@@ -197,14 +197,19 @@ class I18n {
     }
 }
 
-// Create global i18n instance
-
-// Create global i18n instance
+// Global i18n instance
 const i18n = new I18n();
-
-// Expose a promise that resolves when i18n is fully loaded
-// app.js awaits window.i18nReady before starting the poll loop
 window.i18n = i18n;
-window.i18nReady = (document.readyState === 'loading')
-    ? new Promise(resolve => document.addEventListener('DOMContentLoaded', () => i18n.init().then(resolve)))
-    : i18n.init();
+
+// window.i18nReady: resolves when translations are fully loaded.
+// app.js awaits this before rendering anything (F0.33).
+window.i18nReady = new Promise(function(resolve) {
+    function doInit() {
+        i18n.init().then(resolve).catch(resolve); // resolve even on error to unblock app
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', doInit, { once: true });
+    } else {
+        doInit();
+    }
+});

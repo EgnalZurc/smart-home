@@ -74,13 +74,23 @@ function showApp() {
 
 // —— Init ————————————————————————————————————————————————————————————————————————————
 (async function init() {
-    // F0.33: Wait for translations before anything renders
-    await window.i18nReady;
+    // F0.33: Wait for translations, with a 5s safety timeout so the app
+    // never gets stuck on the loading screen if i18n fails
+    const i18nTimeout = new Promise(resolve => setTimeout(resolve, 5000));
+    await Promise.race([window.i18nReady, i18nTimeout]);
+
     initCharts();
     initLanguageDropdown(i18n);
-    // Load history and run first full poll — THEN reveal the app
-    await loadHistory();
-    await poll();
+
+    // Load history and first poll, each with their own safety timeout
+    try {
+        await Promise.race([loadHistory(), new Promise(r => setTimeout(r, 4000))]);
+    } catch { /* history is optional */ }
+
+    try {
+        await Promise.race([poll(), new Promise(r => setTimeout(r, 4000))]);
+    } catch { /* show app even if first poll fails */ }
+
     showApp();
     setInterval(poll, 5000);
 })();
