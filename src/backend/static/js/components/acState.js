@@ -19,8 +19,6 @@ export function updateAcState(status, i18n) {
 
     updateModeDisplay(ac_state.mode, i18n);
     updateFanDisplay(ac_state.fan_speed, i18n);
-    updateSetpointDisplay(ac_state.setpoint);
-
     // Thermostat (read-only, from MELCloud)
     const rtEl = document.getElementById('ac-real-roomtemp');
     if (ac_real.room_temp !== null) {
@@ -43,7 +41,7 @@ export function updateAcState(status, i18n) {
 
     // Enable/disable param boxes based on control mode
     const isManual = control_mode === 'manual';
-    ['ac-mode-box', 'ac-fan-box', 'ac-setpoint-box'].forEach(id => {
+    ['ac-mode-box', 'ac-fan-box'].forEach(id => {
         document.getElementById(id).style.cursor = isManual ? 'pointer' : 'default';
     });
 }
@@ -92,29 +90,6 @@ export function editFanSpeed(i18n) {
     _pulse(box);
 }
 
-export function editSetpoint(i18n) {
-    const current = manualQueue.lastAcknowledged.temperature;
-    const input = prompt(`${i18n.t('modals.forceOn.temperature')} (19-30°C):`, current);
-    if (input === null) return;
-    const temp = parseFloat(input);
-    if (isNaN(temp) || temp < 19 || temp > 30) {
-        showToast(i18n.t('toast.invalidTemp'), 'warning');
-        return;
-    }
-    const box = document.getElementById('ac-setpoint-box');
-
-    manualQueue.enqueue(
-        'temperature', temp,
-        val => updateSetpointDisplay(val),
-        val => {
-            updateSetpointDisplay(val);
-            _shake(box);
-            showToast(i18n.t('toast.setpointError'), 'error');
-        },
-        () => showToast(i18n.t('toast.setpointSet').replace('{{value}}', temp.toFixed(1)), 'success')
-    );
-    _pulse(box);
-}
 
 export function updateModeDisplay(mode, i18n) {
     document.getElementById('ac-mode-display').textContent = mode === 'cool'
@@ -135,9 +110,6 @@ export function updateFanDisplay(speed, i18n) {
     el.className = `text-xs font-semibold ${colors[speed]}`;
 }
 
-export function updateSetpointDisplay(temp) {
-    document.getElementById('ac-setpoint-display').textContent = temp.toFixed(1) + '°C';
-}
 
 function _pulse(el) {
     el.classList.add('optimistic-update');

@@ -2,7 +2,7 @@
 import { fetchStatus, fetchSensors, fetchOutdoor, fetchErrors } from './services/api.js';
 import { loadHistory, updateHistory }              from './services/sensorHistory.js';
 import { updateAvgTemp, updateOutdoor, updateSensorsCount, updateSensorsDetail, openModal, closeModal } from './components/avgTemp.js';
-import { updateAcState, editMode, editFanSpeed, editSetpoint } from './components/acState.js';
+import { updateAcState, editMode, editFanSpeed } from './components/acState.js';
 import { updateController, changeTarget }          from './components/controller.js';
 import { syncControlMode, setControlMode }         from './components/manualControl.js';
 import { initCharts, updateTempChart, updateHumChart } from './components/charts.js';
@@ -111,7 +111,6 @@ window.changeTarget   = changeTarget;
 window.setControlMode = mode => setControlMode(mode);
 window.editMode       = () => editMode(i18n);
 window.editFanSpeed   = () => editFanSpeed(i18n);
-window.editSetpoint   = () => editSetpoint(i18n);
 window.openErrorsModal  = () => { fetchErrors().then(d => openErrorsModal(d.errors || [], i18n)).catch(() => openErrorsModal([], i18n)); };
 window.closeErrorsModal = closeErrorsModal;
 // Clicking the status indicator opens errors modal only when there are errors
