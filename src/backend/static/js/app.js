@@ -74,10 +74,23 @@ function showApp() {
 
 // —— Init ————————————————————————————————————————————————————————————————————————————
 (async function init() {
-    // F0.33: Wait for translations, with a 5s safety timeout so the app
-    // never gets stuck on the loading screen if i18n fails
-    const i18nTimeout = new Promise(resolve => setTimeout(resolve, 5000));
-    await Promise.race([window.i18nReady, i18nTimeout]);
+    // F0.33: Wait for window.i18nReady to be set AND resolved.
+    // We poll for it because i18n.js (classic script) may not have run yet
+    // when this ES module executes, especially on hard refresh.
+    await new Promise(resolve => {
+        const deadline = Date.now() + 6000; // 6s absolute max
+        function check() {
+            if (window.i18nReady) {
+                Promise.race([window.i18nReady, new Promise(r => setTimeout(r, 3000))])
+                    .then(resolve).catch(resolve);
+            } else if (Date.now() < deadline) {
+                setTimeout(check, 50); // retry in 50ms
+            } else {
+                resolve(); // give up, show app anyway
+            }
+        }
+        check();
+    });
 
     initCharts();
     initLanguageDropdown(i18n);
