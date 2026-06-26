@@ -61,14 +61,27 @@ async function poll() {
     }
 }
 
-// —— Init ————————————————————————————————————————————————————————————————————
+// —— Overlay helpers (F0.33) ——————————————————————————————————————————
+function showApp() {
+    const overlay = document.getElementById('loading-overlay');
+    const content = document.getElementById('app-content');
+    if (content) content.classList.add('visible');
+    if (overlay) {
+        overlay.classList.add('fade-out');
+        setTimeout(() => { overlay.style.display = 'none'; }, 450);
+    }
+}
+
+// —— Init ————————————————————————————————————————————————————————————————————————————
 (async function init() {
-    // Wait for i18n translations to load before rendering
+    // F0.33: Wait for translations before anything renders
     await window.i18nReady;
     initCharts();
     initLanguageDropdown(i18n);
+    // Load history and run first full poll — THEN reveal the app
     await loadHistory();
     await poll();
+    showApp();
     setInterval(poll, 5000);
 })();
 
