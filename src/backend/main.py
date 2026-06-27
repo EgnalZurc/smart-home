@@ -5,6 +5,7 @@ Orchestrates all components: MQTT, MELCloud, AC controller, REST API.
 
 import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
