@@ -163,3 +163,25 @@ class TestRecordAcTemp:
             h._error_tracker = None
         assert "AC" in h.history
         assert h.history["AC"][0].temperature == 23.0
+
+
+class TestSensorReadingOptionalFields:
+    """SensorReading supports None humidity/battery (AC virtual sensor)."""
+
+    def test_ac_reading_humidity_battery_none(self):
+        r = SensorReading(temperature=23.5, humidity=None, battery=None, timestamp=999.0)
+        assert r.humidity is None
+        assert r.battery is None
+
+    def test_to_dict_with_none_fields(self):
+        r = SensorReading(24.0, None, None, 1000.0)
+        d = r.to_dict()
+        assert d["humidity"] is None
+        assert d["battery"] is None
+
+    def test_from_dict_with_none_fields(self):
+        d = {"temperature": 22.0, "humidity": None, "battery": None, "timestamp": 500.0}
+        r = SensorReading.from_dict(d)
+        assert r.humidity is None
+        assert r.battery is None
+        assert r.temperature == 22.0

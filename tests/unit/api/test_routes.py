@@ -130,3 +130,96 @@ class TestGetErrors:
         r = client.get("/api/errors")
         assert r.json()["has_errors"] is True
         assert len(r.json()["errors"]) == 1
+
+
+class TestGetSensorsHistory:
+    """Tests for /api/sensors/history endpoint (AC-CHART.5)."""
+
+    def _client_with_history(self, error_tracker):
+        """Client fixture with pre-populated sensor + AC history."""
+        import time as _time
+        from mqtt_handler import MqttHandler, SensorReading
+        from unittest.mock import patch as _patch
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        ac = MagicMock()
+        ac.current_state = _mock_ac_state()
+        ac.config.target_temperature = 26.0
+        ac.config.min_setpoint = 19.0
+        ac.config.max_setpoint = 30.0
+        ac.config.sensor_timeout = 3600
+        ac.config.hysteresis_on = 0.5
+        ac.config.hysteresis_off = 0.3
+        ac.config.loop_interval = 10
+        ac.config.ac_mode = "cool"
+        ac.config.fan_speed_max = 3
+        ac.config.fan_speed_modulate = 0
+        ac.get_history.return_value = []
+
+        with _patch("mqtt_handler.mqtt"):
+            with _patch.object(MqttHandler, "_load_from_disk"):
+                mqtt = MqttHandler("localhost", 1883, ["Salon"], max_history=200)
+                mqtt._error_tracker = None
+                mqtt._connected = True
+
+        now = _time.time()
+        # Three readings: two recent, one old
+        mqtt.history["Salon"] = [
+            SensorReading(25.0, 40, 90, now - 7200),   # 2h ago
+            SensorReading(26.0, 42, 90, now - 3600),   # 1h ago
+            SensorReading(27.0, 44, 90, now - 60),     # 1 min ago
+        ]
+        # AC virtual sensor entry
+        mqtt.history["AC"] = [
+            SensorReading(24.0, None, None, now - 3600),
+        ]
+
+        sub = SubscriptionManager(SubscriptionConfig())
+        routes.mqtt_handler = mqtt
+        routes.ac_controller = ac
+        routes.subscription_manager = sub
+        routes.error_tracker = error_tracker
+        routes.energy_tracker = None
+
+        app = FastAPI()
+        app.include_router(routes.router)
+        return TestClient(app), now
+
+    def test_history_no_params_returns_all(self, error_tracker):
+        c, now = self._client_with_history(error_tracker)
+        r = c.get("/api/sensors/history")
+        assert r.status_code == 200
+        data = r.json()
+        assert "Salon" in data
+        assert len(data["Salon"]) == 3
+
+    def test_history_start_filters_old(self, error_tracker):
+        c, now = self._client_with_history(error_tracker)
+        # start = 90 minutes ago -> excludes the 2h-old reading
+        r = c.get(f"/api/sensors/history?start={now - 5400}")
+        data = r.json()
+        assert len(data["Salon"]) == 2
+
+    def test_history_start_end_range(self, error_tracker):
+        c, now = self._client_with_history(error_tracker)
+        # Range: 90min ago to 30min ago -> only the 1h-ago reading
+        r = c.get(f"/api/sensors/history?start={now - 5400}&end={now - 1800}")
+        data = r.json()
+        assert len(data["Salon"]) == 1
+        assert data["Salon"][0]["temperature"] == 26.0
+
+    def test_history_includes_ac_virtual_sensor(self, error_tracker):
+        c, now = self._client_with_history(error_tracker)
+        r = c.get("/api/sensors/history")
+        data = r.json()
+        assert "AC" in data
+        assert data["AC"][0]["temperature"] == 24.0
+        assert data["AC"][0]["humidity"] is None
+
+    def test_history_ac_range_filtered(self, error_tracker):
+        c, now = self._client_with_history(error_tracker)
+        # AC reading is 1h ago; start=30min ago should exclude it
+        r = c.get(f"/api/sensors/history?start={now - 1800}")
+        data = r.json()
+        assert "AC" not in data or len(data.get("AC", [])) == 0
