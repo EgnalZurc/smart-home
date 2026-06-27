@@ -41,6 +41,7 @@
 | DASH-1.4 | All text translatable, self-contained T={} object | Complete |
 | DASH-1.5 | App registry (APPS array) � only registered apps shown | Complete |
 | DASH-1.6 | AC Control registered and displayed | Complete |
+| DASH-1.6b | Zigbee2MQTT registered and displayed; click redirects to /zigbee/ | Complete |
 | DASH-1.7 | No placeholder cards | Complete |
 | DASH-1.8 | Live status dot per app card | Complete |
 | DASH-1.9 | Loading spinner until translations + status loaded | Complete |
@@ -76,6 +77,25 @@
 | AC-CORE.3 | Outdoor temperature from Open-Meteo API | Complete |
 | AC-CORE.4 | Real AC state fetched from MELCloud every 30s | Complete |
 | Tests | test_routes.py, test_ac_controller.py, test_mqtt_handler.py, test_melcloud_client.py | Complete |
+
+## AC-CHART — Dynamic Sensor Chart  ✅ Complete
+
+| # | Requirement | Status |
+|---|---|---|
+| AC-CHART | Single dynamic chart replacing the two static graphs | Complete |
+| AC-CHART.1 | Tab selector: Temperature / Humidity | Complete |
+| AC-CHART.2 | Toggle chip per source (avg + A/C + each sensor); default = avg only | Complete |
+| AC-CHART.3 | Chips show colored glowing dot; active = colored border + glow, inactive = dimmed | Complete |
+| AC-CHART.4 | Time range picker (segmented control): 1h, 6h, 12h, 24h (default), 48h, 7d | Complete |
+| AC-CHART.5 | Chart fetches /api/sensors/history?start=X&end=Y for the selected range | Complete |
+| AC-CHART.6 | One colored line per active source, Chart.js legend hidden (own legend) | Complete |
+| AC-CHART.7 | Gaussian smoothing + time-bucket averaging (bucket size scales with range) | Complete |
+| AC-CHART.8 | "No data" message when selected range has no readings | Complete |
+| AC-CHART.9 | All labels translatable ES/EN (range buttons, tabs, average, no-data) | Complete |
+| AC-CHART.10 | AC room temp recorded hourly (at :00) by AcTempScheduler into history JSON | Complete |
+| AC-CHART.11 | AC shown as dashed line from historical data; flat ref fallback if no history | Complete |
+| AC-CHART.12 | Mean / min / max values shown below chart for current range | Complete |
+| Tests | test_mqtt_handler.py (record_ac_temp, AC disk load), test_routes.py (history range) | Complete |
 
 ## AC-AUTO ? Automatic Control  ? Complete
 

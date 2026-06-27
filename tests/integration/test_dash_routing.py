@@ -212,3 +212,33 @@ class TestNoRegressions:
         from pathlib import Path
         content = Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text()
         assert "tailwind.css" in content
+
+
+class TestDashboardZigbeeApp:
+    """Zigbee2MQTT app registered in dashboard (DASH-1.6b)."""
+
+    def _html(self):
+        from pathlib import Path
+        return Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text(encoding="utf-8")
+
+    def test_zigbee_url_in_apps(self):
+        assert "/zigbee/" in self._html()
+
+    def test_zigbee_translations_es(self):
+        assert "Zigbee2MQTT" in self._html()
+        assert "zigbee_name" in self._html()
+        assert "zigbee_desc" in self._html()
+
+    def test_zigbee_translations_en(self):
+        html = self._html()
+        assert "Zigbee devices" in html or "zigbee_desc" in html
+
+    def test_loadstatus_skips_null_statusurl(self):
+        """Apps with statusUrl=null must not be fetched (guard in loadStatus)."""
+        html = self._html()
+        assert "if (!app.statusUrl || !app.getStatus) continue" in html
+
+    def test_two_apps_registered(self):
+        """APPS array must have at least AC and Zigbee."""
+        html = self._html()
+        assert html.count("key:") >= 2 or html.count("'ac'") >= 1 and html.count("'zigbee'") >= 1

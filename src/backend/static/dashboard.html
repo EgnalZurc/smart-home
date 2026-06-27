@@ -82,6 +82,8 @@ const T = {
         offline:      'Sin conexi\u00f3n',
         ac_name:      'Control AC',
         ac_desc:      'Control de temperatura, sensores Zigbee, MELCloud',
+        zigbee_name:  'Zigbee2MQTT',
+        zigbee_desc:  'Dispositivos Zigbee, sensores, coordinador',
     },
     en: {
         title:        'Cuchi Casa',
@@ -90,12 +92,15 @@ const T = {
         offline:      'Offline',
         ac_name:      'AC Control',
         ac_desc:      'Temperature control, Zigbee sensors, MELCloud',
+        zigbee_name:  'Zigbee2MQTT',
+        zigbee_desc:  'Zigbee devices, sensors, coordinator',
     },
 };
 
 // ── App Registry ─────────────────────────────────────────────────────────────
 const APPS = [
-    { key: 'ac', url: '/smart-home/ac', nameKey: 'ac_name', descKey: 'ac_desc', statusUrl: '/api/status', getStatus: d => d?.mqtt_connected },
+    { key: 'ac',     url: '/smart-home/ac', nameKey: 'ac_name',     descKey: 'ac_desc',     statusUrl: '/api/status', getStatus: d => d?.mqtt_connected },
+    { key: 'zigbee', url: '/zigbee/',        nameKey: 'zigbee_name', descKey: 'zigbee_desc', statusUrl: null,          getStatus: null },
 ];
 
 // ── Language ──────────────────────────────────────────────────────────────────
@@ -167,6 +172,7 @@ function render() {
 // ── Status ────────────────────────────────────────────────────────────────────
 async function loadStatus() {
     for (const app of APPS) {
+        if (!app.statusUrl || !app.getStatus) continue;
         try {
             const data = await fetch(app.statusUrl).then(r => r.json());
             const online = app.getStatus(data);
