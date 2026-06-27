@@ -42,8 +42,9 @@ async function poll() {
         updateSensorsCount(sensors);
         updateSensorsDetail(sensors, i18n, status.ac_real);
 
-        // Dynamic chart: update sensor list and refresh
-        setSensors(sensors);
+        // Dynamic chart: update sensor list (with A/C room temp) and refresh
+        const acRoomTemp = status?.ac_real?.room_temp ?? null;
+        setSensors(sensors, acRoomTemp);
         await refreshChart();
 
     } catch (err) {

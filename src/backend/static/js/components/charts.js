@@ -1,23 +1,27 @@
-// charts.js ? Dynamic single chart with multiselect sources + time range picker
+// charts.js - Dynamic chart: average + individual sensors + A/C temp
 import { fetchSensorHistoryRange } from '../services/sensorHistory.js';
 import { SENSOR_COLORS } from '../utils/colors.js';
 
 // ?? State ?????????????????????????????????????????????????????????????????????
-let _chart      = null;     // Chart.js instance
+let _chart      = null;
 let _sensors    = [];       // [{name, color}]
+let _acRoomTemp = null;     // latest A/C room temp (number | null)
 let _i18n       = null;
-let _rangeHours = 24;       // default: last 24h
-let _selTemp    = null;     // Set of selected sensor names for temperature
-let _selHum     = null;     // Set of selected sensor names for humidity
-let _activeTab  = 'temp';   // 'temp' | 'hum'
+let _rangeHours = 24;
+let _activeTab  = 'temp';  // 'temp' | 'hum'
+
+// Which series are visible: 'avg' always default-on, sensors default-off
+// Stored as Set of keys: 'avg', 'ac', or sensor name
+let _visibleTemp = new Set(['avg']);
+let _visibleHum  = new Set(['avg']);
 
 // ?? Range options ?????????????????????????????????????????????????????????????
 const RANGES = [
-    { key: 'range1h',  hours: 1  },
-    { key: 'range6h',  hours: 6  },
-    { key: 'range12h', hours: 12 },
-    { key: 'range24h', hours: 24 },
-    { key: 'range48h', hours: 48 },
+    { key: 'range1h',  hours: 1   },
+    { key: 'range6h',  hours: 6   },
+    { key: 'range12h', hours: 12  },
+    { key: 'range24h', hours: 24  },
+    { key: 'range48h', hours: 48  },
     { key: 'range7d',  hours: 168 },
 ];
 
@@ -34,130 +38,263 @@ export function initCharts(i18n) {
     _renderRangePicker();
 }
 
-// ?? Called from app.js on each poll with current sensor list ??????????????????
-export function setSensors(sensors) {
+export function initChartTabs() {
+    _renderTabs();
+}
+
+// ?? Called from app.js on each poll ??????????????????????????????????????????
+export function setSensors(sensors, acRoomTemp) {
+    _acRoomTemp = acRoomTemp ?? null;
     const names = sensors.map(s => s.name);
     _sensors = sensors.map((s, i) => ({ name: s.name, color: SENSOR_COLORS[i % SENSOR_COLORS.length] }));
 
-    // Init selections to "all" on first call
-    if (_selTemp === null) _selTemp = new Set(names);
-    if (_selHum  === null) _selHum  = new Set(names);
+    // Clean up visibility sets if sensors changed
+    for (const n of [..._visibleTemp]) { if (n !== 'avg' && n !== 'ac' && !names.includes(n)) _visibleTemp.delete(n); }
+    for (const n of [..._visibleHum])  { if (n !== 'avg' && !names.includes(n)) _visibleHum.delete(n); }
 
-    // Remove any sensor that no longer exists
-    for (const n of [..._selTemp]) { if (!names.includes(n)) _selTemp.delete(n); }
-    for (const n of [..._selHum])  { if (!names.includes(n)) _selHum.delete(n);  }
-
-    _renderSourceDropdowns();
+    _renderLegend();
 }
 
-// ?? Public: refresh chart data (called from app.js after poll) ????????????????
 export async function refreshChart() {
     if (!_chart) return;
     await _loadAndRender();
 }
 
-// ?? Data loading ??????????????????????????????????????????????????????????????
+// ?? Data loading + render ?????????????????????????????????????????????????????
 async function _loadAndRender() {
-    const nowSec  = Date.now() / 1000;
+    const nowSec   = Date.now() / 1000;
     const startSec = nowSec - _rangeHours * 3600;
-    const field   = _activeTab;
-    const sel     = field === 'temp' ? _selTemp : _selHum;
+    const isHum    = _activeTab === 'hum';
+    const field    = isHum ? 'hum' : 'temp';
+    const visible  = isHum ? _visibleHum : _visibleTemp;
+    const bMin     = _bucketMinutes(_rangeHours);
+    const bMs      = bMin * 60 * 1000;
 
     let rawData;
-    try {
-        rawData = await fetchSensorHistoryRange(startSec, nowSec);
-    } catch {
-        return;
-    }
+    try { rawData = await fetchSensorHistoryRange(startSec, nowSec); }
+    catch { return; }
 
-    // Build one dataset per selected sensor
-    const datasets = [];
+    // ?? Build bucket map: ts -> { sensorName: [values] } ?????????????????????
+    const bucketMap = {};  // key=bucketTs, value={ name: [vals] }
     for (const sensor of _sensors) {
-        if (!sel.has(sensor.name)) continue;
-        const readings = (rawData[sensor.name] || []).filter(r => r.ts >= startSec * 1000);
-        if (!readings.length) continue;
-
-        // Bucket + smooth
-        const pts = _buildPoints(readings, field, _bucketMinutes(_rangeHours));
-        const smoothed = _smooth(pts.map(p => p.value), 2);
-
-        datasets.push({
-            label: sensor.name,
-            data: smoothed,
-            borderColor: sensor.color,
-            backgroundColor: sensor.color + '18',
-            borderWidth: 1.5,
-            tension: 0.4,
-            pointRadius: 0,
-            pointHoverRadius: 5,
-            pointHoverBackgroundColor: sensor.color,
-            fill: false,
-            spanGaps: false,
-        });
+        for (const r of (rawData[sensor.name] || [])) {
+            if (r.ts < startSec * 1000) continue;
+            const v = isHum ? r.hum : r.temp;
+            if (v === null || v === undefined) continue;
+            const bk = Math.floor(r.ts / bMs) * bMs;
+            if (!bucketMap[bk]) bucketMap[bk] = {};
+            if (!bucketMap[bk][sensor.name]) bucketMap[bk][sensor.name] = [];
+            bucketMap[bk][sensor.name].push(v);
+        }
     }
 
-    const labels = datasets.length > 0
-        ? _buildLabels(rawData, [...sel], field, startSec * 1000, _bucketMinutes(_rangeHours))
-        : [];
-
-    const noDataEl = document.getElementById('chart-no-data');
-    if (datasets.length === 0 || labels.length === 0) {
+    const sortedBuckets = Object.keys(bucketMap).map(Number).sort((a, b) => a - b);
+    if (sortedBuckets.length === 0) {
+        const noDataEl = document.getElementById('chart-no-data');
         if (noDataEl) noDataEl.classList.remove('hidden');
         _chart.data = { labels: [], datasets: [] };
         _chart.update('none');
         return;
     }
-    if (noDataEl) noDataEl.classList.add('hidden');
+    document.getElementById('chart-no-data')?.classList.add('hidden');
 
-    // Align all datasets to the same label array
-    const isHum = field === 'hum';
+    const labels = sortedBuckets.map(bk => _formatLabel(bk + bMs / 2));
+
+    // ?? Average dataset ???????????????????????????????????????????????????????
+    const avgValues = sortedBuckets.map(bk => {
+        const allVals = Object.values(bucketMap[bk]).flat();
+        return allVals.length ? Math.round((allVals.reduce((s, v) => s + v, 0) / allVals.length) * 10) / 10 : null;
+    });
+
+    const datasets = [];
+
+    if (visible.has('avg')) {
+        datasets.push({
+            label: _t('chart.average'),
+            data: _smooth(avgValues, 2),
+            borderColor: 'rgba(255,255,255,0.85)',
+            backgroundColor: 'rgba(255,255,255,0.05)',
+            borderWidth: 2,
+            tension: 0.4,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: '#ffffff',
+            fill: { target: 'origin', above: 'rgba(255,255,255,0.04)' },
+            spanGaps: true,
+            order: 0,
+        });
+    }
+
+    // ?? A/C room temp dataset (temp tab only, single horizontal-ish series) ???
+    if (!isHum && visible.has('ac') && _acRoomTemp !== null) {
+        // Draw as a flat reference line at the A/C reported room temp
+        datasets.push({
+            label: 'A/C',
+            data: sortedBuckets.map(() => _acRoomTemp),
+            borderColor: 'rgba(148,163,184,0.6)',
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            tension: 0,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            fill: false,
+            spanGaps: true,
+            order: 1,
+        });
+    }
+
+    // ?? Individual sensor datasets ????????????????????????????????????????????
+    for (const sensor of _sensors) {
+        if (!visible.has(sensor.name)) continue;
+        const values = sortedBuckets.map(bk => {
+            const vals = bucketMap[bk]?.[sensor.name];
+            return vals ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10 : null;
+        });
+        datasets.push({
+            label: sensor.name,
+            data: _smooth(values, 2),
+            borderColor: sensor.color,
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            tension: 0.4,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            pointHoverBackgroundColor: sensor.color,
+            fill: false,
+            spanGaps: true,
+            order: 2,
+        });
+    }
+
     _chart.options = _chartOptions(isHum ? v => v + '%' : v => v + '\u00b0C');
     _chart.data.labels   = labels;
     _chart.data.datasets = datasets;
     _chart.update('none');
+
+    // Update mean values display
+    _renderMeanValues(avgValues, isHum);
 }
 
-// ?? Build shared label array from all selected sensors ????????????????????????
-function _buildLabels(rawData, selectedNames, field, startMs, bucketMin) {
-    const bucketMs = bucketMin * 60 * 1000;
-    const buckets  = new Set();
-    for (const name of selectedNames) {
-        (rawData[name] || [])
-            .filter(r => r.ts >= startMs)
-            .forEach(r => buckets.add(Math.floor(r.ts / bucketMs) * bucketMs));
-    }
-    return [...buckets].sort((a, b) => a - b).map(ts => _formatLabel(ts + bucketMs / 2));
+// ?? Mean values bar ???????????????????????????????????????????????????????????
+function _renderMeanValues(avgValues, isHum) {
+    const el = document.getElementById('chart-means');
+    if (!el) return;
+    const valid = avgValues.filter(v => v !== null);
+    if (!valid.length) { el.innerHTML = ''; return; }
+    const mean = Math.round((valid.reduce((s, v) => s + v, 0) / valid.length) * 10) / 10;
+    const min  = Math.min(...valid);
+    const max  = Math.max(...valid);
+    const unit = isHum ? '%' : '\u00b0C';
+    el.innerHTML = `
+        <span class="text-[10px] text-slate-500">${_t('chart.mean')}: <strong class="text-slate-300">${mean}${unit}</strong></span>
+        <span class="text-[10px] text-slate-600">\u2193 ${min}${unit}</span>
+        <span class="text-[10px] text-slate-600">\u2191 ${max}${unit}</span>
+    `;
 }
 
-// ?? Build averaged bucket points for one sensor ???????????????????????????????
-function _buildPoints(readings, field, bucketMin) {
-    const bucketMs = bucketMin * 60 * 1000;
-    const buckets  = {};
-    for (const r of readings) {
-        const v = field === 'temp' ? r.temp : r.hum;
-        if (v === null || v === undefined) continue;
-        const key = Math.floor(r.ts / bucketMs) * bucketMs;
-        if (!buckets[key]) buckets[key] = [];
-        buckets[key].push(v);
+// ?? Legend: toggle buttons ????????????????????????????????????????????????????
+function _renderLegend() {
+    const isHum   = _activeTab === 'hum';
+    const visible = isHum ? _visibleHum : _visibleTemp;
+    const el      = document.getElementById('chart-legend');
+    if (!el) return;
+
+    const items = [];
+
+    // Average
+    items.push({ key: 'avg', label: _t('chart.average'), color: 'rgba(255,255,255,0.8)' });
+
+    // A/C (temp only)
+    if (!isHum && _acRoomTemp !== null) {
+        items.push({ key: 'ac', label: 'A/C', color: 'rgba(148,163,184,0.7)' });
     }
-    return Object.entries(buckets)
-        .sort(([a], [b]) => a - b)
-        .map(([ts, vals]) => ({
-            ts: parseInt(ts) + bucketMs / 2,
-            value: Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10,
-        }));
+
+    // Individual sensors
+    for (const s of _sensors) {
+        items.push({ key: s.name, label: s.name, color: s.color });
+    }
+
+    el.innerHTML = items.map(item => {
+        const on = visible.has(item.key);
+        return `<button
+            onclick="chartToggleSeries('${item.key}')"
+            class="flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all text-[10px] select-none"
+            style="border-color:${on ? item.color : 'rgba(100,116,139,0.25)'};
+                   background:${on ? item.color + '22' : 'transparent'};
+                   color:${on ? item.color : '#475569'};
+                   opacity:${on ? '1' : '0.5'}">
+            <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${item.color}"></span>
+            ${item.label}
+        </button>`;
+    }).join('');
 }
+
+// ?? Tabs ??????????????????????????????????????????????????????????????????????
+function _renderTabs() {
+    const t = document.getElementById('chart-tab-temp');
+    const h = document.getElementById('chart-tab-hum');
+    if (!t || !h) return;
+    const on  = 'border-b-2 border-blue-400 text-blue-300';
+    const off = 'border-b-2 border-transparent text-slate-500';
+    t.className = 'flex-1 py-2 text-[11px] font-medium text-center transition-all cursor-pointer ' + (_activeTab === 'temp' ? on : off);
+    h.className = 'flex-1 py-2 text-[11px] font-medium text-center transition-all cursor-pointer ' + (_activeTab === 'hum'  ? on : off);
+}
+
+// ?? Range picker ??????????????????????????????????????????????????????????????
+function _renderRangePicker() {
+    const el = document.getElementById('chart-range-picker');
+    if (!el) return;
+    el.innerHTML = RANGES.map(r => `
+        <button onclick="chartSetRange(${r.hours})"
+            class="chart-range-btn px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all border
+                   ${r.hours === _rangeHours
+                       ? 'bg-blue-600/30 border-blue-500/60 text-blue-300'
+                       : 'bg-slate-800/60 border-slate-700/40 text-slate-400 hover:border-slate-600'}"
+        >${_i18n ? _i18n.t('chart.' + r.key) : r.hours + 'h'}</button>
+    `).join('');
+}
+
+// ?? Global handlers ???????????????????????????????????????????????????????????
+window.chartSetRange = function(hours) {
+    _rangeHours = hours;
+    _renderRangePicker();
+    _loadAndRender();
+};
+
+window.chartSetTab = function(tab) {
+    _activeTab = tab;
+    _renderTabs();
+    _renderLegend();
+    _loadAndRender();
+};
+
+window.chartToggleSeries = function(key) {
+    const visible = _activeTab === 'hum' ? _visibleHum : _visibleTemp;
+    if (visible.has(key)) visible.delete(key); else visible.add(key);
+    _renderLegend();
+    _loadAndRender();
+};
+
+export function retranslateCharts(i18n) {
+    _i18n = i18n;
+    _renderRangePicker();
+    _renderTabs();
+    _renderLegend();
+}
+
+// ?? Helpers ???????????????????????????????????????????????????????????????????
+function _t(key) { return _i18n ? _i18n.t(key) : key; }
 
 function _bucketMinutes(hours) {
-    if (hours <= 1)   return 2;
-    if (hours <= 6)   return 10;
-    if (hours <= 12)  return 15;
-    if (hours <= 24)  return 20;
-    if (hours <= 48)  return 30;
+    if (hours <= 1)  return 2;
+    if (hours <= 6)  return 10;
+    if (hours <= 12) return 15;
+    if (hours <= 24) return 20;
+    if (hours <= 48) return 30;
     return 60;
 }
 
-// ?? Gaussian smoothing ????????????????????????????????????????????????????????
 function _smooth(data, passes = 2) {
     if (data.length < 5) return data;
     const weights = [0.06, 0.24, 0.40, 0.24, 0.06];
@@ -175,7 +312,6 @@ function _smooth(data, passes = 2) {
     return result;
 }
 
-// ?? Label formatter ???????????????????????????????????????????????????????????
 function _formatLabel(tsMs) {
     const d   = new Date(tsMs);
     const now = new Date();
@@ -185,7 +321,6 @@ function _formatLabel(tsMs) {
     return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }) + ' ' + hhmm;
 }
 
-// ?? Chart.js options ??????????????????????????????????????????????????????????
 function _chartOptions(tickCb = null) {
     return {
         responsive: true,
@@ -195,10 +330,7 @@ function _chartOptions(tickCb = null) {
         scales: {
             y: {
                 grid: { color: 'rgba(148,163,184,0.06)' },
-                ticks: {
-                    color: '#64748b', font: { size: 10 }, maxTicksLimit: 5,
-                    callback: tickCb || undefined, padding: 4,
-                },
+                ticks: { color: '#64748b', font: { size: 10 }, maxTicksLimit: 5, callback: tickCb || undefined, padding: 4 },
                 afterDataLimits(scale) {
                     const range = scale.max - scale.min;
                     const pad = range * 0.15 || 0.3;
@@ -211,10 +343,7 @@ function _chartOptions(tickCb = null) {
             },
         },
         plugins: {
-            legend: {
-                display: true,
-                labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 10, padding: 10, usePointStyle: true },
-            },
+            legend: { display: false },  // We render our own legend
             tooltip: {
                 backgroundColor: 'rgba(15,23,42,0.95)',
                 borderColor: 'rgba(100,116,139,0.4)',
@@ -226,92 +355,4 @@ function _chartOptions(tickCb = null) {
             },
         },
     };
-}
-
-// ?? UI: range picker ??????????????????????????????????????????????????????????
-function _renderRangePicker() {
-    const el = document.getElementById('chart-range-picker');
-    if (!el) return;
-    el.innerHTML = RANGES.map(r => `
-        <button
-            data-hours="${r.hours}"
-            onclick="chartSetRange(${r.hours})"
-            class="chart-range-btn px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all border
-                   ${r.hours === _rangeHours
-                       ? 'bg-blue-600/30 border-blue-500/60 text-blue-300'
-                       : 'bg-slate-800/60 border-slate-700/40 text-slate-400 hover:border-slate-600'}"
-        >${_i18n ? _i18n.t('chart.' + r.key) : r.hours + 'h'}</button>
-    `).join('');
-}
-
-function _renderSourceDropdowns() {
-    _renderOneDropdown('temp');
-    _renderOneDropdown('hum');
-}
-
-function _renderOneDropdown(field) {
-    const el = document.getElementById('chart-sources-' + field);
-    if (!el) return;
-    const sel = field === 'temp' ? _selTemp : _selHum;
-    el.innerHTML = _sensors.map(s => {
-        const checked = sel.has(s.name);
-        return `<label class="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer hover:bg-slate-700/40 transition-colors select-none">
-            <input type="checkbox" value="${s.name}" data-field="${field}"
-                   ${checked ? 'checked' : ''}
-                   onchange="chartToggleSource('${field}','${s.name}',this.checked)"
-                   class="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer">
-            <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${s.color}"></span>
-            <span class="text-xs text-slate-300">${s.name}</span>
-        </label>`;
-    }).join('');
-}
-
-// ?? Tab switching ?????????????????????????????????????????????????????????????
-function _renderTabs() {
-    const t = document.getElementById('chart-tab-temp');
-    const h = document.getElementById('chart-tab-hum');
-    if (!t || !h) return;
-    const activeClass   = 'border-b-2 border-blue-400 text-blue-300';
-    const inactiveClass = 'border-b-2 border-transparent text-slate-500';
-    t.className = 'flex-1 py-2 text-[11px] font-medium text-center transition-all cursor-pointer ' +
-                  (_activeTab === 'temp' ? activeClass : inactiveClass);
-    h.className = 'flex-1 py-2 text-[11px] font-medium text-center transition-all cursor-pointer ' +
-                  (_activeTab === 'hum'  ? activeClass : inactiveClass);
-
-    // Show/hide source dropdowns
-    const tempSrc = document.getElementById('chart-sources-temp-wrap');
-    const humSrc  = document.getElementById('chart-sources-hum-wrap');
-    if (tempSrc) tempSrc.classList.toggle('hidden', _activeTab !== 'temp');
-    if (humSrc)  humSrc.classList.toggle('hidden',  _activeTab !== 'hum');
-}
-
-// ?? Global handlers (called from HTML) ???????????????????????????????????????
-window.chartSetRange = function(hours) {
-    _rangeHours = hours;
-    _renderRangePicker();
-    _loadAndRender();
-};
-
-window.chartToggleSource = function(field, name, checked) {
-    const sel = field === 'temp' ? _selTemp : _selHum;
-    if (checked) sel.add(name); else sel.delete(name);
-    _loadAndRender();
-};
-
-window.chartSetTab = function(tab) {
-    _activeTab = tab;
-    _renderTabs();
-    _loadAndRender();
-};
-
-// ?? Re-translate (called when language changes) ???????????????????????????????
-export function retranslateCharts(i18n) {
-    _i18n = i18n;
-    _renderRangePicker();
-    _renderTabs();
-}
-
-// Render tabs on init (called after DOM is ready)
-export function initChartTabs() {
-    _renderTabs();
 }

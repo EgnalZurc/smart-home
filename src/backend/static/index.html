@@ -286,28 +286,22 @@
                     <div id="chart-tab-hum"  class="flex-1 py-2 text-[11px] font-medium text-center cursor-pointer" onclick="chartSetTab('hum')"  data-i18n="chart.humidity">Humedad</div>
                 </div>
 
-                <!-- Range picker -->
+                <!-- Range picker (no label) -->
                 <div class="mb-3">
-                    <p class="text-[9px] text-slate-500 uppercase tracking-widest mb-1.5" data-i18n="chart.range">Rango</p>
                     <div id="chart-range-picker" class="flex flex-wrap gap-1.5"></div>
                 </div>
 
-                <!-- Source selectors -->
-                <div class="mb-3">
-                    <p class="text-[9px] text-slate-500 uppercase tracking-widest mb-1.5" data-i18n="chart.sources">Fuentes</p>
-                    <div id="chart-sources-temp-wrap">
-                        <div id="chart-sources-temp"></div>
-                    </div>
-                    <div id="chart-sources-hum-wrap" class="hidden">
-                        <div id="chart-sources-hum"></div>
-                    </div>
-                </div>
+                <!-- Custom legend: toggle buttons per series -->
+                <div id="chart-legend" class="flex flex-wrap gap-1.5 mb-3"></div>
 
                 <!-- Chart canvas -->
                 <div class="relative" style="height:150px">
                     <canvas id="chart-dynamic" style="position:absolute;inset:0;width:100%!important;height:100%!important"></canvas>
                     <p id="chart-no-data" class="hidden absolute inset-0 flex items-center justify-center text-slate-500 text-xs" data-i18n="chart.noData">Sin datos en el rango seleccionado</p>
                 </div>
+
+                <!-- Mean / min / max values -->
+                <div id="chart-means" class="flex gap-3 mt-2 px-1"></div>
 
             </div>
 

@@ -85,7 +85,8 @@
     "range24h": "24 hours",
     "range48h": "48 hours",
     "range7d": "7 days",
-    "noData": "No data for selected range"
+    "noData": "No data for selected range",
+    "mean": "Avg"
   },
   "toast": {
     "targetSet": "Target set to {{value}}°C",
