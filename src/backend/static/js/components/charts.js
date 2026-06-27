@@ -227,36 +227,46 @@ function _renderLegend() {
     if (!el) return;
 
     const items = [];
-
-    // Average
-    items.push({ key: 'avg', label: _t('chart.average'), color: 'rgba(255,255,255,0.8)' });
-
-    // A/C (temp only)
+    items.push({ key: 'avg', label: _t('chart.average'), color: '#e2e8f0' });
     if (!isHum && _acRoomTemp !== null) {
-        items.push({ key: 'ac', label: 'A/C', color: 'rgba(148,163,184,0.7)' });
+        items.push({ key: 'ac', label: 'A/C', color: '#94a3b8' });
     }
-
-    // Individual sensors
     for (const s of _sensors) {
         items.push({ key: s.name, label: s.name, color: s.color });
     }
 
     el.innerHTML = items.map(item => {
         const on = visible.has(item.key);
+        // Chip: active = colored dot + slight glow, inactive = muted dot + dimmed text
         return `<button
             onclick="chartToggleSeries('${item.key}')"
-            class="flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all text-[10px] select-none"
-            style="border-color:${on ? item.color : 'rgba(100,116,139,0.25)'};
-                   background:${on ? item.color + '22' : 'transparent'};
-                   color:${on ? item.color : '#475569'};
-                   opacity:${on ? '1' : '0.5'}">
-            <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${item.color}"></span>
+            style="
+                display:inline-flex; align-items:center; gap:6px;
+                padding:5px 10px 5px 7px;
+                border-radius:999px;
+                border:1px solid ${on ? item.color + '55' : 'rgba(71,85,105,0.4)'};
+                background:${on ? item.color + '14' : 'rgba(15,23,42,0.4)'};
+                color:${on ? item.color : '#475569'};
+                font-size:10px; font-weight:500;
+                cursor:pointer; user-select:none;
+                transition:all 0.18s ease;
+                white-space:nowrap;
+                box-shadow:${on ? '0 0 8px ' + item.color + '22' : 'none'};
+            "
+            onmouseenter="this.style.opacity='0.85'"
+            onmouseleave="this.style.opacity='1'"
+        >
+            <span style="
+                width:8px; height:8px; border-radius:50%; flex-shrink:0;
+                background:${on ? item.color : 'rgba(71,85,105,0.6)'};
+                box-shadow:${on ? '0 0 6px ' + item.color + '88' : 'none'};
+                transition:all 0.18s ease;
+            "></span>
             ${item.label}
         </button>`;
     }).join('');
 }
 
-// ?? Tabs ??????????????????????????????????????????????????????????????????????
 function _renderTabs() {
     const t = document.getElementById('chart-tab-temp');
     const h = document.getElementById('chart-tab-hum');
@@ -268,17 +278,45 @@ function _renderTabs() {
 }
 
 // ?? Range picker ??????????????????????????????????????????????????????????????
+
 function _renderRangePicker() {
     const el = document.getElementById('chart-range-picker');
     if (!el) return;
-    el.innerHTML = RANGES.map(r => `
-        <button onclick="chartSetRange(${r.hours})"
-            class="chart-range-btn px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all border
-                   ${r.hours === _rangeHours
-                       ? 'bg-blue-600/30 border-blue-500/60 text-blue-300'
-                       : 'bg-slate-800/60 border-slate-700/40 text-slate-400 hover:border-slate-600'}"
-        >${_i18n ? _i18n.t('chart.' + r.key) : r.hours + 'h'}</button>
-    `).join('');
+
+    // Segmented control: single pill container, active item has floating selector
+    const labels = RANGES.map(r => _i18n ? _i18n.t('chart.' + r.key) : r.hours + 'h');
+    const activeIdx = RANGES.findIndex(r => r.hours === _rangeHours);
+
+    el.innerHTML = `
+        <div style="
+            display:flex; align-items:center;
+            background:rgba(15,23,42,0.7);
+            border:1px solid rgba(51,65,85,0.6);
+            border-radius:10px;
+            padding:3px;
+            gap:1px;
+            width:100%;
+        ">
+            ${RANGES.map((r, i) => {
+                const active = r.hours === _rangeHours;
+                return `<button
+                    onclick="chartSetRange(${r.hours})"
+                    style="
+                        flex:1;
+                        padding:5px 0;
+                        border-radius:7px;
+                        border:none;
+                        font-size:10px; font-weight:${active ? '600' : '400'};
+                        cursor:pointer;
+                        transition:all 0.18s ease;
+                        white-space:nowrap;
+                        background:${active ? 'rgba(59,130,246,0.25)' : 'transparent'};
+                        color:${active ? '#93c5fd' : '#475569'};
+                        box-shadow:${active ? 'inset 0 0 0 1px rgba(59,130,246,0.5)' : 'none'};
+                    "
+                >${labels[i]}</button>`;
+            }).join('')}
+        </div>`;
 }
 
 // ?? Global handlers ???????????????????????????????????????????????????????????
