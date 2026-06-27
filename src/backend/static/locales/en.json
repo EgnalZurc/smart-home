@@ -73,7 +73,19 @@
     }
   },
   "chart": {
-    "average": "Average"
+    "average": "Average",
+    "temperature": "Temperature",
+    "humidity": "Humidity",
+    "sources": "Sources",
+    "allSources": "All sources",
+    "range": "Range",
+    "range1h": "1 hour",
+    "range6h": "6 hours",
+    "range12h": "12 hours",
+    "range24h": "24 hours",
+    "range48h": "48 hours",
+    "range7d": "7 days",
+    "noData": "No data for selected range"
   },
   "toast": {
     "targetSet": "Target set to {{value}}°C",

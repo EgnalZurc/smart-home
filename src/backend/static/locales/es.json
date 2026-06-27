@@ -14,7 +14,7 @@
     "mode": "Modo",
     "power": "Fuerza",
     "setpoint": "Consigna",
-    "thermostat": "Term?st."
+    "thermostat": "Termóst."
   },
   "controller": {
     "title": "Controlador",
@@ -73,7 +73,19 @@
     }
   },
   "chart": {
-    "average": "Media"
+    "average": "Media",
+    "temperature": "Temperatura",
+    "humidity": "Humedad",
+    "sources": "Fuentes",
+    "allSources": "Todas",
+    "range": "Rango",
+    "range1h": "1 hora",
+    "range6h": "6 horas",
+    "range12h": "12 horas",
+    "range24h": "24 horas",
+    "range48h": "48 horas",
+    "range7d": "7 días",
+    "noData": "Sin datos en el rango seleccionado"
   },
   "toast": {
     "targetSet": "Objetivo: {{value}}°C",

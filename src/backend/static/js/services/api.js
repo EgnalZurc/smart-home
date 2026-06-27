@@ -11,11 +11,13 @@ export async function fetchSensors() {
     return r.json();
 }
 
-export async function fetchSensorHistory(since = null) {
-    const url = since
-        ? `${BASE}/api/sensors/history?start=${since}`
-        : `${BASE}/api/sensors/history`;
-    const r = await fetch(url);
+// Renamed to fetchSensorHistoryApi to avoid collision with sensorHistory.js exports
+export async function fetchSensorHistoryApi(start = null, end = null) {
+    const params = new URLSearchParams();
+    if (start !== null) params.set('start', start);
+    if (end   !== null) params.set('end',   end);
+    const qs = params.toString();
+    const r = await fetch(`${BASE}/api/sensors/history${qs ? '?' + qs : ''}`);
     return r.json();
 }
 
