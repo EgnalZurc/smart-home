@@ -106,3 +106,60 @@ class TestGetActiveReadings:
                 h = MqttHandler("localhost", 1883, ["s1"], max_history=200)
                 h._error_tracker = None
                 assert h.get_average_temperature(max_age_seconds=3600) is None
+
+
+class TestRecordAcTemp:
+    """Tests for AC room temperature hourly recording (AC-CHART)."""
+
+    def _make_handler(self):
+        with patch("mqtt_handler.mqtt"):
+            with patch.object(MqttHandler, "_load_from_disk"):
+                h = MqttHandler("localhost", 1883, ["s1"], max_history=200)
+                h._error_tracker = None
+                return h
+
+    def test_record_ac_temp_adds_to_history(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("SENSOR_PERSIST_FILE", str(tmp_path / "sensor.json"))
+        import mqtt_handler as mh
+        monkeypatch.setattr(mh, "PERSIST_FILE", str(tmp_path / "sensor.json"))
+        h = self._make_handler()
+        h.record_ac_temp(24.5)
+        assert "AC" in h.history
+        assert len(h.history["AC"]) == 1
+        assert h.history["AC"][0].temperature == 24.5
+        assert h.history["AC"][0].humidity is None
+        assert h.history["AC"][0].battery is None
+
+    def test_record_ac_temp_persists_to_disk(self, tmp_path, monkeypatch):
+        import json, mqtt_handler as mh
+        persist = tmp_path / "sensor.json"
+        monkeypatch.setattr(mh, "PERSIST_FILE", str(persist))
+        h = self._make_handler()
+        h.record_ac_temp(22.0)
+        data = json.loads(persist.read_text(encoding="utf-8"))
+        assert "AC" in data
+        assert data["AC"][0]["temperature"] == 22.0
+
+    def test_record_ac_temp_respects_max_history(self, tmp_path, monkeypatch):
+        import mqtt_handler as mh
+        monkeypatch.setattr(mh, "PERSIST_FILE", str(tmp_path / "sensor.json"))
+        h = self._make_handler()
+        h.max_history = 5
+        for i in range(10):
+            h.record_ac_temp(20.0 + i)
+        assert len(h.history["AC"]) == 5
+
+    def test_ac_sensor_loaded_from_disk(self, tmp_path, monkeypatch):
+        """AC entries persisted on disk are loaded even though AC not in sensor_names."""
+        import json, mqtt_handler as mh
+        persist = tmp_path / "sensor.json"
+        monkeypatch.setattr(mh, "PERSIST_FILE", str(persist))
+        # Write pre-existing AC data
+        persist.write_text(json.dumps({
+            "AC": [{"temperature": 23.0, "humidity": None, "battery": None, "timestamp": 1000.0}]
+        }), encoding="utf-8")
+        with patch("mqtt_handler.mqtt"):
+            h = MqttHandler("localhost", 1883, ["s1"], max_history=200)
+            h._error_tracker = None
+        assert "AC" in h.history
+        assert h.history["AC"][0].temperature == 23.0

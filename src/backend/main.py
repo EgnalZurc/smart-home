@@ -102,6 +102,47 @@ AC_POWER_COOLING_MID = float(os.environ.get("AC_POWER_COOLING_MID", "1.75"))
 AC_POWER_MODULATING = float(os.environ.get("AC_POWER_MODULATING", "1.25"))
 AC_POWER_FORCED_ON = float(os.environ.get("AC_POWER_FORCED_ON", "2.5"))
 
+# --- AC temperature hourly scheduler ---
+
+class AcTempScheduler:
+    """Records the AC room temperature once per hour, on the hour (:00).
+
+    Wakes up every 30 seconds to check whether the current minute is 0
+    and we haven't already recorded for this hour-slot.
+    """
+
+    def __init__(self, mqtt_handler, ac_controller):
+        self._mqtt = mqtt_handler
+        self._ac   = ac_controller
+        self._last_recorded_hour: int | None = None
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+
+    def start(self):
+        self._thread = threading.Thread(target=self._run, daemon=True, name="ac-temp-scheduler")
+        self._thread.start()
+        logger.info("AC temperature hourly scheduler started")
+
+    def stop(self):
+        self._stop_event.set()
+
+    def _run(self):
+        import datetime
+        while not self._stop_event.is_set():
+            try:
+                now = datetime.datetime.now()
+                if now.minute == 0 and now.hour != self._last_recorded_hour:
+                    room_temp = self._ac.state.ac_real_room_temp
+                    if room_temp is not None:
+                        self._mqtt.record_ac_temp(room_temp)
+                        self._last_recorded_hour = now.hour
+                    else:
+                        logger.debug("AC room temp not available yet, skipping hour %d", now.hour)
+            except Exception as e:
+                logger.warning("AcTempScheduler error: %s", e)
+            self._stop_event.wait(30)  # check every 30s
+
+
 # --- Global components ---
 
 mqtt_handler: MqttHandler | None = None
@@ -111,12 +152,13 @@ cleanup_scheduler: CleanupScheduler | None = None
 subscription_manager: SubscriptionManager | None = None
 error_tracker: ErrorTracker | None = None
 humidity_scheduler: HumidityAnalysisScheduler | None = None
+ac_temp_scheduler: AcTempScheduler | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle."""
-    global mqtt_handler, melcloud_client, ac_controller, cleanup_scheduler, subscription_manager, error_tracker, humidity_scheduler
+    global mqtt_handler, melcloud_client, ac_controller, cleanup_scheduler, subscription_manager, error_tracker, humidity_scheduler, ac_temp_scheduler
 
     # F0.30 - Create error tracker first (other components need it)
     error_tracker = ErrorTracker()
@@ -269,6 +311,10 @@ async def lifespan(app: FastAPI):
     )
     cleanup_scheduler.start()
 
+    # AC-CHART: Hourly AC room temperature recorder
+    ac_temp_scheduler = AcTempScheduler(mqtt_handler, ac_controller)
+    ac_temp_scheduler.start()
+
     # HUM-0: Start daily humidity analysis (3-week study)
     humidity_scheduler = HumidityAnalysisScheduler(
         mqtt_handler=mqtt_handler,
@@ -285,6 +331,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("=== Shutting down Smart Home Backend ===")
     cleanup_scheduler.stop()
+    ac_temp_scheduler.stop()
     humidity_scheduler.stop()
     subscription_manager.stop()
     ac_controller.stop()

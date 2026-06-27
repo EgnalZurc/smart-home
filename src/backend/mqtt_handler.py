@@ -23,7 +23,7 @@ PERSIST_FILE = os.environ.get("SENSOR_PERSIST_FILE", "/app/data/sensor_readings.
 class SensorReading:
     """Reading from a sensor."""
 
-    def __init__(self, temperature: float, humidity: float, battery: int, timestamp: float):
+    def __init__(self, temperature: float, humidity: float | None, battery: int | None, timestamp: float):
         self.temperature = temperature
         self.humidity = humidity
         self.battery = battery
@@ -83,7 +83,8 @@ class MqttHandler:
             if path.exists():
                 data = json.loads(path.read_text(encoding="utf-8"))
                 for name, sensor_data in data.items():
-                    if name not in self.sensor_names:
+                    # 'AC' is a virtual sensor (MELCloud room temp) - always load it
+                    if name not in self.sensor_names and name != "AC":
                         continue
                     # New format: list of readings
                     if isinstance(sensor_data, list):
@@ -216,6 +217,36 @@ class MqttHandler:
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             logger.warning("Error processing message from %s: %s", msg.topic, e)
+
+    def record_ac_temp(self, room_temp: float) -> None:
+        """Record A/C room temperature as an hourly sample in history.
+
+        Stored under the key 'AC' so it appears in /api/sensors/history
+        alongside Zigbee sensor data.
+        """
+        reading = SensorReading(
+            temperature=room_temp,
+            humidity=None,
+            battery=None,
+            timestamp=time.time(),
+        )
+        with self._lock:
+            if "AC" not in self.history:
+                self.history["AC"] = []
+            self.history["AC"].append(reading)
+            if len(self.history["AC"]) > self.max_history:
+                self.history["AC"] = self.history["AC"][-self.max_history:]
+            data_to_save = {}
+            for name, readings_list in self.history.items():
+                data_to_save[name] = [r.to_dict() for r in readings_list]
+
+        try:
+            path = Path(PERSIST_FILE)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data_to_save, ensure_ascii=False), encoding="utf-8")
+            logger.info("AC room temp recorded: %.1f°C", room_temp)
+        except Exception as e:
+            logger.warning("Error saving AC temp to disk: %s", e)
 
     def get_active_readings(self, max_age_seconds: int = 600) -> dict[str, SensorReading]:
         """Returns sensors with recent data (< max_age)."""

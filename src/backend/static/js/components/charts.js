@@ -125,23 +125,49 @@ async function _loadAndRender() {
         });
     }
 
-    // ?? A/C room temp dataset (temp tab only, single horizontal-ish series) ???
-    if (!isHum && visible.has('ac') && _acRoomTemp !== null) {
-        // Draw as a flat reference line at the A/C reported room temp
-        datasets.push({
-            label: 'A/C',
-            data: sortedBuckets.map(() => _acRoomTemp),
-            borderColor: 'rgba(148,163,184,0.6)',
-            backgroundColor: 'transparent',
-            borderWidth: 1,
-            borderDash: [4, 4],
-            tension: 0,
-            pointRadius: 0,
-            pointHoverRadius: 0,
-            fill: false,
-            spanGaps: true,
-            order: 1,
-        });
+    // -- A/C room temp dataset (temp tab only, from hourly history) -----------
+    if (!isHum && visible.has('ac')) {
+        const acReadings = (rawData['AC'] || []).filter(r => r.ts >= startSec * 1000);
+        if (acReadings.length > 0) {
+            const acPts = _buildAcPoints(acReadings, bMin);
+            const acValues = sortedBuckets.map(bk => {
+                const nearest = acPts.find(p => Math.abs(p.bk - bk) < bMs);
+                return nearest ? nearest.value : null;
+            });
+            if (acValues.some(v => v !== null)) {
+                datasets.push({
+                    label: 'A/C',
+                    data: acValues,
+                    borderColor: 'rgba(148,163,184,0.7)',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.5,
+                    borderDash: [5, 4],
+                    tension: 0.3,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    pointHoverBackgroundColor: 'rgba(148,163,184,0.9)',
+                    fill: false,
+                    spanGaps: true,
+                    order: 1,
+                });
+            }
+        } else if (_acRoomTemp !== null) {
+            // Fallback: no history yet - flat reference line
+            datasets.push({
+                label: 'A/C',
+                data: sortedBuckets.map(() => _acRoomTemp),
+                borderColor: 'rgba(148,163,184,0.4)',
+                backgroundColor: 'transparent',
+                borderWidth: 1,
+                borderDash: [4, 4],
+                tension: 0,
+                pointRadius: 0,
+                pointHoverRadius: 0,
+                fill: false,
+                spanGaps: true,
+                order: 1,
+            });
+        }
     }
 
     // ?? Individual sensor datasets ????????????????????????????????????????????
@@ -285,6 +311,23 @@ export function retranslateCharts(i18n) {
 
 // ?? Helpers ???????????????????????????????????????????????????????????????????
 function _t(key) { return _i18n ? _i18n.t(key) : key; }
+
+function _buildAcPoints(readings, bucketMin) {
+    const bucketMs = bucketMin * 60 * 1000;
+    const buckets  = {};
+    for (const r of readings) {
+        if (r.temp === null || r.temp === undefined) continue;
+        const bk = Math.floor(r.ts / bucketMs) * bucketMs;
+        if (!buckets[bk]) buckets[bk] = [];
+        buckets[bk].push(r.temp);
+    }
+    return Object.entries(buckets)
+        .sort(([a], [b]) => a - b)
+        .map(([bk, vals]) => ({
+            bk: parseInt(bk),
+            value: Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10,
+        }));
+}
 
 function _bucketMinutes(hours) {
     if (hours <= 1)  return 2;
