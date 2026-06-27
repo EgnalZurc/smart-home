@@ -371,33 +371,35 @@ class ACController:
             )
 
     def _read_sensors(self) -> tuple[float | None, float | None, int, float]:
-        """Reads sensors and returns (avg_temp, avg_hum, active_count, most recent timestamp)."""
+        """Reads sensors and returns (avg_temp, avg_hum, active_count, most recent timestamp).
+
+        Average is calculated only from ACTIVE sensors (within sensor_timeout).
+        active_count and the average use the same set of sensors for consistency.
+        """
         avg_temp = None
         avg_hum = None
         last_sensor_time = self._last_sensor_update_time
 
-        with self.mqtt._lock:
-            readings = self.mqtt.readings
-            if readings:
-                # Calculate average temperature
-                temps = [r.temperature for r in readings.values() if r.temperature is not None]
-                if temps:
-                    avg_temp = sum(temps) / len(temps)
-                
-                # Calculate average humidity
-                hums = [r.humidity for r in readings.values() if r.humidity is not None]
-                if hums:
-                    avg_hum = sum(hums) / len(hums)
-                
-                # Find most recent timestamp
-                timestamps = [r.timestamp for r in readings.values()]
-                if timestamps:
-                    most_recent = max(timestamps)
-                    if most_recent > self._last_sensor_update_time:
-                        self._last_sensor_update_time = most_recent
-                        last_sensor_time = most_recent
+        # Use only active readings so that avg and active_count are consistent
+        active_readings = self.mqtt.get_active_readings(self.config.sensor_timeout)
 
-        active_count = len(self.mqtt.get_active_readings(self.config.sensor_timeout))
+        if active_readings:
+            temps = [r.temperature for r in active_readings.values() if r.temperature is not None]
+            if temps:
+                avg_temp = sum(temps) / len(temps)
+
+            hums = [r.humidity for r in active_readings.values() if r.humidity is not None]
+            if hums:
+                avg_hum = sum(hums) / len(hums)
+
+            timestamps = [r.timestamp for r in active_readings.values()]
+            if timestamps:
+                most_recent = max(timestamps)
+                if most_recent > self._last_sensor_update_time:
+                    self._last_sensor_update_time = most_recent
+                    last_sensor_time = most_recent
+
+        active_count = len(active_readings)
         return avg_temp, avg_hum, active_count, last_sensor_time
 
     def _build_inputs(self, avg_temp: float | None, last_sensor_time: float) -> StateMachineInputs:
