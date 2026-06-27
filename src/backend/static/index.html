@@ -251,7 +251,7 @@
 
 <!-- Sensors Modal -->
 <div id="modal" class="fixed inset-0 bg-black/60 modal-bg z-50 hidden flex items-end justify-center" onclick="if(event.target===this)closeModal()">
-    <div class="modal-sheet bg-[#1e293b] rounded-t-3xl w-full max-w-md max-h-[90vh] overflow-y-auto p-5 pb-8 border-t border-slate-700/50">
+    <div class="modal-sheet bg-[#1e293b] rounded-t-3xl w-full max-w-md max-h-[88vh] overflow-y-auto p-5 pb-8 border-t border-slate-700/50" style="-webkit-overflow-scrolling:touch">
         <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4"></div>
         <h2 class="text-base font-bold mb-3" data-i18n="modals.sensors.title">Sensores</h2>
 
@@ -283,7 +283,7 @@
 
             <!-- Chart canvas -->
             <div class="relative">
-                <canvas id="chart-dynamic" height="150"></canvas>
+                <canvas id="chart-dynamic" height="150" style="max-height:160px"></canvas>
                 <p id="chart-no-data" class="hidden absolute inset-0 flex items-center justify-center text-slate-500 text-xs" data-i18n="chart.noData">Sin datos en el rango seleccionado</p>
             </div>
 

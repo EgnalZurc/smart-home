@@ -86,6 +86,9 @@ export function updateSensorsDetail(sensors, i18n, acReal = null) {
 
 export function openModal() {
     const modal = document.getElementById('modal');
+    // Reset scroll to top before revealing so it always opens at the top
+    const sheet = modal.querySelector('.modal-sheet');
+    if (sheet) sheet.scrollTop = 0;
     modal.classList.remove('hidden');
     requestAnimationFrame(() => modal.classList.add('modal-visible'));
 }
