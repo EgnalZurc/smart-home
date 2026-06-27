@@ -56,8 +56,8 @@
       "confirm": "Aplicar"
     },
     "forceOff": {
-      "title": "?Apagar el sistema?",
-      "message": "El AC se apagar? completamente. Para volver a usar el control autom?tico, pulsa AUTO.",
+      "title": "¿Apagar el sistema?",
+      "message": "El AC se apagará completamente. Para volver a usar el control automático, pulsa AUTO.",
       "cancel": "Cancelar",
       "confirm": "Apagar"
     },
@@ -68,8 +68,8 @@
       "close": "Cerrar",
       "online": "Online",
       "offline": "Offline",
-      "battery": "Bater?a",
-      "lastSeen": "?ltima medici?n"
+      "battery": "Batería",
+      "lastSeen": "Última medición"
     }
   },
   "chart": {
@@ -86,7 +86,7 @@
     "setpointError": "Error al cambiar la consigna",
     "controlModeSet": "Modo de control: {{value}}",
     "controlModeError": "Error al cambiar el modo de control",
-    "connectionLost": "Conexi?n perdida",
+    "connectionLost": "Conexión perdida",
     "invalidTemp": "La temperatura debe estar entre 19 y 30°C"
   },
   "dashboard": {
