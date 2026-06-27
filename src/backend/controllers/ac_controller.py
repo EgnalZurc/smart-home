@@ -381,7 +381,12 @@ class ACController:
         last_sensor_time = self._last_sensor_update_time
 
         # Use only active readings so that avg and active_count are consistent
-        active_readings = self.mqtt.get_active_readings(self.config.sensor_timeout)
+        # Exclude the virtual 'AC' sensor (MELCloud room temp recorder) from averages
+        active_readings = {
+            name: r
+            for name, r in self.mqtt.get_active_readings(self.config.sensor_timeout).items()
+            if name != "AC"
+        }
 
         if active_readings:
             temps = [r.temperature for r in active_readings.values() if r.temperature is not None]
