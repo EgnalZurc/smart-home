@@ -189,6 +189,7 @@ function _formatLabel(tsMs) {
 function _chartOptions(tickCb = null) {
     return {
         responsive: true,
+        maintainAspectRatio: false,
         animation: false,
         interaction: { mode: 'nearest', intersect: false },
         scales: {

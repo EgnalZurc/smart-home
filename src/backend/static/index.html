@@ -251,50 +251,70 @@
 
 <!-- Sensors Modal -->
 <div id="modal" class="fixed inset-0 bg-black/60 modal-bg z-50 hidden flex items-end justify-center" onclick="if(event.target===this)closeModal()">
-    <div class="modal-sheet bg-[#1e293b] rounded-t-3xl w-full max-w-md max-h-[88vh] overflow-y-auto p-5 pb-8 border-t border-slate-700/50" style="-webkit-overflow-scrolling:touch">
-        <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4"></div>
-        <h2 class="text-base font-bold mb-3" data-i18n="modals.sensors.title">Sensores</h2>
+    <!--
+        Layout: fixed-height flex column sheet.
+        - Header (handle + title + close btn): always visible, never scrolls
+        - Body: scrollable, contains chart controls + sensor list
+        This guarantees the top is always visible regardless of content height.
+    -->
+    <div class="modal-sheet bg-[#1e293b] rounded-t-3xl w-full max-w-md border-t border-slate-700/50"
+         style="height:88vh; display:flex; flex-direction:column; overflow:hidden"
+         onclick="event.stopPropagation()">
 
-        <!-- Dynamic chart container -->
-        <div class="bg-slate-900/50 rounded-2xl p-3 mb-4 border border-slate-700/30">
-
-            <!-- Tabs: Temperature / Humidity -->
-            <div class="flex border-b border-slate-700/40 mb-3">
-                <div id="chart-tab-temp" class="flex-1 py-2 text-[11px] font-medium text-center cursor-pointer" onclick="chartSetTab('temp')" data-i18n="chart.temperature">Temperatura</div>
-                <div id="chart-tab-hum"  class="flex-1 py-2 text-[11px] font-medium text-center cursor-pointer" onclick="chartSetTab('hum')"  data-i18n="chart.humidity">Humedad</div>
+        <!-- Fixed header: always on top -->
+        <div style="flex-shrink:0; padding:20px 20px 12px">
+            <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4"></div>
+            <div class="flex items-center justify-between">
+                <h2 class="text-base font-bold" data-i18n="modals.sensors.title">Sensores</h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-700/50">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style="width:18px;height:18px">
+                        <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z"/>
+                    </svg>
+                </button>
             </div>
-
-            <!-- Range picker -->
-            <div class="mb-3">
-                <p class="text-[9px] text-slate-500 uppercase tracking-widest mb-1.5" data-i18n="chart.range">Rango</p>
-                <div id="chart-range-picker" class="flex flex-wrap gap-1.5"></div>
-            </div>
-
-            <!-- Source selectors -->
-            <div class="mb-3">
-                <p class="text-[9px] text-slate-500 uppercase tracking-widest mb-1.5" data-i18n="chart.sources">Fuentes</p>
-                <div id="chart-sources-temp-wrap" class="grid grid-cols-2 gap-0.5">
-                    <div id="chart-sources-temp"></div>
-                </div>
-                <div id="chart-sources-hum-wrap" class="grid grid-cols-2 gap-0.5 hidden">
-                    <div id="chart-sources-hum"></div>
-                </div>
-            </div>
-
-            <!-- Chart canvas -->
-            <div class="relative">
-                <canvas id="chart-dynamic" height="150" style="max-height:160px"></canvas>
-                <p id="chart-no-data" class="hidden absolute inset-0 flex items-center justify-center text-slate-500 text-xs" data-i18n="chart.noData">Sin datos en el rango seleccionado</p>
-            </div>
-
         </div>
 
-        <!-- Sensor detail list -->
-        <div id="sensors-detail" class="space-y-2"></div>
+        <!-- Scrollable body -->
+        <div style="flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0 20px 32px">
 
-        <button onclick="closeModal()" class="mt-5 w-full py-3.5 bg-slate-700/60 hover:bg-slate-600 rounded-2xl text-sm font-semibold transition-colors">
-            <span data-i18n="modals.sensors.close">Cerrar</span>
-        </button>
+            <!-- Dynamic chart container -->
+            <div class="bg-slate-900/50 rounded-2xl p-3 mb-4 border border-slate-700/30">
+
+                <!-- Tabs: Temperature / Humidity -->
+                <div class="flex border-b border-slate-700/40 mb-3">
+                    <div id="chart-tab-temp" class="flex-1 py-2 text-[11px] font-medium text-center cursor-pointer" onclick="chartSetTab('temp')" data-i18n="chart.temperature">Temperatura</div>
+                    <div id="chart-tab-hum"  class="flex-1 py-2 text-[11px] font-medium text-center cursor-pointer" onclick="chartSetTab('hum')"  data-i18n="chart.humidity">Humedad</div>
+                </div>
+
+                <!-- Range picker -->
+                <div class="mb-3">
+                    <p class="text-[9px] text-slate-500 uppercase tracking-widest mb-1.5" data-i18n="chart.range">Rango</p>
+                    <div id="chart-range-picker" class="flex flex-wrap gap-1.5"></div>
+                </div>
+
+                <!-- Source selectors -->
+                <div class="mb-3">
+                    <p class="text-[9px] text-slate-500 uppercase tracking-widest mb-1.5" data-i18n="chart.sources">Fuentes</p>
+                    <div id="chart-sources-temp-wrap">
+                        <div id="chart-sources-temp"></div>
+                    </div>
+                    <div id="chart-sources-hum-wrap" class="hidden">
+                        <div id="chart-sources-hum"></div>
+                    </div>
+                </div>
+
+                <!-- Chart canvas -->
+                <div class="relative" style="height:150px">
+                    <canvas id="chart-dynamic" style="position:absolute;inset:0;width:100%!important;height:100%!important"></canvas>
+                    <p id="chart-no-data" class="hidden absolute inset-0 flex items-center justify-center text-slate-500 text-xs" data-i18n="chart.noData">Sin datos en el rango seleccionado</p>
+                </div>
+
+            </div>
+
+            <!-- Sensor detail list -->
+            <div id="sensors-detail" class="space-y-2 mb-4"></div>
+
+        </div>
     </div>
 </div>
 
