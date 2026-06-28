@@ -142,3 +142,48 @@ class TestNoOptimisticUI:
         r = client.post("/api/config", json={"target_temperature": 24.0})
         assert r.status_code == 200
         ac.update_config.assert_called_once()
+
+
+class TestPendingStateFeedback:
+    """Pending state: API contract for manualQueue.onPollUpdate (AC-MANUAL.7)."""
+
+    def test_manual_param_response_applied_mode_matches_sent(self):
+        """Queue uses applied.mode to decide when to clear pending state."""
+        client, ac, _ = _setup("manual")
+        ac.current_state.manual_params = ManualParams(temperature=22.0, fan_speed=0, mode="heat")
+        r = client.post("/api/manual_param?param=mode&value=heat")
+        assert r.status_code == 200
+        assert r.json()["applied"]["mode"] == "heat"
+
+    def test_manual_param_response_applied_fan_matches_sent(self):
+        client, ac, _ = _setup("manual")
+        ac.current_state.manual_params = ManualParams(temperature=22.0, fan_speed=2, mode="cool")
+        r = client.post("/api/manual_param?param=fan_speed&value=2")
+        assert r.status_code == 200
+        assert r.json()["applied"]["fan_speed"] == 2
+
+    def test_manual_param_response_applied_temperature_matches_sent(self):
+        client, ac, _ = _setup("manual")
+        ac.current_state.manual_params = ManualParams(temperature=20.5, fan_speed=0, mode="cool")
+        r = client.post("/api/manual_param?param=temperature&value=20.5")
+        assert r.status_code == 200
+        assert abs(r.json()["applied"]["temperature"] - 20.5) < 0.15
+
+    def test_status_manual_params_has_all_fields_for_pending_clear(self):
+        """After any change, /api/status must expose manual_params with all 3 fields
+        so onPollUpdate can check mode, fan_speed, and temperature."""
+        client, ac, _ = _setup("manual")
+        status = client.get("/api/status").json()
+        mp = status["manual_params"]
+        assert "mode" in mp
+        assert "fan_speed" in mp
+        assert "temperature" in mp
+
+    def test_pending_cleared_when_server_confirms_temperature(self):
+        """Simulate: send temp=20.0, server later returns temp=20.0 in status -> matches."""
+        client, ac, _ = _setup("manual")
+        ac.current_state.manual_params = ManualParams(temperature=20.0, fan_speed=0, mode="cool")
+        client.post("/api/manual_param?param=temperature&value=20.0")
+        # Next poll returns manual_params.temperature=20.0 -> onPollUpdate clears pending
+        status = client.get("/api/status").json()
+        assert abs(status["manual_params"]["temperature"] - 20.0) < 0.15

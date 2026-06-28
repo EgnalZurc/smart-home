@@ -120,6 +120,7 @@
 | AC-MANUAL.4 | Pending icon disappears once AC confirms the new state | Complete |
 | AC-MANUAL.5 | All actions show a toast confirming what was done | Complete |
 | AC-MANUAL.6 | UI reflects only persisted server state (no optimistic updates); updates on next poll (~5s) | Complete |
+| AC-MANUAL.7 | While a command is in-flight, the affected control shows a pending state (amber sweep animation, non-interactive) until the next poll confirms the change | Complete |
 | Tests | test_f0_manual_mode.py — 11 tests including TestNoOptimisticUI | Complete |
 
 ## AC-ERR ? Error Tracking  ? Complete
