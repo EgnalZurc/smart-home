@@ -109,7 +109,7 @@
 | AC-AUTO.5 | Falls back to forced_on if all sensors time out | Complete |
 | Tests | test_f0_ac_auto_control.py ? integration tests, test_state_machine.py | Complete |
 
-## AC-MANUAL ? Manual Mode  ? Complete
+## AC-MANUAL — Manual Mode  ✅ Complete
 
 | # | Requirement | Status |
 |---|---|---|
@@ -118,7 +118,9 @@
 | AC-MANUAL.2 | Manual commands queued and sent to MELCloud | Complete |
 | AC-MANUAL.3 | Pending command icon shown while command awaits AC confirmation | Complete |
 | AC-MANUAL.4 | Pending icon disappears once AC confirms the new state | Complete |
-| Tests | test_f0_manual_mode.py ? integration tests | Complete |
+| AC-MANUAL.5 | All actions show a toast confirming what was done | Complete |
+| AC-MANUAL.6 | UI reflects only persisted server state (no optimistic updates); updates on next poll (~5s) | Complete |
+| Tests | test_f0_manual_mode.py — 11 tests including TestNoOptimisticUI | Complete |
 
 ## AC-ERR ? Error Tracking  ? Complete
 

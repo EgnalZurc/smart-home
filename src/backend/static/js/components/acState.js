@@ -19,8 +19,7 @@ export function updateAcState(status, i18n) {
 
     updateModeDisplay(ac_state.mode, i18n);
     updateFanDisplay(ac_state.fan_speed, i18n);
-    // Thermostat (read-only, from MELCloud)
-    // ac-real-roomtemp moved to sensors modal (F0.35) - guard with null check
+
     const rtEl = document.getElementById('ac-real-roomtemp');
     if (rtEl) {
         if (ac_real.room_temp !== null) {
@@ -32,9 +31,6 @@ export function updateAcState(status, i18n) {
         }
     }
 
-    // ac-real-power is managed by controller.js smart badge (F0.34)
-
-    // Enable/disable param boxes based on control mode
     const isManual = control_mode === 'manual';
     ['ac-mode-box', 'ac-fan-box'].forEach(id => {
         document.getElementById(id).style.cursor = isManual ? 'pointer' : 'default';
@@ -44,22 +40,15 @@ export function updateAcState(status, i18n) {
 export function editMode(i18n) {
     const current = manualQueue.lastAcknowledged.mode;
     const newMode = current === 'cool' ? 'heat' : 'cool';
-    const box = document.getElementById('ac-mode-box');
     const modeLabel = newMode === 'cool'
         ? i18n.t('modals.forceOn.modes.cool')
         : i18n.t('modals.forceOn.modes.heat');
 
     manualQueue.enqueue(
         'mode', newMode,
-        val => updateModeDisplay(val, i18n),
-        val => {
-            updateModeDisplay(val, i18n);
-            _shake(box);
-            showToast(i18n.t('toast.modeError'), 'error');
-        },
-        () => showToast(i18n.t('toast.modeSet').replace('{{value}}', modeLabel), 'success')
+        () => showToast(i18n.t('toast.modeSet').replace('{{value}}', modeLabel), 'success'),
+        () => showToast(i18n.t('toast.modeError'), 'error')
     );
-    _pulse(box);
 }
 
 export function editFanSpeed(i18n) {
@@ -70,21 +59,13 @@ export function editFanSpeed(i18n) {
         i18n.t('modals.forceOn.powerLevels.medium'),
         i18n.t('modals.forceOn.powerLevels.high'),
     ];
-    const box = document.getElementById('ac-fan-box');
 
     manualQueue.enqueue(
         'fan_speed', newSpeed,
-        val => updateFanDisplay(val, i18n),
-        val => {
-            updateFanDisplay(val, i18n);
-            _shake(box);
-            showToast(i18n.t('toast.fanError'), 'error');
-        },
-        () => showToast(i18n.t('toast.fanSet').replace('{{value}}', speedLabels[newSpeed]), 'success')
+        () => showToast(i18n.t('toast.fanSet').replace('{{value}}', speedLabels[newSpeed]), 'success'),
+        () => showToast(i18n.t('toast.fanError'), 'error')
     );
-    _pulse(box);
 }
-
 
 export function updateModeDisplay(mode, i18n) {
     document.getElementById('ac-mode-display').textContent = mode === 'cool'
@@ -103,15 +84,4 @@ export function updateFanDisplay(speed, i18n) {
     const el = document.getElementById('ac-fan-display');
     el.textContent = labels[speed];
     el.className = `text-xs font-semibold ${colors[speed]}`;
-}
-
-
-function _pulse(el) {
-    el.classList.add('optimistic-update');
-    setTimeout(() => el.classList.remove('optimistic-update'), 600);
-}
-
-function _shake(el) {
-    el.classList.add('revert-error');
-    setTimeout(() => el.classList.remove('revert-error'), 500);
 }

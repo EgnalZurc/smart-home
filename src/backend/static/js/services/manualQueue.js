@@ -1,9 +1,10 @@
 import { postManualParam } from './api.js';
 import { showToast } from '../components/toast.js';
 
-// Optimistic UI queue for AC manual parameter changes.
-// Sends changes sequentially; reverts UI on failure.
-// Calls successFn(data) on success so callers can show a contextual toast.
+// Manual control queue for AC parameter changes.
+// Sends changes sequentially and shows toast on result.
+// Does NOT update the UI optimistically - the UI reflects server state only,
+// updated on the next poll cycle (every 5s).
 export class ManualControlQueue {
     constructor() {
         this.queue = [];
@@ -15,31 +16,26 @@ export class ManualControlQueue {
         };
     }
 
-    // updateFn(value)   : applies optimistic change to UI immediately
-    // revertFn(value)   : restores last known good value on failure
-    // successFn(data)   : called after confirmed server response (optional)
-    enqueue(param, value, updateFn, revertFn, successFn = null) {
-        updateFn(value); // optimistic
-        this.queue.push({ param, value, revertFn, successFn });
+    // successFn(): called after confirmed server response (for toast)
+    // errorFn():   called on failure (for toast)
+    enqueue(param, value, successFn = null, errorFn = null) {
+        this.queue.push({ param, value, successFn, errorFn });
         if (!this.processing) this._process();
     }
 
     async _process() {
         this.processing = true;
         while (this.queue.length > 0) {
-            const { param, value, revertFn, successFn } = this.queue.shift();
+            const { param, value, successFn, errorFn } = this.queue.shift();
             try {
                 const data = await postManualParam(param, value);
-                // Store acknowledged value
                 if (param === 'mode')        this.lastAcknowledged.mode        = data.applied.mode;
                 if (param === 'fan_speed')   this.lastAcknowledged.fan_speed   = data.applied.fan_speed;
                 if (param === 'temperature') this.lastAcknowledged.temperature = data.applied.temperature;
-                // Notify caller of success
                 if (successFn) successFn(data);
             } catch {
-                revertFn(this.lastAcknowledged[param]);
-                // Error toast shown by caller via revertFn or here as fallback
-                showToast('Error: ' + param, 'error');
+                if (errorFn) errorFn();
+                else showToast('Error: ' + param, 'error');
             }
         }
         this.processing = false;

@@ -1,10 +1,9 @@
 import { postConfig, postManualParam } from '../services/api.js';
 import { showToast } from './toast.js';
 
-export let currentTarget   = 26.0;  // auto mode: controller objective
-export let currentManualT  = 24.0;  // manual mode: AC setpoint
+export let currentTarget   = 26.0;
+export let currentManualT  = 24.0;
 
-// States where the AC should be ON according to the controller
 const ACTIVE_STATES   = new Set(['cooling_max', 'modulating', 'manual']);
 const INACTIVE_STATES = new Set(['off', 'cooldown', 'system_off']);
 
@@ -26,13 +25,12 @@ const DECISION_BG = {
 export function updateController(status) {
     const isManual = status.ac_state?.control_mode === 'manual';
 
-    // F0.36: Show the relevant temperature for the current mode
+    // Always reflect server state - no local overrides
     currentTarget  = status.target_temperature;
     currentManualT = status.manual_params?.temperature ?? 24.0;
     const displayTemp = isManual ? currentManualT : currentTarget;
-    document.getElementById('target-display').textContent = displayTemp.toFixed(1) + '\u00b0C';
+    document.getElementById('target-display').textContent = displayTemp.toFixed(1) + '°C';
 
-    // F0.36: Update label to reflect mode semantics
     const labelEl = document.getElementById('target-label');
     if (labelEl) {
         const i18n = window.i18n || { t: k => k };
@@ -41,7 +39,6 @@ export function updateController(status) {
             : (i18n.t('controller.objective') || 'Target');
     }
 
-    // Smart badge: detect mismatch between what controller wants and AC real state
     const el     = document.getElementById('controller-decision');
     const action = status.ac_state.action;
     const acOn   = status.ac_real?.power === true;
@@ -60,7 +57,6 @@ export function updateController(status) {
         el.style.backgroundColor = DECISION_BG[action]     || 'transparent';
     }
 
-    // F0.37: pending indicator
     const pendingEl = document.getElementById('pending-indicator');
     if (pendingEl) pendingEl.classList.toggle('active', mismatch);
 
@@ -68,42 +64,32 @@ export function updateController(status) {
     if (powerEl) powerEl.style.display = 'none';
 }
 
-// F0.36: dual-mode changeTarget
-// auto   -> updates controller objective (postConfig)
-// manual -> updates AC setpoint directly (postManualParam 'temperature')
+// changeTarget: sends the request and shows toast.
+// Does NOT update the DOM - the next poll will reflect the new value.
 export async function changeTarget(delta) {
     const i18n = window.i18n || { t: k => k };
     const isManual = document.getElementById('btn-manual')?.classList.contains('bg-blue-600');
 
     if (isManual) {
-        // Manual mode: control the AC setpoint directly
-        currentManualT = Math.max(19, Math.min(30, currentManualT + delta));
-        document.getElementById('target-display').textContent = currentManualT.toFixed(1) + '\u00b0C';
+        const newTemp = Math.max(19, Math.min(30, currentManualT + delta));
         try {
-            await postManualParam('temperature', currentManualT);
+            await postManualParam('temperature', newTemp);
             showToast(
-                (i18n.t('toast.setpointSet') || 'AC Temp: {{value}}\u00b0C').replace('{{value}}', currentManualT.toFixed(1)),
+                i18n.t('toast.setpointSet').replace('{{value}}', newTemp.toFixed(1)),
                 'success'
             );
         } catch {
-            // Revert on failure
-            currentManualT -= delta;
-            document.getElementById('target-display').textContent = currentManualT.toFixed(1) + '\u00b0C';
-            showToast(i18n.t('toast.setpointError') || 'Error updating AC temperature', 'error');
+            showToast(i18n.t('toast.setpointError'), 'error');
         }
     } else {
-        // Auto mode: update controller objective
-        currentTarget = Math.max(19, Math.min(30, currentTarget + delta));
-        document.getElementById('target-display').textContent = currentTarget.toFixed(1) + '\u00b0C';
+        const newTemp = Math.max(19, Math.min(30, currentTarget + delta));
         try {
-            await postConfig(currentTarget);
+            await postConfig(newTemp);
             showToast(
-                i18n.t('toast.targetSet').replace('{{value}}', currentTarget.toFixed(1)),
+                i18n.t('toast.targetSet').replace('{{value}}', newTemp.toFixed(1)),
                 'success'
             );
         } catch {
-            currentTarget -= delta;
-            document.getElementById('target-display').textContent = currentTarget.toFixed(1) + '\u00b0C';
             showToast(i18n.t('toast.targetError'), 'error');
         }
     }

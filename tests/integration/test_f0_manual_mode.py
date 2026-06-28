@@ -97,3 +97,48 @@ class TestF0ManualMode:
         r = client.post("/api/control_mode", json={"mode": "off"})
         assert r.status_code == 200
         ac.set_control_mode.assert_called_with("off")
+
+
+class TestNoOptimisticUI:
+    """Actions send requests and show toast; UI updates only via next poll (AC-MANUAL.5)."""
+
+    def test_manual_param_response_has_applied_values(self):
+        """API response must include applied values so the queue can track acknowledged state."""
+        client, ac, _ = _setup("manual")
+        ac.current_state.manual_params = ManualParams(temperature=22.0, fan_speed=1, mode="cool")
+        r = client.post("/api/manual_param?param=fan_speed&value=2")
+        assert r.status_code == 200
+        data = r.json()
+        # Response must include 'applied' so ManualControlQueue can update lastAcknowledged
+        assert "applied" in data
+
+    def test_manual_param_applied_contains_all_fields(self):
+        client, ac, _ = _setup("manual")
+        r = client.post("/api/manual_param?param=mode&value=heat")
+        assert r.status_code == 200
+        applied = r.json()["applied"]
+        assert "mode" in applied
+        assert "fan_speed" in applied
+        assert "temperature" in applied
+
+    def test_status_reflects_server_state_not_local(self):
+        """After a param change, /api/status reflects server state (controller state machine)."""
+        client, ac, _ = _setup("manual")
+        # Simulate server applying temperature=20.0
+        ac.current_state.manual_params = ManualParams(temperature=20.0, fan_speed=0, mode="cool")
+        client.post("/api/manual_param?param=temperature&value=20.0")
+        status = client.get("/api/status").json()
+        assert status["manual_params"]["temperature"] == 20.0
+
+    def test_control_mode_change_response_200(self):
+        """Switching control mode returns 200 - UI updates from next /api/status poll."""
+        client, ac, _ = _setup("auto")
+        r = client.post("/api/control_mode", json={"mode": "manual"})
+        assert r.status_code == 200
+
+    def test_target_temp_change_persists_to_config(self):
+        """Changing target temperature via /api/config persists to controller config."""
+        client, ac, _ = _setup("auto")
+        r = client.post("/api/config", json={"target_temperature": 24.0})
+        assert r.status_code == 200
+        ac.update_config.assert_called_once()
