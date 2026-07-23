@@ -101,12 +101,17 @@
 
 | # | Requirement | Status |
 |---|---|---|
-| AC-AUTO | Controller loop runs every 10s evaluating sensor average vs target | Complete |
-| AC-AUTO.1 | State machine: idle, cooling_max, cooling_mid, modulating, forced_on | Complete |
-| AC-AUTO.2 | Hysteresis on/off to prevent rapid switching | Complete |
-| AC-AUTO.3 | Cooldown period between state transitions | Complete |
-| AC-AUTO.4 | Sensor timeout (3600s) - sensor marked inactive if no data | Complete |
-| AC-AUTO.5 | Falls back to forced_on if all sensors time out | Complete |
+| AC-AUTO | Controller loop runs every 10s evaluating sensor average vs target temperature | Complete |
+| AC-AUTO.1 | States: off, cooling_max, modulating, cooldown, manual, system_off, error | Complete |
+| AC-AUTO.2 | OFF -> COOLING_MAX when avg > target + hysteresis_on (default +0.5?C) | Complete |
+| AC-AUTO.3 | COOLING_MAX -> MODULATING when avg enters (cold_threshold, hot_threshold] | Complete |
+| AC-AUTO.4 | COOLING_MAX / MODULATING -> COOLDOWN when avg < target - hysteresis_off (default -0.3?C) | Complete |
+| AC-AUTO.5 | COOLDOWN waits cooldown_seconds (default 180s) before re-evaluating | Complete |
+| AC-AUTO.6 | MODULATING uses proportional setpoint: hot edge=min_setpoint (19?C), cold edge=max_setpoint (30?C) | Complete |
+| AC-AUTO.7 | Hysteresis band: hot_threshold = target + 0.5, cold_threshold = target - 0.3 (configurable) | Complete |
+| AC-AUTO.8 | Sensor timeout (3600s) - sensor marked inactive if no recent data | Complete |
+| AC-AUTO.9 | No active sensors in COOLING_MAX: keeps COOLING_MAX (last known hot, stays on) | Complete |
+| AC-AUTO.10 | No active sensors in MODULATING: keeps last setpoint until sensors recover | Complete |
 | Tests | test_f0_ac_auto_control.py (5), test_state_machine.py (23) | Complete |
 
 ## AC-MANUAL - Manual Mode  Complete
