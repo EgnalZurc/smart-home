@@ -84,6 +84,8 @@ const T = {
         ac_desc:      'Control de temperatura, sensores Zigbee, MELCloud',
         zigbee_name:  'Zigbee2MQTT',
         zigbee_desc:  'Dispositivos Zigbee, sensores, coordinador',
+        photos_name:  'Fotos',
+        photos_desc:  'Copia de seguridad de fotos y vídeos',
     },
     en: {
         title:        'Cuchi Casa',
@@ -94,13 +96,16 @@ const T = {
         ac_desc:      'Temperature control, Zigbee sensors, MELCloud',
         zigbee_name:  'Zigbee2MQTT',
         zigbee_desc:  'Zigbee devices, sensors, coordinator',
+        photos_name:  'Photos',
+        photos_desc:  'Photo and video backup',
     },
 };
 
 // ── App Registry ─────────────────────────────────────────────────────────────
 const APPS = [
     { key: 'ac',     url: '/smart-home/ac', nameKey: 'ac_name',     descKey: 'ac_desc',     statusUrl: '/api/status', getStatus: d => d?.mqtt_connected },
-    { key: 'zigbee', url: '/zigbee/',        nameKey: 'zigbee_name', descKey: 'zigbee_desc', statusUrl: null,          getStatus: null },
+    { key: 'zigbee', url: '/zigbee/',        nameKey: 'zigbee_name', descKey: 'zigbee_desc', statusUrl: null,         getStatus: null },
+    { key: 'photos', url: '/photos/',        nameKey: 'photos_name', descKey: 'photos_desc', statusUrl: '/photos/api/server-info', getStatus: d => d?.version != null },
 ];
 
 // ── Language ──────────────────────────────────────────────────────────────────

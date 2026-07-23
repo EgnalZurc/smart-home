@@ -189,17 +189,17 @@
 | PHO-0.5 | /mnt/immich-backup in fstab with nofail,noatime | Complete |
 | PHO-0.6 | If primary fills up: 500GB can be repurposed as additional primary storage | Planned |
 
-## PHO-1 - Immich Deployment  Planned
+## PHO-1 - Immich Deployment  In Progress
 
 | # | Requirement | Priority | Status |
 |---|---|---|---|
-| PHO-1 | Deploy Immich via Docker Compose, /mnt/immich as storage | HIGH | Planned |
-| PHO-1.1 | Accessible at /photos | HIGH | Planned |
-| PHO-1.2 | ML disabled at deploy, schedulable at night | HIGH | Planned |
+| PHO-1 | Deploy Immich via Docker Compose, /mnt/immich as storage | HIGH | Complete |
+| PHO-1.1 | Accessible at /photos (nginx proxy + sub_filter rewrite) | HIGH | Complete |
+| PHO-1.2 | ML container disabled at deploy (profiles: [ml], not started by default) | HIGH | Complete |
 | PHO-1.3 | Video transcoding: H.265 for space efficiency | MEDIUM | Planned |
 | PHO-1.4 | Transcoding only at night | MEDIUM | Planned |
-| PHO-1.5 | Two accounts: egnal and virchu | HIGH | Planned |
-| PHO-1.6 | Dashboard card when deployed | MEDIUM | Planned |
+| PHO-1.5 | Two accounts: egnal and virchu | HIGH | Pending manual setup |
+| PHO-1.6 | Dashboard card (Photos app registered in APPS array) | MEDIUM | Complete |
 
 ## PHO-2 - Mobile App & Backup  Planned (after PHO-1)
 
@@ -219,14 +219,15 @@
 | PHO-3.2 | Import via immich-go CLI | MEDIUM | Planned |
 | PHO-3.3 | Verify before deleting from Google | HIGH | Planned |
 
-## PHO-4 - Backup Redundancy  Planned (after PHO-1)
+## PHO-4 - Backup Redundancy  In Progress
 
 | # | Requirement | Priority | Status |
 |---|---|---|---|
-| PHO-4 | Second HDD as nightly backup | MEDIUM | Planned |
-| PHO-4.1 | Daily rsync /mnt/immich -> /mnt/immich-backup | MEDIUM | Planned |
-| PHO-4.2 | Night schedule | MEDIUM | Planned |
-| PHO-4.3 | Backup status in dashboard/error tracker | LOW | Planned |
+| PHO-4 | Second HDD as nightly backup | MEDIUM | In Progress |
+| PHO-4.1 | rsync /mnt/immich -> /mnt/immich-backup (excludes postgres dir) | MEDIUM | Complete |
+| PHO-4.2 | Cron at 03:00 daily (/usr/local/bin/immich-backup.sh) | MEDIUM | Complete |
+| PHO-4.3 | Backup log at /var/log/immich-backup.log | LOW | Complete |
+| PHO-4.4 | Postgres database backup (pg_dump nightly) | MEDIUM | Planned |
 
 ---
 
