@@ -213,7 +213,7 @@
 | PHO-0.5 | /mnt/immich-backup in fstab with nofail,noatime | Complete |
 | PHO-0.6 | If primary fills up: 500GB can be repurposed as additional primary storage | Planned |
 
-## PHO-1 - Immich Deployment  In Progress
+## PHO-1 - Immich Deployment  Complete
 
 | # | Requirement | Priority | Status |
 |---|---|---|---|
@@ -222,7 +222,7 @@
 | PHO-1.2 | ML container disabled at deploy (profiles: [ml], not started by default) | HIGH | Complete |
 | PHO-1.3 | Video transcoding: H.265 for space efficiency | MEDIUM | Planned |
 | PHO-1.4 | Transcoding only at night | MEDIUM | Planned |
-| PHO-1.5 | Two accounts: egnal and virchu | HIGH | Pending manual setup |
+| PHO-1.5 | Two accounts: Angel (acmlsn@gmail.com) and Virginia (virginiataboa@gmail.com) | HIGH | Complete |
 | PHO-1.6 | Dashboard card (Photos app registered in APPS array) | MEDIUM | Complete |
 
 ## PHO-2 - Mobile App & Backup  Planned (after PHO-1)
@@ -251,7 +251,7 @@
 | PHO-4.1 | rsync /mnt/immich -> /mnt/immich-backup (excludes postgres dir) | MEDIUM | Complete |
 | PHO-4.2 | Cron at 03:00 daily (/usr/local/bin/immich-backup.sh) | MEDIUM | Complete |
 | PHO-4.3 | Backup log at /var/log/immich-backup.log | LOW | Complete |
-| PHO-4.4 | Postgres database backup (pg_dump nightly) | MEDIUM | Planned |
+| PHO-4.4 | pg_dump nightly at 03:30, compressed to /mnt/immich-backup/db/, 7 days retention | MEDIUM | Complete |
 
 ---
 
