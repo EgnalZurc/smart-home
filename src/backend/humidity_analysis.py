@@ -1,16 +1,12 @@
-"""Humidity analysis scheduler for 3-week humidifier study (HUM-0).
+"""Humidity analysis scheduler for seasonal humidifier study (HUM-0).
 
 Architecture:
 - Runs every SAMPLE_INTERVAL_H (default: 1h) to collect an hourly sample
-- Each sample captures the current sensor readings in memory
-- Hourly samples for the current day are accumulated in-memory and on disk
-- At end of day (00:00-01:00), consolidates all hourly samples into one
-  daily snapshot that truly represents the full 24h distribution
-- Keeps 21 daily snapshots (3 weeks) in /app/data/humidity_analysis.json
-- Keeps last 72 hourly samples in /app/data/humidity_hourly.json (rolling)
-
-This avoids the bias of reading at a single time of day (afternoons are
-more humid, nights drier - a single daily reading would miss this variation).
+- Each sample captures the current sensor readings
+- At midnight, consolidates the day's hourly samples into one daily snapshot
+- Snapshots are kept indefinitely, classified by season
+- The API returns per-season analysis and recommendations
+- Seasons (Northern Hemisphere): Spring=MAM, Summer=JJA, Autumn=SON, Winter=DJF
 """
 
 import json
@@ -19,22 +15,46 @@ import os
 import statistics
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 HUMIDITY_ANALYSIS_FILE = os.environ.get("HUMIDITY_ANALYSIS_FILE", "/app/data/humidity_analysis.json")
 HUMIDITY_HOURLY_FILE   = os.environ.get("HUMIDITY_HOURLY_FILE",   "/app/data/humidity_hourly.json")
-MAX_SNAPSHOTS          = 21     # 3-week daily study
-MAX_HOURLY_SAMPLES     = 72     # Rolling window: last 72 hours stored on disk
-SAMPLE_INTERVAL_H      = 1      # Collect a sample every hour
-LOW_THRESHOLD          = 40.0   # Below this = dry
-HIGH_THRESHOLD         = 55.0   # Above this = humid
-STUDY_DAYS             = 21
+MAX_HOURLY_SAMPLES     = 72     # Rolling window: last 72h on disk
+SAMPLE_INTERVAL_H      = 1
+LOW_THRESHOLD          = 40.0
+HIGH_THRESHOLD         = 55.0
+
+# Season definitions (month -> season key)
+MONTH_TO_SEASON = {
+    12: "winter", 1: "winter",  2: "winter",
+     3: "spring", 4: "spring",  5: "spring",
+     6: "summer", 7: "summer",  8: "summer",
+     9: "autumn", 10: "autumn", 11: "autumn",
+}
+SEASON_NAMES_ES = {
+    "spring": "Primavera", "summer": "Verano",
+    "autumn": "Oto?o",     "winter": "Invierno",
+}
+SEASON_NAMES_EN = {
+    "spring": "Spring", "summer": "Summer",
+    "autumn": "Autumn", "winter": "Winter",
+}
+SEASON_ORDER = ["spring", "summer", "autumn", "winter"]
+
+# Threshold: fraction of days with signal to recommend humidifier
+SIGNAL_THRESHOLD = 0.5   # >= 50% of days with signal -> recommend
 
 
-# ?? Helpers ???????????????????????????????????????????????????????????????????
+# -- Helpers ------------------------------------------------------------------
+
+def get_season(date_str: str) -> str:
+    """Return season key for a YYYY-MM-DD date string."""
+    month = int(date_str[5:7])
+    return MONTH_TO_SEASON[month]
+
 
 def _percentile(sorted_data: list, p: float) -> float:
     if not sorted_data:
@@ -61,7 +81,7 @@ def _save_json(data, filepath: str) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-# ?? Core analysis ?????????????????????????????????????????????????????????????
+# -- Core analysis ------------------------------------------------------------
 
 def _collect_sample(mqtt_handler) -> dict | None:
     """Read current sensor data and return a timestamped humidity sample."""
@@ -69,7 +89,7 @@ def _collect_sample(mqtt_handler) -> dict | None:
         readings = {
             name: [r.humidity for r in rlist if r.humidity is not None]
             for name, rlist in mqtt_handler.history.items()
-            if rlist
+            if name != "AC" and rlist
         }
 
     all_values = [h for vals in readings.values() for h in vals]
@@ -78,14 +98,14 @@ def _collect_sample(mqtt_handler) -> dict | None:
 
     now = datetime.now(timezone.utc)
     return {
-        "timestamp":   round(time.time(), 1),
-        "date":        now.strftime("%Y-%m-%d"),
-        "hour":        now.hour,
-        "mean":        round(statistics.mean(all_values), 2),
-        "min":         round(min(all_values), 2),
-        "max":         round(max(all_values), 2),
-        "sample_n":    len(all_values),
-        "sensors":     list(readings.keys()),
+        "timestamp": round(time.time(), 1),
+        "date":      now.strftime("%Y-%m-%d"),
+        "hour":      now.hour,
+        "mean":      round(statistics.mean(all_values), 2),
+        "min":       round(min(all_values), 2),
+        "max":       round(max(all_values), 2),
+        "sample_n":  len(all_values),
+        "sensors":   list(readings.keys()),
     }
 
 
@@ -95,46 +115,36 @@ def _build_daily_snapshot(date: str, hourly_samples: list) -> dict | None:
     if not day_samples:
         return None
 
-    # Weighted by sample_n to give more weight to hours with more data
-    all_means  = [s["mean"] for s in day_samples]
-    weights    = [s["sample_n"] for s in day_samples]
-    total_w    = sum(weights)
-    w_mean     = round(sum(m * w for m, w in zip(all_means, weights)) / total_w, 2)
+    all_means = [s["mean"] for s in day_samples]
+    weights   = [s["sample_n"] for s in day_samples]
+    total_w   = sum(weights)
+    w_mean    = round(sum(m * w for m, w in zip(all_means, weights)) / total_w, 2)
+    n         = len(day_samples)
 
-    all_mins   = [s["min"] for s in day_samples]
-    all_maxs   = [s["max"] for s in day_samples]
-
-    # Hourly distribution
     sorted_means = sorted(all_means)
-    n = len(sorted_means)
-
-    # Fraction of hours below / above thresholds (hour-level, not reading-level)
-    frac_below = round(sum(1 for m in all_means if m < LOW_THRESHOLD)  / n, 4)
-    frac_above = round(sum(1 for m in all_means if m > HIGH_THRESHOLD) / n, 4)
-
-    # Hourly pattern: {hour: mean}
+    frac_below   = round(sum(1 for m in all_means if m < LOW_THRESHOLD)  / n, 4)
+    frac_above   = round(sum(1 for m in all_means if m > HIGH_THRESHOLD) / n, 4)
     hourly_pattern = {str(s["hour"]): s["mean"] for s in day_samples}
 
     return {
         "date":                   date,
+        "season":                 get_season(date),
         "timestamp":              round(time.time(), 1),
         "hours_sampled":          n,
         "sensors":                day_samples[0]["sensors"],
         "mean":                   w_mean,
-        "min":                    round(min(all_mins), 2),
-        "max":                    round(max(all_maxs), 2),
+        "min":                    round(min(s["min"] for s in day_samples), 2),
+        "max":                    round(max(s["max"] for s in day_samples), 2),
         "p25":                    _percentile(sorted_means, 25),
         "p75":                    _percentile(sorted_means, 75),
         "fraction_below_40":      frac_below,
         "fraction_above_55":      frac_above,
         "hourly_pattern":         hourly_pattern,
-        "humidifier_needed_signal": (
-            w_mean < 38.0 or frac_below > 0.65
-        ),
+        "humidifier_needed_signal": (w_mean < 38.0 or frac_below > 0.65),
     }
 
 
-# ?? Persistence ????????????????????????????????????????????????????????????????
+# -- Persistence --------------------------------------------------------------
 
 def _append_hourly_sample(sample: dict) -> None:
     samples = _load_json(HUMIDITY_HOURLY_FILE)
@@ -144,60 +154,105 @@ def _append_hourly_sample(sample: dict) -> None:
 
 
 def append_snapshot(snapshot: dict, filepath: str = HUMIDITY_ANALYSIS_FILE) -> None:
+    """Add or replace a daily snapshot. Kept indefinitely (no max cap)."""
     snapshots = _load_json(filepath)
     date = snapshot["date"]
+    # Ensure season field is present (migration: old snapshots may lack it)
+    snapshot.setdefault("season", get_season(date))
     snapshots = [s for s in snapshots if s.get("date") != date]
     snapshots.append(snapshot)
-    snapshots = sorted(snapshots, key=lambda s: s["date"])[-MAX_SNAPSHOTS:]
+    snapshots = sorted(snapshots, key=lambda s: s["date"])
     _save_json(snapshots, filepath)
     logger.info(
-        "[humidity] Daily snapshot saved for %s ? mean=%.1f%%, hours=%d, "
-        "below_40=%.0f%%, signal=%s (%d/%d days stored)",
-        date, snapshot["mean"], snapshot["hours_sampled"],
+        "[humidity] Snapshot saved: %s (%s) mean=%.1f%% h=%d below_40=%.0f%% signal=%s",
+        date, snapshot["season"], snapshot["mean"], snapshot["hours_sampled"],
         snapshot["fraction_below_40"] * 100,
         "YES" if snapshot["humidifier_needed_signal"] else "no",
-        len(snapshots), MAX_SNAPSHOTS,
     )
 
 
-# ?? Public API helpers ?????????????????????????????????????????????????????????
+# -- Seasonal analysis --------------------------------------------------------
+
+def _season_summary(snapshots: list) -> dict:
+    """Compute per-season statistics from all daily snapshots."""
+    seasons = {}
+    for season_key in SEASON_ORDER:
+        days = [s for s in snapshots if s.get("season") == season_key]
+        if not days:
+            seasons[season_key] = {
+                "season":      season_key,
+                "name_es":     SEASON_NAMES_ES[season_key],
+                "name_en":     SEASON_NAMES_EN[season_key],
+                "days":        0,
+                "mean":        None,
+                "min":         None,
+                "max":         None,
+                "avg_fraction_below_40": None,
+                "days_signal": 0,
+                "recommendation": "no_data",
+                "snapshots":   [],
+            }
+            continue
+
+        means   = [d["mean"] for d in days]
+        fracs   = [d["fraction_below_40"] for d in days]
+        signals = [d["humidifier_needed_signal"] for d in days]
+        n       = len(days)
+        signal_count = sum(signals)
+
+        if n < 7:
+            rec = "insufficient_data"
+        elif signal_count / n >= SIGNAL_THRESHOLD:
+            rec = "recommended"
+        else:
+            rec = "not_needed"
+
+        seasons[season_key] = {
+            "season":                 season_key,
+            "name_es":                SEASON_NAMES_ES[season_key],
+            "name_en":                SEASON_NAMES_EN[season_key],
+            "days":                   n,
+            "mean":                   round(statistics.mean(means), 2),
+            "min":                    round(min(d["min"] for d in days), 2),
+            "max":                    round(max(d["max"] for d in days), 2),
+            "avg_fraction_below_40":  round(statistics.mean(fracs), 4),
+            "days_signal":            signal_count,
+            "recommendation":         rec,
+            "snapshots":              days,
+        }
+    return seasons
+
 
 def get_summary(filepath: str = HUMIDITY_ANALYSIS_FILE) -> dict | None:
+    """Return the full seasonal summary. Returns None if no data."""
     snapshots = _load_json(filepath)
     if not snapshots:
         return None
 
-    means    = [s["mean"] for s in snapshots]
-    fracs    = [s["fraction_below_40"] for s in snapshots]
-    signals  = [s.get("humidifier_needed_signal", False) for s in snapshots]
+    # Ensure all snapshots have season field (migration)
+    for s in snapshots:
+        s.setdefault("season", get_season(s["date"]))
+
+    seasons = _season_summary(snapshots)
+    total_days = len(snapshots)
 
     return {
-        "days_collected":        len(snapshots),
-        "study_duration_days":   STUDY_DAYS,
-        "date_first":            snapshots[0]["date"],
-        "date_last":             snapshots[-1]["date"],
-        "overall_mean":          round(statistics.mean(means), 2),
-        "avg_fraction_below_40": round(statistics.mean(fracs), 4),
-        "days_signal_yes":       sum(signals),
-        "recommendation": (
-            "HUMIDIFIER RECOMMENDED"
-            if sum(signals) >= len(snapshots) * 0.6
-            else "Monitor more days"
-            if len(snapshots) < STUDY_DAYS
-            else "No action needed"
-        ),
-        "snapshots": snapshots,
+        "total_days":    total_days,
+        "date_first":    snapshots[0]["date"],
+        "date_last":     snapshots[-1]["date"],
+        "seasons":       seasons,
+        "snapshots":     snapshots,
     }
 
 
-# ?? Scheduler ??????????????????????????????????????????????????????????????????
+# -- Scheduler ----------------------------------------------------------------
 
 class HumidityAnalysisScheduler:
     """
     Runs every SAMPLE_INTERVAL_H hours.
-    - Each run: collects one hourly sample from current sensor data
-    - At day boundary (hour 0): consolidates previous day's samples
-      into a single daily snapshot covering all 24 hours
+    - Collects one hourly sample each run
+    - At midnight, consolidates previous day into a daily snapshot
+    - Data is kept indefinitely, classified by season
     """
 
     def __init__(
@@ -220,7 +275,7 @@ class HumidityAnalysisScheduler:
         )
         self._thread.start()
         logger.info(
-            "[humidity] Scheduler started ? samples every %dh, grace=%ds",
+            "[humidity] Scheduler started - samples every %dh, grace=%ds",
             self._interval // 3600, self._grace,
         )
 
@@ -230,7 +285,6 @@ class HumidityAnalysisScheduler:
             self._thread.join(timeout=5)
 
     def run_now(self) -> None:
-        """Trigger an immediate sample + optional consolidation (for API/testing)."""
         self._collect_and_consolidate()
 
     def _loop(self) -> None:
@@ -243,38 +297,34 @@ class HumidityAnalysisScheduler:
                 self._collect_and_consolidate()
 
     def _collect_and_consolidate(self) -> None:
-        now  = datetime.now(timezone.utc)
+        now   = datetime.now(timezone.utc)
         today = now.strftime("%Y-%m-%d")
 
-        # 1. Collect hourly sample
         try:
             sample = _collect_sample(self._mqtt)
             if sample:
                 _append_hourly_sample(sample)
                 logger.info(
-                    "[humidity] Hourly sample collected ? %s %02dh mean=%.1f%%",
+                    "[humidity] Sample: %s %02dh mean=%.1f%%",
                     today, now.hour, sample["mean"],
                 )
         except Exception as exc:
             logger.error("[humidity] Sample collection failed: %s", exc, exc_info=True)
 
-        # 2. At hour 0 (midnight), consolidate the previous day into a daily snapshot
+        # At midnight: consolidate previous day
         if now.hour == 0 and self._last_consolidated_date != today:
-            # Use timedelta to safely get yesterday (handles month/year boundaries)
-            from datetime import timedelta
             yesterday = (now.replace(hour=12, minute=0, second=0, microsecond=0)
                          - timedelta(days=1)).strftime("%Y-%m-%d")
             self._consolidate_day(yesterday)
             self._last_consolidated_date = today
 
     def _consolidate_day(self, date: str) -> None:
-        """Build and save the daily snapshot for a given date."""
         try:
             hourly_samples = _load_json(HUMIDITY_HOURLY_FILE)
             snapshot = _build_daily_snapshot(date, hourly_samples)
             if snapshot:
                 append_snapshot(snapshot)
             else:
-                logger.warning("[humidity] No hourly samples found for %s, skipping", date)
+                logger.warning("[humidity] No samples for %s, skipping", date)
         except Exception as exc:
             logger.error("[humidity] Consolidation failed for %s: %s", date, exc, exc_info=True)

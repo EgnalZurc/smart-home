@@ -225,18 +225,19 @@
 
 # PROJECT: Humidity Study (Humidifier Decision)
 
-## HUM-0 � Data Collection  ?? In progress (ends ~17 Jul 2026)
+## HUM-0 — Seasonal Humidity Study  ✅ Complete
 
 | # | Requirement | Status |
 |---|---|---|
-| HUM-0 | Collect hourly humidity data for 3 weeks | In progress |
-| HUM-0.1 | Hourly samples + daily 24h snapshots | Complete |
-| HUM-0.2 | GET /api/humidity/study | Complete |
-| HUM-0.3 | Decision gate ~17 Jul 2026 | Planned |
-| Tests | test_humidity_analysis.py � 17 tests | Complete |
-
-**Decision**: Implement humidifier if signal=YES on 13+/21 days.
-
+| HUM-0 | Collect hourly humidity samples, consolidated into daily snapshots | Complete |
+| HUM-0.1 | Each daily snapshot tagged with season (spring/summer/autumn/winter) | Complete |
+| HUM-0.2 | Data kept indefinitely — builds seasonal picture over time | Complete |
+| HUM-0.3 | GET /api/humidity/study returns per-season analysis and recommendations | Complete |
+| HUM-0.4 | Recommendation per season: recommended / not_needed / insufficient_data / no_data | Complete |
+| HUM-0.5 | Season computed from date (DJF=winter, MAM=spring, JJA=summer, SON=autumn) | Complete |
+| HUM-0.6 | Min 7 days per season required before definitive recommendation | Complete |
+| HUM-0.7 | Migration: old snapshots without season field get it auto-assigned on read | Complete |
+| Tests | test_humidity_analysis.py — 28 tests | Complete |
 ## HUM-1 � Humidifier Control  ? Pending analysis result
 
 | # | Requirement | Priority | Status |
