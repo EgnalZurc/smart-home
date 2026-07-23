@@ -81,8 +81,8 @@
       - /etc/localtime:/etc/localtime:ro
     env_file:
       - .env.immich
-    expose:
-      - 2283
+    ports:
+      - "127.0.0.1:2283:2283"  # localhost only, accessed via Tailscale Serve
     depends_on:
       - immich-redis
       - immich-database

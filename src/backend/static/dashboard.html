@@ -105,7 +105,7 @@ const T = {
 const APPS = [
     { key: 'ac',     url: '/smart-home/ac', nameKey: 'ac_name',     descKey: 'ac_desc',     statusUrl: '/api/status', getStatus: d => d?.mqtt_connected },
     { key: 'zigbee', url: '/zigbee/',        nameKey: 'zigbee_name', descKey: 'zigbee_desc', statusUrl: null,         getStatus: null },
-    { key: 'photos', url: '/photos/',        nameKey: 'photos_name', descKey: 'photos_desc', statusUrl: '/photos/api/server-info', getStatus: d => d?.version != null },
+    { key: 'photos', url: 'https://raspberrypi.tailaa37cd.ts.net:8444/', nameKey: 'photos_name', descKey: 'photos_desc', statusUrl: null, getStatus: null },
 ];
 
 // ── Language ──────────────────────────────────────────────────────────────────

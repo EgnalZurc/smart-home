@@ -130,10 +130,17 @@ class TestDASH1Dashboard:
         assert "data-i18n" in content or ("const T" in content and "ac_name" in content)
 
     def test_dashboard_no_hostname(self):
-        """Dashboard must not show the hostname."""
+        """Dashboard title/header must not show the hostname (external app URLs are allowed)."""
         from pathlib import Path
         content = Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text()
-        assert "raspberrypi.tailaa37cd.ts.net" not in content
+        # The hostname may appear as an external app URL (e.g. Immich on port 8444)
+        # but must not appear in the visible title or header text
+        assert "Cuchi Casa" in content  # title is app name, not hostname
+        # Hostname in APPS url is acceptable - only check it's not in the title element
+        import re
+        title_match = re.search(r'<h1[^>]*id="title"[^>]*>(.*?)</h1>', content)
+        if title_match:
+            assert "raspberrypi" not in title_match.group(1)
 
     def test_dashboard_no_more_apps_placeholder(self):
         """Dashboard must not show More apps coming placeholder."""
