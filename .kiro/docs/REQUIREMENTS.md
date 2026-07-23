@@ -62,10 +62,13 @@
 | DASH-1.6 | AC Control registered and displayed | Complete |
 | DASH-1.6b | Zigbee2MQTT registered and displayed; click redirects to /zigbee/ | Complete |
 | DASH-1.7 | No placeholder cards | Complete |
-| DASH-1.8 | Live status dot per app card: green=online, red=offline, grey=no endpoint | Complete |
-| DASH-1.8a | AC Control: checks /api/status (mqtt_connected) | Complete |
-| DASH-1.8b | Zigbee2MQTT: checks /api/health/zigbee (mqtt_connected + active sensors) | Complete |
-| DASH-1.8c | Fotos (Immich): checks /api/health/immich (probes immich-server:2283/api/server/ping) | Complete |
+| DASH-1.8 | Every app card shows a real-time status dot that reflects whether the app will load, without having to open it | Complete |
+| DASH-1.8.1 | Green dot = app is reachable and functional. Red dot = app is down or unreachable | Complete |
+| DASH-1.8.2 | Status is polled every 10s; checked on page load before spinner hides | Complete |
+| DASH-1.8.3 | AC Control status: /api/status -> mqtt_connected | Complete |
+| DASH-1.8.4 | Zigbee2MQTT status: /api/health/zigbee -> MQTT connected + active sensors | Complete |
+| DASH-1.8.5 | Fotos (Immich) status: /api/health/immich -> Immich server responds to ping | Complete |
+| DASH-1.8.6 | Any new app added to the APPS registry MUST include a statusUrl and getStatus function | Complete |
 | DASH-1.9 | Loading spinner until translations + status loaded | Complete |
 | Tests | test_dash_routing.py - 25 tests | Complete |
 
