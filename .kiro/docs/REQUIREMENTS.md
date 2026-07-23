@@ -181,11 +181,12 @@
 
 | # | Requirement | Status |
 |---|---|---|
-| PHO-0 | External HDD formatted and mounted | Complete |
-| PHO-0.1 | WD 500GB ext4, label: immich-data | Complete |
-| PHO-0.2 | Mounted at /mnt/immich, fstab nofail | Complete |
+| PHO-0 | Both external HDDs formatted ext4 and mounted | Complete |
+| PHO-0.1 | WD 500GB ext4, label: immich-data, mounted at /mnt/immich (435GB free) | Complete |
+| PHO-0.2 | /mnt/immich in fstab with nofail,noatime | Complete |
 | PHO-0.3 | Directories: library/, upload/, thumbs/, profile/, backups/ | Complete |
-| PHO-0.4 | Second HDD connected (WD Elements 1.8TB, /media/pi/Elements, NTFS) | Complete |
+| PHO-0.4 | WD 2TB ext4, label: immich-backup, mounted at /mnt/immich-backup (1.7TB free) | Complete |
+| PHO-0.5 | /mnt/immich-backup in fstab with nofail,noatime | Complete |
 
 ## PHO-1 - Immich Deployment  Planned
 
