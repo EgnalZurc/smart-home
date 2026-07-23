@@ -29,6 +29,24 @@
 
 ---
 
+# CROSS-CUTTING: Application Independence
+
+## INDEP-1 - Service Independence  Complete
+
+| # | Requirement | Status |
+|---|---|---|
+| INDEP-1 | Each application can restart without affecting other applications | Complete |
+| INDEP-1.1 | Immich (photos) restart does not affect AC app or dashboard | Complete |
+| INDEP-1.2 | Backend (AC app) restart does not affect Immich | Complete |
+| INDEP-1.3 | nginx has no hard dependency on Immich (removed depends_on immich-server) | Complete |
+| INDEP-1.4 | nginx uses lazy DNS resolution (resolver 127.0.0.11) so upstream restarts are transparent | Complete |
+| INDEP-1.5 | All services use restart: unless-stopped for auto-recovery | Complete |
+| INDEP-1.6 | Immich served via Tailscale Serve (port 8444), fully isolated from nginx | Complete |
+
+**How it works**: nginx serves dashboard + AC app. Immich is independently served by Tailscale Serve on port 8444. Neither depends on the other at runtime.
+
+---
+
 # PROJECT: Smart Home Platform (Dashboard + Routing)
 
 ## DASH-1 - Platform Dashboard  Complete

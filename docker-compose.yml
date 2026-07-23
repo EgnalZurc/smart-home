@@ -59,7 +59,6 @@
     depends_on:
       - backend
       - zigbee2mqtt
-      - immich-server
     ports:
       - 80:80
       - 8443:443
