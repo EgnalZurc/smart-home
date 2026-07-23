@@ -24,6 +24,7 @@
 - Rate limiting: auth 60 req/min (login), general 20 req/s (app), /static/ no limit.
 - Zigbee sensors: report every 1h or on change >0.1C; timeout 3600s.
 - MELCloud credentials required in .env (Device ID + Building ID).
+- HYSTERESIS_ON=0.1 set in .env (modulating starts at target+0.1?C, not default +0.5?C).
 - AC virtual sensor ("AC" key in history): MELCloud room temp, excluded from Zigbee averages.
 
 ---
