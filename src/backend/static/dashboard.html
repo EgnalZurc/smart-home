@@ -104,8 +104,8 @@ const T = {
 // ── App Registry ─────────────────────────────────────────────────────────────
 const APPS = [
     { key: 'ac',     url: '/smart-home/ac', nameKey: 'ac_name',     descKey: 'ac_desc',     statusUrl: '/api/status', getStatus: d => d?.mqtt_connected },
-    { key: 'zigbee', url: '/zigbee/',        nameKey: 'zigbee_name', descKey: 'zigbee_desc', statusUrl: null,         getStatus: null },
-    { key: 'photos', url: 'https://raspberrypi.tailaa37cd.ts.net:10000/', nameKey: 'photos_name', descKey: 'photos_desc', statusUrl: null, getStatus: null },
+    { key: 'zigbee', url: '/zigbee/',        nameKey: 'zigbee_name', descKey: 'zigbee_desc', statusUrl: '/api/health/zigbee', getStatus: d => d?.online === true },
+    { key: 'photos', url: 'https://raspberrypi.tailaa37cd.ts.net:10000/', nameKey: 'photos_name', descKey: 'photos_desc', statusUrl: '/api/health/immich', getStatus: d => d?.online === true },
 ];
 
 // ── Language ──────────────────────────────────────────────────────────────────

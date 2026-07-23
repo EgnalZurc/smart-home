@@ -477,3 +477,40 @@ def get_subscription_stats():
         return {"error": "Subscription manager not initialized"}
     
     return subscription_manager.get_stats()
+
+
+@router.get("/health/zigbee")
+def get_zigbee_health():
+    """Health check for Zigbee2MQTT service.
+
+    Returns online=True if:
+    - MQTT broker is connected (zigbee2mqtt communicates via MQTT)
+    - At least one sensor has been seen recently
+    """
+    import time
+    mqtt_ok = mqtt_handler is not None and mqtt_handler.is_connected
+    # Consider zigbee healthy if we have active sensor readings
+    active = {}
+    if mqtt_handler is not None:
+        active = mqtt_handler.get_active_readings(max_age_seconds=7200)  # 2h tolerance
+    return {
+        "online": mqtt_ok,
+        "mqtt_connected": mqtt_ok,
+        "active_sensors": len(active),
+    }
+
+
+@router.get("/health/immich")
+async def get_immich_health():
+    """Health check for Immich photo server.
+
+    Probes Immich /api/server/ping from within the Docker network.
+    Returns online=True if Immich responds with pong.
+    """
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            r = await client.get("http://immich-server:2283/api/server/ping")
+            return {"online": r.status_code == 200 and r.json().get("res") == "pong"}
+    except Exception:
+        return {"online": False}

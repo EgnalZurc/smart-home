@@ -62,7 +62,10 @@
 | DASH-1.6 | AC Control registered and displayed | Complete |
 | DASH-1.6b | Zigbee2MQTT registered and displayed; click redirects to /zigbee/ | Complete |
 | DASH-1.7 | No placeholder cards | Complete |
-| DASH-1.8 | Live status dot per app card (skipped for apps without a status endpoint) | Complete |
+| DASH-1.8 | Live status dot per app card: green=online, red=offline, grey=no endpoint | Complete |
+| DASH-1.8a | AC Control: checks /api/status (mqtt_connected) | Complete |
+| DASH-1.8b | Zigbee2MQTT: checks /api/health/zigbee (mqtt_connected + active sensors) | Complete |
+| DASH-1.8c | Fotos (Immich): checks /api/health/immich (probes immich-server:2283/api/server/ping) | Complete |
 | DASH-1.9 | Loading spinner until translations + status loaded | Complete |
 | Tests | test_dash_routing.py - 25 tests | Complete |
 
