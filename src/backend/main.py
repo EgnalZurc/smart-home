@@ -221,10 +221,11 @@ async def lifespan(app: FastAPI):
     
     # Subscribe to outdoor temperature (Open-Meteo)
     def fetch_outdoor_temp():
-        """Fetcher for outdoor temperature."""
+        """Fetcher for outdoor temperature and air quality (Open-Meteo)."""
         import httpx
         try:
-            resp = httpx.get(
+            # Fetch weather and air quality in parallel
+            weather_resp = httpx.get(
                 "https://api.open-meteo.com/v1/forecast",
                 params={
                     "latitude": LOCATION_LATITUDE,
@@ -234,16 +235,27 @@ async def lifespan(app: FastAPI):
                 },
                 timeout=10.0,
             )
-            data = resp.json()
-            current = data.get("current", {})
+            aqi_resp = httpx.get(
+                "https://air-quality-api.open-meteo.com/v1/air-quality",
+                params={
+                    "latitude": LOCATION_LATITUDE,
+                    "longitude": LOCATION_LONGITUDE,
+                    "current": "european_aqi",
+                    "timezone": "Europe/Madrid",
+                },
+                timeout=10.0,
+            )
+            weather = weather_resp.json().get("current", {})
+            aqi_current = aqi_resp.json().get("current", {})
             error_tracker.clear("outdoor_fetch")
             return {
-                "temperature": current.get("temperature_2m"),
-                "humidity": current.get("relative_humidity_2m"),
+                "temperature": weather.get("temperature_2m"),
+                "humidity": weather.get("relative_humidity_2m"),
+                "aqi": aqi_current.get("european_aqi"),
             }
         except Exception as e:
-            logger.error("Failed to fetch outdoor temperature: %s", e)
-            error_tracker.register("outdoor_fetch", "warning", f"Outdoor temperature unavailable: {e}", "outdoor")
+            logger.error("Failed to fetch outdoor data: %s", e)
+            error_tracker.register("outdoor_fetch", "warning", f"Outdoor data unavailable: {e}", "outdoor")
             return None
     
     subscription_manager.subscribe(

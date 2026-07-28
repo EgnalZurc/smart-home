@@ -395,6 +395,7 @@ def get_outdoor():
     return {
         "temperature": outdoor_data.get("temperature"),
         "humidity": outdoor_data.get("humidity"),
+        "aqi": outdoor_data.get("aqi"),
         "timestamp": timestamp
     }
 

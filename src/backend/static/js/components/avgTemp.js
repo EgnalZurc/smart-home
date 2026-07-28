@@ -19,12 +19,37 @@ export function updateAvgTemp(status) {
     }
 }
 
+function _aqiColor(aqi) {
+    if (aqi === null || aqi === undefined) return '#64748b';
+    if (aqi <= 20)  return '#22c55e';
+    if (aqi <= 40)  return '#84cc16';
+    if (aqi <= 60)  return '#fbbf24';
+    if (aqi <= 80)  return '#f97316';
+    if (aqi <= 100) return '#ef4444';
+    return '#dc2626';
+}
+
+function _aqiLabel(aqi, i18n) {
+    if (aqi === null || aqi === undefined) return '';
+    if (aqi <= 20)  return i18n.t('main.aqiGood');
+    if (aqi <= 40)  return i18n.t('main.aqiFair');
+    if (aqi <= 60)  return i18n.t('main.aqiModerate');
+    if (aqi <= 80)  return i18n.t('main.aqiPoor');
+    if (aqi <= 100) return i18n.t('main.aqiVeryPoor');
+    return i18n.t('main.aqiHazardous');
+}
+
 export function updateOutdoor(out, i18n) {
     const el = document.getElementById('outdoor-line');
     if (out.temperature !== null) {
+        const aqi = out.aqi ?? null;
+        const aqiHtml = aqi !== null
+            ? ` · <span style="color:${_aqiColor(aqi)}" title="EAQI ${aqi}">${_aqiLabel(aqi, i18n)} (${aqi})</span>`
+            : '';
         el.innerHTML = `🌍 <span>${i18n.t('main.outdoor')}</span>: `
             + `<span style="color:${tempColor(out.temperature)}">${out.temperature.toFixed(1)}°C</span>`
-            + ` · <span style="color:${humColor(out.humidity)}">${out.humidity}%</span>`;
+            + ` · <span style="color:${humColor(out.humidity)}">${out.humidity}%</span>`
+            + aqiHtml;
     }
 }
 
