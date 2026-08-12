@@ -519,9 +519,30 @@ async def get_immich_health():
 
 @router.get("/vacaciones")
 def get_vacaciones():
-    """Returns the Christmas planning data for Propuesta 1."""
-    from controllers.vacaciones_controller import get_propuesta1_data
-    return get_propuesta1_data()
+    """Returns all vacaciones data including config."""
+    from controllers.vacaciones_controller import get_vacaciones_data
+    return get_vacaciones_data()
+
+
+@router.get("/vacaciones/config")
+def get_vacaciones_config():
+    """Returns vacaciones configuration (nucleos and personas)."""
+    from controllers.vacaciones_controller import get_config
+    return get_config()
+
+
+@router.post("/vacaciones/config")
+def post_vacaciones_config(data: dict):
+    """Save vacaciones configuration."""
+    from controllers.vacaciones_controller import save_config
+    return save_config(data.get('nucleos', []), data.get('personas', []))
+
+
+@router.post("/vacaciones/year/{year}")
+def post_vacaciones_year(year: int, data: dict):
+    """Save a year's planning."""
+    from controllers.vacaciones_controller import save_year
+    return save_year(year, data.get('comidas', []), data.get('notas', ''))
 
 
 @router.get("/health/vacaciones")

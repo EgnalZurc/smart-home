@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Planilla Vacaciones - Cuchi Casa</title>
+    <title>Cuchi Vacaciones</title>
     <link rel="icon" href="/static/favicon.ico">
     <meta name="theme-color" content="#0f172a">
     <link rel="stylesheet" href="/static/tailwind.css">
@@ -17,45 +17,52 @@
         #app-content.visible { opacity:1; }
         .spinner { width:32px; height:32px; border:3px solid rgba(255,255,255,.1); border-top-color:rgba(255,255,255,.7); border-radius:50%; animation:spin .8s linear infinite; }
         @keyframes spin { to { transform:rotate(360deg); } }
-        .year-wrap { background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9)); border: 1px solid rgba(51,65,85,0.5); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
-        .year-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
-        .year-num { font-size: 1.25rem; font-weight: 700; }
-        .pills { display: flex; gap: 6px; flex-wrap: wrap; }
-        .pill { font-size: 10px; padding: 2px 8px; border-radius: 12px; font-weight: 600; }
-        .pill-par { background: rgba(99,102,241,0.2); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3); }
-        .pill-imp { background: rgba(34,197,94,0.2); color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
-        .pill-mu { background: rgba(251,146,60,0.2); color: #fdba74; border: 1px solid rgba(251,146,60,0.3); }
-        .year-note { font-size: 11px; color: #94a3b8; margin-bottom: 8px; line-height: 1.4; }
-        .diff { font-size: 10px; color: #64748b; margin-bottom: 12px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 8px; }
-        .moment { background: rgba(15,23,42,0.5); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
-        .moment-head { font-size: 12px; font-weight: 600; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(51,65,85,0.5); }
-        .mh-24 { color: #c084fc; }
-        .mh-25 { color: #fbbf24; }
-        .mh-31 { color: #60a5fa; }
-        .mh-1 { color: #34d399; }
-        .mh-6 { color: #f87171; }
-        .nuc { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
-        .nuc:last-child { margin-bottom: 0; }
-        .nuc-l { font-size: 10px; font-weight: 600; min-width: 70px; padding: 2px 6px; border-radius: 4px; }
-        .lbl-pv { background: rgba(96,165,250,0.2); color: #93c5fd; }
-        .lbl-pa { background: rgba(251,146,60,0.2); color: #fdba74; }
-        .lbl-pi { background: rgba(168,85,247,0.2); color: #d8b4fe; }
-        .nuc-b { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-        .chip { font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
-        .chip-pv { background: rgba(59,130,246,0.3); color: #93c5fd; }
-        .chip-pa { background: rgba(249,115,22,0.3); color: #fdba74; }
-        .chip-mu { background: rgba(239,68,68,0.3); color: #fca5a5; }
-        .chip-su { background: rgba(107,114,128,0.3); color: #9ca3af; }
-        .nuc-d { font-size: 10px; color: #94a3b8; }
-        .alerts { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
-        .alert { font-size: 10px; padding: 6px 10px; border-radius: 6px; }
-        .a-ok { background: rgba(34,197,94,0.15); color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
-        .a-warn { background: rgba(251,191,36,0.15); color: #fde047; border: 1px solid rgba(251,191,36,0.3); }
-        .a-info { background: rgba(99,102,241,0.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3); }
-        .rule { font-size: 11px; color: #94a3b8; padding: 8px 12px; background: rgba(30,41,59,0.6); border-radius: 8px; margin-bottom: 8px; border-left: 3px solid #6366f1; }
-        .p-header { text-align: center; margin-bottom: 16px; }
-        .p-header h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
-        .p-header p { font-size: 11px; color: #94a3b8; }
+        
+        /* Calendar styles */
+        .cal-wrap { background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9)); border: 1px solid rgba(51,65,85,0.5); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
+        .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .cal-year { font-size: 1.5rem; font-weight: 700; }
+        .meal-card { background: rgba(15,23,42,0.5); border-radius: 12px; padding: 12px; margin-bottom: 8px; border: 1px solid rgba(51,65,85,0.3); }
+        .meal-card:last-child { margin-bottom: 0; }
+        .meal-head { font-size: 13px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .meal-important { border-left: 3px solid #6366f1; }
+        .meal-wildcard { border-left: 3px solid #f59e0b; opacity: 0.8; }
+        .meal-content { font-size: 11px; color: #94a3b8; min-height: 24px; }
+        .meal-empty { color: #475569; font-style: italic; }
+        .nucleo-chip { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+        
+        /* Config button */
+        .config-btn { background: rgba(99,102,241,0.2); border: 1px solid rgba(99,102,241,0.3); color: #a5b4fc; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
+        .config-btn:hover { background: rgba(99,102,241,0.3); border-color: rgba(99,102,241,0.5); }
+        
+        /* Modal */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 16px; }
+        .modal-overlay.open { display: flex; }
+        .modal { background: #1e293b; border-radius: 16px; width: 100%; max-width: 400px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+        .modal-header { padding: 16px; border-bottom: 1px solid rgba(51,65,85,0.5); display: flex; align-items: center; justify-content: space-between; }
+        .modal-title { font-size: 16px; font-weight: 600; }
+        .modal-close { background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px; }
+        .modal-body { padding: 16px; overflow-y: auto; flex: 1; }
+        .modal-footer { padding: 16px; border-top: 1px solid rgba(51,65,85,0.5); display: flex; gap: 8px; justify-content: flex-end; }
+        
+        /* Form styles */
+        .form-section { margin-bottom: 20px; }
+        .form-section-title { font-size: 12px; font-weight: 600; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-list { display: flex; flex-direction: column; gap: 8px; }
+        .form-item { display: flex; align-items: center; gap: 8px; background: rgba(15,23,42,0.5); padding: 8px 12px; border-radius: 8px; }
+        .form-item input { flex: 1; background: transparent; border: none; color: white; font-size: 13px; outline: none; }
+        .form-item input::placeholder { color: #475569; }
+        .form-item .color-dot { width: 16px; height: 16px; border-radius: 50%; cursor: pointer; }
+        .form-item .delete-btn { background: none; border: none; color: #ef4444; cursor: pointer; padding: 4px; font-size: 14px; }
+        .add-btn { background: rgba(34,197,94,0.2); border: 1px dashed rgba(34,197,94,0.4); color: #86efac; padding: 8px; border-radius: 8px; font-size: 12px; cursor: pointer; text-align: center; transition: all 0.2s; }
+        .add-btn:hover { background: rgba(34,197,94,0.3); }
+        .btn-primary { background: #6366f1; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; }
+        .btn-secondary { background: rgba(51,65,85,0.5); color: #94a3b8; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+        
+        /* Tabs */
+        .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+        .tab { flex: 1; padding: 8px; text-align: center; font-size: 12px; font-weight: 500; border-radius: 6px; cursor: pointer; background: rgba(51,65,85,0.3); color: #94a3b8; transition: all 0.2s; }
+        .tab.active { background: rgba(99,102,241,0.3); color: #a5b4fc; }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
@@ -64,105 +71,229 @@
 <div class="max-w-md mx-auto px-4 pt-6 pb-10 fade-in">
     
     <header class="flex items-center justify-between mb-6">
-        <h1 class="text-lg font-semibold tracking-tight">&#127876; Planilla Vacaciones</h1>
-        <a href="/smart-home" class="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-700/40 transition-all" aria-label="Home" title="Dashboard">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 text-slate-400">
-                <path d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"/>
-            </svg>
-        </a>
+        <h1 class="text-lg font-semibold tracking-tight">&#127876; Cuchi Vacaciones</h1>
+        <div class="flex items-center gap-2">
+            <button class="config-btn" onclick="openConfig()">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+                    <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.206-1.25l1.18-2.045a1 1 0 0 1 1.187-.447l1.598.54A6.992 6.992 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
+                </svg>
+                Configurar
+            </button>
+            <a href="/smart-home" class="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-700/40 transition-all" aria-label="Home" title="Dashboard">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 text-slate-400">
+                    <path d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"/>
+                </svg>
+            </a>
+        </div>
     </header>
 
-    <div class="p-header">
-        <h1>&#127876; Propuesta 1</h1>
-        <p>Preferencias respetadas - PA elige Murcia 31+1</p>
-    </div>
-
-    <div class="rule"><strong>Pack H:</strong> IMPAR: 24+1 PI / 25+31 PV | PAR: 24+25 PI / 31+1 PV</div>
-    <div class="rule"><strong>Murcia:</strong> PA va 1 par (24+25 O 31+1). Max 2 dias. Maria siempre con PA</div>
-    <div class="rule"><strong>Pseudonorma PA:</strong> PA prefiere Murcia 31+1</div>
-    <div class="rule"><strong>Pseudonorma V:</strong> Virginia prefiere ver a los tios (con PV)</div>
-    <div class="rule"><strong>PV:</strong> Minimo 2 dias con A+V+H+I juntos</div>
-    <div class="rule"><strong>Prioridad:</strong> PAR &#8594; PA | IMPAR &#8594; PV</div>
-    <div class="rule"><strong>6 Ene:</strong> Comida para quien peor le fue. Empate: alterna</div>
-
-    <div id="years-container">
-        <p class="text-slate-400 text-sm text-center py-8">Cargando datos...</p>
+    <div id="calendar-container">
+        <p class="text-slate-400 text-sm text-center py-8">Cargando...</p>
     </div>
 
 </div>
+</div>
+
+<!-- Config Modal -->
+<div class="modal-overlay" id="config-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">&#9881; Configuracion</span>
+            <button class="modal-close" onclick="closeConfig()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <div class="tabs">
+                <div class="tab active" data-tab="nucleos" onclick="switchTab('nucleos')">Nucleos Familiares</div>
+                <div class="tab" data-tab="personas" onclick="switchTab('personas')">Personas</div>
+            </div>
+            
+            <div id="tab-nucleos" class="tab-content">
+                <div class="form-section">
+                    <div class="form-list" id="nucleos-list"></div>
+                    <button class="add-btn" onclick="addNucleo()">+ Anadir Nucleo Familiar</button>
+                </div>
+            </div>
+            
+            <div id="tab-personas" class="tab-content" style="display:none">
+                <div class="form-section">
+                    <div class="form-list" id="personas-list"></div>
+                    <button class="add-btn" onclick="addPersona()">+ Anadir Persona</button>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" onclick="closeConfig()">Cancelar</button>
+            <button class="btn-primary" onclick="saveConfig()">Guardar</button>
+        </div>
+    </div>
 </div>
 
 <div id="loading-overlay"><div class="spinner"></div></div>
 
 <script>
-// Vacaciones App - fetches data from API
-async function loadVacaciones() {
+// State
+let appData = { nucleos: [], personas: [], years: [], momentos: [] };
+let editNucleos = [];
+let editPersonas = [];
+
+const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
+
+// Load data
+async function loadData() {
     try {
         const resp = await fetch('/api/vacaciones');
-        const data = await resp.json();
-        renderYears(data.years);
+        appData = await resp.json();
+        renderCalendar();
     } catch (e) {
-        document.getElementById('years-container').innerHTML = '<p class="text-red-400 text-sm text-center py-8">Error cargando datos</p>';
+        document.getElementById('calendar-container').innerHTML = '<p class="text-red-400 text-sm text-center py-8">Error cargando datos</p>';
     }
 }
 
-function renderYears(years) {
-    const container = document.getElementById('years-container');
-    container.innerHTML = years.map(y => renderYear(y)).join('');
+// Render calendar
+function renderCalendar() {
+    const container = document.getElementById('calendar-container');
+    if (!appData.years || appData.years.length === 0) {
+        container.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">No hay datos configurados</p>';
+        return;
+    }
+    
+    container.innerHTML = appData.years.map(year => renderYear(year)).join('');
 }
 
-function renderYear(y) {
-    const pillType = y.tipo === 'PAR' ? 'pill-par' : 'pill-imp';
-    const pillLabel = y.tipo === 'PAR' ? 'Par' : 'Impar';
-    
-    return `
-    <div class="year-wrap">
-        <div class="year-head">
-            <span class="year-num">&#127876; ${y.year}</span>
-            <div class="pills">
-                <span class="pill ${pillType}">${pillLabel}</span>
-                <span class="pill pill-mu">Murcia ${y.murcia}</span>
+function renderYear(year) {
+    const meals = appData.momentos.map(m => {
+        const comida = year.comidas.find(c => c.momento === m.id) || {};
+        const nucleo = appData.nucleos.find(n => n.id === comida.nucleo_id);
+        const isImportant = m.importante;
+        
+        let content = '';
+        if (nucleo) {
+            content = `<span class="nucleo-chip" style="background:${nucleo.color}20;color:${nucleo.color}">${nucleo.nombre}</span>`;
+            if (comida.personas && comida.personas.length > 0) {
+                const nombres = comida.personas.map(pid => {
+                    const p = appData.personas.find(x => x.id === pid);
+                    return p ? p.nombre : '';
+                }).filter(Boolean).join(', ');
+                if (nombres) content += ` <span class="text-slate-500">- ${nombres}</span>`;
+            }
+        } else {
+            content = '<span class="meal-empty">Sin asignar</span>';
+        }
+        
+        return `
+        <div class="meal-card ${isImportant ? 'meal-important' : 'meal-wildcard'}">
+            <div class="meal-head">
+                <span>${m.icon}</span>
+                <span>${m.label}</span>
+                ${!isImportant ? '<span class="text-amber-500 text-[10px]">(comodin)</span>' : ''}
             </div>
+            <div class="meal-content">${content}</div>
         </div>
-        <div class="year-note">${y.note}</div>
-        ${y.diff ? `<div class="diff">${y.diff}</div>` : ''}
-        ${y.moments.map(m => renderMoment(m)).join('')}
-        <div class="alerts">
-            ${y.alerts.map(a => `<div class="alert a-${a.type}">&#10003; ${a.text}</div>`).join('')}
+        `;
+    }).join('');
+    
+    return `
+    <div class="cal-wrap">
+        <div class="cal-head">
+            <span class="cal-year">&#127876; ${year.year}</span>
         </div>
+        ${meals}
     </div>
     `;
 }
 
-function renderMoment(m) {
-    const headClass = m.id === '24' ? 'mh-24' : m.id === '25' ? 'mh-25' : m.id === '31' ? 'mh-31' : m.id === '1' ? 'mh-1' : 'mh-6';
-    
-    return `
-    <div class="moment">
-        <div class="moment-head ${headClass}">${m.icon} ${m.label}</div>
-        ${m.families.map(f => renderFamily(f)).join('')}
-    </div>
-    `;
+// Config modal
+function openConfig() {
+    editNucleos = JSON.parse(JSON.stringify(appData.nucleos || []));
+    editPersonas = JSON.parse(JSON.stringify(appData.personas || []));
+    renderNucleosList();
+    renderPersonasList();
+    document.getElementById('config-modal').classList.add('open');
 }
 
-function renderFamily(f) {
-    const lblClass = f.family === 'PV' ? 'lbl-pv' : f.family === 'PA' ? 'lbl-pa' : 'lbl-pi';
-    const chipClass = f.location === 'Madrid' ? (f.family === 'PV' ? 'chip-pv' : 'chip-pa') : f.location === 'Murcia' ? 'chip-mu' : 'chip-su';
-    
-    return `
-    <div class="nuc">
-        <span class="nuc-l ${lblClass}">Fam ${f.familyName}</span>
-        <div class="nuc-b">
-            <span class="chip ${chipClass}">${f.location}</span>
-            ${f.detail ? `<span class="nuc-d">${f.detail}</span>` : ''}
+function closeConfig() {
+    document.getElementById('config-modal').classList.remove('open');
+}
+
+function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+    document.getElementById('tab-nucleos').style.display = tab === 'nucleos' ? 'block' : 'none';
+    document.getElementById('tab-personas').style.display = tab === 'personas' ? 'block' : 'none';
+}
+
+function renderNucleosList() {
+    const list = document.getElementById('nucleos-list');
+    list.innerHTML = editNucleos.map((n, i) => `
+        <div class="form-item">
+            <span class="color-dot" style="background:${n.color}" onclick="cycleColor(${i})"></span>
+            <input type="text" value="${n.nombre}" placeholder="Nombre del nucleo" onchange="editNucleos[${i}].nombre=this.value">
+            <button class="delete-btn" onclick="deleteNucleo(${i})">&#128465;</button>
         </div>
-    </div>
-    `;
+    `).join('');
+}
+
+function renderPersonasList() {
+    const list = document.getElementById('personas-list');
+    list.innerHTML = editPersonas.map((p, i) => `
+        <div class="form-item">
+            <input type="text" value="${p.nombre}" placeholder="Nombre de la persona" onchange="editPersonas[${i}].nombre=this.value">
+            <button class="delete-btn" onclick="deletePersona(${i})">&#128465;</button>
+        </div>
+    `).join('');
+}
+
+function addNucleo() {
+    const id = 'n_' + Date.now();
+    editNucleos.push({ id, nombre: '', color: COLORS[editNucleos.length % COLORS.length] });
+    renderNucleosList();
+}
+
+function deleteNucleo(i) {
+    editNucleos.splice(i, 1);
+    renderNucleosList();
+}
+
+function cycleColor(i) {
+    const currentIndex = COLORS.indexOf(editNucleos[i].color);
+    editNucleos[i].color = COLORS[(currentIndex + 1) % COLORS.length];
+    renderNucleosList();
+}
+
+function addPersona() {
+    const id = 'p_' + Date.now();
+    editPersonas.push({ id, nombre: '' });
+    renderPersonasList();
+}
+
+function deletePersona(i) {
+    editPersonas.splice(i, 1);
+    renderPersonasList();
+}
+
+async function saveConfig() {
+    // Filter out empty names
+    const nucleos = editNucleos.filter(n => n.nombre.trim());
+    const personas = editPersonas.filter(p => p.nombre.trim());
+    
+    try {
+        const resp = await fetch('/api/vacaciones/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nucleos, personas })
+        });
+        if (resp.ok) {
+            closeConfig();
+            await loadData();
+        }
+    } catch (e) {
+        console.error('Error saving config', e);
+    }
 }
 
 // Init
 (async function init() {
-    await loadVacaciones();
+    await loadData();
     const overlay = document.getElementById('loading-overlay');
     const content = document.getElementById('app-content');
     content.classList.add('visible');

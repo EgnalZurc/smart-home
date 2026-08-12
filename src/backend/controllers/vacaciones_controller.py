@@ -1,222 +1,175 @@
 """Vacaciones (Christmas Planning) API controller.
 
-Provides the data for the Planilla Vacaciones app.
-This module generates the Christmas planning data for 2026-2029.
+Business Objects:
+- NucleoFamiliar: Family group / reunion place (e.g., "Padres de Angel")
+- Persona: Individual person who attends family gatherings
+- Year: Annual planning with meals (cena 24, comida 25, cena 31, comida 1, desayuno 6, comida 6)
+
+Key dates: 24, 25, 31, 1 (important days)
+Day 6 is a wildcard to balance the year between family nuclei.
 """
 
-from dataclasses import dataclass
-from typing import List, Dict, Any
+from dataclasses import dataclass, field, asdict
+from typing import List, Dict, Any, Optional
+import json
+from pathlib import Path
+
+DATA_FILE = Path(__file__).parent.parent / "data" / "vacaciones.json"
 
 
 @dataclass
-class FamilyMoment:
-    """A family's location and details for a specific moment."""
-    family: str  # PV, PA, PI
-    familyName: str  # Virginia, Angel, Irene
-    location: str  # Madrid, Murcia, supuesto
-    detail: str = ""
-
-
-@dataclass  
-class Moment:
-    """A specific moment (meal) during Christmas."""
-    id: str  # 24, 25, 31, 1, 6
-    icon: str
-    label: str
-    families: List[FamilyMoment]
+class Persona:
+    id: str
+    nombre: str
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass
-class Alert:
-    """An alert/note for a year."""
-    type: str  # ok, warn, info
-    text: str
+class NucleoFamiliar:
+    id: str
+    nombre: str
+    color: str = "#6366f1"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class Comida:
+    momento: str
+    nucleo_id: Optional[str] = None
+    personas: List[str] = field(default_factory=list)
+    notas: str = ""
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass
 class YearPlan:
-    """The complete plan for a year."""
     year: int
-    tipo: str  # PAR or IMPAR
-    murcia: str  # 31+1 or 24+25 or 24+1
-    note: str
-    diff: str
-    moments: List[Moment]
-    alerts: List[Alert]
-
-
-def get_propuesta1_data() -> Dict[str, Any]:
-    """Returns the Propuesta 1 data for all years."""
+    comidas: List[Comida] = field(default_factory=list)
+    notas: str = ""
     
-    years = [
-        # 2026 - IMPAR - Embarazo
-        YearPlan(
-            year=2026,
-            tipo="IMPAR",
-            murcia="31+1",
-            note="Ano IMPAR - prioridad PV - Embarazo: A+V no viajan a Murcia",
-            diff="Sin flexibilidad por embarazo. PA va Murcia 31+1 (su preferencia).",
-            moments=[
-                Moment(id="24", icon="&#127769;", label="Cena 24", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con <strong>A+V, H+I</strong>, abuela, tios &#10003;"),
-                    FamilyMoment("PA", "Angel", "Madrid", "Con Maria"),
-                ]),
-                Moment(id="25", icon="&#9728;", label="Comida 25", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con abuela y tios"),
-                    FamilyMoment("PA", "Angel", "Madrid", "Con Maria, <strong>A+V</strong>"),
-                ]),
-                Moment(id="31", icon="&#127769;", label="Cena 31", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con <strong>A+V</strong>, abuela"),
-                    FamilyMoment("PA", "Angel", "Murcia", "Con Maria"),
-                ]),
-                Moment(id="1", icon="&#9728;", label="Comida 1", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con <strong>A+V, H+I</strong>, abuela &#10003;"),
-                    FamilyMoment("PA", "Angel", "Murcia", "Con Maria"),
-                ]),
-                Moment(id="6", icon="&#127869;", label="6 Ene - PA peor (1 dia vs 3)", families=[
-                    FamilyMoment("PV", "Virginia", "Desayuno", ""),
-                    FamilyMoment("PA", "Angel", "Comida", "Con Maria, A+V"),
-                ]),
-            ],
-            alerts=[
-                Alert("ok", "PV 2 dias con A+V+H+I: 24 y 1"),
-                Alert("ok", "Murcia 31+1. A+V: 3 PV, 1 PA"),
-            ]
-        ),
-        
-        # 2027 - PAR - Prioridad PA
-        YearPlan(
-            year=2027,
-            tipo="PAR",
-            murcia="31+1",
-            note="Ano PAR - prioridad PA - <strong>A+V: 24+25 PV / 31+1 Murcia</strong> - H+I se adaptan: 24+25 PV / 31+1 PI",
-            diff="PA elige Murcia 31+1 (su preferencia). H+I se adaptan para que PV tenga A+V+H+I juntos el 24+25. PV solo 31+1 - comida 6.",
-            moments=[
-                Moment(id="24", icon="&#127769;", label="Cena 24", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con <strong>A+V, H+I</strong>, abuela, tios &#10003;"),
-                    FamilyMoment("PA", "Angel", "Madrid", "Con Maria"),
-                    FamilyMoment("PI", "Irene", "supuesto", "Con su familia"),
-                ]),
-                Moment(id="25", icon="&#9728;", label="Comida 25", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con <strong>A+V, H+I</strong>, abuela, tios &#10003;"),
-                    FamilyMoment("PA", "Angel", "Madrid", "Con Maria"),
-                    FamilyMoment("PI", "Irene", "supuesto", "Con su familia"),
-                ]),
-                Moment(id="31", icon="&#127769;", label="Cena 31", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con abuela (solos)"),
-                    FamilyMoment("PA", "Angel", "Murcia", "Con Maria, <strong>A+V</strong>"),
-                    FamilyMoment("PI", "Irene", "supuesto", "Con H+I y familia"),
-                ]),
-                Moment(id="1", icon="&#9728;", label="Comida 1", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con abuela (solos)"),
-                    FamilyMoment("PA", "Angel", "Murcia", "Con Maria, <strong>A+V</strong>"),
-                    FamilyMoment("PI", "Irene", "supuesto", "Con H+I y familia"),
-                ]),
-                Moment(id="6", icon="&#127869;", label="6 Ene - PV peor (solos 31+1)", families=[
-                    FamilyMoment("PA", "Angel", "Desayuno", "Con Maria, A+V"),
-                    FamilyMoment("PV", "Virginia", "Comida", "Con A+V, H+I, abuela"),
-                ]),
-            ],
-            alerts=[
-                Alert("ok", "PV 2 dias con A+V+H+I: 24 y 25"),
-                Alert("ok", "Murcia 31+1 (preferencia PA). A+V: 2 PV, 2 PA"),
-                Alert("warn", "PV solos 31+1 - Comida 6 compensa"),
-            ]
-        ),
-        
-        # 2028 - IMPAR - Prioridad PV
-        YearPlan(
-            year=2028,
-            tipo="IMPAR",
-            murcia="24+1",
-            note="Ano IMPAR - prioridad PV - H: 24+1 PI / 25+31 PV - <strong>A+V: 24+1 Murcia / 25+31 PV</strong>",
-            diff="PV tiene prioridad. A+V van 25+31 con PV (coinciden con H+I). Murcia 24+1 (no 31+1).",
-            moments=[
-                Moment(id="24", icon="&#127769;", label="Cena 24", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con abuela y tios"),
-                    FamilyMoment("PA", "Angel", "Murcia", "Con Maria, <strong>A+V</strong>"),
-                    FamilyMoment("PI", "Irene", "supuesto", "Con H+I y familia"),
-                ]),
-                Moment(id="25", icon="&#9728;", label="Comida 25", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con <strong>A+V, H+I</strong>, abuela, tios &#10003;"),
-                    FamilyMoment("PA", "Angel", "Madrid", "Con Maria"),
-                    FamilyMoment("PI", "Irene", "supuesto", "Con su familia"),
-                ]),
-                Moment(id="31", icon="&#127769;", label="Cena 31", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con <strong>A+V, H+I</strong>, abuela &#10003;"),
-                    FamilyMoment("PA", "Angel", "Madrid", "Con Maria"),
-                    FamilyMoment("PI", "Irene", "supuesto", "Con su familia"),
-                ]),
-                Moment(id="1", icon="&#9728;", label="Comida 1", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con abuela"),
-                    FamilyMoment("PA", "Angel", "Murcia", "Con Maria, <strong>A+V</strong>"),
-                    FamilyMoment("PI", "Irene", "supuesto", "Con H+I y familia"),
-                ]),
-                Moment(id="6", icon="&#127869;", label="6 Ene - Empate 2-2 - 2027 comio PV - comida PA", families=[
-                    FamilyMoment("PV", "Virginia", "Desayuno", "Con A+V, abuela"),
-                    FamilyMoment("PA", "Angel", "Comida", "Con Maria, A+V"),
-                ]),
-            ],
-            alerts=[
-                Alert("ok", "PV 2 dias con A+V+H+I: 25 y 31"),
-                Alert("ok", "Murcia 24+1. A+V: 2 PV, 2 PA"),
-                Alert("info", "Coste: PA no va Murcia 31+1 (PV prioridad)"),
-            ]
-        ),
-        
-        # 2029 - PAR - Prioridad PA
-        YearPlan(
-            year=2029,
-            tipo="PAR",
-            murcia="31+1",
-            note="Ano PAR - prioridad PA - <strong>A+V: 24+25 PV / 31+1 Murcia</strong> - H+I se adaptan: 24+25 PV / 31+1 PI",
-            diff="PA elige Murcia 31+1 (su preferencia). H+I se adaptan para que PV tenga A+V+H+I juntos el 24+25. PV solo 31+1 - comida 6.",
-            moments=[
-                Moment(id="24", icon="&#127769;", label="Cena 24", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con <strong>A+V, H+I</strong>, abuela, tios &#10003;"),
-                    FamilyMoment("PA", "Angel", "Madrid", "Con Maria"),
-                    FamilyMoment("PI", "Irene", "supuesto", "Con su familia"),
-                ]),
-                Moment(id="25", icon="&#9728;", label="Comida 25", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con <strong>A+V, H+I</strong>, abuela, tios &#10003;"),
-                    FamilyMoment("PA", "Angel", "Madrid", "Con Maria"),
-                    FamilyMoment("PI", "Irene", "supuesto", "Con su familia"),
-                ]),
-                Moment(id="31", icon="&#127769;", label="Cena 31", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con abuela (solos)"),
-                    FamilyMoment("PA", "Angel", "Murcia", "Con Maria, <strong>A+V</strong>"),
-                    FamilyMoment("PI", "Irene", "supuesto", "Con H+I y familia"),
-                ]),
-                Moment(id="1", icon="&#9728;", label="Comida 1", families=[
-                    FamilyMoment("PV", "Virginia", "Madrid", "Con abuela (solos)"),
-                    FamilyMoment("PA", "Angel", "Murcia", "Con Maria, <strong>A+V</strong>"),
-                    FamilyMoment("PI", "Irene", "supuesto", "Con H+I y familia"),
-                ]),
-                Moment(id="6", icon="&#127869;", label="6 Ene - PV peor (solos 31+1)", families=[
-                    FamilyMoment("PA", "Angel", "Desayuno", "Con Maria, A+V"),
-                    FamilyMoment("PV", "Virginia", "Comida", "Con A+V, H+I, abuela"),
-                ]),
-            ],
-            alerts=[
-                Alert("ok", "PV 2 dias con A+V+H+I: 24 y 25"),
-                Alert("ok", "Murcia 31+1 (preferencia PA). A+V: 2 PV, 2 PA"),
-                Alert("warn", "PV solos 31+1 - Comida 6 compensa"),
-            ]
-        ),
-    ]
-    
-    # Convert to dict for JSON serialization
-    def to_dict(obj):
-        if hasattr(obj, '__dataclass_fields__'):
-            return {k: to_dict(v) for k, v in obj.__dict__.items()}
-        elif isinstance(obj, list):
-            return [to_dict(i) for i in obj]
-        return obj
-    
-    return {"years": [to_dict(y) for y in years]}
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "year": self.year,
+            "comidas": [c.to_dict() for c in self.comidas],
+            "notas": self.notas
+        }
 
 
-# Health check - always returns True since this is a static data provider
+@dataclass
+class VacacionesData:
+    nucleos: List[NucleoFamiliar] = field(default_factory=list)
+    personas: List[Persona] = field(default_factory=list)
+    years: List[YearPlan] = field(default_factory=list)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "nucleos": [n.to_dict() for n in self.nucleos],
+            "personas": [p.to_dict() for p in self.personas],
+            "years": [y.to_dict() for y in self.years]
+        }
+
+
+MOMENTOS = [
+    {"id": "cena_24", "label": "Cena 24", "icon": "&#127769;", "dia": 24, "tipo": "cena", "importante": True},
+    {"id": "comida_25", "label": "Comida 25", "icon": "&#9728;", "dia": 25, "tipo": "comida", "importante": True},
+    {"id": "cena_31", "label": "Cena 31", "icon": "&#127769;", "dia": 31, "tipo": "cena", "importante": True},
+    {"id": "comida_1", "label": "Comida 1", "icon": "&#9728;", "dia": 1, "tipo": "comida", "importante": True},
+    {"id": "desayuno_6", "label": "Desayuno 6", "icon": "&#9749;", "dia": 6, "tipo": "desayuno", "importante": False},
+    {"id": "comida_6", "label": "Comida 6", "icon": "&#127869;", "dia": 6, "tipo": "comida", "importante": False},
+]
+
+
+def _ensure_data_dir():
+    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _load_data() -> VacacionesData:
+    _ensure_data_dir()
+    
+    if DATA_FILE.exists():
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+                
+            nucleos = [NucleoFamiliar(**n) for n in raw.get("nucleos", [])]
+            personas = [Persona(**p) for p in raw.get("personas", [])]
+            years = []
+            for y in raw.get("years", []):
+                comidas = [Comida(**c) for c in y.get("comidas", [])]
+                years.append(YearPlan(year=y["year"], comidas=comidas, notas=y.get("notas", "")))
+            
+            return VacacionesData(nucleos=nucleos, personas=personas, years=years)
+        except Exception:
+            pass
+    
+    return VacacionesData(
+        nucleos=[],
+        personas=[],
+        years=[
+            YearPlan(
+                year=2026,
+                comidas=[Comida(momento=m["id"]) for m in MOMENTOS],
+                notas=""
+            )
+        ]
+    )
+
+
+def _save_data(data: VacacionesData):
+    _ensure_data_dir()
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data.to_dict(), f, ensure_ascii=False, indent=2)
+
+
+def get_vacaciones_data() -> Dict[str, Any]:
+    data = _load_data()
+    return {
+        **data.to_dict(),
+        "momentos": MOMENTOS
+    }
+
+
+def get_config() -> Dict[str, Any]:
+    data = _load_data()
+    return {
+        "nucleos": [n.to_dict() for n in data.nucleos],
+        "personas": [p.to_dict() for p in data.personas]
+    }
+
+
+def save_config(nucleos: List[Dict], personas: List[Dict]) -> Dict[str, Any]:
+    data = _load_data()
+    data.nucleos = [NucleoFamiliar(**n) for n in nucleos]
+    data.personas = [Persona(**p) for p in personas]
+    _save_data(data)
+    return {"status": "ok"}
+
+
+def save_year(year: int, comidas: List[Dict], notas: str = "") -> Dict[str, Any]:
+    data = _load_data()
+    
+    year_plan = None
+    for y in data.years:
+        if y.year == year:
+            year_plan = y
+            break
+    
+    if year_plan is None:
+        year_plan = YearPlan(year=year)
+        data.years.append(year_plan)
+    
+    year_plan.comidas = [Comida(**c) for c in comidas]
+    year_plan.notas = notas
+    
+    _save_data(data)
+    return {"status": "ok"}
+
+
 def is_healthy() -> bool:
-    """Returns True if the vacaciones module is working."""
     return True

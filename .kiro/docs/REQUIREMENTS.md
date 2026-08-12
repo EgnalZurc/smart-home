@@ -292,39 +292,73 @@
 
 # PROJECT: Cuchi Vacaciones (Christmas Planning)
 
-## VAC-1 - Dashboard Integration  In Progress
+## VAC-1 - Dashboard Integration  Complete
 
 | # | Requirement | Status |
 |---|---|---|
-| VAC-1 | App listed in Cuchi Casa dashboard | In Progress |
+| VAC-1 | App listed in Cuchi Casa dashboard | Complete |
 | VAC-1.1 | Name displayed: "Cuchi Vacaciones" | Complete |
 | VAC-1.2 | Description displayed: "Planificador de cuchi vacaciones" | Complete |
-| VAC-1.3 | Status dot: green if app running, red if not | In Progress |
-| VAC-1.3.1 | GET /api/health/vacaciones returns {"online": true} when app is healthy | In Progress |
+| VAC-1.3 | Status dot: green if app running, red if not | Complete |
+| VAC-1.3.1 | GET /api/health/vacaciones returns {"online": true} when app is healthy | Complete |
 | VAC-1.3.2 | Dashboard polls status every 10s like other apps | Complete |
-| VAC-1.4 | Click navigates to /smart-home/vacaciones | In Progress |
-| Tests | Pending |
+| VAC-1.4 | Click navigates to /smart-home/vacaciones | Complete |
 
-## VAC-2 - Christmas Planning Web  In Progress
-
-| # | Requirement | Status |
-|---|---|---|
-| VAC-2 | /smart-home/vacaciones renders the Christmas planning web | In Progress |
-| VAC-2.1 | Shows configured Christmas vacation plan (currently 2026-2029) | In Progress |
-| VAC-2.2 | Data fetched from /api/vacaciones endpoint | In Progress |
-| VAC-2.3 | Mobile-first, dark theme matching Cuchi Casa style | In Progress |
-| VAC-2.4 | Home button to return to /smart-home | In Progress |
-| VAC-2.5 | Scope: Christmas period (future: may extend to other vacation periods) | Planned |
-| Tests | Pending |
-
-## VAC-3 - Backend API  In Progress
+## VAC-2 - Business Objects  In Progress
 
 | # | Requirement | Status |
 |---|---|---|
-| VAC-3 | GET /api/vacaciones returns the vacation planning data | In Progress |
-| VAC-3.1 | Returns JSON with years array containing planning for each year | In Progress |
-| VAC-3.2 | Each year includes: tipo (PAR/IMPAR), murcia days, moments, alerts | In Progress |
-| VAC-3.3 | GET /api/health/vacaciones returns health status | In Progress |
-| Tests | Pending |
+| VAC-2 | App uses three core business objects | In Progress |
+| VAC-2.1 | **NucleoFamiliar**: Entity representing reunion place (e.g., "Padres de Angel") | Complete |
+| VAC-2.1.1 | Has id, nombre, and color properties | Complete |
+| VAC-2.2 | **Persona**: Individual person who attends family gatherings | Complete |
+| VAC-2.2.1 | Has id and nombre properties | Complete |
+| VAC-2.3 | **Year (YearPlan)**: Annual planning container | Complete |
+| VAC-2.3.1 | Contains meals: cena 24, comida 25, cena 31, comida 1, desayuno 6, comida 6 | Complete |
+| VAC-2.3.2 | Days 24, 25, 31, 1 are important days | Complete |
+| VAC-2.3.3 | Day 6 is wildcard to balance year between NucleoFamiliar | Complete |
+| VAC-2.4 | **Comida**: Meal assignment linking momento, nucleo, and personas | Complete |
 
-**Current scope**: Christmas 2026-2029 (Propuesta 1 - family planning with rules for PV, PA, PI families).
+## VAC-3 - Configuration UI  In Progress
+
+| # | Requirement | Status |
+|---|---|---|
+| VAC-3 | Configuration button opens popup modal | Complete |
+| VAC-3.1 | Modal has tabs: "Nucleos Familiares" and "Personas" | Complete |
+| VAC-3.2 | Can add/edit/delete NucleoFamiliar with name and color | Complete |
+| VAC-3.3 | Can add/edit/delete Persona with name | Complete |
+| VAC-3.4 | Save button persists configuration to backend | Complete |
+| VAC-3.5 | Cancel button discards changes | Complete |
+
+## VAC-4 - Calendar View  In Progress
+
+| # | Requirement | Status |
+|---|---|---|
+| VAC-4 | Shows year calendar with all meals | In Progress |
+| VAC-4.1 | Initially shows only 2026 (empty) | Complete |
+| VAC-4.2 | Each meal shows assigned NucleoFamiliar with color | Pending |
+| VAC-4.3 | Each meal shows attending Personas | Pending |
+| VAC-4.4 | Important days (24, 25, 31, 1) visually distinguished | Complete |
+| VAC-4.5 | Wildcard day (6) visually marked as comodin | Complete |
+
+## VAC-5 - Backend API  In Progress
+
+| # | Requirement | Status |
+|---|---|---|
+| VAC-5 | GET /api/vacaciones returns all data (nucleos, personas, years, momentos) | Complete |
+| VAC-5.1 | GET /api/vacaciones/config returns configuration only | Complete |
+| VAC-5.2 | POST /api/vacaciones/config saves nucleos and personas | Complete |
+| VAC-5.3 | POST /api/vacaciones/year/{year} saves year planning | Complete |
+| VAC-5.4 | Data persisted to JSON file (data/vacaciones.json) | Complete |
+| VAC-5.5 | GET /api/health/vacaciones returns health status | Complete |
+
+## VAC-6 - Data Persistence  Complete
+
+| # | Requirement | Status |
+|---|---|---|
+| VAC-6 | Data stored in data/vacaciones.json | Complete |
+| VAC-6.1 | Auto-creates data directory if missing | Complete |
+| VAC-6.2 | Default state: year 2026 with empty meals | Complete |
+| VAC-6.3 | UTF-8 encoding for Spanish characters | Complete |
+
+**Scope**: Christmas period planning (24 Dec - 6 Jan). Future: may extend to other vacation periods.
