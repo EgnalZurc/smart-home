@@ -312,7 +312,9 @@
 | VAC-2.1 | **NucleoFamiliar**: Entity representing reunion place (e.g., "Padres de Angel") | Complete |
 | VAC-2.1.1 | Has id, nombre, and color properties | Complete |
 | VAC-2.2 | **Persona**: Individual person who attends family gatherings | Complete |
-| VAC-2.2.1 | Has id and nombre properties | Complete |
+| VAC-2.2.1 | Has id, nombre, and inicial properties | Complete |
+| VAC-2.2.2 | Inicial auto-generated: starts with 1st letter, if taken uses 2, then 3, etc. | Complete |
+| VAC-2.2.3 | If full name taken as inicial, append number (e.g., "ANGEL2") | Complete |
 | VAC-2.3 | **Year (YearPlan)**: Annual planning container | Complete |
 | VAC-2.3.1 | Contains meals: cena 24, comida 25, cena 31, comida 1, desayuno 6, comida 6 | Complete |
 | VAC-2.3.2 | Days 24, 25, 31, 1 are important days | Complete |
@@ -340,6 +342,8 @@
 | VAC-4.3 | Each meal shows attending Personas | Pending |
 | VAC-4.4 | Important days (24, 25, 31, 1) visually distinguished | Complete |
 | VAC-4.5 | Wildcard day (6) visually marked as comodin | Complete |
+| VAC-4.6 | Cena meals use waning crescent moon icon (&#127770;) | Complete |
+| VAC-4.7 | Comida/Desayuno meals use yellow sun icon (&#9728;) | Complete |
 
 ## VAC-5 - Backend API  In Progress
 

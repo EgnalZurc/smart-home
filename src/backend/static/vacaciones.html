@@ -54,6 +54,7 @@
         .form-item input::placeholder { color: #475569; }
         .form-item .color-dot { width: 16px; height: 16px; border-radius: 50%; cursor: pointer; }
         .form-item .delete-btn { background: none; border: none; color: #ef4444; cursor: pointer; padding: 4px; font-size: 14px; }
+        .form-item .inicial-badge { font-size: 10px; padding: 2px 6px; background: rgba(99,102,241,0.3); color: #a5b4fc; border-radius: 4px; font-weight: 600; min-width: 24px; text-align: center; }
         .add-btn { background: rgba(34,197,94,0.2); border: 1px dashed rgba(34,197,94,0.4); color: #86efac; padding: 8px; border-radius: 8px; font-size: 12px; cursor: pointer; text-align: center; transition: all 0.2s; }
         .add-btn:hover { background: rgba(34,197,94,0.3); }
         .btn-primary { background: #6366f1; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; }
@@ -63,6 +64,9 @@
         .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
         .tab { flex: 1; padding: 8px; text-align: center; font-size: 12px; font-weight: 500; border-radius: 6px; cursor: pointer; background: rgba(51,65,85,0.3); color: #94a3b8; transition: all 0.2s; }
         .tab.active { background: rgba(99,102,241,0.3); color: #a5b4fc; }
+        
+        /* Hint text */
+        .hint { font-size: 10px; color: #64748b; margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px; }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
@@ -118,6 +122,7 @@
                 <div class="form-section">
                     <div class="form-list" id="personas-list"></div>
                     <button class="add-btn" onclick="addPersona()">+ Anadir Persona</button>
+                    <div class="hint">&#128161; La inicial se genera automaticamente. Si hay conflicto, se usan mas letras del nombre.</div>
                 </div>
             </div>
         </div>
@@ -137,6 +142,26 @@ let editNucleos = [];
 let editPersonas = [];
 
 const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
+
+// Generate unique inicial (client-side preview)
+function generateInicial(nombre, existingIniciales) {
+    const cleanName = nombre.trim().toUpperCase();
+    if (!cleanName) return '';
+    
+    for (let len = 1; len <= cleanName.length; len++) {
+        const candidate = cleanName.substring(0, len);
+        if (!existingIniciales.includes(candidate)) {
+            return candidate;
+        }
+    }
+    
+    // Full name taken, add number
+    let counter = 2;
+    while (existingIniciales.includes(cleanName + counter)) {
+        counter++;
+    }
+    return cleanName + counter;
+}
 
 // Load data
 async function loadData() {
@@ -170,11 +195,11 @@ function renderYear(year) {
         if (nucleo) {
             content = `<span class="nucleo-chip" style="background:${nucleo.color}20;color:${nucleo.color}">${nucleo.nombre}</span>`;
             if (comida.personas && comida.personas.length > 0) {
-                const nombres = comida.personas.map(pid => {
+                const iniciales = comida.personas.map(pid => {
                     const p = appData.personas.find(x => x.id === pid);
-                    return p ? p.nombre : '';
+                    return p ? p.inicial : '';
                 }).filter(Boolean).join(', ');
-                if (nombres) content += ` <span class="text-slate-500">- ${nombres}</span>`;
+                if (iniciales) content += ` <span class="text-slate-500">- ${iniciales}</span>`;
             }
         } else {
             content = '<span class="meal-empty">Sin asignar</span>';
@@ -234,13 +259,30 @@ function renderNucleosList() {
 }
 
 function renderPersonasList() {
+    // Calculate preview iniciales
+    const usedIniciales = [];
+    editPersonas.forEach(p => {
+        if (p.nombre.trim()) {
+            p._previewInicial = generateInicial(p.nombre, usedIniciales);
+            usedIniciales.push(p._previewInicial);
+        } else {
+            p._previewInicial = '';
+        }
+    });
+    
     const list = document.getElementById('personas-list');
     list.innerHTML = editPersonas.map((p, i) => `
         <div class="form-item">
-            <input type="text" value="${p.nombre}" placeholder="Nombre de la persona" onchange="editPersonas[${i}].nombre=this.value">
+            <span class="inicial-badge">${p._previewInicial || '-'}</span>
+            <input type="text" value="${p.nombre}" placeholder="Nombre de la persona" onchange="updatePersonaNombre(${i}, this.value)">
             <button class="delete-btn" onclick="deletePersona(${i})">&#128465;</button>
         </div>
     `).join('');
+}
+
+function updatePersonaNombre(i, value) {
+    editPersonas[i].nombre = value;
+    renderPersonasList(); // Re-render to update iniciales preview
 }
 
 function addNucleo() {
@@ -262,7 +304,7 @@ function cycleColor(i) {
 
 function addPersona() {
     const id = 'p_' + Date.now();
-    editPersonas.push({ id, nombre: '' });
+    editPersonas.push({ id, nombre: '', inicial: '' });
     renderPersonasList();
 }
 
@@ -272,9 +314,9 @@ function deletePersona(i) {
 }
 
 async function saveConfig() {
-    // Filter out empty names
-    const nucleos = editNucleos.filter(n => n.nombre.trim());
-    const personas = editPersonas.filter(p => p.nombre.trim());
+    // Filter out empty names and remove preview field
+    const nucleos = editNucleos.filter(n => n.nombre.trim()).map(n => ({id: n.id, nombre: n.nombre, color: n.color}));
+    const personas = editPersonas.filter(p => p.nombre.trim()).map(p => ({id: p.id, nombre: p.nombre}));
     
     try {
         const resp = await fetch('/api/vacaciones/config', {
