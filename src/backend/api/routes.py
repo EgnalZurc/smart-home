@@ -515,3 +515,20 @@ async def get_immich_health():
             return {"online": r.status_code == 200 and r.json().get("res") == "pong"}
     except Exception:
         return {"online": False}
+
+
+@router.get("/vacaciones")
+def get_vacaciones():
+    """Returns the Christmas planning data for Propuesta 1."""
+    from controllers.vacaciones_controller import get_propuesta1_data
+    return get_propuesta1_data()
+
+
+@router.get("/health/vacaciones")
+def get_vacaciones_health():
+    """Health check for Vacaciones (Christmas Planning) app.
+    
+    Returns online=True if the vacaciones module is loaded and working.
+    """
+    from controllers.vacaciones_controller import is_healthy
+    return {"online": is_healthy()}

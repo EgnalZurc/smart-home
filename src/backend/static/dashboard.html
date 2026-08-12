@@ -73,7 +73,7 @@
 <div id="loading-overlay"><div class="spinner"></div></div>
 
 <script>
-// ── Translations (self-contained, no dependency on i18n.js) ──────────────────
+// â”€â”€ Translations (self-contained, no dependency on i18n.js) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const T = {
     es: {
         title:        'Cuchi Casa',
@@ -86,6 +86,8 @@ const T = {
         zigbee_desc:  'Dispositivos Zigbee, sensores, coordinador',
         photos_name:  'Fotos',
         photos_desc:  'Copia de seguridad de fotos y vídeos',
+        vacaciones_name: 'Cuchi Vacaciones',
+        vacaciones_desc: 'Planificador de cuchi vacaciones',
     },
     en: {
         title:        'Cuchi Casa',
@@ -101,14 +103,15 @@ const T = {
     },
 };
 
-// ── App Registry ─────────────────────────────────────────────────────────────
+// â”€â”€ App Registry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const APPS = [
     { key: 'ac',     url: '/smart-home/ac', nameKey: 'ac_name',     descKey: 'ac_desc',     statusUrl: '/api/status', getStatus: d => d?.mqtt_connected },
     { key: 'zigbee', url: '/zigbee/',        nameKey: 'zigbee_name', descKey: 'zigbee_desc', statusUrl: '/api/health/zigbee', getStatus: d => d?.online === true },
     { key: 'photos', url: 'https://raspberrypi.tailaa37cd.ts.net:10000/', nameKey: 'photos_name', descKey: 'photos_desc', statusUrl: '/api/health/immich', getStatus: d => d?.online === true },
+    { key: 'vacaciones', url: '/smart-home/vacaciones', nameKey: 'vacaciones_name', descKey: 'vacaciones_desc', statusUrl: '/api/health/vacaciones', getStatus: d => d?.online === true },
 ];
 
-// ── Language ──────────────────────────────────────────────────────────────────
+// â”€â”€ Language â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const COOKIE = 'locale';
 function getLang() {
     const m = document.cookie.match(/(?:^|;\s*)locale=([^;]+)/);
@@ -152,7 +155,7 @@ document.addEventListener('click', e => {
     if (dd && !dd.contains(e.target)) document.getElementById('lang-menu').classList.remove('open');
 });
 
-// ── Render ────────────────────────────────────────────────────────────────────
+// â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function render() {
     const list = document.getElementById('apps-list');
     list.innerHTML = APPS.map(app => `
@@ -174,7 +177,7 @@ function render() {
     `).join('');
 }
 
-// ── Status ────────────────────────────────────────────────────────────────────
+// â”€â”€ Status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function loadStatus() {
     for (const app of APPS) {
         if (!app.statusUrl || !app.getStatus) continue;
@@ -190,7 +193,7 @@ async function loadStatus() {
     }
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 (async function init() {
     applyLang();
     render();
@@ -206,3 +209,10 @@ async function loadStatus() {
 </script>
 </body>
 </html>
+
+
+
+
+
+
+

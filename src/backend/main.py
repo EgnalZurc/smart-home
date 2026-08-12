@@ -369,6 +369,12 @@ async def serve_ac():
     """Serves the AC Control app."""
     return _serve_html("index.html")
 
+# VAC-URL: Vacaciones (Christmas Planning) app at /smart-home/vacaciones
+@app.get("/smart-home/vacaciones")
+async def serve_vacaciones():
+    """Serves the Vacaciones (Christmas Planning) app."""
+    return _serve_html("vacaciones.html")
+
 # Serve other static files normally
 frontend_path = Path(__file__).parent / "static"
 if frontend_path.exists():
