@@ -36,7 +36,17 @@ class ControlModeRequest(BaseModel):
 class ManualParamsRequest(BaseModel):
     mode: str = "cool"  # "cool" or "heat"
     fan_speed: int = 0  # 0=auto, 1=low, 2=mid, 3=high
-    temperature: float = 23.0  # 19-30°C
+    temperature: float = 23.0  # 19-30
+
+
+class VacacionesConfigRequest(BaseModel):
+    nucleos: list = []
+    personas: list = []
+
+
+class VacacionesYearRequest(BaseModel):
+    comidas: list = []
+    notas: str = ""
 
 
 @router.get("/status")
@@ -532,17 +542,17 @@ def get_vacaciones_config():
 
 
 @router.post("/vacaciones/config")
-def post_vacaciones_config(data: dict):
+def post_vacaciones_config(data: VacacionesConfigRequest):
     """Save vacaciones configuration."""
     from controllers.vacaciones_controller import save_config
-    return save_config(data.get('nucleos', []), data.get('personas', []))
+    return save_config(data.nucleos, data.personas)
 
 
 @router.post("/vacaciones/year/{year}")
-def post_vacaciones_year(year: int, data: dict):
+def post_vacaciones_year(year: int, data: VacacionesYearRequest):
     """Save a year's planning."""
     from controllers.vacaciones_controller import save_year
-    return save_year(year, data.get('comidas', []), data.get('notas', ''))
+    return save_year(year, data.comidas, data.notas)
 
 
 @router.get("/health/vacaciones")
