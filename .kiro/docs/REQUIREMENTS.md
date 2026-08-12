@@ -360,9 +360,13 @@
 
 | # | Requirement | Status |
 |---|---|---|
-| VAC-6 | Data stored in data/vacaciones.json | Complete |
-| VAC-6.1 | Auto-creates data directory if missing | Complete |
-| VAC-6.2 | Default state: year 2026 with empty meals | Complete |
-| VAC-6.3 | UTF-8 encoding for Spanish characters | Complete |
+| VAC-6 | All business objects persist across container restarts | Complete |
+| VAC-6.1 | Data stored in data/vacaciones.json (Docker volume ./data/backend:/app/data) | Complete |
+| VAC-6.2 | NucleoFamiliar objects persist with id, nombre, color | Complete |
+| VAC-6.3 | Persona objects persist with id, nombre, inicial | Complete |
+| VAC-6.4 | YearPlan objects persist with year, comidas, notas | Complete |
+| VAC-6.5 | Auto-creates data directory if missing | Complete |
+| VAC-6.6 | Default state: year 2026 with empty meals | Complete |
+| VAC-6.7 | UTF-8 encoding for Spanish characters | Complete |
 
 **Scope**: Christmas period planning (24 Dec - 6 Jan). Future: may extend to other vacation periods.
