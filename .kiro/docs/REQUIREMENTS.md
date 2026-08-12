@@ -287,3 +287,44 @@
 | HUM-1.5 | State machine integration | LOW | Pending seasonal data |
 
 **Decision gate**: Implement HUM-1 when at least 2 seasons show "recommended". Currently: 1/4 (summer only).
+
+---
+
+# PROJECT: Cuchi Vacaciones (Christmas Planning)
+
+## VAC-1 - Dashboard Integration  In Progress
+
+| # | Requirement | Status |
+|---|---|---|
+| VAC-1 | App listed in Cuchi Casa dashboard | In Progress |
+| VAC-1.1 | Name displayed: "Cuchi Vacaciones" | Complete |
+| VAC-1.2 | Description displayed: "Planificador de cuchi vacaciones" | Complete |
+| VAC-1.3 | Status dot: green if app running, red if not | In Progress |
+| VAC-1.3.1 | GET /api/health/vacaciones returns {"online": true} when app is healthy | In Progress |
+| VAC-1.3.2 | Dashboard polls status every 10s like other apps | Complete |
+| VAC-1.4 | Click navigates to /smart-home/vacaciones | In Progress |
+| Tests | Pending |
+
+## VAC-2 - Christmas Planning Web  In Progress
+
+| # | Requirement | Status |
+|---|---|---|
+| VAC-2 | /smart-home/vacaciones renders the Christmas planning web | In Progress |
+| VAC-2.1 | Shows configured Christmas vacation plan (currently 2026-2029) | In Progress |
+| VAC-2.2 | Data fetched from /api/vacaciones endpoint | In Progress |
+| VAC-2.3 | Mobile-first, dark theme matching Cuchi Casa style | In Progress |
+| VAC-2.4 | Home button to return to /smart-home | In Progress |
+| VAC-2.5 | Scope: Christmas period (future: may extend to other vacation periods) | Planned |
+| Tests | Pending |
+
+## VAC-3 - Backend API  In Progress
+
+| # | Requirement | Status |
+|---|---|---|
+| VAC-3 | GET /api/vacaciones returns the vacation planning data | In Progress |
+| VAC-3.1 | Returns JSON with years array containing planning for each year | In Progress |
+| VAC-3.2 | Each year includes: tipo (PAR/IMPAR), murcia days, moments, alerts | In Progress |
+| VAC-3.3 | GET /api/health/vacaciones returns health status | In Progress |
+| Tests | Pending |
+
+**Current scope**: Christmas 2026-2029 (Propuesta 1 - family planning with rules for PV, PA, PI families).
