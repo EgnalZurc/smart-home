@@ -375,4 +375,16 @@
 | VAC-6.6 | Default state: year 2026 with empty meals | Complete |
 | VAC-6.7 | UTF-8 encoding for Spanish characters | Complete |
 
+## VAC-7 - Performance  Complete
+
+| # | Requirement | Status |
+|---|---|---|
+| VAC-7 | App must be as lightweight as possible | Complete |
+| VAC-7.1 | Zero resource usage when not in use (no polling, no timers) | Complete |
+| VAC-7.2 | No periodic API calls or background processes | Complete |
+| VAC-7.3 | Auto-save uses debounce (500ms) to minimize API calls | Complete |
+| VAC-7.4 | Single API call on page load, no subsequent polling | Complete |
+| VAC-7.5 | No external libraries (vanilla JS only) | Complete |
+| VAC-7.6 | Minimal DOM updates (only changed elements) | Complete |
+
 **Scope**: Christmas period planning (24 Dec - 6 Jan). Future: may extend to other vacation periods.
