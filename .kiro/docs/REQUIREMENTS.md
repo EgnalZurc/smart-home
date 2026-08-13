@@ -375,6 +375,26 @@
 | VAC-6.6 | Default state: year 2026 with empty meals | Complete |
 | VAC-6.7 | UTF-8 encoding for Spanish characters | Complete |
 
+## VAC-8 - Year Management  Complete
+
+| # | Requirement | Status |
+|---|---|---|
+| VAC-8 | YearPlan can be added and deleted | Complete |
+| VAC-8.1 | Delete button appears top-right of each YearPlan | Complete |
+| VAC-8.2 | Delete only enabled if >1 years AND is the highest year | Complete |
+| VAC-8.3 | Add button appears below the last YearPlan | Complete |
+| VAC-8.4 | Add creates next year (last year + 1) with empty meals | Complete |
+| VAC-8.5 | New YearPlan appears below existing ones | Complete |
+
+## VAC-9 - Edit Restrictions  Complete
+
+| # | Requirement | Status |
+|---|---|---|
+| VAC-9 | Past years are read-only | Complete |
+| VAC-9.1 | Persona selection only enabled for future YearPlans | Complete |
+| VAC-9.2 | Current year determined by comparing with system date | Complete |
+| VAC-9.3 | Past years show dimmed/disabled persona chips | Complete |
+
 ## VAC-7 - Performance  Complete
 
 | # | Requirement | Status |

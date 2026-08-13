@@ -555,6 +555,20 @@ def post_vacaciones_year(year: int, data: VacacionesYearRequest):
     return save_year(year, data.comidas, data.notas)
 
 
+@router.delete("/vacaciones/year/{year}")
+def delete_vacaciones_year(year: int):
+    """Delete a year's planning. Only allowed if >1 years and is highest year."""
+    from controllers.vacaciones_controller import delete_year
+    return delete_year(year)
+
+
+@router.post("/vacaciones/year")
+def add_vacaciones_year():
+    """Add a new year (next year after the highest existing)."""
+    from controllers.vacaciones_controller import add_year
+    return add_year()
+
+
 @router.get("/health/vacaciones")
 def get_vacaciones_health():
     """Health check for Vacaciones (Christmas Planning) app.
