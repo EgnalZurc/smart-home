@@ -45,10 +45,17 @@ class Comida:
     momento: str
     nucleo_id: Optional[str] = None
     personas: List[str] = field(default_factory=list)
+    personas_por_nucleo: Dict[str, List[str]] = field(default_factory=dict)
     notas: str = ""
     
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        return {
+            "momento": self.momento,
+            "nucleo_id": self.nucleo_id,
+            "personas": self.personas,
+            "personas_por_nucleo": self.personas_por_nucleo,
+            "notas": self.notas
+        }
 
 
 @dataclass
@@ -82,26 +89,18 @@ class VacacionesData:
 
 
 # Meal moments configuration
-# Icons: waning crescent moon for dinner, sun for lunch/breakfast
 MOMENTOS = [
     {"id": "cena_24", "label": "Cena 24", "icon": "&#127770;", "dia": 24, "tipo": "cena", "importante": True},
     {"id": "comida_25", "label": "Comida 25", "icon": "&#9728;&#65039;", "dia": 25, "tipo": "comida", "importante": True},
     {"id": "cena_31", "label": "Cena 31", "icon": "&#127770;", "dia": 31, "tipo": "cena", "importante": True},
     {"id": "comida_1", "label": "Comida 1", "icon": "&#9728;&#65039;", "dia": 1, "tipo": "comida", "importante": True},
     {"id": "desayuno_6", "label": "Desayuno 6", "icon": "&#9728;&#65039;", "dia": 6, "tipo": "desayuno", "importante": False},
-    {"id": "comida_6", "label": "Comida 6", "icon": "&#9728;&#65039;", "dia": 6, "tipo": "comida", "importante": False},
+    {"id": "comida_6", "label": "Comida 6", "icon": "&#127869;", "dia": 6, "tipo": "comida", "importante": False},
 ]
 
 
 def _generate_inicial(nombre: str, existing_iniciales: List[str]) -> str:
-    """Generate a unique inicial for a persona.
-    
-    Algorithm:
-    1. Start with first letter
-    2. If taken, use first 2 letters
-    3. If taken, use first 3 letters
-    4. Continue until unique or full name reached
-    """
+    """Generate a unique inicial for a persona."""
     nombre_clean = nombre.strip().upper()
     if not nombre_clean:
         return ""
@@ -111,7 +110,6 @@ def _generate_inicial(nombre: str, existing_iniciales: List[str]) -> str:
         if candidate not in existing_iniciales:
             return candidate
     
-    # If even full name is taken, append a number
     base = nombre_clean
     counter = 2
     while f"{base}{counter}" in existing_iniciales:
@@ -137,7 +135,15 @@ def _load_data() -> VacacionesData:
             personas = [Persona(**p) for p in raw.get("personas", [])]
             years = []
             for y in raw.get("years", []):
-                comidas = [Comida(**c) for c in y.get("comidas", [])]
+                comidas = []
+                for c in y.get("comidas", []):
+                    comidas.append(Comida(
+                        momento=c.get("momento", ""),
+                        nucleo_id=c.get("nucleo_id"),
+                        personas=c.get("personas", []),
+                        personas_por_nucleo=c.get("personas_por_nucleo", {}),
+                        notas=c.get("notas", "")
+                    ))
                 years.append(YearPlan(year=y["year"], comidas=comidas, notas=y.get("notas", "")))
             
             return VacacionesData(nucleos=nucleos, personas=personas, years=years)
@@ -183,14 +189,10 @@ def get_config() -> Dict[str, Any]:
 
 
 def save_config(nucleos: List[Dict], personas: List[Dict]) -> Dict[str, Any]:
-    """Save nucleos and personas configuration.
-    
-    For personas, automatically generates unique iniciales.
-    """
+    """Save nucleos and personas configuration."""
     data = _load_data()
     data.nucleos = [NucleoFamiliar(**n) for n in nucleos]
     
-    # Process personas with unique iniciales
     new_personas = []
     used_iniciales = []
     
@@ -199,14 +201,11 @@ def save_config(nucleos: List[Dict], personas: List[Dict]) -> Dict[str, Any]:
         if not nombre:
             continue
             
-        # Check if this persona already has an inicial that we should preserve
         existing_inicial = p.get("inicial", "")
         
         if existing_inicial and existing_inicial.upper() not in used_iniciales:
-            # Keep existing inicial if still unique
             inicial = existing_inicial.upper()
         else:
-            # Generate new unique inicial
             inicial = _generate_inicial(nombre, used_iniciales)
         
         used_iniciales.append(inicial)
@@ -235,7 +234,15 @@ def save_year(year: int, comidas: List[Dict], notas: str = "") -> Dict[str, Any]
         year_plan = YearPlan(year=year)
         data.years.append(year_plan)
     
-    year_plan.comidas = [Comida(**c) for c in comidas]
+    year_plan.comidas = [
+        Comida(
+            momento=c.get("momento", ""),
+            nucleo_id=c.get("nucleo_id"),
+            personas=c.get("personas", []),
+            personas_por_nucleo=c.get("personas_por_nucleo", {}),
+            notas=c.get("notas", "")
+        ) for c in comidas
+    ]
     year_plan.notas = notas
     
     _save_data(data)

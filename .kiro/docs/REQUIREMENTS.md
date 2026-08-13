@@ -344,6 +344,12 @@
 | VAC-4.5 | Wildcard day (6) visually marked as comodin | Complete |
 | VAC-4.6 | Cena meals use waning crescent moon icon (&#127770;) | Complete |
 | VAC-4.7 | Comida/Desayuno meals use yellow sun icon (&#9728;) | Complete |
+| VAC-4.8 | Each day shows list of all NucleoFamiliar | Complete |
+| VAC-4.9 | Each NucleoFamiliar in each day shows all Personas | Complete |
+| VAC-4.10 | Personas shown by inicial, selectable toggle | Complete |
+| VAC-4.11 | Unselected personas show dimmed inicial | Complete |
+| VAC-4.12 | Selected personas show bright inicial | Complete |
+| VAC-4.13 | Selection state persists to backend | Complete |
 
 ## VAC-5 - Backend API  In Progress
 
