@@ -1,4 +1,4 @@
-﻿"""REST API endpoints for the Web UI."""
+"""REST API endpoints for the Web UI."""
 
 import time
 
@@ -613,14 +613,19 @@ async def get_casita_status():
 
 
 @router.get("/casita/radar")
-async def get_casita_radar():
-    """Propiedades en el radar ordenadas por fecha de publicación."""
+async def get_casita_radar(request: Request):
+    """Propiedades en el radar con paginacion y orden. Pasa query params al container."""
+    # Reenviar todos los query params: limit, offset, sort_by, sort_dir
+    qs = str(request.url.query)
+    url = "http://casita-suenos:8001/radar"
+    if qs:
+        url = f"{url}?{qs}"
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get("http://casita-suenos:8001/radar")
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url)
             return resp.json()
     except Exception as e:
-        return {"properties": [], "error": str(e)}
+        return {"items": [], "total": 0, "offset": 0, "limit": 20, "has_more": False, "error": str(e)}
 
 
 @router.get("/casita/dismissed")
