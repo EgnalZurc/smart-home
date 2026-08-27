@@ -196,12 +196,13 @@ class IdealistaApifyClient:
         now = datetime.now()
         results: list[Property] = []
 
-        # Construir búsqueda a partir de las keywords de la zona
-        # El actor acepta 'locationName' o una lista de URLs de búsqueda de Idealista
+        # El actor pro100chok/idealista-scraper requiere: location + country
+        # locationName sin country hace que el actor no encuentre nada
         location = zone.idealista_alert_keywords[0] if zone.idealista_alert_keywords else zone.name
 
         run_input = {
-            "locationName": location,
+            "location": location,
+            "country": "es",
             "operation": "sale",
             "propertyType": "homes",
             "maxItems": max_props,
@@ -221,7 +222,7 @@ class IdealistaApifyClient:
                 return []
 
             items = list(
-                self._client.dataset(run["defaultDatasetId"]).iterate_items()
+                self._client.dataset(run.default_dataset_id).iterate_items()
             )
 
             self._tracker.add(len(items))
@@ -257,7 +258,7 @@ class IdealistaApifyClient:
             if not run:
                 return None
 
-            items = list(self._client.dataset(run["defaultDatasetId"]).iterate_items())
+            items = list(self._client.dataset(run.default_dataset_id).iterate_items())
             self._tracker.add(len(items))
 
             if items:
