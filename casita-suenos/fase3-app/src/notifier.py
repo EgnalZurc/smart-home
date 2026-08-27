@@ -35,15 +35,24 @@ def _format_price(price: int) -> str:
     return f"{price:,}€".replace(",", ".")
 
 
+def _escape_md(text: str) -> str:
+    """Escapa caracteres especiales de Markdown para evitar errores 400 en Telegram."""
+    # Escapa los caracteres que abren entidades pero Telegram no puede cerrar
+    for ch in ['*', '_', '`', '[']:
+        text = text.replace(ch, '\\' + ch)
+    return text
+
 def _format_new_property_alert(scored: ScoredProperty) -> str:
     prop = scored.prop
     s = scored.score
     emoji = _score_emoji(scored.total_score)
+    safe_title = _escape_md(prop.title or '')
+    safe_zone  = _escape_md(scored.zone.name)
     piscina = _PISCINA_EMOJI.get(prop.piscina.value, "")
     lines = [
-        f"{emoji} *Nueva vivienda — {scored.total_score:.1f}/84 pts*",
-        f"📍 *{scored.zone.name}*",
-        f"💰 *{_format_price(prop.price)}*",
+        f"{emoji} Nueva vivienda — {scored.total_score:.1f}/84 pts",
+        f"📍 {safe_zone}",
+        f"💰 {_format_price(prop.price)}",
         "",
     ]
     details = []
@@ -110,7 +119,7 @@ def _format_weekly_summary(top_properties: list[dict]) -> str:
         rooms = f"{prop['rooms']} hab." if prop.get("rooms") else ""
         size = f"{prop['size_m2']:.0f}m²" if prop.get("size_m2") else ""
         details = "  ".join(filter(None, [rooms, size]))
-        lines.append(f"*{i}. {score:.1f}pts* — {price}")
+        lines.append(f"{i}. {score:.1f}pts — {price}")
         lines.append(f"   📍 {prop.get('zone_id', '').replace('_', ' ')}")
         if details:
             lines.append(f"   {details}")
@@ -171,7 +180,7 @@ class TelegramNotifier:
                     json={
                         "chat_id": chat_id,
                         "text": text,
-                        "parse_mode": "Markdown",
+                        
                         "disable_web_page_preview": True,
                     },
                     timeout=15.0,
