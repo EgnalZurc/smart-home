@@ -115,7 +115,7 @@ const APPS = [
     { key: 'zigbee', url: '/zigbee/',        nameKey: 'zigbee_name', descKey: 'zigbee_desc', statusUrl: '/api/health/zigbee', getStatus: d => d?.online === true },
     { key: 'photos', url: 'https://raspberrypi.tailaa37cd.ts.net:10000/', nameKey: 'photos_name', descKey: 'photos_desc', statusUrl: '/api/health/immich', getStatus: d => d?.online === true },
     { key: 'vacaciones', url: '/smart-home/vacaciones', nameKey: 'vacaciones_name', descKey: 'vacaciones_desc', statusUrl: '/api/health/vacaciones', getStatus: d => d?.online === true },
-    { key: 'casita', url: '/smart-home/casita', nameKey: 'casita_name', descKey: 'casita_desc', statusUrl: '/api/health/casita', getStatus: d => d?.online === true },
+    { key: 'casita', url: '/smart-home/casita?' + Date.now(), nameKey: 'casita_name', descKey: 'casita_desc', statusUrl: '/api/health/casita', getStatus: d => d?.online === true },
 ];
 
 // â”€â”€ Language â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

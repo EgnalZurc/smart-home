@@ -605,10 +605,16 @@ async function openSummary() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init() {
-  // Asegurar que todos los modales están cerrados al arrancar
-  ['modal-config','modal-dismissed','modal-summary'].forEach(id => {
-    document.getElementById(id).classList.add('hidden');
+  // Versión: forzar limpieza total de estado al cargar
+  // Cerrar TODOS los modales y limpiar cualquier estado residual de caché
+  document.querySelectorAll('.modal-overlay').forEach(el => {
+    el.classList.add('hidden');
+    el.style.display = '';
   });
+  // Limpiar contenido de modales para evitar mostrar datos de sesiones anteriores
+  document.getElementById('summary-content').textContent = '';
+  document.getElementById('summary-date').textContent = '';
+  document.getElementById('summary-empty').classList.add('hidden');
 
   try {
     await Promise.race([
