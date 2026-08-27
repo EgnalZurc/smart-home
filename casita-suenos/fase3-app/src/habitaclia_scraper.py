@@ -92,7 +92,17 @@ def _parse_listing_page(soup: BeautifulSoup, zone: Zone, now: datetime,
                 "[itemprop='price'], [class*='price']"
             )
             price_raw = price_el.get_text(strip=True) if price_el else ""
+            # Ignorar si es precio/m2 en vez de precio total
+            if "/m" in price_raw.lower() or "€/m" in price_raw:
+                price_raw = ""
             price = parse_price(price_raw)
+            if not price:
+                text = article.get_text(" ")
+                # Buscar solo precios con ".000 EUR" (precios totales reales)
+                import re as _re
+                m2 = _re.search(r"([\d][\d\.]+\.000)\s*€(?!\s*/\s*m)", text)
+                if m2:
+                    price = parse_price(m2.group(0))
             if not price:
                 # buscar en todo el articulo el primer patron de precio
                 text = article.get_text(" ")
