@@ -128,10 +128,14 @@ def _score_rooms(rooms: int | None) -> float:
 
 
 def _score_piscina(piscina: Piscina) -> float:
-    """P2 — Piscina (max 8)."""
+    """P2 — Piscina (max 8).
+    ESPACIO baja de 5 a 2: en parcelas pequeñas (<200m²) no cabe
+    piscina + huerto + barbacoa. Sin datos de tamaño de parcela,
+    valoramos conservadoramente el "espacio para piscina".
+    """
     return {
         Piscina.PROPIA:      8.0,
-        Piscina.ESPACIO:     5.0,
+        Piscina.ESPACIO:     2.0,  # bajado de 5 — parcela pequeña no permite todo
         Piscina.COMUNITARIA: 3.0,
         Piscina.NINGUNA:     0.0,
     }[piscina]

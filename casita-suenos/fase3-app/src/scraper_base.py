@@ -16,10 +16,20 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 
 # Palabras clave que indican ruina / inhabitable (L4)
+# Captura tanto obras mayores como casas "para reformar" que requieren inversion importante
 _INHABITABLE_KEYWORDS = (
+    # Reforma integral / obra mayor
     "para rehabilitar", "rehabilitación integral", "en ruinas", "derruid",
     "obra negra", "sin terminar", "sin cédula", "precisa reforma integral",
     "completamente a reformar", "totalmente a reformar",
+    # Frases comunes en títulos de portales (Pisos.com, Habitaclia)
+    "para reformar", "a reformar", "proyecto de reforma", "necesita reforma",
+    "requiere reforma", "ideal para reformar", "oportunidad para reformar",
+    "oportunidad única para reformar", "gran oportunidad para reformar",
+    "casa a rehabilitar", "chalet a rehabilitar", "vivienda a reformar",
+    "vivienda para reformar", "para restaurar", "a restaurar",
+    "obra a reformar", "estado de reforma", "pendiente de reforma",
+    "necesitada de reforma", "precisa de reforma",
 )
 
 # Palabras clave que indican piscina propia
@@ -27,7 +37,7 @@ _POOL_OWN_KEYWORDS = ("piscina propia", "piscina privada", "piscina individual")
 # Palabras clave que indican espacio para piscina
 _POOL_SPACE_KEYWORDS = ("posibilidad de piscina", "espacio para piscina", "parcela para piscina")
 # Palabras clave que indican piscina comunitaria
-_POOL_COMMUNITY_KEYWORDS = ("piscina comunitaria", "piscina común", "zona comunitaria con piscina")
+_POOL_COMMUNITY_KEYWORDS = ("piscina comunitaria", "piscina común", "zona comunitaria con piscina", "comunidad con piscina", "urbanización con piscina", "urbanizacion con piscina", "residencial con piscina", "complejo con piscina")
 # Palabras clave que indican piscina sin especificar (asumir propia si casa independiente)
 _POOL_GENERIC_KEYWORDS = ("piscina",)
 
