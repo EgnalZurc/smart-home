@@ -348,7 +348,7 @@ class CasitaScheduler:
                     total_scored += 1
                     if is_new and scored.passes_alert_threshold:
                         if not self._db.is_alerted(prop.unique_id):
-                            self._notifier.send_new_property_alert(scored)
+                            # No enviamos alerta individual ? solo el resumen al final
                             self._db.mark_alerted(prop.unique_id)
                             total_new += 1
                             new_by_zone[zone_id] = new_by_zone.get(zone_id, 0) + 1
@@ -438,6 +438,8 @@ class CasitaScheduler:
         if total_new == 0 and result == "ok":
             lines.append("")
             lines.append("_Sin casas nuevas por encima del umbral de 50 pts._")
+        lines.append("")
+        lines.append("https://smart-home.local/smart-home/casita")
         self._notifier.send_status("\n".join(lines))
 
     def _notify_scraper_errors(self, errors: list[ScraperError]) -> None:
