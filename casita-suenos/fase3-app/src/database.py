@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS properties (
     description     TEXT NOT NULL DEFAULT '',
     first_seen      TEXT NOT NULL,
     last_seen       TEXT NOT NULL,
-    source          TEXT NOT NULL DEFAULT ''
+    source          TEXT NOT NULL DEFAULT '',
+    published_at    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS price_history (
@@ -141,6 +142,12 @@ class Database:
                 logger.info("[db] Migración: añadida columna %s.%s", table, col)
             except sqlite3.OperationalError:
                 pass  # columna ya existe
+        # Migraci?n: published_at en properties
+        try:
+            self._conn.execute("ALTER TABLE properties ADD COLUMN published_at TEXT")
+            logger.info("[db] Migracion: anadida columna properties.published_at")
+        except sqlite3.OperationalError:
+            pass  # ya existe
         # Asegurar que tabla telegram_chats existe (por si la BD era antigua)
         try:
             self._conn.execute(
@@ -193,8 +200,8 @@ class Database:
                 """INSERT INTO properties
                    (uid, portal, portal_id, zone_id, url, title, price, rooms, size_m2,
                     has_garage, has_garden, piscina, habitable, description,
-                    first_seen, last_seen, source)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    first_seen, last_seen, source, published_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     uid, prop.portal.value, prop.portal_id, prop.zone_id,
                     prop.url, prop.title, prop.price,
@@ -203,6 +210,7 @@ class Database:
                     prop.piscina.value, int(prop.habitable),
                     prop.description,
                     prop.first_seen.isoformat(), now, prop.source,
+                    getattr(prop, "published_at", None),
                 ),
             )
             logger.debug("[db] Nueva propiedad: %s — %d€", uid, prop.price)
@@ -333,8 +341,9 @@ class Database:
         """
         rows = self._conn.execute(
             """SELECT p.uid, p.title, p.price, p.url, p.zone_id,
+                      p.portal, p.portal_id,
                       p.rooms, p.size_m2, p.piscina, p.has_garage,
-                      p.first_seen, p.last_seen,
+                      p.first_seen, p.last_seen, p.published_at,
                       s.score_total, s.score_p1, s.score_p2, s.score_p3,
                       s.score_p4, s.score_p5, s.score_p6, s.score_p7,
                       s.score_p8, s.score_p9, s.score_p10, s.score_p11

@@ -255,9 +255,11 @@ class CasitaScheduler:
         )
 
     def get_radar(self) -> list[dict]:
-        """Propiedades en el radar ordenadas por fecha de publicación."""
-        return self._db.get_radar_properties(min_score=50.0, limit=100)
-
+        props = self._db.get_radar_properties(min_score=50.0, limit=100)
+        for p in props:
+            zone = ZONES.get(p.get("zone_id", ""))
+            p["distance_madrid_min"] = zone.distance_madrid_min if zone else None
+        return props
     def get_dismissed(self) -> list[dict]:
         """Propiedades descartadas."""
         return self._db.get_dismissed()

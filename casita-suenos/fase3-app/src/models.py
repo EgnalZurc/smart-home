@@ -118,6 +118,7 @@ class Property:
     first_seen: datetime = field(default_factory=datetime.now)
     last_seen: datetime = field(default_factory=datetime.now)
     source: str = ""                 # info adicional de origen (ej: "gmail_alert")
+    published_at: str | None = None  # fecha de publicacion en el portal (ISO str o None)
 
     @property
     def unique_id(self) -> str:
