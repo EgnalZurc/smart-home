@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Casita Sueños</title>
 <link rel="icon" href="/static/favicon.ico">
 <meta name="theme-color" content="#0f172a">
@@ -120,11 +123,18 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
   <div>
     <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-3 px-1">🏠 En el radar</p>
     <div id="radar-list" class="space-y-2.5"></div>
-    <div id="radar-empty" class="hidden text-center py-10 text-slate-600 text-xs leading-relaxed">
-      Aún no hay propiedades que superen los 50 puntos.<br>
-      El scraping se ejecuta los lunes y jueves a las 07:00.
+    <div id="radar-empty" class="hidden text-center py-10 text-slate-500 text-xs leading-relaxed">
+      <div class="text-2xl mb-3">🏠</div>
+      <div class="font-medium text-slate-400 mb-1">Sin casas en el radar aún</div>
+      <div class="text-slate-600">
+        El primer scraping se ejecutará automáticamente<br>
+        el próximo lunes o jueves a las 07:00.<br><br>
+        También puedes lanzarlo manualmente desde<br>
+        <button onclick="openConfig()" class="text-indigo-400 underline">Automatizaciones → Scraping ahora</button>
+      </div>
     </div>
     <div id="radar-offline" class="hidden text-center py-10 text-slate-600 text-xs">
+      <div class="text-2xl mb-2">⚠️</div>
       casita-orquestador no responde.
     </div>
   </div>
@@ -271,16 +281,23 @@ function fmtZone(id) {
   return (id||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
 }
 function closeIfOverlay(e, id) {
-  if (e.target.id === id) closeModal(id);
+  // Cierra solo si se hace click directamente en el overlay (fondo), no en el contenido
+  if (e.target === document.getElementById(id)) closeModal(id);
 }
-function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
-function openModal(id)  { document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('hidden');
+}
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('hidden');
+}
 
 // ── Radar ─────────────────────────────────────────────────────────────────────
 
 async function loadRadar() {
   try {
-    const data = await fetch(API + '/radar').then(r => r.json());
+    const data = await fetch(API + '/radar', {cache:'no-store'}).then(r => r.json());
     renderRadar(data.properties || []);
   } catch {
     document.getElementById('radar-offline').classList.remove('hidden');
@@ -380,7 +397,7 @@ async function dismiss(uid, btn) {
 
 async function loadStatus() {
   try {
-    const data = await fetch(API + '/status').then(r=>r.json());
+    const data = await fetch(API + '/status', {cache:'no-store'}).then(r=>r.json());
     _statusCache = data;
     updateOrchestratorDot(data.online, data.scraper_errors?.length > 0);
     document.getElementById('st-total').textContent = data.total_properties ?? '—';
@@ -588,6 +605,11 @@ async function openSummary() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init() {
+  // Asegurar que todos los modales están cerrados al arrancar
+  ['modal-config','modal-dismissed','modal-summary'].forEach(id => {
+    document.getElementById(id).classList.add('hidden');
+  });
+
   try {
     await Promise.race([
       Promise.all([loadStatus(), loadRadar()]),
