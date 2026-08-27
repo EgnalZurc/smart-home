@@ -94,6 +94,11 @@ CREATE INDEX IF NOT EXISTS idx_properties_first_seen ON properties(first_seen DE
 CREATE INDEX IF NOT EXISTS idx_scored_total ON scored_properties(score_total DESC);
 CREATE INDEX IF NOT EXISTS idx_scored_dismissed ON scored_properties(dismissed);
 CREATE INDEX IF NOT EXISTS idx_price_history_uid ON price_history(property_uid);
+CREATE TABLE IF NOT EXISTS telegram_chats (
+    chat_id     TEXT PRIMARY KEY,
+    username    TEXT NOT NULL DEFAULT '',
+    registered_at TEXT NOT NULL
+);
 """
 
 # Configuración de schedule por defecto
@@ -136,6 +141,15 @@ class Database:
                 logger.info("[db] Migración: añadida columna %s.%s", table, col)
             except sqlite3.OperationalError:
                 pass  # columna ya existe
+        # Asegurar que tabla telegram_chats existe (por si la BD era antigua)
+        try:
+            self._conn.execute(
+                "CREATE TABLE IF NOT EXISTS telegram_chats "
+                "(chat_id TEXT PRIMARY KEY, username TEXT NOT NULL DEFAULT '', "
+                "registered_at TEXT NOT NULL)"
+            )
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Propiedades
@@ -413,6 +427,27 @@ class Database:
             "SELECT zone_id, COUNT(*) as cnt FROM properties GROUP BY zone_id"
         ).fetchall()
         return {r["zone_id"]: r["cnt"] for r in rows}
+
+    # ------------------------------------------------------------------
+    # Telegram chats
+    # ------------------------------------------------------------------
+    def register_telegram_chat(self, chat_id: str, username: str = "") -> None:
+        """Registra o actualiza un chat_id de Telegram."""
+        now = datetime.now().isoformat()
+        self._conn.execute(
+            "INSERT OR REPLACE INTO telegram_chats "
+            "(chat_id, username, registered_at) VALUES (?, ?, ?)",
+            (str(chat_id), username or "", now),
+        )
+        self._conn.commit()
+        logger.info("[db] Telegram chat registrado: %s (%s)", chat_id, username)
+
+    def get_telegram_chat_ids(self) -> list[str]:
+        """Devuelve todos los chat_ids registrados."""
+        rows = self._conn.execute(
+            "SELECT chat_id FROM telegram_chats ORDER BY registered_at"
+        ).fetchall()
+        return [r["chat_id"] for r in rows]
 
     def close(self) -> None:
         self._conn.close()

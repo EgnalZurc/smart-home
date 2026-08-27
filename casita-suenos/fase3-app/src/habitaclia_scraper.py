@@ -1,11 +1,20 @@
 """
 Scraper para habitaclia.com.
+Estructura HTML (verificada agosto 2026):
+  - Listado: article.list-item-container
+  - URL detalle: data-href o a[href*='comprar-casa']
+  - Precio: span.list-item-price o texto en el articulo
+  - Caracteristicas: p.list-item-feature  (ej: "55m2 - 2 habitaciones - 1 bano")
+  - Descripcion: p.list-item-description
 
-Usa las URLs directas del campo habitaclia_search_urls de cada zona,
-con el patron /casas-{ciudad}.htm (verificado OK agosto 2026).
-
-La pagina .htm de Habitaclia es HTML clasico (no Next.js), por lo que
-se parsea el DOM directamente sin __NEXT_DATA__.
+Workaround L2/L3:
+  Habitaclia no tiene filtro de jardin/garaje en la URL de listado.
+  Las URLs se construyen con parametros de filtro st= que incluyen
+  equipamiento: st contiene codigos para caracteristicas.
+  Alternativamente, si la URL incluye "jardin" o "garaje" en los parametros
+  ya es garantia de que el portal ha filtrado.
+  Si no hay garantia por URL, has_garden/has_garage quedan como inferencia
+  de descripcion. El scorer usa L2/L3 como soft-limiters (ver scorer.py).
 """
 from __future__ import annotations
 import logging
@@ -34,91 +43,101 @@ logger = logging.getLogger(__name__)
 _BASE_URL = "https://www.habitaclia.com"
 
 
-def _parse_listing_page(soup: BeautifulSoup, zone: Zone, now: datetime) -> list[Property]:
+def _parse_listing_page(soup: BeautifulSoup, zone: Zone, now: datetime,
+                         url_used: str = "") -> list[Property]:
     """
-    Parsea una pagina de resultados de Habitaclia (.htm).
-    Busca los articulos de cada anuncio en el DOM.
+    Parsea una pagina de resultados de Habitaclia.
+    Selector verificado agosto 2026: article.list-item-container
     """
-    results: list[Property] = []
-
-    # Habitaclia usa <article> con clase 'list-item' o similar
-    articles = soup.select(
-        "article.list-item, "
-        "article[class*='item'], "
-        "li[class*='item'], "
-        "div[class*='property-item'], "
-        "article"
-    )
+    # Selector principal verificado
+    articles = soup.select("article.list-item-container")
 
     if not articles:
-        logger.debug("[habitaclia] No se encontraron articulos en la pagina")
-        return results
+        # Fallback a cualquier article con data-href
+        articles = soup.select("article[data-href]")
+
+    if not articles:
+        logger.debug("[habitaclia] No se encontraron articulos list-item-container")
+        return []
+
+    results: list[Property] = []
 
     for article in articles:
         try:
-            # URL y portal_id
-            link = article.select_one("a[href]")
-            if not link:
+            # URL: data-href tiene la URL limpia del anuncio
+            href = article.get("data-href", "")
+            if not href:
+                link = article.select_one("a[href*='comprar-casa'], h3 a")
+                href = link.get("href", "") if link else ""
+            if not href:
                 continue
-            href = str(link.get("href", ""))
-            if not href or href == "#":
-                continue
-            url = href if href.startswith("http") else (_BASE_URL + href)
+            if not href.startswith("http"):
+                href = _BASE_URL + href
+            # Limpiar parametros de tracking (?f=&st=...)
+            href_clean = href.split("?")[0]
 
-            # Extraer ID numerico de la URL (ej: /casa-en-zamora-12345678.htm)
-            portal_id_m = re.search(r"-(\d{6,})(?:\.htm)?", href)
-            if not portal_id_m:
-                portal_id_m = re.search(r"/(\d{6,})", href)
-            portal_id = portal_id_m.group(1) if portal_id_m else href
+            # portal_id: en data-id o extraido de la URL
+            portal_id = article.get("data-id", "")
+            if not portal_id:
+                m = re.search(r"-i(\d+)\.htm", href_clean)
+                portal_id = m.group(1) if m else href_clean
 
-            # Precio
+            # Titulo
+            title_el = article.select_one("h3.list-item-title a, h3 a, a[itemprop='name']")
+            title = title_el.get_text(strip=True) if title_el else ""
+
+            # Precio: puede estar en varias clases
             price_el = article.select_one(
-                "[class*='price'], [class*='precio'], span[class*='Price']"
+                "span.list-item-price, [class*='list-item-price'], "
+                "[itemprop='price'], [class*='price']"
             )
             price_raw = price_el.get_text(strip=True) if price_el else ""
             price = parse_price(price_raw)
             if not price:
+                # buscar en todo el articulo el primer patron de precio
+                text = article.get_text(" ")
+                m = re.search(r"([\d\.]+)\s*€", text)
+                if m:
+                    price = parse_price(m.group(0))
+            if not price:
                 continue
 
-            # Titulo
-            title_el = article.select_one("h2, h3, [class*='title'], [class*='titulo']")
-            title = title_el.get_text(strip=True) if title_el else ""
+            # Caracteristicas: p.list-item-feature tiene "55m2 - 2 habitaciones - 1 bano"
+            feature_el = article.select_one("p.list-item-feature")
+            feature_text = feature_el.get_text(" ", strip=True) if feature_el else ""
+
+            rooms_m = re.search(r"(\d+)\s*hab", feature_text, re.I)
+            size_m = re.search(r"(\d+)\s*m[²2]", feature_text, re.I)
+            rooms_raw = rooms_m.group(0) if rooms_m else None
+            size_raw = size_m.group(0) if size_m else None
 
             # Descripcion
-            desc_el = article.select_one("[class*='description'], [class*='descripcion'], p")
+            desc_el = article.select_one("p.list-item-description, [itemprop='description']")
             description = desc_el.get_text(" ", strip=True) if desc_el else title
 
-            # Features / extras (m2, habitaciones, etc.)
+            # Extras: tags de equipamiento en el listado (si existen)
             extras: list[str] = [
                 t.get_text(strip=True)
-                for t in article.select(
-                    "[class*='feature'], [class*='tag'], [class*='detail'], "
-                    "[class*='characteristic'], li"
-                )
+                for t in article.select("[class*='tag'], [class*='feature-item'], li")
+                if t.get_text(strip=True)
             ]
-            full_text = description + " " + " ".join(extras)
 
-            # Habitaciones y superficie desde extras o texto
-            rooms_raw = ""
-            size_raw = ""
-            rooms_m = re.search(r"(\d+)\s*hab", full_text, re.IGNORECASE)
-            size_m = re.search(r"(\d+)\s*m[²2]", full_text, re.IGNORECASE)
-            if rooms_m:
-                rooms_raw = rooms_m.group(1)
-            if size_m:
-                size_raw = size_m.group(1)
+            # Garaje y jardin: inferir de descripcion + extras
+            # (Habitaclia no garantiza por URL — ver scorer soft-limiter)
+            has_garden = infer_has_garden(description + " " + feature_text, extras)
+            has_garage = infer_has_garage(description + " " + feature_text, extras)
 
             results.append(Property(
                 portal=Portal.HABITACLIA,
                 portal_id=portal_id,
-                url=url,
+                url=href_clean,
                 zone_id=zone.id,
                 title=title,
                 price=price,
                 size_m2=parse_size(size_raw),
-                rooms=parse_rooms(rooms_raw) or (int(rooms_raw) if rooms_raw.isdigit() else None),
-                has_garage=infer_has_garage(description, extras),
-                has_garden_or_plot=infer_has_garden(description, extras),
+                rooms=parse_rooms(rooms_raw) or (int(rooms_m.group(1)) if rooms_m else None),
+                has_garage=has_garage,
+                has_garden_or_plot=has_garden,
                 piscina=infer_piscina(description, extras),
                 has_internet_mention=not infer_no_internet(description),
                 habitable=infer_habitable(description, title),
@@ -127,23 +146,12 @@ def _parse_listing_page(soup: BeautifulSoup, zone: Zone, now: datetime) -> list[
                 last_seen=now,
                 source="habitaclia_scraper",
             ))
+
         except Exception as e:
             logger.debug("[habitaclia] Error en articulo: %s", e)
             continue
 
     return results
-
-
-def _next_page_url(soup: BeautifulSoup, current_url: str, page: int) -> str | None:
-    """Construye la URL de la siguiente pagina de Habitaclia."""
-    # Habitaclia usa ?pagina=N o /pagina-N en la URL
-    if "pagina=" in current_url:
-        return re.sub(r"pagina=\d+", f"pagina={page}", current_url)
-    if re.search(r"/pagina-\d+", current_url):
-        return re.sub(r"/pagina-\d+", f"/pagina-{page}", current_url)
-    # Primera vez: anadir pagina
-    separator = "&" if "?" in current_url else "?"
-    return f"{current_url}{separator}pagina={page}"
 
 
 def scrape_zone(zone: Zone, client: httpx.Client | None = None) -> list[Property]:
@@ -164,21 +172,28 @@ def scrape_zone(zone: Zone, client: httpx.Client | None = None) -> list[Property
     try:
         for base_url in zone.habitaclia_search_urls:
             for page in range(1, MAX_PAGES + 1):
-                url = base_url if page == 1 else _next_page_url(None, base_url, page)
-                logger.info("[habitaclia] Scraping %s", url)
+                if page == 1:
+                    url = base_url
+                else:
+                    # Habitaclia pagina con ?pagina=N
+                    separator = "&" if "?" in base_url else "?"
+                    url = f"{base_url}{separator}pagina={page}"
 
+                logger.info("[habitaclia] Scraping %s", url)
                 soup = get_html(url, client, delay=2.5)
                 if not soup:
                     logger.warning("[habitaclia] Sin respuesta para %s", url)
                     break
 
-                page_results = _parse_listing_page(soup, zone, now)
+                page_results = _parse_listing_page(soup, zone, now, url_used=url)
 
                 if not page_results:
-                    logger.info("[habitaclia] Zona %s — sin resultados en pagina %d, parando.", zone.id, page)
+                    logger.info(
+                        "[habitaclia] Zona %s — sin resultados en pagina %d, parando.",
+                        zone.id, page
+                    )
                     break
 
-                # Deduplicar por portal_id
                 new_count = 0
                 for prop in page_results:
                     if prop.portal_id not in seen_ids:
@@ -192,7 +207,7 @@ def scrape_zone(zone: Zone, client: httpx.Client | None = None) -> list[Property
                 )
 
                 if new_count == 0:
-                    break  # pagina sin novedades, no merece la pena seguir
+                    break
 
     finally:
         if own_client:

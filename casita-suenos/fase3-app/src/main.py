@@ -224,6 +224,24 @@ class _StatusHandler(BaseHTTPRequestHandler):
             ).start()
             self._send_json(202, {"ok": True, "message": "Scraping iniciado"})
 
+        elif self.path == "/telegram-webhook":
+            # Recibe updates del bot Telegram (webhook o polling manual)
+            # Procesa el comando /start para registrar el chat_id
+            try:
+                update = body
+                message = update.get("message", {})
+                chat = message.get("chat", {})
+                chat_id = str(chat.get("id", ""))
+                text = message.get("text", "")
+                username = chat.get("username", "") or chat.get("first_name", "")
+                if chat_id and text.startswith("/start"):
+                    if _scheduler_instance:
+                        _scheduler_instance._notifier.register_chat(chat_id, username)
+                    self._send_json(200, {"ok": True, "registered": chat_id})
+                else:
+                    self._send_json(200, {"ok": True})
+            except Exception as e:
+                self._send_json(200, {"ok": True, "warn": str(e)})
         elif self.path == "/run-summary":
             import threading
             threading.Thread(
@@ -271,7 +289,7 @@ def main() -> None:
 
     # Instanciar componentes
     db = Database(DB_PATH)
-    notifier = TelegramNotifier(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+    notifier = TelegramNotifier(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, db=db)
     tracker = ApifyUsageTracker(APIFY_USAGE_PATH)
     apify = IdealistaApifyClient(APIFY_API_TOKEN, tracker)
 
@@ -286,6 +304,40 @@ def main() -> None:
     # Registrar referencia global para el servidor HTTP
     global _scheduler_instance
     _scheduler_instance = scheduler
+
+    # Arrancar polling de Telegram para registrar nuevos chats (/start)
+    def _telegram_polling() -> None:
+        import httpx, time as _time
+        token = TELEGRAM_BOT_TOKEN
+        offset = 0
+        url = f"https://api.telegram.org/bot{token}/getUpdates"
+        logger.info("[main] Polling Telegram iniciado")
+        while True:
+            try:
+                resp = httpx.get(url, params={"offset": offset, "timeout": 30}, timeout=35)
+                updates = resp.json().get("result", [])
+                for upd in updates:
+                    offset = upd["update_id"] + 1
+                    msg = upd.get("message", {})
+                    text = msg.get("text", "")
+                    chat = msg.get("chat", {})
+                    chat_id = str(chat.get("id", ""))
+                    username = chat.get("username", "") or chat.get("first_name", "")
+                    if chat_id and text.startswith("/start"):
+                        db.register_telegram_chat(chat_id, username)
+                        logger.info("[main] Nuevo chat registrado via /start: %s (%s)", chat_id, username)
+                        # Mensaje de bienvenida
+                        httpx.post(
+                            f"https://api.telegram.org/bot{token}/sendMessage",
+                            json={"chat_id": chat_id,
+                                  "text": "Bienvenido/a a Casita Suenos! Recibiras alertas de nuevas casas en el radar."},
+                            timeout=10,
+                        )
+            except Exception as e:
+                logger.debug("[main] Telegram polling error: %s", e)
+            _time.sleep(1)
+
+    threading.Thread(target=_telegram_polling, daemon=True, name="telegram-polling").start()
 
     # Arrancar servidor HTTP de estado (para dashboard)
     _start_status_server(STATUS_PORT)

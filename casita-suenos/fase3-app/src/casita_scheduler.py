@@ -291,6 +291,7 @@ class CasitaScheduler:
         logger.info("[casita] ── Iniciando scraping completo ──────────────")
         total_new = 0
         total_price_drops = 0
+        total_scored = 0
         new_errors: list[ScraperError] = []
 
         for zone_id, zone in ZONES.items():
@@ -332,6 +333,7 @@ class CasitaScheduler:
                     if scored is None:
                         continue
                     self._db.upsert_score(scored)
+                    total_scored += 1
                     if is_new and scored.passes_alert_threshold:
                         if not self._db.is_alerted(prop.unique_id):
                             self._notifier.send_new_property_alert(scored)
@@ -361,7 +363,19 @@ class CasitaScheduler:
         else:
             with self._lock:
                 self._scraper_errors.clear()
-            result = "ok"
+            # Sin errores tecnicos, pero si 0 propiedades llegaron al radar
+            # el scraping es funcionalmente inutil: marcamos como error
+            if total_scored == 0:
+                result = "error"
+                logger.warning(
+                    "[casita] 0 propiedades pasaron los limitantes ? marcando como error."
+                )
+                self._notifier.send_status(
+                    "Scraping sin errores tecnicos pero 0 propiedades pasaron los filtros.\n"
+                    "Revisa scrapers y limitantes en el dashboard."
+                )
+            else:
+                result = "ok"
 
         with self._lock:
             self._last_scraping_result = result
