@@ -153,6 +153,12 @@ class Database:
             logger.info("[db] Migracion: anadida columna properties.published_at")
         except sqlite3.OperationalError:
             pass  # ya existe
+        # Migracion: has_ac en properties
+        try:
+            self._conn.execute("ALTER TABLE properties ADD COLUMN has_ac INTEGER NOT NULL DEFAULT 0")
+            logger.info("[db] Migracion: has_ac en properties")
+        except sqlite3.OperationalError:
+            pass  # ya existe
         # Asegurar que tabla telegram_chats existe (por si la BD era antigua)
         try:
             self._conn.execute(
@@ -206,7 +212,7 @@ class Database:
                    (uid, portal, portal_id, zone_id, url, title, price, rooms, size_m2,
                     has_garage, has_garden, has_ac, piscina, habitable, description,
                     first_seen, last_seen, source, published_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     uid, prop.portal.value, prop.portal_id, prop.zone_id,
                     prop.url, prop.title, prop.price,
