@@ -375,6 +375,12 @@ async def serve_vacaciones():
     """Serves the Vacaciones (Christmas Planning) app."""
     return _serve_html("vacaciones.html")
 
+# CASITA-URL: Casita Sueños detail page
+@app.get("/smart-home/casita")
+async def serve_casita():
+    """Serves the Casita Sueños detail page."""
+    return _serve_html("casita.html")
+
 # Serve other static files normally
 frontend_path = Path(__file__).parent / "static"
 if frontend_path.exists():

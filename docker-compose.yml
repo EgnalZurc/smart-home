@@ -132,6 +132,32 @@
       disable: false
 
 
+  # 🏡 Casita Sueños — Monitor de precios inmobiliarios ████████████████████████
+  casita-suenos:
+    build:
+      context: ./casita-suenos/fase3-app
+      dockerfile: Dockerfile
+    container_name: casita-suenos
+    restart: unless-stopped
+    volumes:
+      - ./data/casita-suenos:/app/data
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Madrid
+      - CASITA_DATA_DIR=/app/data
+    expose:
+      - 8001
+    networks:
+      - smart-home
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
 volumes:
   immich-model-cache:
 

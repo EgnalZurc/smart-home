@@ -407,4 +407,13 @@
 | VAC-7.5 | No external libraries (vanilla JS only) | Complete |
 | VAC-7.6 | Minimal DOM updates (only changed elements) | Complete |
 
-**Scope**: Christmas period planning (24 Dec - 6 Jan). Future: may extend to other vacation periods.
+**Scope**: Christmas period planning (24 Dec - 6 Jan). Future: may extend to other vacation periods.## VAC-10 - Year Summary  In Progress
+
+| # | Requirement | Status |
+|---|---|---|
+| VAC-10 | Each YearPlan shows a summary at the bottom | In Progress |
+| VAC-10.1 | Summary shows count of meals each NucleoFamiliar spends with their hijo | In Progress |
+| VAC-10.2 | NucleoFamiliar has hijo_id property linking to a Persona | In Progress |
+| VAC-10.3 | hijo_id configurable in Configuration modal (dropdown to select persona) | In Progress |
+| VAC-10.4 | Count = number of meals where the hijo is selected for that nucleo | In Progress |
+| VAC-10.5 | Display format: {Nucleo}: {count} comidas con {hijo_nombre} | In Progress |

@@ -88,6 +88,8 @@ const T = {
         photos_desc:  'Copia de seguridad de fotos y vídeos',
         vacaciones_name: 'Cuchi Vacaciones',
         vacaciones_desc: 'Planificador de cuchi vacaciones',
+        casita_name: 'Casita Sueños',
+        casita_desc: 'Monitor de precios inmobiliarios',
     },
     en: {
         title:        'Cuchi Casa',
@@ -100,6 +102,10 @@ const T = {
         zigbee_desc:  'Zigbee devices, sensors, coordinator',
         photos_name:  'Photos',
         photos_desc:  'Photo and video backup',
+        vacaciones_name: 'Cuchi Vacaciones',
+        vacaciones_desc: 'Holiday planner',
+        casita_name: 'Casita Sueños',
+        casita_desc: 'Real estate price monitor',
     },
 };
 
@@ -109,6 +115,7 @@ const APPS = [
     { key: 'zigbee', url: '/zigbee/',        nameKey: 'zigbee_name', descKey: 'zigbee_desc', statusUrl: '/api/health/zigbee', getStatus: d => d?.online === true },
     { key: 'photos', url: 'https://raspberrypi.tailaa37cd.ts.net:10000/', nameKey: 'photos_name', descKey: 'photos_desc', statusUrl: '/api/health/immich', getStatus: d => d?.online === true },
     { key: 'vacaciones', url: '/smart-home/vacaciones', nameKey: 'vacaciones_name', descKey: 'vacaciones_desc', statusUrl: '/api/health/vacaciones', getStatus: d => d?.online === true },
+    { key: 'casita', url: '/smart-home/casita', nameKey: 'casita_name', descKey: 'casita_desc', statusUrl: '/api/health/casita', getStatus: d => d?.online === true },
 ];
 
 // â”€â”€ Language â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

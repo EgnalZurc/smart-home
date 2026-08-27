@@ -1,0 +1,17 @@
+# Casita Sueños — dependencias del orquestador
+# Versiones fijas para reproducibilidad en la Raspberry
+
+# HTTP y scraping
+httpx==0.28.1
+beautifulsoup4==4.12.3
+
+# Notificaciones Telegram
+python-telegram-bot==21.10
+
+# Scraping Idealista via Apify (free tier)
+apify-client==1.8.1
+
+# Gmail OAuth2 (IMAP con XOAUTH2)
+# google-api-python-client NO es necesario — solo se usa IMAP directo
+google-auth==2.35.0
+google-auth-oauthlib==1.2.1

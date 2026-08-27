@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Casita Sueños</title>
+<link rel="icon" href="/static/favicon.ico">
+<meta name="theme-color" content="#0f172a">
+<link rel="stylesheet" href="/static/tailwind.css">
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+.card{background:linear-gradient(145deg,rgba(30,41,59,.8),rgba(15,23,42,.9));border:1px solid rgba(51,65,85,.5);backdrop-filter:blur(10px);border-radius:1rem}
+.fade-in{animation:fadeIn .35s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%}
+.dot-on{background:#22c55e;box-shadow:0 0 6px #22c55e88;animation:pulse 2s infinite}
+.dot-off{background:#f87171}
+.dot-warn{background:#fb923c;animation:pulse 1.5s infinite}
+.dot-loading{background:#94a3b8;animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.prop-card{background:rgba(30,41,59,.6);border:1px solid rgba(51,65,85,.4);border-radius:.75rem;transition:border-color .2s}
+.prop-card:hover{border-color:rgba(99,102,241,.4)}
+.score-bar-bg{background:rgba(51,65,85,.5);border-radius:4px;height:4px}
+.score-bar-fill{background:linear-gradient(90deg,#6366f1,#22c55e);border-radius:4px;height:4px;transition:width .5s}
+/* Modal */
+.modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center;padding:0;backdrop-filter:blur(4px)}
+.modal-overlay.modal-center{align-items:center;padding:1rem}
+.modal-box{background:#0f172a;border:1px solid rgba(51,65,85,.7);border-radius:1.25rem 1.25rem 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;padding:1.25rem 1rem 2rem}
+.modal-overlay.modal-center .modal-box{border-radius:1.25rem;max-height:80vh}
+.modal-handle{width:40px;height:4px;background:rgba(100,116,139,.5);border-radius:2px;margin:0 auto 1rem}
+/* Loader */
+#loading-overlay{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#0f172a;transition:opacity .35s}
+#loading-overlay.done{opacity:0;pointer-events:none}
+#page-content{opacity:0;transition:opacity .35s}
+#page-content.visible{opacity:1}
+.spinner{width:28px;height:28px;border:3px solid rgba(255,255,255,.1);border-top-color:rgba(255,255,255,.7);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Toggle switch */
+.toggle{position:relative;display:inline-block;width:36px;height:20px}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;inset:0;background:#334155;border-radius:20px;transition:.3s;cursor:pointer}
+.toggle-slider:before{position:absolute;content:"";height:14px;width:14px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.3s}
+input:checked + .toggle-slider{background:#6366f1}
+input:checked + .toggle-slider:before{transform:translateX(16px)}
+/* Result badge */
+.badge-ok{color:#4ade80;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);border-radius:.375rem;padding:1px 7px;font-size:10px}
+.badge-warn{color:#fb923c;background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.3);border-radius:.375rem;padding:1px 7px;font-size:10px}
+.badge-err{color:#f87171;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:.375rem;padding:1px 7px;font-size:10px}
+.badge-never{color:#94a3b8;background:rgba(148,163,184,.1);border:1px solid rgba(148,163,184,.2);border-radius:.375rem;padding:1px 7px;font-size:10px}
+</style>
+</head>
+<body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
+
+<div id="page-content">
+<div class="max-w-md mx-auto px-4 pt-5 pb-16 fade-in">
+
+  <!-- Header -->
+  <header class="flex items-center justify-between mb-5">
+    <div class="flex items-center gap-3">
+      <a href="/smart-home" class="text-slate-400 hover:text-white p-1 -ml-1 transition-colors">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 9.75L12 3l9 6.75V21a.75.75 0 01-.75.75H15a.75.75 0 01-.75-.75v-5.25H9.75V21a.75.75 0 01-.75.75H3.75A.75.75 0 013 21V9.75z"/>
+        </svg>
+      </a>
+      <div>
+        <h1 class="text-base font-bold">Casita Sueños</h1>
+        <p class="text-[10px] text-slate-500">Monitor inmobiliario · casita-orquestador</p>
+      </div>
+    </div>
+    <!-- Estado del orquestador -->
+    <div class="flex items-center gap-1.5">
+      <span class="status-dot dot-loading" id="orch-dot"></span>
+      <span class="text-[11px] text-slate-400" id="orch-txt">—</span>
+    </div>
+  </header>
+
+  <!-- Stats rápidas -->
+  <div class="grid grid-cols-4 gap-2 mb-4">
+    <div class="card p-2.5 text-center">
+      <div class="text-base font-bold" id="st-total">—</div>
+      <div class="text-[9px] text-slate-500 mt-0.5">Vistas</div>
+    </div>
+    <div class="card p-2.5 text-center">
+      <div class="text-base font-bold text-indigo-300" id="st-radar">—</div>
+      <div class="text-[9px] text-slate-500 mt-0.5">Radar</div>
+    </div>
+    <div class="card p-2.5 text-center">
+      <div class="text-base font-bold text-slate-500" id="st-dismissed">—</div>
+      <div class="text-[9px] text-slate-500 mt-0.5">Descart.</div>
+    </div>
+    <div class="card p-2.5 text-center">
+      <div class="text-base font-bold" id="st-errors">—</div>
+      <div class="text-[9px] text-slate-500 mt-0.5">Errores</div>
+    </div>
+  </div>
+
+  <!-- Barra de acciones -->
+  <div class="flex gap-2 mb-5">
+    <button onclick="openConfig()" class="flex-1 card py-2 text-xs text-slate-300 hover:text-white flex items-center justify-center gap-1.5 transition-colors hover:border-indigo-500/40">
+      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"/>
+      </svg>
+      Automatizaciones
+    </button>
+    <button onclick="openDismissed()" class="flex-1 card py-2 text-xs text-slate-300 hover:text-white flex items-center justify-center gap-1.5 transition-colors hover:border-slate-500/40">
+      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+      </svg>
+      Descartadas
+    </button>
+    <button onclick="openSummary()" class="flex-1 card py-2 text-xs text-slate-300 hover:text-white flex items-center justify-center gap-1.5 transition-colors hover:border-slate-500/40">
+      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 9.75a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 01.778-.332 48.294 48.294 0 005.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/>
+      </svg>
+      Resumen
+    </button>
+  </div>
+
+  <!-- Casas en el radar -->
+  <div>
+    <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-3 px-1">🏠 En el radar</p>
+    <div id="radar-list" class="space-y-2.5"></div>
+    <div id="radar-empty" class="hidden text-center py-10 text-slate-600 text-xs leading-relaxed">
+      Aún no hay propiedades que superen los 50 puntos.<br>
+      El scraping se ejecuta los lunes y jueves a las 07:00.
+    </div>
+    <div id="radar-offline" class="hidden text-center py-10 text-slate-600 text-xs">
+      casita-orquestador no responde.
+    </div>
+  </div>
+
+</div>
+</div>
+
+<div id="loading-overlay"><div class="spinner"></div></div>
+
+<!-- ══ MODAL: CONFIGURACIÓN ══════════════════════════════════════════════ -->
+<div id="modal-config" class="modal-overlay hidden" onclick="closeIfOverlay(event,'modal-config')">
+  <div class="modal-box">
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-bold">Automatizaciones</h2>
+      <button onclick="closeModal('modal-config')" class="text-slate-500 hover:text-white p-1">✕</button>
+    </div>
+
+    <!-- Estado general -->
+    <div class="card p-3 mb-4 flex items-center justify-between">
+      <div>
+        <div class="text-xs font-semibold text-slate-300">Orquestador</div>
+        <div class="text-[11px] text-slate-500 mt-0.5">casita-orquestador</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="status-dot dot-loading" id="cfg-orch-dot"></span>
+        <span class="text-[11px] text-slate-400" id="cfg-orch-txt">—</span>
+      </div>
+    </div>
+
+    <!-- Grid de estado de jobs -->
+    <div class="space-y-1 mb-5">
+      <div class="flex items-center justify-between px-1 py-2 border-b border-slate-800">
+        <div class="text-xs text-slate-400">Último scraping</div>
+        <div class="flex items-center gap-2">
+          <span id="cfg-last-scraping" class="text-[11px] text-slate-300">—</span>
+          <span id="cfg-scraping-result" class="badge-never">—</span>
+        </div>
+      </div>
+      <div class="flex items-center justify-between px-1 py-2 border-b border-slate-800">
+        <div class="text-xs text-slate-400">Último check Gmail</div>
+        <span id="cfg-last-gmail" class="text-[11px] text-slate-300">—</span>
+      </div>
+      <div class="flex items-center justify-between px-1 py-2">
+        <div class="text-xs text-slate-400">Último resumen</div>
+        <span id="cfg-last-summary" class="text-[11px] text-slate-300">—</span>
+      </div>
+    </div>
+
+    <!-- Configuración de schedule -->
+    <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-3">Configuración</p>
+
+    <div class="space-y-3 mb-5">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs text-slate-300">Scraping automático</div>
+          <div class="text-[10px] text-slate-500">Lun/Jue a las 07:00 por defecto</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="cfg-scraping-en" onchange="dirtyConfig()"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs text-slate-300">Check alertas Gmail</div>
+          <div class="text-[10px] text-slate-500">Cada 30 minutos</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="cfg-gmail-en" onchange="dirtyConfig()"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs text-slate-300">Resumen semanal Telegram</div>
+          <div class="text-[10px] text-slate-500">Domingos a las 09:00</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="cfg-summary-en" onchange="dirtyConfig()"><span class="toggle-slider"></span></label>
+      </div>
+    </div>
+
+    <!-- Acciones manuales -->
+    <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-3">Ejecutar ahora</p>
+    <div class="flex gap-2 mb-5">
+      <button onclick="runScraping()" id="btn-run-scraping"
+        class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2.5 rounded-xl transition-colors font-medium">
+        Scraping
+      </button>
+      <button onclick="runSummary()" id="btn-run-summary"
+        class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-xs py-2.5 rounded-xl transition-colors font-medium">
+        Resumen
+      </button>
+    </div>
+
+    <button onclick="saveConfig()" id="btn-save-config"
+      class="w-full bg-green-700 hover:bg-green-600 text-white text-xs py-2.5 rounded-xl transition-colors font-medium opacity-50 cursor-not-allowed" disabled>
+      Guardar cambios
+    </button>
+  </div>
+</div>
+
+<!-- ══ MODAL: DESCARTADAS ════════════════════════════════════════════════ -->
+<div id="modal-dismissed" class="modal-overlay hidden" onclick="closeIfOverlay(event,'modal-dismissed')">
+  <div class="modal-box">
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-bold">Casas descartadas</h2>
+      <button onclick="closeModal('modal-dismissed')" class="text-slate-500 hover:text-white p-1">✕</button>
+    </div>
+    <div id="dismissed-list" class="space-y-2"></div>
+    <div id="dismissed-empty" class="hidden text-center py-8 text-slate-600 text-xs">
+      No hay casas descartadas.
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: RESUMEN SEMANAL ════════════════════════════════════════════ -->
+<div id="modal-summary" class="modal-overlay modal-center hidden" onclick="closeIfOverlay(event,'modal-summary')">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-bold">Último resumen semanal</h2>
+      <button onclick="closeModal('modal-summary')" class="text-slate-500 hover:text-white p-1">✕</button>
+    </div>
+    <div id="summary-date" class="text-[10px] text-slate-500 mb-3"></div>
+    <pre id="summary-content" class="text-[11px] text-slate-300 whitespace-pre-wrap font-sans leading-relaxed"></pre>
+    <div id="summary-empty" class="hidden text-center py-8 text-slate-600 text-xs">
+      Aún no se ha enviado ningún resumen semanal.
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+const API = '/api/casita';
+let _statusCache = null;
+let _configDirty = false;
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit'}) + ' ' +
+         d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+}
+function fmtPrice(n) {
+  return new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n);
+}
+function fmtZone(id) {
+  return (id||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+}
+function closeIfOverlay(e, id) {
+  if (e.target.id === id) closeModal(id);
+}
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function openModal(id)  { document.getElementById(id).classList.remove('hidden'); }
+
+// ── Radar ─────────────────────────────────────────────────────────────────────
+
+async function loadRadar() {
+  try {
+    const data = await fetch(API + '/radar').then(r => r.json());
+    renderRadar(data.properties || []);
+  } catch {
+    document.getElementById('radar-offline').classList.remove('hidden');
+    document.getElementById('radar-list').classList.add('hidden');
+  }
+}
+
+function renderRadar(props) {
+  const list = document.getElementById('radar-list');
+  const empty = document.getElementById('radar-empty');
+  const offline = document.getElementById('radar-offline');
+  offline.classList.add('hidden');
+
+  if (!props || props.length === 0) {
+    list.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  list.innerHTML = props.map(p => {
+    const scoreW = Math.round((p.score_total / 84) * 100);
+    const details = [
+      p.rooms ? `${p.rooms} hab.` : null,
+      p.size_m2 ? `${Math.round(p.size_m2)} m²` : null,
+      p.piscina && p.piscina !== 'ninguna' ? '🏊' : null,
+    ].filter(Boolean).join(' · ');
+    const age = _ageLabel(p.first_seen);
+
+    return `
+      <div class="prop-card p-3" data-uid="${p.uid}">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5 mb-0.5 flex-wrap">
+              <span class="text-[10px] text-indigo-400 font-semibold uppercase tracking-wide">${fmtZone(p.zone_id)}</span>
+              <span class="text-[9px] text-slate-600">${age}</span>
+            </div>
+            <p class="text-xs text-white leading-snug line-clamp-2 mb-1">${p.title || 'Sin título'}</p>
+            ${details ? `<p class="text-[10px] text-slate-500">${details}</p>` : ''}
+          </div>
+          <div class="text-right shrink-0">
+            <div class="text-sm font-bold text-white">${fmtPrice(p.price)}</div>
+            <div class="text-[10px] text-indigo-300 font-semibold">${p.score_total?.toFixed(1)} / 84</div>
+          </div>
+        </div>
+        <div class="score-bar-bg mt-2 mb-2.5">
+          <div class="score-bar-fill" style="width:${scoreW}%"></div>
+        </div>
+        <div class="flex gap-2">
+          <a href="${p.url}" target="_blank" rel="noopener"
+             class="flex-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 text-[11px] py-1.5 rounded-lg text-center transition-colors">
+            Ver anuncio ↗
+          </a>
+          <button onclick="dismiss('${p.uid}', this)"
+             class="flex-1 bg-slate-700/50 hover:bg-red-900/40 text-slate-400 hover:text-red-400 text-[11px] py-1.5 rounded-lg transition-colors">
+            Descartar
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function _ageLabel(iso) {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return 'Hoy';
+  if (days === 1) return 'Ayer';
+  if (days < 7)  return `Hace ${days}d`;
+  if (days < 30) return `Hace ${Math.floor(days/7)}sem`;
+  return `Hace ${Math.floor(days/30)}mes`;
+}
+
+async function dismiss(uid, btn) {
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    const res = await fetch(API + '/dismiss', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({uid})
+    }).then(r=>r.json());
+    if (res.ok) {
+      const card = document.querySelector(`[data-uid="${uid}"]`);
+      if (card) {
+        card.style.opacity = '0.3';
+        card.style.pointerEvents = 'none';
+        setTimeout(() => card.remove(), 400);
+      }
+      // Actualizar contador
+      const el = document.getElementById('st-dismissed');
+      el.textContent = (parseInt(el.textContent) || 0) + 1;
+    }
+  } catch {}
+}
+
+// ── Estado del orquestador ────────────────────────────────────────────────────
+
+async function loadStatus() {
+  try {
+    const data = await fetch(API + '/status').then(r=>r.json());
+    _statusCache = data;
+    updateOrchestratorDot(data.online, data.scraper_errors?.length > 0);
+    document.getElementById('st-total').textContent = data.total_properties ?? '—';
+    document.getElementById('st-radar').textContent = data.radar_count ?? '—';
+    document.getElementById('st-dismissed').textContent = data.dismissed_count ?? '—';
+    const errEl = document.getElementById('st-errors');
+    const errs = data.scraper_errors_count ?? 0;
+    errEl.textContent = errs;
+    errEl.className = 'text-base font-bold ' + (errs > 0 ? 'text-red-400' : 'text-green-400');
+  } catch {
+    updateOrchestratorDot(false, false);
+  }
+}
+
+function updateOrchestratorDot(online, hasErrors) {
+  const dot = document.getElementById('orch-dot');
+  const txt = document.getElementById('orch-txt');
+  if (!online) {
+    dot.className = 'status-dot dot-off';
+    txt.textContent = 'Offline';
+    txt.className = 'text-[11px] text-red-400';
+  } else if (hasErrors) {
+    dot.className = 'status-dot dot-warn';
+    txt.textContent = 'Con errores';
+    txt.className = 'text-[11px] text-orange-400';
+  } else {
+    dot.className = 'status-dot dot-on';
+    txt.textContent = 'Activo';
+    txt.className = 'text-[11px] text-green-400';
+  }
+}
+
+// ── Modal: Config ─────────────────────────────────────────────────────────────
+
+async function openConfig() {
+  _configDirty = false;
+  openModal('modal-config');
+
+  // Cargar estado del orquestador en el modal
+  if (_statusCache) _fillConfigStatus(_statusCache);
+  else {
+    const data = await fetch(API + '/status').then(r=>r.json()).catch(()=>null);
+    if (data) _fillConfigStatus(data);
+  }
+
+  // Cargar config de schedule
+  const cfg = await fetch(API + '/schedule').then(r=>r.json()).catch(()=>({}));
+  document.getElementById('cfg-scraping-en').checked = cfg.scraping_enabled !== false;
+  document.getElementById('cfg-gmail-en').checked    = cfg.gmail_check_enabled !== false;
+  document.getElementById('cfg-summary-en').checked  = cfg.summary_enabled !== false;
+  _configDirty = false;
+  _updateSaveBtn();
+}
+
+function _fillConfigStatus(data) {
+  // Dot en modal
+  const online = data.online;
+  const errs   = (data.scraper_errors || []).length;
+  const dot = document.getElementById('cfg-orch-dot');
+  const txt = document.getElementById('cfg-orch-txt');
+  dot.className = 'status-dot ' + (!online ? 'dot-off' : errs > 0 ? 'dot-warn' : 'dot-on');
+  txt.textContent = !online ? 'Offline' : errs > 0 ? 'Con errores' : 'Activo';
+
+  document.getElementById('cfg-last-scraping').textContent = fmtDate(data.last_scraping);
+  document.getElementById('cfg-last-gmail').textContent    = fmtDate(data.last_gmail_check);
+  document.getElementById('cfg-last-summary').textContent  = fmtDate(data.last_summary);
+
+  // Badge resultado
+  const badge = document.getElementById('cfg-scraping-result');
+  const r = data.last_scraping_result || 'never';
+  const classes = {ok:'badge-ok',ok_with_errors:'badge-warn',error:'badge-err',never:'badge-never'};
+  const labels  = {ok:'OK',ok_with_errors:'Con errores',error:'Error',never:'—'};
+  badge.className = classes[r] || 'badge-never';
+  badge.textContent = labels[r] || '—';
+}
+
+function dirtyConfig() {
+  _configDirty = true;
+  _updateSaveBtn();
+}
+
+function _updateSaveBtn() {
+  const btn = document.getElementById('btn-save-config');
+  if (_configDirty) {
+    btn.disabled = false;
+    btn.classList.remove('opacity-50','cursor-not-allowed');
+  } else {
+    btn.disabled = true;
+    btn.classList.add('opacity-50','cursor-not-allowed');
+  }
+}
+
+async function saveConfig() {
+  const cfg = {
+    scraping_enabled:    document.getElementById('cfg-scraping-en').checked,
+    gmail_check_enabled: document.getElementById('cfg-gmail-en').checked,
+    summary_enabled:     document.getElementById('cfg-summary-en').checked,
+  };
+  const btn = document.getElementById('btn-save-config');
+  btn.textContent = 'Guardando...';
+  btn.disabled = true;
+  try {
+    await fetch(API + '/schedule', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(cfg)
+    });
+    _configDirty = false;
+    btn.textContent = '✓ Guardado';
+    setTimeout(() => { btn.textContent = 'Guardar cambios'; _updateSaveBtn(); }, 1500);
+  } catch {
+    btn.textContent = '⚠ Error';
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = 'Guardar cambios'; _updateSaveBtn(); }, 2000);
+  }
+}
+
+async function runScraping() {
+  const btn = document.getElementById('btn-run-scraping');
+  btn.textContent = 'Iniciando...';
+  btn.disabled = true;
+  try {
+    await fetch(API + '/run-scraping', {method:'POST'});
+    btn.textContent = '✓ En curso';
+  } catch { btn.textContent = '⚠ Error'; }
+  setTimeout(() => { btn.textContent = 'Scraping'; btn.disabled = false; }, 3000);
+}
+
+async function runSummary() {
+  const btn = document.getElementById('btn-run-summary');
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    await fetch(API + '/run-summary', {method:'POST'});
+    btn.textContent = '✓ Enviado';
+  } catch { btn.textContent = '⚠ Error'; }
+  setTimeout(() => { btn.textContent = 'Resumen'; btn.disabled = false; }, 3000);
+}
+
+// ── Modal: Descartadas ────────────────────────────────────────────────────────
+
+async function openDismissed() {
+  openModal('modal-dismissed');
+  const data = await fetch(API + '/dismissed').then(r=>r.json()).catch(()=>({properties:[]}));
+  const props = data.properties || [];
+  const list = document.getElementById('dismissed-list');
+  const empty = document.getElementById('dismissed-empty');
+  if (props.length === 0) {
+    list.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  list.innerHTML = props.map(p => `
+    <div class="prop-card p-3 flex items-center gap-3" id="dism-${p.uid}">
+      <div class="flex-1 min-w-0">
+        <p class="text-xs text-slate-300 truncate">${p.title || 'Sin título'}</p>
+        <div class="flex gap-2 mt-0.5">
+          <span class="text-[10px] text-slate-500">${fmtZone(p.zone_id)}</span>
+          <span class="text-[10px] text-slate-500">${fmtPrice(p.price)}</span>
+          <span class="text-[10px] text-indigo-400">${(p.score_total||0).toFixed(1)}pts</span>
+        </div>
+      </div>
+      <button onclick="undismiss('${p.uid}')"
+        class="shrink-0 text-[11px] bg-indigo-600/30 hover:bg-indigo-600/60 text-indigo-300 px-2.5 py-1.5 rounded-lg transition-colors">
+        Recuperar
+      </button>
+    </div>`).join('');
+}
+
+async function undismiss(uid) {
+  const res = await fetch(API + '/undismiss', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({uid})
+  }).then(r=>r.json()).catch(()=>({ok:false}));
+  if (res.ok) {
+    const card = document.getElementById(`dism-${uid}`);
+    if (card) { card.style.opacity='0.3'; setTimeout(()=>card.remove(),300); }
+    // Recargar radar
+    loadRadar();
+    loadStatus();
+  }
+}
+
+// ── Modal: Resumen ────────────────────────────────────────────────────────────
+
+async function openSummary() {
+  openModal('modal-summary');
+  const data = await fetch(API + '/summary').then(r=>r.json()).catch(()=>({}));
+  const content = data.content || null;
+  const sentAt  = data.sent_at  || null;
+  const empty   = document.getElementById('summary-empty');
+  const pre     = document.getElementById('summary-content');
+  const dateEl  = document.getElementById('summary-date');
+  if (!content) {
+    pre.textContent = '';
+    dateEl.textContent = '';
+    empty.classList.remove('hidden');
+  } else {
+    empty.classList.add('hidden');
+    dateEl.textContent = sentAt ? `Enviado el ${fmtDate(sentAt)}` : '';
+    pre.textContent = content;
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+async function init() {
+  try {
+    await Promise.race([
+      Promise.all([loadStatus(), loadRadar()]),
+      new Promise((_,rej) => setTimeout(()=>rej('timeout'), 7000)),
+    ]);
+  } catch {
+    updateOrchestratorDot(false, false);
+    document.getElementById('radar-offline').classList.remove('hidden');
+  }
+  document.getElementById('loading-overlay').classList.add('done');
+  document.getElementById('page-content').classList.add('visible');
+  // Refrescar cada 30 segundos
+  setInterval(() => { loadStatus(); loadRadar(); }, 30000);
+}
+
+init();
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 import time
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 # These references are injected from main.py
@@ -577,3 +577,138 @@ def get_vacaciones_health():
     """
     from controllers.vacaciones_controller import is_healthy
     return {"online": is_healthy()}
+
+
+@router.get("/health/casita")
+async def get_casita_health():
+    """Health check para Casita Sueños.
+
+    Llama al endpoint /health del servicio casita-suenos dentro de la red Docker.
+    Devuelve online=True si el servicio responde correctamente.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get("http://casita-suenos:8001/health")
+            data = resp.json()
+            return {"online": data.get("online", False)}
+    except Exception:
+        return {"online": False}
+
+
+@router.get("/casita/status")
+async def get_casita_status():
+    """Estado detallado de Casita Sueños para la página de detalle del dashboard."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get("http://casita-suenos:8001/status")
+            return resp.json()
+    except Exception as e:
+        return {
+            "online": False,
+            "error": str(e),
+            "total_properties": 0,
+            "scraper_errors": [],
+            "top_properties": [],
+        }
+
+
+@router.get("/casita/radar")
+async def get_casita_radar():
+    """Propiedades en el radar ordenadas por fecha de publicación."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get("http://casita-suenos:8001/radar")
+            return resp.json()
+    except Exception as e:
+        return {"properties": [], "error": str(e)}
+
+
+@router.get("/casita/dismissed")
+async def get_casita_dismissed():
+    """Propiedades descartadas."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get("http://casita-suenos:8001/dismissed")
+            return resp.json()
+    except Exception as e:
+        return {"properties": [], "error": str(e)}
+
+
+@router.get("/casita/schedule")
+async def get_casita_schedule():
+    """Configuración de automatizaciones."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get("http://casita-suenos:8001/schedule")
+            return resp.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.post("/casita/schedule")
+async def save_casita_schedule(request: Request):
+    """Guarda la configuración de automatizaciones."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post("http://casita-suenos:8001/schedule", json=body)
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/casita/dismiss")
+async def dismiss_casita_property(request: Request):
+    """Descarta una propiedad del radar."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post("http://casita-suenos:8001/dismiss", json=body)
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/casita/undismiss")
+async def undismiss_casita_property(request: Request):
+    """Recupera una propiedad descartada."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post("http://casita-suenos:8001/undismiss", json=body)
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/casita/summary")
+async def get_casita_summary():
+    """Último resumen semanal enviado."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get("http://casita-suenos:8001/summary")
+            return resp.json()
+    except Exception as e:
+        return {"content": None, "sent_at": None, "error": str(e)}
+
+
+@router.post("/casita/run-scraping")
+async def run_casita_scraping():
+    """Lanza un scraping manual inmediato."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post("http://casita-suenos:8001/run-scraping")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/casita/run-summary")
+async def run_casita_summary():
+    """Lanza el resumen semanal manual."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post("http://casita-suenos:8001/run-summary")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
