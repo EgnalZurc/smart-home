@@ -301,6 +301,35 @@ function fmtPrice(n) {
 function fmtZone(id) {
   return (id||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
 }
+function _fmtFirstSeen(iso) {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return 'Detectado hoy';
+  if (days === 1) return 'Detectado ayer';
+  if (days < 7)  return 'Detectado hace ' + days + 'd';
+  if (days < 30) return 'Detectado hace ' + Math.floor(days/7) + 'sem';
+  return 'Detectado hace ' + Math.floor(days/30) + 'mes';
+}
+function _ageLabel(iso) { return _fmtFirstSeen(iso); }
+function _fmtPortal(portal) {
+  if (!portal) return '';
+  const map = {
+    pisos:      { label: 'Pisos.com',  color: 'text-emerald-400 bg-emerald-950/50 border-emerald-800/40' },
+    habitaclia: { label: 'Habitaclia', color: 'text-orange-400 bg-orange-950/50 border-orange-800/40' },
+    idealista:  { label: 'Idealista',  color: 'text-blue-400 bg-blue-950/50 border-blue-800/40' },
+    fotocasa:   { label: 'Fotocasa',   color: 'text-pink-400 bg-pink-950/50 border-pink-800/40' },
+  };
+  const p = map[portal] || { label: portal, color: 'text-slate-400 bg-slate-800/50 border-slate-700/40' };
+  return '<span class="text-[9px] font-medium px-1.5 py-0.5 rounded border ' + p.color + '">' + p.label + '</span>';
+}
+function _fmtMadrid(minutes) {
+  if (!minutes) return null;
+  if (minutes < 60) return minutes + ' min';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? h + 'h ' + m + 'min Madrid' : h + 'h Madrid';
+}
 function closeIfOverlay(e, id) {
   // Cierra solo si se hace click directamente en el overlay (fondo), no en el contenido
   if (e.target === document.getElementById(id)) closeModal(id);
