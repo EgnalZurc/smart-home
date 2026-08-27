@@ -24,7 +24,7 @@ from models import (
     Zone,
 )
 logger = logging.getLogger(__name__)
-ALERT_THRESHOLD = 55.0  # +5 por adición de P12
+ALERT_THRESHOLD = 57.0  # +5 P12 +2 P13
 MAX_PRICE = 320_000
 # ---------------------------------------------------------------------------
 # Limitantes
@@ -41,29 +41,19 @@ def apply_limiters(prop: Property, zone: Zone) -> FilterResult:
     if prop.rooms is not None and prop.rooms < 3:
         failures.append(f"L1: habitaciones={prop.rooms} < 3")
 
-    # L2 — Garaje/aparcamiento (SOFT)
-    # Solo descarta si rooms es conocido Y la descripcion indica sin parking
-    # explicitamente. Si has_garage=False pero sin confirmacion textual → no descarta.
+    # L2 — Garaje/aparcamiento (HARD)
+    # Pisos.com garantiza por URL /jardin/ y /garaje/.
+    # Habitaclia infiere del texto: si no está mencionado → False → descarte.
+    # Requisito real: la casa debe tener aparcamiento.
     if not prop.has_garage:
-        desc_lower = prop.description.lower()
-        explicit_no_garage = any(s in desc_lower for s in (
-            "sin garaje", "sin parking", "sin aparcamiento", "no incluye garaje",
-            "no tiene garaje", "without parking",
-        ))
-        if explicit_no_garage:
-            failures.append("L2: descripcion indica sin garaje/aparcamiento")
-        # Si simplemente no se menciona → pass (dato desconocido por limitacion del scraper)
+        failures.append("L2: sin garaje/aparcamiento (no mencionado o ausente)")
 
-    # L3 — Jardin/parcela (SOFT)
-    # Solo descarta si la descripcion indica explicitamente ausencia de exterior.
+    # L3 — Jardin/parcela (HARD)
+    # Requisito real: parcela con espacio para huerto y barbacoa.
+    # Pisos.com garantiza por URL, Habitaclia infiere del texto.
+    # Si no hay mención de jardín/parcela → descarte.
     if not prop.has_garden_or_plot:
-        desc_lower = prop.description.lower()
-        explicit_no_garden = any(s in desc_lower for s in (
-            "sin jardin", "sin parcela", "sin exterior", "piso interior",
-            "no tiene jardin", "without garden",
-        ))
-        if explicit_no_garden:
-            failures.append("L3: descripcion indica sin jardin ni parcela")
+        failures.append("L3: sin parcela o jardin (no mencionado o ausente)")
 
     # L4 — Estructura sana (habitable)
     if not prop.habitable:
@@ -261,6 +251,10 @@ def _score_flood_risk(risk) -> float:
         FloodRisk.ALTO:        0.0,  # nunca debería llegar aquí
     }.get(risk, 7.0)
 
+def _score_ac(has_ac: bool) -> float:
+    """P13 — Aire acondicionado (max 4). Solo puntua si hay certeza de que existe."""
+    return 4.0 if has_ac else 0.0
+
 
 def calculate_score(prop: Property, zone: Zone) -> ScoreBreakdown:
     """Calcula la puntuacion completa de una propiedad que ya paso los limitantes."""
@@ -280,6 +274,7 @@ def calculate_score(prop: Property, zone: Zone) -> ScoreBreakdown:
         p10_fire=_score_fire_risk(zone.fire_risk),
         p11_preference=_score_preference(zone.zone_preference),
         p12_flood=_score_flood_risk(getattr(zone, "flood_risk", None)),
+        p13_ac=_score_ac(getattr(prop, "has_ac", False)),
     )
 
 
@@ -304,7 +299,7 @@ def evaluate(prop: Property, zone: Zone) -> ScoredProperty | None:
     score = calculate_score(prop, zone)
     scored = ScoredProperty(prop=prop, zone=zone, score=score)
     logger.info(
-        "[scorer] %s -> %.1f/93 %s",
+        "[scorer] %s -> %.1f/97 %s",
         prop.unique_id,
         scored.total_score,
         "ALERTA" if scored.passes_alert_threshold else "",

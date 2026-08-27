@@ -47,6 +47,13 @@ _GARAGE_KEYWORDS = (
 _NO_INTERNET_KEYWORDS = (
     "sin cobertura", "sin internet", "sin wifi", "sin fibra",
 )
+# Palabras clave que indican aire acondicionado (P13)
+_AC_KEYWORDS = (
+    "aire acondicionado", "a/c", "a.a.", "climatizado", "climatizacion",
+    "climatización", "split", "bomba de calor", "bomba calor",
+    "calefaccion y refrigeracion", "calefacción y refrigeración",
+    "frio y calor", "frío y calor",
+)
 
 _DEFAULT_HEADERS = {
     "User-Agent": (
@@ -122,6 +129,11 @@ def infer_no_internet(description: str) -> bool:
     """L5 — True si la descripción menciona explícitamente falta de internet."""
     text = description.lower()
     return any(kw in text for kw in _NO_INTERNET_KEYWORDS)
+
+def infer_ac(description: str, extras: list[str]) -> bool:
+    """P13 — True si hay mención a aire acondicionado/climatización."""
+    text = (description + " " + " ".join(extras)).lower()
+    return any(kw in text for kw in _AC_KEYWORDS)
 
 
 def infer_piscina(description: str, extras: list[str]) -> str:

@@ -129,6 +129,7 @@ class Property:
     last_seen: datetime = field(default_factory=datetime.now)
     source: str = ""                 # info adicional de origen (ej: "gmail_alert")
     published_at: str | None = None  # fecha de publicacion en el portal (ISO str o None)
+    has_ac: bool = False             # P13 ? aire acondicionado
 
     @property
     def unique_id(self) -> str:
@@ -155,6 +156,7 @@ class ScoreBreakdown:
     p10_fire: float        # máx 9
     p11_preference: float  # máx 9 — gusto personal por la provincia
     p12_flood: float       # máx 9 — riesgo inundación
+    p13_ac: float          # máx 4 — aire acondicionado
 
     @property
     def total(self) -> float:
@@ -162,10 +164,10 @@ class ScoreBreakdown:
             self.p1_rooms + self.p2_piscina + self.p3_distance +
             self.p4_beach + self.p5_pools + self.p6_supermarket +
             self.p7_health + self.p8_hospital + self.p9_price +
-            self.p10_fire + self.p11_preference + self.p12_flood
+            self.p10_fire + self.p11_preference + self.p12_flood + self.p13_ac
         )
 
-    MAX_SCORE: float = 93.0   # 75 + 9 P11 + 9 P12
+    MAX_SCORE: float = 97.0   # 75 + 9 P11 + 9 P12 + 4 P13
 
     def as_dict(self) -> dict[str, float]:
         return {
@@ -181,6 +183,7 @@ class ScoreBreakdown:
             "P10_incendio": self.p10_fire,
             "P11_preferencia_provincia": self.p11_preference,
             "P12_riesgo_inundacion": self.p12_flood,
+            "P13_aire_acondicionado": self.p13_ac,
             "TOTAL": self.total,
         }
 

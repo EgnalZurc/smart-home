@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS properties (
     has_garden      INTEGER NOT NULL DEFAULT 0,
     piscina         TEXT NOT NULL DEFAULT 'ninguna',
     habitable       INTEGER NOT NULL DEFAULT 1,
+    has_ac          INTEGER NOT NULL DEFAULT 0,
     description     TEXT NOT NULL DEFAULT '',
     first_seen      TEXT NOT NULL,
     last_seen       TEXT NOT NULL,
@@ -72,6 +73,7 @@ CREATE TABLE IF NOT EXISTS scored_properties (
     score_p10       REAL NOT NULL,
     score_p11       REAL NOT NULL DEFAULT 0,
     score_p12       REAL NOT NULL DEFAULT 0,
+    score_p13       REAL NOT NULL DEFAULT 0,
     scored_at       TEXT NOT NULL,
     alerted         INTEGER NOT NULL DEFAULT 0,
     dismissed       INTEGER NOT NULL DEFAULT 0,
@@ -135,6 +137,7 @@ class Database:
         migrations = [
             ("scored_properties", "score_p11",    "REAL NOT NULL DEFAULT 0"),
             ("scored_properties", "score_p12",    "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_p13",    "REAL NOT NULL DEFAULT 0"),
             ("scored_properties", "dismissed",     "INTEGER NOT NULL DEFAULT 0"),
             ("scored_properties", "dismissed_at",  "TEXT"),
         ]
@@ -201,7 +204,7 @@ class Database:
             self._conn.execute(
                 """INSERT INTO properties
                    (uid, portal, portal_id, zone_id, url, title, price, rooms, size_m2,
-                    has_garage, has_garden, piscina, habitable, description,
+                    has_garage, has_garden, has_ac, piscina, habitable, description,
                     first_seen, last_seen, source, published_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
@@ -209,6 +212,7 @@ class Database:
                     prop.url, prop.title, prop.price,
                     prop.rooms, prop.size_m2,
                     int(prop.has_garage), int(prop.has_garden_or_plot),
+                    int(getattr(prop, 'has_ac', False)),
                     prop.piscina.value, int(prop.habitable),
                     prop.description,
                     prop.first_seen.isoformat(), now, prop.source,
@@ -248,14 +252,14 @@ class Database:
             """INSERT OR REPLACE INTO scored_properties
                (property_uid, zone_id, score_total,
                 score_p1, score_p2, score_p3, score_p4, score_p5,
-                score_p6, score_p7, score_p8, score_p9, score_p10, score_p11, score_p12,
+                score_p6, score_p7, score_p8, score_p9, score_p10, score_p11, score_p12, score_p13,
                 scored_at, alerted, dismissed, dismissed_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 uid, scored.zone.id, s.total,
                 s.p1_rooms, s.p2_piscina, s.p3_distance, s.p4_beach, s.p5_pools,
                 s.p6_supermarket, s.p7_health, s.p8_hospital, s.p9_price,
-                s.p10_fire, getattr(s, "p11_preference", 0.0), getattr(s, "p12_flood", 0.0),
+                s.p10_fire, getattr(s, "p11_preference", 0.0), getattr(s, "p12_flood", 0.0), getattr(s, "p13_ac", 0.0),
                 now, alerted, dismissed, dism_at,
             ),
         )

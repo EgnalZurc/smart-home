@@ -27,6 +27,7 @@ from bs4 import BeautifulSoup
 from models import Portal, Property
 from scraper_base import (
     get_html,
+    infer_ac,
     infer_habitable,
     infer_has_garage,
     infer_has_garden,
@@ -148,6 +149,7 @@ def _parse_listing_page(soup: BeautifulSoup, zone: Zone, now: datetime,
                 rooms=parse_rooms(rooms_raw) or (int(rooms_m.group(1)) if rooms_m else None),
                 has_garage=has_garage,
                 has_garden_or_plot=has_garden,
+                has_ac=infer_ac(description, extras),
                 piscina=infer_piscina(description, extras),
                 has_internet_mention=not infer_no_internet(description),
                 habitable=infer_habitable(description, title),
