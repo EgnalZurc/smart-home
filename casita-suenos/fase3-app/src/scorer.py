@@ -41,12 +41,23 @@ def apply_limiters(prop: Property, zone: Zone) -> FilterResult:
     if prop.rooms is not None and prop.rooms < 3:
         failures.append(f"L1: habitaciones={prop.rooms} < 3")
 
-    # L2 — Garaje/aparcamiento (HARD)
-    # Pisos.com garantiza por URL /jardin/ y /garaje/.
-    # Habitaclia infiere del texto: si no está mencionado → False → descarte.
-    # Requisito real: la casa debe tener aparcamiento.
+    # L2 — Garaje/aparcamiento (SEMI-SOFT)
+    # Si la casa tiene jardin/parcela pero garaje no se menciona: NO descartar.
+    # Una casa con parcela en zona rural implica espacio para aparcar.
+    # Descartamos solo si: descripcion dice explicitamente sin garaje
+    # O si no tiene ni jardin ni garaje (piso urbano sin exterior).
     if not prop.has_garage:
-        failures.append("L2: sin garaje/aparcamiento (no mencionado o ausente)")
+        desc_lower_l2 = prop.description.lower()
+        explicit_no_garage = any(s in desc_lower_l2 for s in (
+            "sin garaje", "sin parking", "sin aparcamiento",
+            "no dispone de garaje", "no incluye garaje", "no tiene garaje",
+        ))
+        if explicit_no_garage:
+            failures.append("L2: descripcion indica sin garaje/aparcamiento")
+        elif not prop.has_garden_or_plot:
+            # Sin jardin Y sin garaje: propiedad urbana sin exterior
+            failures.append("L2: sin garaje ni parcela (urbano sin exterior)")
+        # Con jardin pero sin mencion garaje: pass (parcela implica espacio coche)
 
     # L3 — Jardin/parcela (HARD)
     # Requisito real: parcela con espacio para huerto y barbacoa.
