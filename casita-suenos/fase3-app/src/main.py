@@ -163,11 +163,27 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 ],
             })
 
-        elif self.path == "/radar":
+        elif self.path.startswith("/radar"):
             if _scheduler_instance is None:
                 self._send_json(503, {"error": "Not ready"}); return
-            props = _scheduler_instance.get_radar()
-            self._send_json(200, {"properties": props})
+            # Parsear query params: ?limit=20&offset=0&sort_by=score&sort_dir=desc
+            from urllib.parse import urlparse, parse_qs
+            parsed = urlparse(self.path)
+            qs = parse_qs(parsed.query)
+            def _qs(key, default):
+                return qs.get(key, [default])[0]
+            try:
+                limit   = min(int(_qs("limit",   "20")), 100)
+                offset  = max(int(_qs("offset",  "0")),  0)
+                sort_by = _qs("sort_by", "score")
+                sort_dir= _qs("sort_dir", "desc")
+            except (ValueError, TypeError):
+                limit, offset, sort_by, sort_dir = 20, 0, "score", "desc"
+            result = _scheduler_instance.get_radar(
+                limit=limit, offset=offset,
+                sort_by=sort_by, sort_dir=sort_dir,
+            )
+            self._send_json(200, result)
 
         elif self.path == "/dismissed":
             if _scheduler_instance is None:
@@ -343,11 +359,10 @@ def main() -> None:
     _start_status_server(STATUS_PORT)
 
     # Notificar arranque
+    radar_count = len(db.get_radar_properties(min_score=55.0, limit=500).get("items", []))
     notifier.send_status(
-        f"🚀 Casita Sueños arrancado\n"
-        f"📊 {db.count_properties()} propiedades en DB\n"
-        f"🔍 {len(ZONES)} zonas monitorizadas\n"
-        f"💳 Apify: {tracker.remaining} props restantes este mes"
+        "🚀 Casita Suenos arrancado "
+        "· {} casas en el radar".format(radar_count)
     )
 
     # Arrancar scheduler

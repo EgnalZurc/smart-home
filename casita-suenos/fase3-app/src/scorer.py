@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from models import (
     FilterResult,
     FireRisk,
+    FloodRisk,
     Piscina,
     Property,
     ScoreBreakdown,
@@ -23,7 +24,7 @@ from models import (
     Zone,
 )
 logger = logging.getLogger(__name__)
-ALERT_THRESHOLD = 50.0
+ALERT_THRESHOLD = 55.0  # +5 por adición de P12
 MAX_PRICE = 320_000
 # ---------------------------------------------------------------------------
 # Limitantes
@@ -100,6 +101,11 @@ def apply_limiters(prop: Property, zone: Zone) -> FilterResult:
     # L11 — Precio maximo 320.000 EUR
     if prop.price > MAX_PRICE:
         failures.append(f"L11: precio={prop.price}EUR > {MAX_PRICE}EUR")
+
+    # L12 — Riesgo de inundacion ALTO → descarte automatico
+    flood = getattr(zone, "flood_risk", None)
+    if flood is not None and flood == FloodRisk.ALTO:
+        failures.append(f"L12: riesgo inundacion ALTO en zona {zone.id}")
 
     if failures:
         return FilterResult.fail(*failures)
@@ -242,6 +248,19 @@ def _score_preference(preference: float) -> float:
     """P11 — Gusto personal por la provincia (max 9)."""
     return max(0.0, min(9.0, float(preference)))
 
+def _score_flood_risk(risk) -> float:
+    """P12 — Riesgo inundacion (max 9). ALTO ya fue descartado en L12."""
+    if risk is None:
+        return 7.0  # Sin dato → tratar como BAJO
+    return {
+        FloodRisk.NULO:        9.0,
+        FloodRisk.BAJO:        7.0,
+        FloodRisk.BAJO_MEDIO:  5.0,
+        FloodRisk.MEDIO:       3.0,
+        FloodRisk.MEDIO_ALTO:  1.0,
+        FloodRisk.ALTO:        0.0,  # nunca debería llegar aquí
+    }.get(risk, 7.0)
+
 
 def calculate_score(prop: Property, zone: Zone) -> ScoreBreakdown:
     """Calcula la puntuacion completa de una propiedad que ya paso los limitantes."""
@@ -260,6 +279,7 @@ def calculate_score(prop: Property, zone: Zone) -> ScoreBreakdown:
         p9_price=_score_price(prop.price),
         p10_fire=_score_fire_risk(zone.fire_risk),
         p11_preference=_score_preference(zone.zone_preference),
+        p12_flood=_score_flood_risk(getattr(zone, "flood_risk", None)),
     )
 
 
@@ -284,7 +304,7 @@ def evaluate(prop: Property, zone: Zone) -> ScoredProperty | None:
     score = calculate_score(prop, zone)
     scored = ScoredProperty(prop=prop, zone=zone, score=score)
     logger.info(
-        "[scorer] %s -> %.1f/84 %s",
+        "[scorer] %s -> %.1f/93 %s",
         prop.unique_id,
         scored.total_score,
         "ALERTA" if scored.passes_alert_threshold else "",

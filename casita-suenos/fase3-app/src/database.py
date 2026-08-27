@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS scored_properties (
     score_p9        REAL NOT NULL,
     score_p10       REAL NOT NULL,
     score_p11       REAL NOT NULL DEFAULT 0,
+    score_p12       REAL NOT NULL DEFAULT 0,
     scored_at       TEXT NOT NULL,
     alerted         INTEGER NOT NULL DEFAULT 0,
     dismissed       INTEGER NOT NULL DEFAULT 0,
@@ -133,6 +134,7 @@ class Database:
         """Migraciones no destructivas para añadir columnas nuevas a tablas existentes."""
         migrations = [
             ("scored_properties", "score_p11",    "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_p12",    "REAL NOT NULL DEFAULT 0"),
             ("scored_properties", "dismissed",     "INTEGER NOT NULL DEFAULT 0"),
             ("scored_properties", "dismissed_at",  "TEXT"),
         ]
@@ -246,14 +248,14 @@ class Database:
             """INSERT OR REPLACE INTO scored_properties
                (property_uid, zone_id, score_total,
                 score_p1, score_p2, score_p3, score_p4, score_p5,
-                score_p6, score_p7, score_p8, score_p9, score_p10, score_p11,
+                score_p6, score_p7, score_p8, score_p9, score_p10, score_p11, score_p12,
                 scored_at, alerted, dismissed, dismissed_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 uid, scored.zone.id, s.total,
                 s.p1_rooms, s.p2_piscina, s.p3_distance, s.p4_beach, s.p5_pools,
                 s.p6_supermarket, s.p7_health, s.p8_hospital, s.p9_price,
-                s.p10_fire, getattr(s, "p11_preference", 0.0),
+                s.p10_fire, getattr(s, "p11_preference", 0.0), getattr(s, "p12_flood", 0.0),
                 now, alerted, dismissed, dism_at,
             ),
         )
@@ -334,27 +336,61 @@ class Database:
     # Radar de casas (para la UI)
     # ------------------------------------------------------------------
 
-    def get_radar_properties(self, min_score: float = 50.0, limit: int = 50) -> list[dict]:
+    def get_radar_properties(
+        self,
+        min_score: float = 55.0,
+        limit: int = 20,
+        offset: int = 0,
+        sort_by: str = "score",   # score | price | distance | portal | zone
+        sort_dir: str = "desc",
+    ) -> dict:
         """
-        Devuelve propiedades en el radar ordenadas por fecha de publicación (más recientes primero).
-        Excluye las descartadas.
+        Devuelve propiedades en el radar con paginación y ordenación configurable.
+        Retorna: {items: [...], total: int, has_more: bool}
         """
+        _SORT_MAP = {
+            "score":    "s.score_total",
+            "price":    "p.price",
+            "distance": "p.first_seen",  # distancia no está en BD, fallback a fecha
+            "portal":   "p.portal",
+            "zone":     "p.zone_id",
+            "date":     "p.first_seen",
+        }
+        order_col = _SORT_MAP.get(sort_by, "s.score_total")
+        order_dir = "DESC" if sort_dir.lower() == "desc" else "ASC"
+
+        total = self._conn.execute(
+            "SELECT COUNT(*) FROM scored_properties s "
+            "JOIN properties p ON p.uid=s.property_uid "
+            "WHERE s.score_total >= ? AND s.dismissed = 0",
+            (min_score,),
+        ).fetchone()[0]
+
         rows = self._conn.execute(
-            """SELECT p.uid, p.title, p.price, p.url, p.zone_id,
+            f"""SELECT p.uid, p.title, p.price, p.url, p.zone_id,
                       p.portal, p.portal_id,
                       p.rooms, p.size_m2, p.piscina, p.has_garage,
                       p.first_seen, p.last_seen, p.published_at,
                       s.score_total, s.score_p1, s.score_p2, s.score_p3,
                       s.score_p4, s.score_p5, s.score_p6, s.score_p7,
-                      s.score_p8, s.score_p9, s.score_p10, s.score_p11
+                      s.score_p8, s.score_p9, s.score_p10, s.score_p11,
+                      COALESCE(s.score_p12, 0) as score_p12
                FROM scored_properties s
                JOIN properties p ON p.uid = s.property_uid
                WHERE s.score_total >= ? AND s.dismissed = 0
-               ORDER BY p.first_seen DESC
-               LIMIT ?""",
-            (min_score, limit),
+               ORDER BY {order_col} {order_dir}
+               LIMIT ? OFFSET ?""",
+            (min_score, limit, offset),
         ).fetchall()
-        return [dict(r) for r in rows]
+
+        items = [dict(r) for r in rows]
+        return {
+            "items": items,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "has_more": (offset + limit) < total,
+        }
 
     # ------------------------------------------------------------------
     # Resumen semanal

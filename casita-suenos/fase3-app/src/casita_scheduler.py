@@ -248,18 +248,23 @@ class CasitaScheduler:
             last_summary=self._last_summary_date,
             last_scraping_result=result,
             total_properties=self._db.count_properties(),
-            radar_count=len(self._db.get_radar_properties(min_score=50.0, limit=200)),
+            radar_count=self._db.get_radar_properties(min_score=55.0, limit=1, offset=0).get("total", 0),
             dismissed_count=len(self._db.get_dismissed()),
             scraper_errors=errors,
             top_properties=self._db.get_top_scored(limit=5, min_score=50.0),
         )
 
-    def get_radar(self) -> list[dict]:
-        props = self._db.get_radar_properties(min_score=50.0, limit=100)
-        for p in props:
+    def get_radar(self, limit: int = 20, offset: int = 0,
+                  sort_by: str = "score", sort_dir: str = "desc") -> dict:
+        result = self._db.get_radar_properties(
+            min_score=55.0, limit=limit, offset=offset,
+            sort_by=sort_by, sort_dir=sort_dir,
+        )
+        # Enriquecer cada item con distance_madrid_min de la zona
+        for p in result["items"]:
             zone = ZONES.get(p.get("zone_id", ""))
             p["distance_madrid_min"] = zone.distance_madrid_min if zone else None
-        return props
+        return result
     def get_dismissed(self) -> list[dict]:
         """Propiedades descartadas."""
         return self._db.get_dismissed()

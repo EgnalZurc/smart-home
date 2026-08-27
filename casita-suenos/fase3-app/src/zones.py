@@ -2,10 +2,11 @@
 Configuracion de las 13 zonas candidatas del estudio (Fase 1).
 Las URLs de busqueda se rellenan con patrones reales de cada portal.
 """
-from models import FireRisk, Zone
+from models import FireRisk, FloodRisk, Zone
 # ---------------------------------------------------------------------------
 # Las 13 zonas con mayor puntuacion del estudio peninsular
-# Preferencias personales (P11, max 9): especificadas por el usuario
+# P11: gusto personal por la provincia (0-9)
+# P12: riesgo inundacion segun SNCZI/CHE/CHC/PATRICOVA (0-9, ALTO = L12 descarte)
 # ---------------------------------------------------------------------------
 ZONES: dict[str, Zone] = {
     z.id: z for z in [
@@ -20,6 +21,7 @@ ZONES: dict[str, Zone] = {
             distance_hospital_min=12,
             fire_risk=FireRisk.NULO,
             zone_preference=5.0,
+            flood_risk=FloodRisk.BAJO_MEDIO,  # valle Duero, SNCZI T=100/500 floodplain
             price_min=59_000,
             price_max=259_000,
             fotocasa_search_urls=(),
@@ -42,6 +44,7 @@ ZONES: dict[str, Zone] = {
             distance_hospital_min=8,
             fire_risk=FireRisk.MUY_BAJO,
             zone_preference=6.0,
+            flood_risk=FloodRisk.MEDIO,  # barrancos costeros, DANA, boca Cervol
             price_min=250_000,
             price_max=450_000,
             fotocasa_search_urls=(),
@@ -66,6 +69,7 @@ ZONES: dict[str, Zone] = {
             distance_hospital_min=12,
             fire_risk=FireRisk.NULO,
             zone_preference=5.0,
+            flood_risk=FloodRisk.BAJO,  # meseta alta, rio Tormes con gradiente suave
             price_min=183_000,
             price_max=299_000,
             fotocasa_search_urls=(),
@@ -88,6 +92,7 @@ ZONES: dict[str, Zone] = {
             distance_hospital_min=8,
             fire_risk=FireRisk.NULO,
             zone_preference=7.0,
+            flood_risk=FloodRisk.BAJO_MEDIO,  # corredor Ebro-Iregua, inundaciones 2003/2015
             price_min=208_000,
             price_max=300_000,
             fotocasa_search_urls=(),
@@ -111,6 +116,7 @@ ZONES: dict[str, Zone] = {
             distance_hospital_min=8,
             fire_risk=FireRisk.MUY_BAJO,
             zone_preference=6.0,
+            flood_risk=FloodRisk.MEDIO_ALTO,  # DANA corredor Valencia, Palancia, Albufera
             price_min=250_000,
             price_max=400_000,
             fotocasa_search_urls=(),
@@ -133,6 +139,7 @@ ZONES: dict[str, Zone] = {
             distance_hospital_min=18,
             fire_risk=FireRisk.NULO,
             zone_preference=5.0,
+            flood_risk=FloodRisk.BAJO_MEDIO,  # confluencia Carrion-Pisuerga, inundaciones 2001/2003
             price_min=159_000,
             price_max=207_000,
             fotocasa_search_urls=(),
@@ -155,6 +162,7 @@ ZONES: dict[str, Zone] = {
             distance_hospital_min=8,
             fire_risk=FireRisk.BAJO,
             zone_preference=6.0,
+            flood_risk=FloodRisk.ALTO,  # L12: Ribera Ebro, zona inundable historica, evacuaciones
             price_min=100_000,
             price_max=200_000,
             fotocasa_search_urls=(),
@@ -177,6 +185,7 @@ ZONES: dict[str, Zone] = {
             distance_hospital_min=18,
             fire_risk=FireRisk.MUY_BAJO,
             zone_preference=6.0,
+            flood_risk=FloodRisk.BAJO,  # Duero encajonado en Aranda, Lerma en alto
             price_min=120_000,
             price_max=220_000,
             fotocasa_search_urls=(),
@@ -199,6 +208,7 @@ ZONES: dict[str, Zone] = {
             distance_hospital_min=22,
             fire_risk=FireRisk.NULO,
             zone_preference=4.0,
+            flood_risk=FloodRisk.BAJO,  # meseta castellana, buenos drenajes naturales
             price_min=180_000,
             price_max=250_000,
             fotocasa_search_urls=(),
@@ -221,6 +231,7 @@ ZONES: dict[str, Zone] = {
             distance_hospital_min=12,
             fire_risk=FireRisk.MEDIO,
             zone_preference=4.0,
+            flood_risk=FloodRisk.BAJO,  # cabecera Jucar, topografia en gorge, drenaje rapido
             price_min=185_000,
             price_max=285_000,
             fotocasa_search_urls=(),
@@ -243,6 +254,7 @@ ZONES: dict[str, Zone] = {
             distance_hospital_min=55,
             fire_risk=FireRisk.MUY_BAJO,
             zone_preference=6.0,
+            flood_risk=FloodRisk.BAJO_MEDIO,  # valles Nela/Trueba, flash floods atlanticos
             price_min=100_000,
             price_max=230_000,
             fotocasa_search_urls=(),
@@ -265,6 +277,7 @@ ZONES: dict[str, Zone] = {
             distance_hospital_min=50,
             fire_risk=FireRisk.BAJO,
             zone_preference=9.0,
+            flood_risk=FloodRisk.MEDIO,  # confluencia Deva-Quiviesa, inundacion grave 2010
             price_min=270_000,
             price_max=350_000,
             fotocasa_search_urls=(),
@@ -287,6 +300,7 @@ ZONES: dict[str, Zone] = {
             distance_hospital_min=40,
             fire_risk=FireRisk.MEDIO,
             zone_preference=9.0,
+            flood_risk=FloodRisk.BAJO_MEDIO,  # rias atlanticas, bocas Sella/Villaviciosa
             price_min=200_000,
             price_max=450_000,
             fotocasa_search_urls=(),

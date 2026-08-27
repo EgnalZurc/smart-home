@@ -124,8 +124,26 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 
   <!-- Casas en el radar -->
   <div>
-    <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-3 px-1">🏠 En el radar</p>
+    <!-- Cabecera con total y controles de orden -->
+    <div class="flex items-center justify-between mb-3 px-1">
+      <p class="text-[10px] text-slate-500 uppercase tracking-widest">🏠 En el radar <span id="radar-total-label" class="text-slate-600"></span></p>
+      <select id="radar-sort" onchange="onSortChange()"
+        class="text-[10px] bg-slate-800/60 border border-slate-700/50 text-slate-300 rounded-lg px-2 py-1 outline-none">
+        <option value="score">Por puntos</option>
+        <option value="price">Por precio</option>
+        <option value="zone">Por zona</option>
+        <option value="portal">Por portal</option>
+        <option value="date">Más recientes</option>
+      </select>
+    </div>
     <div id="radar-list" class="space-y-2.5"></div>
+    <!-- Botón cargar más -->
+    <div id="radar-load-more" class="hidden text-center mt-4 mb-2">
+      <button onclick="loadMoreRadar()"
+        class="text-xs text-indigo-400 border border-indigo-800/40 bg-indigo-950/30 hover:bg-indigo-900/40 px-5 py-2 rounded-xl transition-colors">
+        Cargar más casas
+      </button>
+    </div>
     <div id="radar-empty" class="hidden text-center py-10 text-slate-500 text-xs leading-relaxed">
       <div class="text-2xl mb-3">🏠</div>
       <div class="font-medium text-slate-400 mb-1">Sin casas en el radar aún</div>
@@ -298,34 +316,72 @@ function openModal(id) {
 
 // ── Radar ─────────────────────────────────────────────────────────────────────
 
-async function loadRadar() {
+// ── Radar paginado ───────────────────────────────────────────────────────────
+const RADAR_PAGE_SIZE = 20;
+let _radarOffset = 0;
+let _radarTotal  = 0;
+let _radarSort   = "score";
+let _radarLoading = false;
+
+function onSortChange() {
+  const sel = document.getElementById("radar-sort");
+  _radarSort = sel ? sel.value : "score";
+  _radarOffset = 0;
+  document.getElementById("radar-list").innerHTML = "";
+  loadRadar();
+}
+
+async function loadRadar(append = false) {
+  if (_radarLoading) return;
+  _radarLoading = true;
+  const offline = document.getElementById("radar-offline");
+  offline.classList.add("hidden");
   try {
-    const data = await fetch(API + '/radar', {cache:'no-store'}).then(r => r.json());
-    renderRadar(data.properties || []);
+    const url = `${API}/radar?limit=${RADAR_PAGE_SIZE}&offset=${_radarOffset}&sort_by=${_radarSort}&sort_dir=desc`;
+    const data = await fetch(url, {cache:"no-store"}).then(r => r.json());
+    _radarTotal = data.total ?? 0;
+    const items = data.items ?? [];
+    renderRadar(items, append);
+    // Actualizar label total
+    const lbl = document.getElementById("radar-total-label");
+    if (lbl) lbl.textContent = _radarTotal > 0 ? `(${_radarTotal})` : "";
+    // Mostrar/ocultar botón "cargar más"
+    const btnMore = document.getElementById("radar-load-more");
+    if (btnMore) {
+      if (data.has_more) btnMore.classList.remove("hidden");
+      else btnMore.classList.add("hidden");
+    }
+    _radarOffset += items.length;
   } catch {
-    document.getElementById('radar-offline').classList.remove('hidden');
-    document.getElementById('radar-list').classList.add('hidden');
+    document.getElementById("radar-offline").classList.remove("hidden");
+    document.getElementById("radar-list").classList.add("hidden");
+  } finally {
+    _radarLoading = false;
   }
 }
 
-function renderRadar(props) {
-  const list = document.getElementById('radar-list');
-  const empty = document.getElementById('radar-empty');
-  const offline = document.getElementById('radar-offline');
-  offline.classList.add('hidden');
+async function loadMoreRadar() {
+  await loadRadar(true);
+}
+
+function renderRadar(props, append = false) {
+  const list = document.getElementById("radar-list");
+  const empty = document.getElementById("radar-empty");
+  const offline = document.getElementById("radar-offline");
+  offline.classList.add("hidden");
+  if (!append) list.innerHTML = "";
   if (!props || props.length === 0) {
-    list.innerHTML = '';
-    empty.classList.remove('hidden');
+    if (!append) empty.classList.remove("hidden");
     return;
   }
-  empty.classList.add('hidden');
-  list.innerHTML = props.map(p => {
-    const scoreW = Math.round((p.score_total / 84) * 100);
+  empty.classList.add("hidden");
+  const html = props.map(p => {
+    const scoreW = Math.round((p.score_total / 93) * 100);
     const details = [
       p.rooms ? `${p.rooms} hab.` : null,
       p.size_m2 ? `${Math.round(p.size_m2)} m²` : null,
-      p.piscina && p.piscina !== 'ninguna' ? '🏊' : null,
-    ].filter(Boolean).join(' · ');
+      p.piscina && p.piscina !== "ninguna" ? "🏊" : null,
+    ].filter(Boolean).join(" · ");
     const portalBadge = _fmtPortal(p.portal);
     const seenLabel   = _fmtFirstSeen(p.first_seen);
     const madridLabel = _fmtMadrid(p.distance_madrid_min);
@@ -338,15 +394,15 @@ function renderRadar(props) {
               ${portalBadge}
               <span class="text-[9px] text-slate-500">${seenLabel}</span>
             </div>
-            <p class="text-xs text-white leading-snug line-clamp-2 mb-1.5">${p.title || 'Sin título'}</p>
+            <p class="text-xs text-white leading-snug line-clamp-2 mb-1.5">${p.title || "Sin título"}</p>
             <div class="flex flex-wrap gap-x-3 gap-y-0.5">
-              ${details ? `<span class="text-[10px] text-slate-500">${details}</span>` : ''}
-              ${madridLabel ? `<span class="text-[10px] text-slate-500">🚗 ${madridLabel}</span>` : ''}
+              ${details ? `<span class="text-[10px] text-slate-500">${details}</span>` : ""}
+              ${madridLabel ? `<span class="text-[10px] text-slate-500">🚗 ${madridLabel}</span>` : ""}
             </div>
           </div>
           <div class="text-right shrink-0">
             <div class="text-sm font-bold text-white">${fmtPrice(p.price)}</div>
-            <div class="text-[10px] text-indigo-300 font-semibold">${p.score_total?.toFixed(1)} / 84</div>
+            <div class="text-[10px] text-indigo-300 font-semibold">${p.score_total?.toFixed(1)} / 93</div>
           </div>
         </div>
         <div class="score-bar-bg mt-2 mb-2.5">
@@ -363,36 +419,8 @@ function renderRadar(props) {
           </button>
         </div>
       </div>`;
-  }).join('');
-}
-function _fmtFirstSeen(iso) {
-  if (!iso) return '';
-  const diff = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return 'Detectado hoy';
-  if (days === 1) return 'Detectado ayer';
-  if (days < 7)  return `Detectado hace ${days}d`;
-  if (days < 30) return `Detectado hace ${Math.floor(days/7)}sem`;
-  return `Detectado hace ${Math.floor(days/30)}mes`;
-}
-function _ageLabel(iso) { return _fmtFirstSeen(iso); } // alias compatibilidad
-function _fmtPortal(portal) {
-  if (!portal) return '';
-  const map = {
-    pisos:      { label: 'Pisos.com',      color: 'text-emerald-400 bg-emerald-950/50 border-emerald-800/40' },
-    habitaclia: { label: 'Habitaclia',     color: 'text-orange-400 bg-orange-950/50 border-orange-800/40' },
-    idealista:  { label: 'Idealista',      color: 'text-blue-400 bg-blue-950/50 border-blue-800/40' },
-    fotocasa:   { label: 'Fotocasa',       color: 'text-pink-400 bg-pink-950/50 border-pink-800/40' },
-  };
-  const p = map[portal] || { label: portal, color: 'text-slate-400 bg-slate-800/50 border-slate-700/40' };
-  return `<span class="text-[9px] font-medium px-1.5 py-0.5 rounded border ${p.color}">${p.label}</span>`;
-}
-function _fmtMadrid(minutes) {
-  if (!minutes) return null;
-  if (minutes < 60) return `${minutes} min`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return m > 0 ? `${h}h ${m}min Madrid` : `${h}h Madrid`;
+  }).join("");
+  list.insertAdjacentHTML("beforeend", html);
 }
 
 async function dismiss(uid, btn) {
@@ -617,7 +645,7 @@ async function undismiss(uid) {
     const card = document.getElementById(`dism-${uid}`);
     if (card) { card.style.opacity='0.3'; setTimeout(()=>card.remove(),300); }
     // Recargar radar
-    loadRadar();
+    _radarOffset=0; loadRadar(false);
     loadStatus();
   }
 }
@@ -669,7 +697,7 @@ async function init() {
   document.getElementById('loading-overlay').classList.add('done');
   document.getElementById('page-content').classList.add('visible');
   // Refrescar cada 30 segundos
-  setInterval(() => { loadStatus(); loadRadar(); }, 30000);
+  setInterval(() => { loadStatus(); _radarOffset=0; loadRadar(false); }, 30000);
 }
 
 init();

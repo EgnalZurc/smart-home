@@ -38,6 +38,15 @@ class FireRisk(str, Enum):
     ALTO        = "alto"
     MUY_ALTO    = "muy_alto"   # → descarte automático (L10)
 
+class FloodRisk(str, Enum):
+    """Nivel de riesgo de inundación de la zona (SNCZI/CHE/CHC/PATRICOVA)."""
+    NULO        = "nulo"        # P12=9 — sin riesgo
+    BAJO        = "bajo"        # P12=7
+    BAJO_MEDIO  = "bajo_medio"  # P12=5
+    MEDIO       = "medio"       # P12=3
+    MEDIO_ALTO  = "medio_alto"  # P12=1
+    ALTO        = "alto"        # → descarte automático (L12)
+
 
 # ---------------------------------------------------------------------------
 # Zona geográfica candidata
@@ -71,6 +80,7 @@ class Zone:
 
     # Gusto personal por la provincia (P11) — valor entre 0 y 9
     zone_preference: float = 5.0
+    flood_risk: "FloodRisk" = None  # P12 / L12 — None se trata como BAJO
 
     # Búsquedas configuradas para scrapers (URLs o términos)
     fotocasa_search_urls: tuple[str, ...] = field(default_factory=tuple)
@@ -144,6 +154,7 @@ class ScoreBreakdown:
     p9_price: float        # máx 8
     p10_fire: float        # máx 9
     p11_preference: float  # máx 9 — gusto personal por la provincia
+    p12_flood: float       # máx 9 — riesgo inundación
 
     @property
     def total(self) -> float:
@@ -151,10 +162,10 @@ class ScoreBreakdown:
             self.p1_rooms + self.p2_piscina + self.p3_distance +
             self.p4_beach + self.p5_pools + self.p6_supermarket +
             self.p7_health + self.p8_hospital + self.p9_price +
-            self.p10_fire + self.p11_preference
+            self.p10_fire + self.p11_preference + self.p12_flood
         )
 
-    MAX_SCORE: float = 84.0   # 75 + 9 del nuevo P11
+    MAX_SCORE: float = 93.0   # 75 + 9 P11 + 9 P12
 
     def as_dict(self) -> dict[str, float]:
         return {
@@ -169,6 +180,7 @@ class ScoreBreakdown:
             "P9_precio": self.p9_price,
             "P10_incendio": self.p10_fire,
             "P11_preferencia_provincia": self.p11_preference,
+            "P12_riesgo_inundacion": self.p12_flood,
             "TOTAL": self.total,
         }
 
