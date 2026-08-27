@@ -291,10 +291,13 @@ class CasitaScheduler:
         Notifica por Telegram si un scraper falla para permitir corrección manual.
         """
         logger.info("[casita] ── Iniciando scraping completo ──────────────")
+        start_time = datetime.now()
         total_new = 0
         total_price_drops = 0
         total_scored = 0
         new_errors: list[ScraperError] = []
+        portals_active: set[str] = set()
+        new_by_zone: dict[str, int] = {}
 
         for zone_id, zone in ZONES.items():
             logger.info("[casita] Procesando zona: %s", zone.name)
@@ -309,6 +312,8 @@ class CasitaScheduler:
                 try:
                     props = scraper_fn(zone)
                     all_props += props
+                    if props:
+                        portals_active.add(portal_name)
                     logger.debug("[casita] %s/%s: %d propiedades", portal_name, zone_id, len(props))
                 except Exception as e:
                     err_msg = str(e)
@@ -341,6 +346,7 @@ class CasitaScheduler:
                             self._notifier.send_new_property_alert(scored)
                             self._db.mark_alerted(prop.unique_id)
                             total_new += 1
+                            new_by_zone[zone_id] = new_by_zone.get(zone_id, 0) + 1
                     if price_event and price_event.delta < 0:
                         self._notifier.send_price_drop_alert(
                             event=price_event,
@@ -381,11 +387,53 @@ class CasitaScheduler:
 
         with self._lock:
             self._last_scraping_result = result
-
+        elapsed = datetime.now() - start_time
+        elapsed_str = "{}m {}s".format(int(elapsed.total_seconds() // 60), int(elapsed.total_seconds() % 60))
         logger.info(
-            "[casita] ── Scraping completado [%s] — %d alertas nuevas, %d bajadas, %d errores de scraper ──",
-            result, total_new, total_price_drops, len(new_errors),
+            "[casita] Scraping completado [%s] %s | %d alertas | %d en radar | %d errores",
+            result, elapsed_str, total_new, total_scored, len(new_errors),
         )
+        self._send_scraping_summary(
+            result=result, elapsed_str=elapsed_str, total_new=total_new,
+            total_price_drops=total_price_drops, total_scored=total_scored,
+            portals_active=portals_active, new_by_zone=new_by_zone,
+            errors_count=len(new_errors),
+        )
+
+    def _send_scraping_summary(self, result, elapsed_str, total_new,
+                               total_price_drops, total_scored,
+                               portals_active, new_by_zone, errors_count):
+        """Envia resumen del scraping por Telegram al finalizar."""
+        result_emoji = {"ok": "✅", "ok_with_errors": "⚠️", "error": "❌"}.get(result, "ℹ️")
+        portal_labels = {"pisos": "Pisos.com", "habitaclia": "Habitaclia",
+                         "fotocasa": "Fotocasa", "idealista": "Idealista"}
+        if portals_active:
+            portals_str = ", ".join(portal_labels.get(p, p) for p in sorted(portals_active))
+        else:
+            portals_str = "ninguno"
+        lines = [
+            "{} *Scraping completado*".format(result_emoji),
+            "⏱ Tiempo: {}".format(elapsed_str),
+            "📡 Portales: {}".format(portals_str),
+            "🏠 Nuevas en radar: *{}*".format(total_new),
+        ]
+        if new_by_zone:
+            lines.append("")
+            lines.append("*Por zona:*")
+            for zid, count in sorted(new_by_zone.items(), key=lambda x: -x[1]):
+                zone = ZONES.get(zid)
+                zname = zone.name.split("(")[0].strip() if zone else zid
+                lines.append("  • {}: {}".format(zname, count))
+        if total_price_drops > 0:
+            lines.append("")
+            lines.append("📉 Bajadas de precio: {}".format(total_price_drops))
+        if errors_count > 0:
+            lines.append("")
+            lines.append("🔧 Errores de scraper: {} (ver dashboard)".format(errors_count))
+        if total_new == 0 and result == "ok":
+            lines.append("")
+            lines.append("_Sin casas nuevas por encima del umbral de 50 pts._")
+        self._notifier.send_status("\n".join(lines))
 
     def _notify_scraper_errors(self, errors: list[ScraperError]) -> None:
         """Envía una notificación por Telegram para cada scraper que ha fallado."""
