@@ -101,15 +101,13 @@ class CasitaScheduler:
         notifier: "TelegramNotifier",
         apify: "IdealistaApifyClient",
         gmail_address: str,
-        gmail_credentials_path: str,
-        gmail_token_path: str,
+        gmail_app_password: str,
     ) -> None:
         self._db = db
         self._notifier = notifier
         self._apify = apify
         self._gmail_address = gmail_address
-        self._gmail_credentials_path = gmail_credentials_path
-        self._gmail_token_path = gmail_token_path
+        self._gmail_app_password = gmail_app_password
 
         self._running = False
         self._thread: threading.Thread | None = None
@@ -398,8 +396,7 @@ class CasitaScheduler:
         try:
             urls = fetch_new_alert_urls(
                 email_address=self._gmail_address,
-                credentials_path=self._gmail_credentials_path,
-                token_path=self._gmail_token_path,
+                app_password=self._gmail_app_password,
                 lookback_minutes=35,
             )
         except Exception as e:

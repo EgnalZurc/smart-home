@@ -44,12 +44,7 @@ APIFY_API_TOKEN = os.environ["APIFY_API_TOKEN"]
 # Gmail
 GMAIL_ADDRESS = os.environ["GMAIL_ADDRESS"]
 DATA_DIR = os.environ.get("CASITA_DATA_DIR", "/app/data")
-GMAIL_CREDENTIALS_PATH = os.environ.get(
-    "GMAIL_CREDENTIALS_PATH", f"{DATA_DIR}/gmail_credentials.json"
-)
-GMAIL_TOKEN_PATH = os.environ.get(
-    "GMAIL_TOKEN_PATH", f"{DATA_DIR}/gmail_token.json"
-)
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 
 # Base de datos
 DB_PATH = os.environ.get("CASITA_DB_PATH", f"{DATA_DIR}/casita.db")
@@ -77,12 +72,11 @@ def _validate_config() -> None:
             logger.error("[main] %s", e)
         sys.exit(1)
 
-    if not Path(GMAIL_CREDENTIALS_PATH).exists():
+    if not GMAIL_APP_PASSWORD:
         logger.warning(
-            "[main] No se encontró %s. "
-            "Ejecuta setup_gmail.py para configurar el acceso a Gmail. "
-            "El check de alertas de Idealista no funcionará hasta entonces.",
-            GMAIL_CREDENTIALS_PATH,
+            "[main] GMAIL_APP_PASSWORD no configurado. "
+            "El check de alertas de Idealista no funcionará. "
+            "Genera una App Password en myaccount.google.com/apppasswords"
         )
 
 
@@ -286,8 +280,7 @@ def main() -> None:
         notifier=notifier,
         apify=apify,
         gmail_address=GMAIL_ADDRESS,
-        gmail_credentials_path=GMAIL_CREDENTIALS_PATH,
-        gmail_token_path=GMAIL_TOKEN_PATH,
+        gmail_app_password=GMAIL_APP_PASSWORD,
     )
 
     # Registrar referencia global para el servidor HTTP
