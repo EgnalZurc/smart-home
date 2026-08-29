@@ -74,7 +74,7 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 /* Línea tachada en el ojo cuando filter=not_viewed */
 #btn-viewed-filter.filter-not-viewed #eye-icon{opacity:.5}
 /* Botón portal filter */
-#btn-portal-filter{position:relative;font-size:11px;font-weight:700;letter-spacing:.5px}
+#btn-portal-filter{position:relative;font-size:13px;font-weight:800;letter-spacing:0;line-height:1;color:#64748b}
 #btn-portal-filter.filter-idealista{background:rgba(99,102,241,.15);border-color:rgba(99,102,241,.5);color:#818cf8}
 #btn-portal-filter.filter-pisos{background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.5);color:#34d399}
 #btn-portal-filter.filter-habitaclia{background:rgba(251,146,60,.15);border-color:rgba(251,146,60,.5);color:#fb923c}
@@ -432,7 +432,7 @@ let _radarTotal  = 0;
 let _radarSort   = "score";
 let _radarLoading = false;
 
-let _radarFilter = null;  // null | 'viewed' | 'not_viewed'
+let _radarFilter = 'not_viewed';  // Arranca en not_viewed — casas vistas ocultas por defecto
 // Filtro de portal
 let _portalFilter = null;  // null | 'idealista' | 'pisos' | 'habitaclia'
 const _portalStates = [
@@ -461,7 +461,7 @@ function togglePortalFilter() {
 }
 // Ciclo del botón ojo: null → 'viewed' → 'not_viewed' → null
 const _viewedFilterStates = [null, 'viewed', 'not_viewed'];
-let _viewedFilterIdx = 0;
+let _viewedFilterIdx = 2;  // Arranca en 'not_viewed' — casas vistas ocultas por defecto
 
 function toggleViewedFilter() {
   _viewedFilterIdx = (_viewedFilterIdx + 1) % _viewedFilterStates.length;
@@ -1058,6 +1058,15 @@ async function init() {
   document.getElementById('summary-date').textContent = '';
   document.getElementById('summary-empty').classList.add('hidden');
 
+  // Aplicar estado visual inicial del filtro de vistas (not_viewed por defecto)
+  (function _initViewedBtn() {
+    const btn = document.getElementById("btn-viewed-filter");
+    const icon = document.getElementById("eye-icon");
+    if (!btn || !icon) return;
+    btn.classList.add("filter-not-viewed");
+    btn.title = "Mostrando: No vistas";
+    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/>';
+  })();
   try {
     await Promise.race([
       Promise.all([loadStatus(), loadRadar()]),
