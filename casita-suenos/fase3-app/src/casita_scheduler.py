@@ -509,8 +509,10 @@ class CasitaScheduler:
             except Exception as e:
                 logger.error("[casita] Error procesando alerta %s: %s", alert.url, e)
                 processed_email_ids.append(alert.email_id)
-        if processed_email_ids and imap_conn:
-            delete_processed_emails(imap_conn, processed_email_ids)
+        # Pasar los alerts procesados (contienen folder) para eliminar correctamente
+        processed_alerts = [a for a in alerts if a.email_id in set(processed_email_ids)]
+        if processed_alerts and imap_conn:
+            delete_processed_emails(imap_conn, processed_alerts)
         elif imap_conn:
             try: imap_conn.close(); imap_conn.logout()
             except Exception: pass

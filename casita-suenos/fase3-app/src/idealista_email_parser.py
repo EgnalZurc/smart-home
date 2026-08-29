@@ -1,13 +1,14 @@
 """
 Parser de alertas de Idealista recibidas por Gmail.
 Autenticacion: IMAP con App Password de Google.
+
 Flujo:
-  1. Conectar a Gmail via IMAP con LOGIN
-  2. Buscar emails de noreply@idealista.com en los ultimos N dias
-     (sin filtro UNSEEN — el usuario puede haber abierto el email)
-  3. Extraer URLs de anuncios y datos del email (precio, hab, m2, titulo)
-  4. Devolver lista de (url, email_id, datos_basicos) para procesado posterior
-  5. El llamador es responsable de eliminar los emails procesados
+  1. Conectar a Gmail via IMAP
+  2. Buscar emails de noreply@idealista.com en INBOX, Papelera y Todos
+     Sin filtro UNSEEN — procesa todos independientemente del estado de lectura
+  3. Extraer URLs y datos básicos (precio, hab, m2, título, zona) de cada email
+  4. Devolver lista de alertas + conexión IMAP abierta
+  5. El llamador elimina los emails después de procesar (INBOX + Papelera)
 """
 from __future__ import annotations
 import email
@@ -15,7 +16,7 @@ import imaplib
 import logging
 import re
 from datetime import datetime, timedelta
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -23,36 +24,35 @@ _IDEALISTA_SENDER = "noreply@idealista.com"
 _IMAP_HOST  = "imap.gmail.com"
 _IMAP_PORT  = 993
 
+# Carpetas donde buscar — en orden de prioridad
+# Los usuarios pueden mover los emails de Idealista a la papelera manualmente
+_SEARCH_FOLDERS = [
+    "INBOX",
+    "[Gmail]/Papelera",   # Gmail en español
+    "Trash",              # Gmail en inglés / otros clientes
+    "[Gmail]/Todos",      # Todos los emails como fallback
+]
+
 # URL de anuncio: https://www.idealista.com/inmueble/12345678/
-_URL_PATTERN = re.compile(
-    r"https://www\.idealista\.com/inmueble/(\d+)/?",
-    re.IGNORECASE,
-)
-# Precio en el email: "170.000 €" o "170000€"
-_PRICE_PATTERN = re.compile(r"([\d]{2,3}[\.\s]?\d{3})\s*€")
-# Habitaciones: "5 hab" o "5 habitaciones"
+_URL_PATTERN   = re.compile(r"https://www\.idealista\.com/inmueble/(\d+)/?", re.IGNORECASE)
+_PRICE_PATTERN = re.compile(r"([\d]{2,3}[\.\s]?\d{3})\s*\u20ac")
 _ROOMS_PATTERN = re.compile(r"(\d+)\s+hab", re.IGNORECASE)
-# m2: "143,00 m²" o "143 m²"
-_SIZE_PATTERN  = re.compile(r"([\d]+[,.]?\d*)\s*m[²2]", re.IGNORECASE)
-# Titulo del anuncio (en el link del email)
-_TITLE_PATTERN = re.compile(
-    r"(Casa\s+o\s+chalet|Chalet|Casa|Piso|Apartamento|Finca)[^<\n]{5,80}",
-    re.IGNORECASE,
-)
-# Zona/ciudad en el email: "chalets en Burgos"
-_ZONE_PATTERN  = re.compile(r"(?:chalets|casas|pisos)\s+en\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñA-ZÁÉÍÓÚÑ\s]+)", re.IGNORECASE)
+_SIZE_PATTERN  = re.compile(r"([\d]+[,.]?\d*)\s*m[\u00b22]", re.IGNORECASE)
+_TITLE_PATTERN = re.compile(r"(Casa\s+o\s+chalet|Chalet|Casa|Piso|Apartamento|Finca)[^<\n]{5,80}", re.IGNORECASE)
+_ZONE_PATTERN  = re.compile(r"(?:chalets|casas|pisos)\s+en\s+([A-Z\u00c1\u00c9\u00cd\u00d3\u00da\u00d1][a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1A-Z\u00c1\u00c9\u00cd\u00d3\u00da\u00d1\s]+)", re.IGNORECASE)
 
 
 @dataclass
 class IdealistaAlert:
     url: str
     property_id: str
-    email_id: str          # IMAP message ID para borrar después
+    email_id: str          # IMAP message ID (para eliminar después)
+    folder: str            # Carpeta donde se encontró
     price: int | None = None
     rooms: int | None = None
     size_m2: float | None = None
     title: str = ""
-    location_hint: str = ""  # texto de zona/ciudad del email para inferir zona
+    location_hint: str = ""  # texto de zona del email para inferir zona
 
 
 def _connect_imap(email_address: str, app_password: str) -> imaplib.IMAP4_SSL:
@@ -88,13 +88,11 @@ def _parse_size(text: str) -> float | None:
         return None
 
 
-def _extract_body_text(msg: email.message.Message) -> str:
-    """Extrae texto plano + HTML del email."""
+def _get_body(msg: email.message.Message) -> str:
     parts = []
     if msg.is_multipart():
         for part in msg.walk():
-            ct = part.get_content_type()
-            if ct in ("text/plain", "text/html"):
+            if part.get_content_type() in ("text/plain", "text/html"):
                 try:
                     parts.append(part.get_payload(decode=True).decode("utf-8", errors="ignore"))
                 except Exception:
@@ -107,36 +105,24 @@ def _extract_body_text(msg: email.message.Message) -> str:
     return "\n".join(parts)
 
 
-def _extract_alerts_from_message(msg: email.message.Message, msg_id: str) -> list[IdealistaAlert]:
-    """Extrae todas las alertas de un email de Idealista."""
-    body = _extract_body_text(msg)
+def _extract_alerts(msg: email.message.Message, msg_id: str, folder: str) -> list[IdealistaAlert]:
+    body = _get_body(msg)
     alerts: list[IdealistaAlert] = []
-    seen_ids: set[str] = set()
-
-    # Zona/ciudad del email (ej: "chalets en Burgos")
+    seen: set[str] = set()
     location_hints = [m.group(1).strip() for m in _ZONE_PATTERN.finditer(body)]
 
     for match in _URL_PATTERN.finditer(body):
-        prop_id = match.group(1)
-        if prop_id in seen_ids:
+        pid = match.group(1)
+        if pid in seen:
             continue
-        seen_ids.add(prop_id)
-        url = f"https://www.idealista.com/inmueble/{prop_id}/"
-
-        # Extraer contexto del anuncio en el email (±300 chars alrededor de la URL)
+        seen.add(pid)
+        url = f"https://www.idealista.com/inmueble/{pid}/"
         start = max(0, match.start() - 300)
         end   = min(len(body), match.end() + 300)
         ctx   = body[start:end]
 
-        price  = _parse_price(ctx)
-        rooms  = _parse_rooms(ctx)
-        size   = _parse_size(ctx)
         title_m = _TITLE_PATTERN.search(ctx)
-        title  = title_m.group(0).strip() if title_m else ""
-
-        # Asignar la hint de zona más cercana (primera del email si hay varias)
         loc_hint = location_hints[0] if location_hints else ""
-        # Si hay múltiples zonas en el email, intentar asignar la más cercana
         if len(location_hints) > 1:
             for hint in location_hints:
                 if hint.lower() in ctx.lower():
@@ -145,15 +131,15 @@ def _extract_alerts_from_message(msg: email.message.Message, msg_id: str) -> lis
 
         alerts.append(IdealistaAlert(
             url=url,
-            property_id=prop_id,
+            property_id=pid,
             email_id=msg_id,
-            price=price,
-            rooms=rooms,
-            size_m2=size,
-            title=title,
+            folder=folder,
+            price=_parse_price(ctx),
+            rooms=_parse_rooms(ctx),
+            size_m2=_parse_size(ctx),
+            title=title_m.group(0).strip() if title_m else "",
             location_hint=loc_hint,
         ))
-
     return alerts
 
 
@@ -163,11 +149,11 @@ def fetch_new_alerts(
     lookback_days: int = 3,
 ) -> tuple[list[IdealistaAlert], imaplib.IMAP4_SSL | None]:
     """
-    Busca emails de Idealista en los últimos lookback_days días.
-    NO filtra por UNSEEN — procesa todos, leídos o no.
-    Devuelve (lista_de_alertas, conexion_imap_abierta).
-    La conexión se devuelve abierta para que el llamador pueda eliminar
-    los emails después de procesarlos.
+    Busca emails de Idealista en múltiples carpetas (INBOX + Papelera + Todos).
+    Sin filtro UNSEEN — procesa todos los emails del remitente en los últimos N días.
+
+    Returns (lista_alertas, imap_connection) — la conexión queda abierta
+    para que el llamador pueda eliminar los emails procesados.
     """
     try:
         imap = _connect_imap(email_address, app_password)
@@ -176,70 +162,81 @@ def fetch_new_alerts(
         return [], None
 
     all_alerts: list[IdealistaAlert] = []
-    try:
-        imap.select("INBOX")
-        since_date = (datetime.now() - timedelta(days=lookback_days)).strftime("%d-%b-%Y")
-        # Sin UNSEEN — buscamos todos los emails recientes de Idealista
-        search_criteria = f'(FROM "{_IDEALISTA_SENDER}" SINCE "{since_date}")'
-        _, message_numbers = imap.search(None, search_criteria)
+    seen_property_ids: set[str] = set()
+    since_date = (datetime.now() - timedelta(days=lookback_days)).strftime("%d-%b-%Y")
+    search_criteria = f'(FROM "{_IDEALISTA_SENDER}" SINCE "{since_date}")'
 
-        if not message_numbers or not message_numbers[0]:
-            logger.info("[gmail] Sin emails de Idealista en los ultimos %d dias", lookback_days)
-            return [], imap
-
-        ids = message_numbers[0].split()
-        logger.info("[gmail] Encontrados %d emails de Idealista para procesar", len(ids))
-
-        for msg_id in ids:
-            try:
-                _, msg_data = imap.fetch(msg_id, "(RFC822)")
-                if not msg_data or not msg_data[0]:
-                    continue
-                raw_email = msg_data[0][1]
-                msg = email.message_from_bytes(raw_email)
-                alerts = _extract_alerts_from_message(msg, msg_id.decode())
-                if alerts:
-                    logger.info("[gmail] Email %s: %d anuncios extraidos", msg_id.decode(), len(alerts))
-                all_alerts.extend(alerts)
-            except Exception as e:
-                logger.warning("[gmail] Error procesando email %s: %s", msg_id, e)
-
-    except Exception as e:
-        logger.error("[gmail] Error en búsqueda IMAP: %s", e)
+    for folder in _SEARCH_FOLDERS:
         try:
-            imap.close()
-            imap.logout()
-        except Exception:
-            pass
-        return [], None
+            status, _ = imap.select(folder)
+            if status != "OK":
+                logger.debug("[gmail] Carpeta no disponible: %s", folder)
+                continue
 
-    # Deduplicar por property_id
-    seen: set[str] = set()
-    unique = [a for a in all_alerts if not (a.property_id in seen or seen.add(a.property_id))]
-    logger.info("[gmail] Total anuncios unicos: %d", len(unique))
-    return unique, imap
+            _, message_numbers = imap.search(None, search_criteria)
+            if not message_numbers or not message_numbers[0]:
+                logger.debug("[gmail] Sin emails de Idealista en %s", folder)
+                continue
+
+            ids = message_numbers[0].split()
+            logger.info("[gmail] %s: %d emails de Idealista encontrados", folder, len(ids))
+
+            for msg_id in ids:
+                try:
+                    _, msg_data = imap.fetch(msg_id, "(RFC822)")
+                    if not msg_data or not msg_data[0]:
+                        continue
+                    msg = email.message_from_bytes(msg_data[0][1])
+                    alerts = _extract_alerts(msg, msg_id.decode(), folder)
+                    # Deduplicar entre carpetas
+                    for a in alerts:
+                        if a.property_id not in seen_property_ids:
+                            seen_property_ids.add(a.property_id)
+                            all_alerts.append(a)
+                    if alerts:
+                        logger.info("[gmail] %s email %s: %d anuncios",
+                                    folder, msg_id.decode(), len(alerts))
+                except Exception as e:
+                    logger.warning("[gmail] Error procesando email %s en %s: %s", msg_id, folder, e)
+
+        except Exception as e:
+            logger.warning("[gmail] Error accediendo a carpeta %s: %s", folder, e)
+
+    logger.info("[gmail] Total anuncios unicos extraidos: %d", len(all_alerts))
+    return all_alerts, imap
 
 
-def delete_processed_emails(imap: imaplib.IMAP4_SSL, email_ids: list[str]) -> None:
-    """Elimina los emails procesados del buzón."""
-    if not imap or not email_ids:
+def delete_processed_emails(imap: imaplib.IMAP4_SSL, alerts: list[IdealistaAlert]) -> None:
+    """
+    Elimina los emails procesados de cada carpeta donde se encontraron.
+    Agrupa por carpeta para minimizar operaciones IMAP.
+    """
+    if not imap or not alerts:
         return
-    try:
-        for msg_id in set(email_ids):
-            imap.store(msg_id.encode(), "+FLAGS", "\\Deleted")
-        imap.expunge()
-        logger.info("[gmail] %d emails eliminados de INBOX", len(set(email_ids)))
-    except Exception as e:
-        logger.warning("[gmail] Error eliminando emails: %s", e)
-    finally:
+
+    # Agrupar email_ids por carpeta
+    by_folder: dict[str, list[str]] = {}
+    for alert in alerts:
+        by_folder.setdefault(alert.folder, []).append(alert.email_id)
+
+    for folder, ids in by_folder.items():
         try:
-            imap.close()
-            imap.logout()
-        except Exception:
-            pass
+            imap.select(folder)
+            for msg_id in set(ids):
+                imap.store(msg_id.encode(), "+FLAGS", "\\Deleted")
+            imap.expunge()
+            logger.info("[gmail] Eliminados %d emails de %s", len(set(ids)), folder)
+        except Exception as e:
+            logger.warning("[gmail] Error eliminando emails de %s: %s", folder, e)
+
+    try:
+        imap.close()
+        imap.logout()
+    except Exception:
+        pass
 
 
-# Mantener compatibilidad con el código antiguo
+# ── Compatibilidad con API legacy ──────────────────────────────────────────────
 def fetch_new_alert_urls(
     email_address: str,
     app_password: str,
