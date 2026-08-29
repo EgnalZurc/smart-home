@@ -116,6 +116,7 @@ class CasitaScheduler:
         # Tracking de cuándo se ejecutó cada job por última vez
         self._last_scraping_date: datetime | None = None
         self._last_gmail_check: datetime | None = None
+        self._gmail_check_running: bool = False  # evita checks solapados
         self._last_summary_date: datetime | None = None
 
         # Resultado del último scraping
@@ -464,6 +465,16 @@ class CasitaScheduler:
         self._notifier.send_status("\n".join(lines))
 
     def _run_gmail_check(self) -> None:
+        if self._gmail_check_running:
+            logger.info("[casita] Gmail check ya en curso, ignorando")
+            return
+        self._gmail_check_running = True
+        try:
+            self._do_gmail_check()
+        finally:
+            self._gmail_check_running = False
+
+    def _do_gmail_check(self) -> None:
         from idealista_email_parser import fetch_new_alerts, delete_processed_emails
         logger.info("[casita] Comprobando alertas Gmail de Idealista")
         try:
