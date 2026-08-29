@@ -337,14 +337,16 @@ class Database:
         return True
 
     def get_dismissed(self) -> list[dict]:
-        """Devuelve propiedades descartadas, ordenadas por fecha de descarte."""
+        """Devuelve propiedades descartadas: vistas primero, luego por fecha."""
         rows = self._conn.execute(
             """SELECT p.uid, p.title, p.price, p.url, p.zone_id, p.rooms, p.size_m2,
-                      s.score_total, s.dismissed_at
+                      s.score_total, s.dismissed_at,
+                      COALESCE(s.viewed, 0) as viewed,
+                      s.viewed_at, COALESCE(s.comment, '') as comment
                FROM scored_properties s
                JOIN properties p ON p.uid = s.property_uid
                WHERE s.dismissed = 1
-               ORDER BY s.dismissed_at DESC""",
+               ORDER BY s.viewed DESC, s.dismissed_at DESC""",
         ).fetchall()
         return [dict(r) for r in rows]
 

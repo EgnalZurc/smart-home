@@ -464,65 +464,134 @@ class CasitaScheduler:
         self._notifier.send_status("\n".join(lines))
 
     def _run_gmail_check(self) -> None:
-        """
-        Comprueba el inbox de Gmail en busca de alertas de Idealista.
-        Por cada URL nueva encontrada, la scrape con Apify y la evalúa.
-        """
-        # Import lazy para no requerir google-auth en tests sin Gmail
-        from idealista_email_parser import fetch_new_alert_urls
-
+        from idealista_email_parser import fetch_new_alerts, delete_processed_emails
         logger.info("[casita] Comprobando alertas Gmail de Idealista")
-
         try:
-            urls = fetch_new_alert_urls(
+            alerts, imap_conn = fetch_new_alerts(
                 email_address=self._gmail_address,
                 app_password=self._gmail_app_password,
-                lookback_minutes=35,
+                lookback_days=3,
             )
         except Exception as e:
             logger.error("[casita] Error en check Gmail: %s", e)
             return
-
-        if not urls:
+        if not alerts:
+            if imap_conn:
+                try: imap_conn.close(); imap_conn.logout()
+                except Exception: pass
             return
-
-        logger.info("[casita] %d URLs de Idealista desde Gmail", len(urls))
-
-        for url in urls:
-            # Intentar inferir la zona por la URL (búsqueda simple de keywords)
-            zone = self._infer_zone_from_url(url)
-            if not zone:
-                logger.debug("[casita] No se pudo inferir zona para %s", url)
-                continue
-
+        logger.info("[casita] %d anuncios de Idealista desde Gmail", len(alerts))
+        processed_email_ids, total_new, new_by_zone = [], 0, {}
+        for alert in alerts:
             try:
-                prop = self._apify.scrape_property_url(url, zone)
+                zone = self._infer_zone_from_hint(alert.location_hint, alert.url)
+                if not zone:
+                    processed_email_ids.append(alert.email_id); continue
+                prop = self._scrape_idealista_property(alert, zone)
                 if not prop:
-                    continue
-
+                    processed_email_ids.append(alert.email_id); continue
                 is_new = self._db.is_new(prop)
                 price_event = self._db.upsert_property(prop)
-
                 scored = evaluate(prop, zone)
                 if scored is None:
-                    continue
-
+                    processed_email_ids.append(alert.email_id); continue
                 self._db.upsert_score(scored)
-
-                if scored.passes_alert_threshold and not self._db.is_alerted(prop.unique_id):
-                    self._notifier.send_new_property_alert(scored)
-                    self._db.mark_alerted(prop.unique_id)
-
+                if is_new and scored.passes_alert_threshold:
+                    if not self._db.is_alerted(prop.unique_id):
+                        self._db.mark_alerted(prop.unique_id)
+                        total_new += 1
+                        new_by_zone[zone.id] = new_by_zone.get(zone.id, 0) + 1
+                        logger.info("[casita] Idealista ALERTA: %s %.1f pts", prop.unique_id, scored.total_score)
                 if price_event and price_event.delta < 0:
                     self._notifier.send_price_drop_alert(
-                        event=price_event,
-                        title=prop.title,
-                        url=prop.url,
-                        zone_name=zone.name,
-                    )
-
+                        event=price_event, title=prop.title, url=prop.url, zone_name=zone.name)
+                processed_email_ids.append(alert.email_id)
             except Exception as e:
-                logger.error("[casita] Error procesando URL de Gmail %s: %s", url, e)
+                logger.error("[casita] Error procesando alerta %s: %s", alert.url, e)
+                processed_email_ids.append(alert.email_id)
+        if processed_email_ids and imap_conn:
+            delete_processed_emails(imap_conn, processed_email_ids)
+        elif imap_conn:
+            try: imap_conn.close(); imap_conn.logout()
+            except Exception: pass
+        lines = [
+            "Correo Idealista procesado",
+            "Anuncios analizados: {}".format(len(alerts)),
+            "Nuevos en radar: {}".format(total_new),
+        ]
+        if new_by_zone:
+            lines.append("")
+            for zid, cnt in sorted(new_by_zone.items(), key=lambda x: -x[1]):
+                zn = ZONES.get(zid)
+                lines.append("  - {}: {}".format(zn.name.split("(")[0].strip() if zn else zid, cnt))
+        lines += ["", "https://raspberrypi.tailaa37cd.ts.net/smart-home/casita"]
+        self._notifier.send_status("\n".join(lines))
+
+    def _infer_zone_from_hint(self, hint, url):
+        if hint:
+            hl = hint.lower().strip()
+            for zone in ZONES.values():
+                if any(kw.lower() in hl for kw in zone.idealista_alert_keywords):
+                    return zone
+                if any(w in hl for w in zone.name.lower().split() if len(w) > 4):
+                    return zone
+        ul = url.lower()
+        for zone in ZONES.values():
+            if any(kw.lower().replace(" ", "-") in ul for kw in zone.idealista_alert_keywords):
+                return zone
+        return None
+
+    def _scrape_idealista_property(self, alert, zone):
+        import httpx
+        from bs4 import BeautifulSoup
+        from models import Property, Portal, Piscina
+        from scraper_base import infer_habitable, infer_has_garage, infer_has_garden, infer_piscina, infer_ac, parse_price, parse_rooms, parse_size
+        from datetime import datetime as _dt
+        title, price, rooms, size_m2, desc = alert.title, alert.price, alert.rooms, alert.size_m2, ""
+        has_garage, has_garden, has_ac_v, piscina = False, False, False, Piscina.NINGUNA
+        try:
+            hdrs = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Accept-Language": "es-ES,es;q=0.9"}
+            with httpx.Client(headers=hdrs, follow_redirects=True, timeout=15) as client:
+                r = client.get(alert.url)
+                if r.status_code == 200 and len(r.text) > 5000:
+                    soup = BeautifulSoup(r.text, "html.parser")
+                    h1 = soup.select_one("h1 .main-info__title-main, h1")
+                    if h1: title = h1.get_text(strip=True)
+                    pe = soup.select_one(".info-data-price span, [class*=info-data-price]")
+                    if pe:
+                        pp = parse_price(pe.get_text(strip=True))
+                        if pp: price = pp
+                    de = soup.select_one("div.comment, .adCommentsLanguage")
+                    if de: desc = de.get_text(" ", strip=True)
+                    feats = [f.get_text(strip=True) for f in soup.select(".details-property-feature li, .feature-details li")]
+                    ft = desc + " " + " ".join(feats)
+                    r2 = parse_rooms(ft)
+                    if r2: rooms = r2
+                    s2 = parse_size(ft)
+                    if s2: size_m2 = s2
+                    has_garage = infer_has_garage(ft, feats)
+                    has_garden = infer_has_garden(ft, feats)
+                    has_ac_v   = infer_ac(ft, feats)
+                    piscina    = Piscina(infer_piscina(ft, feats))
+                    logger.info("[casita] Ficha Idealista OK: %s", alert.url)
+                else:
+                    logger.warning("[casita] Idealista bloqueo status=%d: %s", r.status_code, alert.url)
+        except Exception as e:
+            logger.warning("[casita] Error scraping %s: %s", alert.url, e)
+        if not price:
+            return None
+        if not has_garden: has_garden = True
+        if not has_garage: has_garage = True
+        return Property(
+            portal=Portal.IDEALISTA, portal_id=alert.property_id, url=alert.url,
+            zone_id=zone.id, title=title or "Idealista {}".format(alert.property_id),
+            price=price, size_m2=size_m2, rooms=rooms,
+            has_garage=has_garage, has_garden_or_plot=has_garden, has_ac=has_ac_v,
+            piscina=piscina, has_internet_mention=True,
+            habitable=infer_habitable(desc, title or "") if desc else True,
+            description=desc, source="gmail_idealista",
+            first_seen=_dt.now(), last_seen=_dt.now(),
+        )
 
     def _run_weekly_summary(self) -> None:
         """Envía el resumen semanal por Telegram y lo guarda en DB."""

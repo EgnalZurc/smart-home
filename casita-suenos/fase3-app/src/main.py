@@ -266,6 +266,13 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 daemon=True, name="manual-summary"
             ).start()
             self._send_json(202, {"ok": True, "message": "Resumen iniciado"})
+        elif self.path == "/run-gmail-check":
+            import threading
+            threading.Thread(
+                target=_scheduler_instance.run_gmail_check_now,
+                daemon=True, name="manual-gmail"
+            ).start()
+            self._send_json(202, {"ok": True, "message": "Gmail check iniciado"})
         elif self.path == "/mark-viewed":
             uid = body.get("uid", "")
             ok = _scheduler_instance.mark_viewed(uid)
