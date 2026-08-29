@@ -134,14 +134,11 @@
 
     <!-- Header -->
     <header class="flex items-center justify-between mb-6">
-        <h1 class="text-lg font-semibold tracking-tight" data-i18n="header.title">🏠 Smart Home</h1>
         <div class="flex items-center gap-3">
-            <!-- Home button (AC-NAV) -->
-            <a href="/smart-home" class="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-700/40 transition-all" aria-label="Home" title="Dashboard">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 text-slate-400">
-                    <path d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"/>
-                </svg>
-            </a>
+            <a href="/smart-home" class="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-700/40 transition-all flex-shrink-0" aria-label="Dashboard" title="Cuchi Casa"><img src="/static/icono-cuchi-casa.png" class="w-5 h-5 object-contain rounded" alt="Home"></a>
+            <h1 class="text-lg font-semibold tracking-tight" data-i18n="header.title">Smart Home</h1>
+        </div>
+        <div class="flex items-center gap-3">
             <div class="lang-dropdown">
                 <div class="lang-current" onclick="toggleLanguageMenu()" id="lang-current">
                     <img id="current-flag" src="/static/flags/gb.svg" alt="Language" class="flag-img">

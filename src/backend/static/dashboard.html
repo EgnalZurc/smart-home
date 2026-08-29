@@ -40,41 +40,58 @@
         #dash-content.visible { opacity:1; }
         .spinner { width:32px; height:32px; border:3px solid rgba(255,255,255,.1); border-top-color:rgba(255,255,255,.7); border-radius:50%; animation:spin .8s linear infinite; }
         @keyframes spin { to { transform:rotate(360deg); } }
-        /* User / logout area */
-        .user-bar { display:flex; align-items:center; gap:8px; }
+        /* User dropdown */
+        .user-dropdown { position:relative; }
         .user-chip {
-            display:flex; align-items:center; gap:5px;
+            display:flex; align-items:center; gap:6px;
             background:rgba(30,41,59,.6);
             border:1px solid rgba(51,65,85,.5);
             border-radius:20px;
-            padding:3px 10px 3px 6px;
+            padding:3px 10px 3px 4px;
             font-size:0.75rem;
             color:#94a3b8;
             line-height:1;
+            cursor:pointer;
+            user-select:none;
+            transition:border-color .2s, background .2s;
         }
+        .user-chip:hover { border-color:rgba(99,102,241,.4); background:rgba(30,41,59,.9); }
         .user-avatar {
-            width:20px; height:20px;
-            background:linear-gradient(135deg,rgba(79,70,229,.4),rgba(99,102,241,.2));
-            border:1px solid rgba(99,102,241,.3);
+            width:22px; height:22px;
+            background:linear-gradient(135deg,rgba(79,70,229,.5),rgba(99,102,241,.3));
+            border:1px solid rgba(99,102,241,.4);
             border-radius:50%;
             display:flex; align-items:center; justify-content:center;
-            font-size:0.625rem;
+            font-size:0.6875rem;
             font-weight:700;
             color:#a5b4fc;
             text-transform:uppercase;
+            flex-shrink:0;
         }
-        .btn-logout {
-            background:none;
-            border:1px solid rgba(51,65,85,.5);
-            border-radius:8px;
-            padding:4px 10px;
-            font-size:0.75rem;
-            color:#64748b;
+        .user-menu {
+            position:absolute; top:calc(100% + 8px); right:0;
+            background:rgba(15,23,42,.97);
+            border:1px solid rgba(51,65,85,.6);
+            border-radius:10px;
+            padding:4px;
+            min-width:130px;
+            box-shadow:0 8px 24px rgba(0,0,0,.4);
+            backdrop-filter:blur(12px);
+            display:none;
+            z-index:1000;
+        }
+        .user-menu.open { display:block; }
+        .user-menu-item {
+            display:flex; align-items:center; gap:8px;
+            padding:8px 12px;
+            border-radius:7px;
+            font-size:0.8125rem;
+            color:#94a3b8;
             cursor:pointer;
-            transition:all .2s;
-            white-space:nowrap;
+            transition:background .15s, color .15s;
+            border:none; background:none; width:100%; text-align:left;
         }
-        .btn-logout:hover { border-color:rgba(239,68,68,.4); color:#f87171; background:rgba(239,68,68,.06); }
+        .user-menu-item:hover { background:rgba(239,68,68,.1); color:#f87171; }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
@@ -83,17 +100,20 @@
     <header class="flex items-center justify-between mb-8">
         <h1 id="title" class="text-xl font-bold tracking-tight">Cuchi Casa</h1>
         <div class="flex items-center gap-2">
-            <!-- User chip + logout -->
-            <div class="user-bar" id="user-bar" style="display:none">
-                <div class="user-chip">
+            <!-- User dropdown -->
+            <div class="user-dropdown" id="user-dropdown" style="display:none">
+                <div class="user-chip" id="user-chip" onclick="toggleUserMenu()">
                     <div class="user-avatar" id="user-avatar">?</div>
                     <span id="user-name">—</span>
                 </div>
-                <form method="post" action="/auth/logout" id="logout-form">
-                    <button type="submit" class="btn-logout" id="logout-btn" aria-label="Cerrar sesión">
-                        ↩
-                    </button>
-                </form>
+                <div class="user-menu" id="user-menu">
+                    <form method="post" action="/auth/logout">
+                        <button type="submit" class="user-menu-item">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            Logout
+                        </button>
+                    </form>
+                </div>
             </div>
             <!-- Language selector -->
             <div class="lang-dropdown">
@@ -158,11 +178,11 @@ const T = {
 };
 // ── App Registry ──────────────────────────────────────────────────────────────
 const APPS = [
-    { key: 'ac',     url: '/smart-home/ac', nameKey: 'ac_name',     descKey: 'ac_desc',     statusUrl: '/api/status', getStatus: d => d?.mqtt_connected },
-    { key: 'zigbee', url: '/zigbee/',        nameKey: 'zigbee_name', descKey: 'zigbee_desc', statusUrl: '/api/health/zigbee', getStatus: d => d?.online === true },
-    { key: 'photos', url: 'https://raspberrypi.tailaa37cd.ts.net:10000/', nameKey: 'photos_name', descKey: 'photos_desc', statusUrl: '/api/health/immich', getStatus: d => d?.online === true },
-    { key: 'vacaciones', url: '/smart-home/vacaciones', nameKey: 'vacaciones_name', descKey: 'vacaciones_desc', statusUrl: '/api/health/vacaciones', getStatus: d => d?.online === true },
-    { key: 'casita', url: '/smart-home/casita?' + Date.now(), nameKey: 'casita_name', descKey: 'casita_desc', statusUrl: '/api/health/casita', getStatus: d => d?.online === true },
+    { key: 'ac',         url: '/smart-home/ac',                                    nameKey: 'ac_name',         descKey: 'ac_desc',         statusUrl: '/api/status',           getStatus: d => d?.mqtt_connected     },
+    { key: 'casita',     url: '/smart-home/casita?' + Date.now(),                  nameKey: 'casita_name',     descKey: 'casita_desc',     statusUrl: '/api/health/casita',    getStatus: d => d?.online === true    },
+    { key: 'vacaciones', url: '/smart-home/vacaciones',                             nameKey: 'vacaciones_name', descKey: 'vacaciones_desc', statusUrl: '/api/health/vacaciones', getStatus: d => d?.online === true   },
+    { key: 'photos',     url: 'https://raspberrypi.tailaa37cd.ts.net:10000/',       nameKey: 'photos_name',     descKey: 'photos_desc',     statusUrl: '/api/health/immich',    getStatus: d => d?.online === true    },
+    { key: 'zigbee',     url: '/zigbee/',                                           nameKey: 'zigbee_name',     descKey: 'zigbee_desc',     statusUrl: '/api/health/zigbee',    getStatus: d => d?.online === true    },
 ];
 // ── Language ──────────────────────────────────────────────────────────────────
 const COOKIE = 'locale';
@@ -240,6 +260,15 @@ async function loadStatus() {
     }
 }
 // ── User info ─────────────────────────────────────────────────────────────────
+function toggleUserMenu() {
+    document.getElementById('user-menu').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+    const dd = document.getElementById('user-dropdown');
+    if (dd && !dd.contains(e.target)) {
+        document.getElementById('user-menu').classList.remove('open');
+    }
+});
 async function loadUser() {
     try {
         const res = await fetch('/auth/me');
@@ -247,13 +276,10 @@ async function loadUser() {
         const data = await res.json();
         const username = data.username || '';
         if (!username) return;
-        const bar     = document.getElementById('user-bar');
-        const nameEl  = document.getElementById('user-name');
-        const avatar  = document.getElementById('user-avatar');
-        nameEl.textContent  = username;
-        avatar.textContent  = username.charAt(0).toUpperCase();
-        bar.style.display   = 'flex';
-    } catch { /* ignore — session may be valid but /auth/me temporarily unavailable */ }
+        document.getElementById('user-name').textContent  = username;
+        document.getElementById('user-avatar').textContent = username.charAt(0).toUpperCase();
+        document.getElementById('user-dropdown').style.display = 'block';
+    } catch { /* ignore */ }
 }
 // ── Init ──────────────────────────────────────────────────────────────────────
 (async function init() {
