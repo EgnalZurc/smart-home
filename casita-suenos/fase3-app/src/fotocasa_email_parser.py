@@ -73,8 +73,16 @@ _AC_KEYWORDS      = {"calefaccion", "aire", "climatizacion", "ac", "aerotermia"}
 
 
 class FotocasaEmailType(str, Enum):
-    ALERTA_ZONA = "alerta_zona"   # "Tienes N anuncio(s) en tu zona personalizada..."
-    OTRO        = "otro"
+    # "Tienes N anuncio(s) en tu zona personalizada de Vivienda en Venta, que no se te adelanten"
+    ALERTA_ZONA    = "alerta_zona"
+    # "¡Precio reducido! Tu alerta de..." (bajada de precio en alerta)
+    BAJADA_PRECIO  = "bajada_precio"
+    # "Novedades de tus búsquedas guardadas" / "Nuevos anuncios en tu zona"
+    RESUMEN        = "resumen"
+    # "¡Nuevo anuncio que coincide con tu búsqueda!"  (anuncio individual directo)
+    NUEVO_ANUNCIO  = "nuevo_anuncio"
+    # "Tu búsqueda guardada tiene actividad" / notificación genérica
+    OTRO           = "otro"
 
 
 @dataclass
@@ -137,9 +145,40 @@ def _get_body(msg: email.message.Message) -> str:
 
 
 def _classify_fotocasa_email(subject: str) -> FotocasaEmailType:
-    """Clasifica el tipo de email de Fotocasa por su subject."""
+    """
+    Clasifica el tipo de email de Fotocasa por su subject.
+
+    Tipos conocidos de Fotocasa España (a partir de casos reales):
+      1. ALERTA_ZONA:   "Tienes N anuncio(s) en tu zona personalizada de Vivienda en Venta,
+                         que no se te adelanten"
+      2. BAJADA_PRECIO: "¡Precio reducido! Tu alerta de Vivienda en Venta..."
+                        "Bajada de precio en tu alerta"
+      3. RESUMEN:       "Novedades de tus búsquedas guardadas"
+                        "Nuevos anuncios en tu zona personalizada"
+                        "Resumen de tus alertas"
+      4. NUEVO_ANUNCIO: "¡Nuevo anuncio que coincide con tu búsqueda!"
+                        "Nuevo inmueble en tu búsqueda guardada"
+      5. OTRO:          Bienvenida, confirmación de alerta, marketing, etc.
+    """
     sl = subject.lower()
-    if "zona personalizada" in sl or "anuncio" in sl and "venta" in sl:
+    # Bajada de precio — más específico primero
+    if ("precio reducido" in sl or "bajada de precio" in sl
+            or "precio rebajado" in sl or "precio ha bajado" in sl
+            or "rebaja" in sl):
+        return FotocasaEmailType.BAJADA_PRECIO
+    # Alerta de zona — formato principal que llega
+    if "zona personalizada" in sl and ("anuncio" in sl or "inmueble" in sl):
+        return FotocasaEmailType.ALERTA_ZONA
+    # Resumen / múltiples anuncios
+    if ("novedades" in sl or "resumen" in sl or "nuevos anuncios" in sl
+            or "busquedas guardadas" in sl or "búsquedas guardadas" in sl):
+        return FotocasaEmailType.RESUMEN
+    # Nuevo anuncio individual
+    if ("nuevo anuncio" in sl or "nuevo inmueble" in sl
+            or "coincide con tu busqueda" in sl or "coincide con tu búsqueda" in sl):
+        return FotocasaEmailType.NUEVO_ANUNCIO
+    # Fallback — si tiene URLs de anuncio se procesará igual
+    if "anuncio" in sl or "inmueble" in sl or "venta" in sl or "alerta" in sl:
         return FotocasaEmailType.ALERTA_ZONA
     return FotocasaEmailType.OTRO
 
@@ -240,7 +279,7 @@ def _extract_alerts_from_email(
                 has_garden=has_garden,
                 has_garage=has_garage,
                 has_ac=has_ac,
-                is_price_drop=False,
+                is_price_drop=(email_type == FotocasaEmailType.BAJADA_PRECIO),
             ))
 
         if not alerts:

@@ -8,6 +8,24 @@ from models import FireRisk, FloodRisk, Zone
 # P11: gusto personal por la provincia (0-9)
 # P12: riesgo inundacion segun SNCZI/CHE/CHC/PATRICOVA (0-9, ALTO = L12 descarte)
 # ---------------------------------------------------------------------------
+
+# Coordenadas de referencia (lat, lon) del centroide de cada zona
+# Usadas para el fallback geográfico cuando no hay match por keywords
+ZONE_COORDS: dict[str, tuple[float, float]] = {
+    "zamora_meseta":          (41.503, -5.744),   # Zamora ciudad
+    "castellon_costa_norte":  (40.476,  0.475),   # Vinaròs–Benicarló
+    "salamanca_alrededores":  (40.965, -5.664),   # Salamanca capital
+    "la_rioja_valle":         (42.430, -2.428),   # Alberite / Logroño
+    "valencia_costa_norte":   (39.681, -0.271),   # Sagunto
+    "palencia_alrededores":   (41.997, -4.530),   # Palencia / Venta de Baños
+    "navarra_ribera":         (42.063, -1.608),   # Tudela
+    "burgos_sur":             (41.671, -3.690),   # Aranda de Duero
+    "valladolid_rural":       (41.652, -4.724),   # Valladolid meseta
+    "cuenca_alrededores":     (40.070, -2.138),   # Cuenca capital
+    "burgos_norte_merindad":  (42.931, -3.484),   # Medina de Pomar
+    "cantabria_liebana":      (43.154, -4.620),   # Potes
+    "asturias_oriente":       (43.484, -5.435),   # Villaviciosa–Ribadesella
+}
 ZONES: dict[str, Zone] = {
     z.id: z for z in [
         Zone(

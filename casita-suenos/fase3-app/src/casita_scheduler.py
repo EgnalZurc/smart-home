@@ -29,7 +29,7 @@ import habitaclia_scraper
 import pisos_scraper
 from scraper_base import ScraperResult
 from scorer import evaluate
-from zones import ZONES
+from zones import ZONES, ZONE_COORDS
 
 if TYPE_CHECKING:
     from apify_client_wrapper import IdealistaApifyClient
@@ -725,7 +725,7 @@ class CasitaScheduler:
                     return zone
                 if any(w in hl for w in zone.name.lower().split() if len(w) > 4):
                     return zone
-            # 3. Buscar municipio de Fotocasa como substring en URL o en keywords
+            # 3. Buscar municipio de Fotocasa como substring
             for zone in ZONES.values():
                 if hasattr(zone, "fotocasa_municipios") and zone.fotocasa_municipios:
                     if any(m.lower().replace("-", " ") in hl for m in zone.fotocasa_municipios):
@@ -737,6 +737,77 @@ class CasitaScheduler:
             if hasattr(zone, "fotocasa_municipios") and zone.fotocasa_municipios:
                 if any(m.lower() in ul for m in zone.fotocasa_municipios):
                     return zone
+        # 4. Fallback geográfico: Nominatim → zona más cercana
+        if hint:
+            zone = self._infer_zone_nominatim(hint)
+            if zone:
+                return zone
+        return None
+
+    def _infer_zone_nominatim(self, hint: str):
+        """
+        Fallback: usa Nominatim (OSM) para obtener coordenadas del municipio,
+        luego devuelve la zona más cercana geográficamente.
+        Solo se invoca cuando el mapeo por keywords falla.
+        Máx distancia: 200 km. Si está más lejos de todas las zonas → None.
+        """
+        import math
+        import json
+        import urllib.request
+        import urllib.parse
+        try:
+            q = urllib.parse.urlencode({
+                "q": hint.replace("-", " ") + ", España",
+                "format": "json",
+                "limit": "1",
+                "countrycodes": "es",
+            })
+            req = urllib.request.Request(
+                f"https://nominatim.openstreetmap.org/search?{q}",
+                headers={"User-Agent": "casita-suenos/1.0 (raspberrypi)"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as r:
+                data = json.loads(r.read().decode())
+            if not data:
+                logger.info("[casita] Nominatim: sin resultados para '%s'", hint)
+                return None
+            lat = float(data[0]["lat"])
+            lon = float(data[0]["lon"])
+            logger.info("[casita] Nominatim '%s' → (%.3f, %.3f) tipo=%s",
+                        hint, lat, lon, data[0].get("type", "?"))
+
+            def _haversine(lat1, lon1, lat2, lon2):
+                R = 6371.0
+                dlat = math.radians(lat2 - lat1)
+                dlon = math.radians(lon2 - lon1)
+                a = (math.sin(dlat / 2) ** 2
+                     + math.cos(math.radians(lat1))
+                     * math.cos(math.radians(lat2))
+                     * math.sin(dlon / 2) ** 2)
+                return R * 2 * math.asin(math.sqrt(a))
+
+            best_zone = None
+            best_dist = float("inf")
+            for zone in ZONES.values():
+                coords = ZONE_COORDS.get(zone.id)
+                if not coords:
+                    continue
+                d = _haversine(lat, lon, coords[0], coords[1])
+                if d < best_dist:
+                    best_dist = d
+                    best_zone = zone
+
+            MAX_DIST_KM = 200.0
+            if best_zone and best_dist <= MAX_DIST_KM:
+                logger.info("[casita] Nominatim fallback: '%s' → %s (%.0f km)",
+                            hint, best_zone.id, best_dist)
+                return best_zone
+            elif best_zone:
+                logger.info("[casita] Nominatim '%s' demasiado lejos: %.0f km (zona más cercana: %s)",
+                            hint, best_dist, best_zone.id)
+                return None
+        except Exception as e:
+            logger.warning("[casita] Nominatim fallback falló para '%s': %s", hint, e)
         return None
 
     def _scrape_idealista_property(self, alert, zone):
