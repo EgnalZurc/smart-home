@@ -387,6 +387,7 @@ function _fmtPortal(portal) {
     pisos:      '/static/portal_pisos.png',
     habitaclia: '/static/portal_habitaclia.png',
     idealista:  '/static/portal_idealista.png',
+    fotocasa:   '/static/portal_fotocasa.png',
   };
   const colors = {
     pisos:      'border-emerald-800/40',
@@ -430,12 +431,13 @@ let _radarLoading = false;
 
 let _radarFilter = 'not_viewed';  // Arranca en not_viewed — casas vistas ocultas por defecto
 // Filtro de portal
-let _portalFilter = null;  // null | 'idealista' | 'pisos' | 'habitaclia'
+let _portalFilter = null;  // null | 'idealista' | 'pisos' | 'habitaclia' | 'fotocasa'
 const _portalStates = [
   { key: null,         icon: "<img src='/static/portal_all.png' class='w-4 h-4 object-contain' alt='Todos'>", cls: "", title: "Todos los portales" },
   { key: "idealista",  icon: "<img src='/static/portal_idealista.png' class='w-4 h-4' alt='I'>",  cls: "filter-idealista",   title: "Solo Idealista" },
   { key: "pisos",      icon: "<img src='/static/portal_pisos.png' class='w-4 h-4' alt='Pi'>",     cls: "filter-pisos",       title: "Solo Pisos.com" },
   { key: "habitaclia", icon: "<img src='/static/portal_habitaclia.png' class='w-4 h-4' alt='H'>", cls: "filter-habitaclia",  title: "Solo Habitaclia" },
+  { key: "fotocasa",   icon: "<img src='/static/portal_fotocasa.png' class='w-4 h-4 object-contain' alt='F'>",   cls: "filter-fotocasa",    title: "Solo Fotocasa" },
 ];
 let _portalFilterIdx = 0;
 
@@ -446,7 +448,7 @@ function togglePortalFilter() {
   const btn = document.getElementById("btn-portal-filter");
   const icon = document.getElementById("portal-icon");
   if (btn) {
-    btn.classList.remove("filter-idealista", "filter-pisos", "filter-habitaclia");
+    btn.classList.remove("filter-idealista", "filter-pisos", "filter-habitaclia", "filter-fotocasa");
     if (state.cls) btn.classList.add(state.cls);
     btn.title = state.title;
   }
