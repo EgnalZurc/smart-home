@@ -74,7 +74,7 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 /* Línea tachada en el ojo cuando filter=not_viewed */
 #btn-viewed-filter.filter-not-viewed #eye-icon{opacity:.5}
 /* Botón portal filter */
-#btn-portal-filter{position:relative;font-size:13px;font-weight:800;letter-spacing:0;line-height:1;color:#64748b}
+#btn-portal-filter{position:relative}
 #btn-portal-filter.filter-idealista{background:rgba(99,102,241,.15);border-color:rgba(99,102,241,.5);color:#818cf8}
 #btn-portal-filter.filter-pisos{background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.5);color:#34d399}
 #btn-portal-filter.filter-habitaclia{background:rgba(251,146,60,.15);border-color:rgba(251,146,60,.5);color:#fb923c}
@@ -167,7 +167,7 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
         <button id="btn-portal-filter" onclick="togglePortalFilter()"
           title="Sin filtro de portal"
           class="flex items-center justify-center w-7 h-7 rounded-lg border border-slate-700/50 bg-slate-800/60 text-slate-500 hover:text-slate-200 hover:border-slate-500 transition-all">
-          <span id="portal-icon">P</span>
+          <img id="portal-icon" src="/static/portal_all.png" class="w-4 h-4 object-contain" alt="Portales">
         </button>
         <!-- Botón toggle filtro vistas -->
         <button id="btn-viewed-filter" onclick="toggleViewedFilter()"
@@ -436,7 +436,7 @@ let _radarFilter = 'not_viewed';  // Arranca en not_viewed — casas vistas ocul
 // Filtro de portal
 let _portalFilter = null;  // null | 'idealista' | 'pisos' | 'habitaclia'
 const _portalStates = [
-  { key: null,         icon: "P",    cls: "",                   title: "Todos los portales" },
+  { key: null,         icon: "<img src='/static/portal_all.png' class='w-4 h-4 object-contain' alt='Todos'>", cls: "", title: "Todos los portales" },
   { key: "idealista",  icon: "<img src='/static/portal_idealista.png' class='w-4 h-4' alt='I'>",  cls: "filter-idealista",   title: "Solo Idealista" },
   { key: "pisos",      icon: "<img src='/static/portal_pisos.png' class='w-4 h-4' alt='Pi'>",     cls: "filter-pisos",       title: "Solo Pisos.com" },
   { key: "habitaclia", icon: "<img src='/static/portal_habitaclia.png' class='w-4 h-4' alt='H'>", cls: "filter-habitaclia",  title: "Solo Habitaclia" },
