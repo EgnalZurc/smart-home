@@ -527,18 +527,22 @@ class CasitaScheduler:
         elif imap_conn:
             try: imap_conn.close(); imap_conn.logout()
             except Exception: pass
-        lines = [
-            "Correo Idealista procesado",
-            "Anuncios analizados: {}".format(len(alerts)),
-            "Nuevos en radar: {}".format(total_new),
-        ]
-        if new_by_zone:
-            lines.append("")
-            for zid, cnt in sorted(new_by_zone.items(), key=lambda x: -x[1]):
-                zn = ZONES.get(zid)
-                lines.append("  - {}: {}".format(zn.name.split("(")[0].strip() if zn else zid, cnt))
-        lines += ["", "https://raspberrypi.tailaa37cd.ts.net/smart-home/casita"]
-        self._notifier.send_status("\n".join(lines))
+        # Solo notificar si hay casas nuevas en el radar
+        if total_new > 0:
+            lines = [
+                "Correo Idealista procesado",
+                "Anuncios analizados: {}".format(len(alerts)),
+                "Nuevas en radar: {}".format(total_new),
+            ]
+            if new_by_zone:
+                lines.append("")
+                for zid, cnt in sorted(new_by_zone.items(), key=lambda x: -x[1]):
+                    zn = ZONES.get(zid)
+                    lines.append("  - {}: {}".format(zn.name.split("(")[0].strip() if zn else zid, cnt))
+            lines += ["", "https://raspberrypi.tailaa37cd.ts.net/smart-home/casita"]
+            self._notifier.send_status("\n".join(lines))
+        else:
+            logger.info("[casita] Gmail check sin nuevas casas para el radar")
 
     def _infer_zone_from_hint(self, hint, url):
         if hint:

@@ -252,13 +252,16 @@ class Database:
         now = scored.scored_at.isoformat()
 
         existing = self._conn.execute(
-            "SELECT alerted, dismissed, dismissed_at FROM scored_properties WHERE property_uid = ?",
+            "SELECT alerted, dismissed, dismissed_at, COALESCE(viewed,0) as viewed, viewed_at, COALESCE(comment,'') as comment FROM scored_properties WHERE property_uid = ?",
             (uid,),
         ).fetchone()
 
         alerted    = existing["alerted"]     if existing else 0
         dismissed  = existing["dismissed"]   if existing else 0
         dism_at    = existing["dismissed_at"] if existing else None
+        viewed     = existing["viewed"]      if existing else 0
+        viewed_at  = existing["viewed_at"]   if existing else None
+        comment    = existing["comment"]     if existing else ""
 
         self._conn.execute(
             """INSERT OR REPLACE INTO scored_properties
