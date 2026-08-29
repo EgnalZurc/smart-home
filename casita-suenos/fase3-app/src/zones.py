@@ -32,6 +32,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-zamora/habitaciones-3/jardin/",
             ),
             idealista_alert_keywords=("zamora", "arcenillas", "villaralbo", "morales del vino"),
+            fotocasa_municipios=("zamora", "arcenillas", "villaralbo", "morales-del-vino", "el-perdigon", "fresno-de-la-ribera", "molacillos", "santa-clara-de-avedillo"),
         ),
         Zone(
             id="castellon_costa_norte",
@@ -57,6 +58,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-benicarlo/habitaciones-3/jardin/",
             ),
             idealista_alert_keywords=("vinaros", "benicarlo", "peniscola"),
+            fotocasa_municipios=("vinaros", "benicarlo", "peniscola", "santa-barbara", "amposta", "deltebre", "tortosa", "alcanar", "ulldecona", "la-senia", "gratallops", "vila-real", "benicarló", "peníscola"),
         ),
         Zone(
             id="salamanca_alrededores",
@@ -80,6 +82,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-salamanca/habitaciones-3/jardin/",
             ),
             idealista_alert_keywords=("doninos", "aldearrubia", "villamayor", "carbajosa"),
+            fotocasa_municipios=("carrascal-de-barregas", "doninos-de-salamanca", "aldearrubia", "villamayor-de-la-armunia", "carbajosa-de-la-sagrada", "cabrerizos", "monterrubio-de-la-sierra", "terradillos"),
         ),
         Zone(
             id="la_rioja_valle",
@@ -104,6 +107,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-alberite/habitaciones-3/jardin/",
             ),
             idealista_alert_keywords=("alberite", "navarrete", "fuenmayor", "villamediana"),
+            fotocasa_municipios=("alberite", "navarrete", "fuenmayor", "villamediana-de-iregua", "logrono", "lardero", "entrena", "sotillo-cameros", "cenicero", "briones"),
         ),
         Zone(
             id="valencia_costa_norte",
@@ -127,6 +131,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-sagunto/habitaciones-3/jardin/",
             ),
             idealista_alert_keywords=("sagunto", "canet d'en berenguer", "pucol"),
+            fotocasa_municipios=("sagunto", "canet-den-berenguer", "pucol", "el-puig-de-santa-maria", "benavites", "faura", "quartell", "benifairo-de-les-valls"),
         ),
         Zone(
             id="palencia_alrededores",
@@ -150,6 +155,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-palencia/habitaciones-3/jardin/",
             ),
             idealista_alert_keywords=("venta de banos", "grijota", "reinoso", "palencia"),
+            fotocasa_municipios=("palencia", "venta-de-banos", "grijota", "reinoso-de-cerrato", "magaz-de-pisuerga", "villamuriel-de-cerrato", "monzon-de-campos", "bustillo-del-paramo", "santa-cristina-de-valmadrigal", "cea", "bercianos-del-real-camino"),
         ),
         Zone(
             id="navarra_ribera",
@@ -173,6 +179,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-tudela/habitaciones-3/jardin/",
             ),
             idealista_alert_keywords=("tudela", "cadreita", "valtierra", "ribera navarra"),
+            fotocasa_municipios=("tudela", "cadreita", "valtierra", "alfaro", "gallur", "corella", "cintruenigo", "fitero", "cascante", "buñuel"),
         ),
         Zone(
             id="burgos_sur",
@@ -196,6 +203,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-burgos/habitaciones-3/jardin/",
             ),
             idealista_alert_keywords=("aranda de duero", "lerma", "penaranda de duero"),
+            fotocasa_municipios=("fuentespina", "aranda-de-duero", "lerma", "gumiel-de-hizan", "quintanamanvirgo", "vadocondes", "la-aguilera", "penaranda-de-duero", "covarrubias", "moradillo-de-roa"),
         ),
         Zone(
             id="valladolid_rural",
@@ -219,6 +227,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-valladolid/habitaciones-3/jardin/",
             ),
             idealista_alert_keywords=("villaturiel", "santa maria del condado", "mansilla"),
+            fotocasa_municipios=("pinarnegrillo", "mojados", "olmedo", "pedrajas-de-san-esteban", "portillo", "aldeatejada", "aldeamayor-de-san-martin", "simancas", "tordesillas"),
         ),
         Zone(
             id="cuenca_alrededores",
@@ -242,6 +251,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-cuenca/habitaciones-3/jardin/",
             ),
             idealista_alert_keywords=("sotos", "arcas", "pernalosas", "cuenca"),
+            fotocasa_municipios=("cuenca", "sotos", "arcas", "las-pernalosas", "mentrida", "fuentes", "gabaldon", "palomera", "el-casar", "guadalajara", "azuqueca-de-henares", "brihuega", "pastrana"),
         ),
         Zone(
             id="burgos_norte_merindad",
@@ -265,6 +275,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-burgos/habitaciones-3/jardin/",
             ),
             idealista_alert_keywords=("medina de pomar", "villarcayo", "merindad de mena"),
+            fotocasa_municipios=("medina-de-pomar", "villarcayo", "espinosa-de-los-monteros", "merindad-de-mena", "torme", "la-pola-de-gordon", "nava-de-ordunte"),
         ),
         Zone(
             id="cantabria_liebana",
@@ -288,6 +299,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-potes/habitaciones-3/jardin/",
             ),
             idealista_alert_keywords=("potes", "liebana", "camaleno"),
+            fotocasa_municipios=("potes", "camaleno", "liebana", "cabezón-de-liebana", "cillorigo-de-liebana", "vega-de-liebana"),
         ),
         Zone(
             id="asturias_oriente",
@@ -313,6 +325,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-ribadesella/habitaciones-3/jardin/",
             ),
             idealista_alert_keywords=("villaviciosa", "ribadesella", "colunga", "lastres"),
+            fotocasa_municipios=("villaviciosa", "ribadesella", "colunga", "lastres", "arriondas", "nava", "parres", "caravia"),
         ),
     ]
 }

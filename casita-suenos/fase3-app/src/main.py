@@ -268,6 +268,13 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 daemon=True, name="manual-summary"
             ).start()
             self._send_json(202, {"ok": True, "message": "Resumen iniciado"})
+        elif self.path == "/run-fotocasa-check":
+            import threading
+            threading.Thread(
+                target=_scheduler_instance.run_fotocasa_check_now,
+                daemon=True, name="manual-fotocasa"
+            ).start()
+            self._send_json(202, {"ok": True, "message": "Fotocasa check iniciado"})
         elif self.path == "/run-gmail-check":
             import threading
             threading.Thread(

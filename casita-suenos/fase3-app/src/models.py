@@ -87,6 +87,8 @@ class Zone:
     pisos_search_urls: tuple[str, ...] = field(default_factory=tuple)
     habitaclia_search_urls: tuple[str, ...] = field(default_factory=tuple)
     idealista_alert_keywords: tuple[str, ...] = field(default_factory=tuple)
+    # Municipios de Fotocasa que corresponden a esta zona
+    fotocasa_municipios: tuple[str, ...] = field(default_factory=tuple)
 
 
 # ---------------------------------------------------------------------------

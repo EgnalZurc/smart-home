@@ -80,6 +80,7 @@ class SchedulerStatus:
     running: bool
     last_scraping: datetime | None
     last_gmail_check: datetime | None
+    last_fotocasa_check: datetime | None
     last_summary: datetime | None
     last_scraping_result: str        # "ok", "ok_with_errors", "error", "never"
     total_properties: int
@@ -117,6 +118,8 @@ class CasitaScheduler:
         self._last_scraping_date: datetime | None = None
         self._last_gmail_check: datetime | None = None
         self._gmail_check_running: bool = False  # evita checks solapados
+        self._last_fotocasa_check: datetime | None = None
+        self._fotocasa_check_running: bool = False  # evita checks solapados
         self._last_summary_date: datetime | None = None
 
         # Resultado del último scraping
@@ -173,6 +176,10 @@ class CasitaScheduler:
             if cfg.get("gmail_check_enabled", True) and self._should_run_gmail_check_interval(gmail_interval):
                 self._run_gmail_check()
                 self._last_gmail_check = now
+            # ── Check Fotocasa (mismo intervalo que Gmail) ───────────────────
+            if cfg.get("gmail_check_enabled", True) and self._should_run_fotocasa_check_interval(gmail_interval):
+                self._run_fotocasa_check()
+                self._last_fotocasa_check = now
 
             # ── Resumen semanal ──────────────────────────────────────────────
             summary_day  = int(cfg.get("summary_day", 6))
@@ -221,6 +228,11 @@ class CasitaScheduler:
             return True
         return (datetime.now() - self._last_gmail_check).total_seconds() >= interval_sec
 
+    def _should_run_fotocasa_check_interval(self, interval_sec: int) -> bool:
+        if self._last_fotocasa_check is None:
+            return True
+        return (datetime.now() - self._last_fotocasa_check).total_seconds() >= interval_sec
+
     # ------------------------------------------------------------------
     # Jobs — públicos para llamada manual / tests
     # ------------------------------------------------------------------
@@ -232,6 +244,10 @@ class CasitaScheduler:
     def run_gmail_check_now(self) -> None:
         """Ejecuta el check de Gmail inmediatamente."""
         self._run_gmail_check()
+
+    def run_fotocasa_check_now(self) -> None:
+        """Ejecuta el check de correo Fotocasa inmediatamente."""
+        self._run_fotocasa_check()
 
     def run_summary_now(self) -> None:
         """Envía el resumen semanal inmediatamente."""
@@ -246,6 +262,7 @@ class CasitaScheduler:
             running=self._running,
             last_scraping=self._last_scraping_date,
             last_gmail_check=self._last_gmail_check,
+            last_fotocasa_check=self._last_fotocasa_check,
             last_summary=self._last_summary_date,
             last_scraping_result=result,
             total_properties=self._db.count_properties(),
@@ -479,7 +496,7 @@ class CasitaScheduler:
         from idealista_email_parser import fetch_new_alerts, delete_processed_emails
         logger.info("[casita] Comprobando alertas Gmail de Idealista")
         try:
-            alerts, imap_conn = fetch_new_alerts(
+            alerts, errors, imap_conn = fetch_new_alerts(
                 email_address=self._gmail_address,
                 app_password=self._gmail_app_password,
                 lookback_days=3,
@@ -487,6 +504,12 @@ class CasitaScheduler:
         except Exception as e:
             logger.error("[casita] Error en check Gmail: %s", e)
             return
+        if errors:
+            for err in errors:
+                logger.warning("[casita] Error parseo Idealista: %s", err)
+            self._notifier.send_status(
+                "⚠️ Errores procesando correo Idealista:\n" + "\n".join(errors[:3])
+            )
         if not alerts:
             if imap_conn:
                 try: imap_conn.close(); imap_conn.logout()
@@ -545,18 +568,175 @@ class CasitaScheduler:
         else:
             logger.info("[casita] Gmail check sin nuevas casas para el radar")
 
+
+    def _run_fotocasa_check(self) -> None:
+        if self._fotocasa_check_running:
+            logger.info("[casita] Fotocasa check ya en curso, ignorando")
+            return
+        self._fotocasa_check_running = True
+        try:
+            self._do_fotocasa_check()
+        finally:
+            self._fotocasa_check_running = False
+
+    def _do_fotocasa_check(self) -> None:
+        from fotocasa_email_parser import (
+            fetch_new_fotocasa_alerts,
+            delete_processed_fotocasa_emails,
+            FotocasaAlert,
+        )
+        from models import Property, Portal, Piscina
+        from scraper_base import infer_habitable, infer_has_garage, infer_has_garden, infer_ac, infer_piscina
+        from datetime import datetime as _dt
+
+        logger.info("[casita] Comprobando alertas Gmail de Fotocasa")
+        try:
+            alerts, errors, imap_conn = fetch_new_fotocasa_alerts(
+                email_address=self._gmail_address,
+                app_password=self._gmail_app_password,
+            )
+        except Exception as e:
+            logger.error("[casita] Error en check Fotocasa: %s", e)
+            return
+
+        if errors:
+            for err in errors:
+                logger.warning("[casita] Error parseo Fotocasa: %s", err)
+            self._notifier.send_status(
+                "⚠️ Errores procesando correo Fotocasa:\n" + "\n".join(errors[:3])
+            )
+
+        if not alerts:
+            if imap_conn:
+                try: imap_conn.close(); imap_conn.logout()
+                except Exception: pass
+            return
+
+        logger.info("[casita] %d anuncios de Fotocasa desde Gmail", len(alerts))
+        processed_email_ids, total_new, new_by_zone = [], 0, {}
+        failed_ids: set[str] = set()
+
+        for alert in alerts:
+            if alert.parse_error:
+                failed_ids.add(alert.email_id)
+                continue
+            try:
+                # Inferir zona desde el municipio en la URL
+                zone = self._infer_zone_from_hint(alert.location_hint, alert.url)
+                if not zone:
+                    logger.warning("[casita] Fotocasa sin zona para %s (%s)", alert.url, alert.location_hint)
+                    processed_email_ids.append(alert.email_id)
+                    continue
+
+                # Fotocasa bloquea scraping (SPA React) → usar solo datos del email
+                if not alert.price:
+                    logger.debug("[casita] Fotocasa sin precio para %s, descartando", alert.url)
+                    processed_email_ids.append(alert.email_id)
+                    continue
+
+                # Los filtros de Fotocasa ya garantizan jardín/garaje si están en la URL
+                # Si no están en la URL, asumir True (el usuario ya configuró el filtro)
+                has_garden = alert.has_garden or True   # filtro Fotocasa ya aplicado
+                has_garage = alert.has_garage or True   # filtro Fotocasa ya aplicado
+
+                prop = Property(
+                    portal=Portal.FOTOCASA,
+                    portal_id=alert.property_id,
+                    url=alert.url,
+                    zone_id=zone.id,
+                    title=f"Fotocasa {alert.property_id}",
+                    price=alert.price,
+                    size_m2=alert.size_m2,
+                    rooms=alert.rooms,
+                    has_garage=has_garage,
+                    has_garden_or_plot=has_garden,
+                    has_ac=alert.has_ac,
+                    piscina=Piscina.NINGUNA,
+                    has_internet_mention=True,
+                    habitable=True,
+                    description="",
+                    source="gmail_fotocasa",
+                    first_seen=_dt.now(),
+                    last_seen=_dt.now(),
+                )
+
+                is_new = self._db.is_new(prop)
+                price_event = self._db.upsert_property(prop)
+                scored = evaluate(prop, zone)
+                if scored is None:
+                    processed_email_ids.append(alert.email_id)
+                    continue
+                self._db.upsert_score(scored)
+
+                if is_new and scored.passes_alert_threshold:
+                    if not self._db.is_alerted(prop.unique_id):
+                        self._db.mark_alerted(prop.unique_id)
+                        total_new += 1
+                        new_by_zone[zone.id] = new_by_zone.get(zone.id, 0) + 1
+                        logger.info("[casita] Fotocasa ALERTA: %s %.1f pts", prop.unique_id, scored.total_score)
+
+                if price_event and price_event.delta < 0:
+                    self._notifier.send_price_drop_alert(
+                        event=price_event, title=prop.title, url=prop.url, zone_name=zone.name)
+
+                processed_email_ids.append(alert.email_id)
+
+            except Exception as e:
+                err_msg = f"Error procesando alerta Fotocasa {alert.url}: {type(e).__name__}: {e}"
+                logger.error("[casita] %s", err_msg)
+                failed_ids.add(alert.email_id)
+                self._notifier.send_status(f"⚠️ {err_msg}")
+
+        processed_alerts = [a for a in alerts if a.email_id in set(processed_email_ids)]
+        if (processed_alerts or alerts) and imap_conn:
+            delete_processed_fotocasa_emails(imap_conn, processed_alerts, failed_ids=failed_ids)
+        elif imap_conn:
+            try: imap_conn.close(); imap_conn.logout()
+            except Exception: pass
+
+        if total_new > 0:
+            lines = [
+                "Correo Fotocasa procesado",
+                "Anuncios analizados: {}".format(len(alerts)),
+                "Nuevas en radar: {}".format(total_new),
+            ]
+            if new_by_zone:
+                lines.append("")
+                for zid, cnt in sorted(new_by_zone.items(), key=lambda x: -x[1]):
+                    zn = ZONES.get(zid)
+                    lines.append("  - {}: {}".format(zn.name.split("(")[0].strip() if zn else zid, cnt))
+            lines += ["", "https://raspberrypi.tailaa37cd.ts.net/smart-home/casita"]
+            self._notifier.send_status("\n".join(lines))
+        else:
+            logger.info("[casita] Fotocasa check sin nuevas casas para el radar")
+
     def _infer_zone_from_hint(self, hint, url):
         if hint:
             hl = hint.lower().strip()
+            # 1. Buscar en fotocasa_municipios (match exacto del municipio)
+            for zone in ZONES.values():
+                if hasattr(zone, "fotocasa_municipios") and zone.fotocasa_municipios:
+                    if any(m.lower().replace("-", " ") == hl.replace("-", " ")
+                           for m in zone.fotocasa_municipios):
+                        return zone
+            # 2. Buscar en idealista_alert_keywords
             for zone in ZONES.values():
                 if any(kw.lower() in hl for kw in zone.idealista_alert_keywords):
                     return zone
                 if any(w in hl for w in zone.name.lower().split() if len(w) > 4):
                     return zone
+            # 3. Buscar municipio de Fotocasa como substring en URL o en keywords
+            for zone in ZONES.values():
+                if hasattr(zone, "fotocasa_municipios") and zone.fotocasa_municipios:
+                    if any(m.lower().replace("-", " ") in hl for m in zone.fotocasa_municipios):
+                        return zone
         ul = url.lower()
         for zone in ZONES.values():
             if any(kw.lower().replace(" ", "-") in ul for kw in zone.idealista_alert_keywords):
                 return zone
+            if hasattr(zone, "fotocasa_municipios") and zone.fotocasa_municipios:
+                if any(m.lower() in ul for m in zone.fotocasa_municipios):
+                    return zone
         return None
 
     def _scrape_idealista_property(self, alert, zone):
