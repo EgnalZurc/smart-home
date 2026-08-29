@@ -359,6 +359,7 @@ class Database:
         offset: int = 0,
         sort_by: str = "score",   # score | price | distance | portal | zone
         sort_dir: str = "desc",
+        filter_by: str | None = None,  # viewed | not_viewed | None
     ) -> dict:
         """
         Devuelve propiedades en el radar con paginación y ordenación configurable.
@@ -375,10 +376,11 @@ class Database:
         order_col = _SORT_MAP.get(sort_by, "s.score_total")
         order_dir = "DESC" if sort_dir.lower() == "desc" else "ASC"
 
+        _fc = "AND s.viewed = 1" if filter_by == "viewed" else ("AND COALESCE(s.viewed,0) = 0" if filter_by == "not_viewed" else "")
         total = self._conn.execute(
-            "SELECT COUNT(*) FROM scored_properties s "
-            "JOIN properties p ON p.uid=s.property_uid "
-            "WHERE s.score_total >= ? AND s.dismissed = 0",
+            f"SELECT COUNT(*) FROM scored_properties s "
+            f"JOIN properties p ON p.uid=s.property_uid "
+            f"WHERE s.score_total >= ? AND s.dismissed = 0 {_fc}",
             (min_score,),
         ).fetchone()[0]
 
@@ -395,7 +397,7 @@ class Database:
                       s.viewed_at, COALESCE(s.comment, '') as comment
                FROM scored_properties s
                JOIN properties p ON p.uid = s.property_uid
-               WHERE s.score_total >= ? AND s.dismissed = 0
+               WHERE s.score_total >= ? AND s.dismissed = 0 {_fc}
                ORDER BY {order_col} {order_dir}
                LIMIT ? OFFSET ?""",
             (min_score, limit, offset),

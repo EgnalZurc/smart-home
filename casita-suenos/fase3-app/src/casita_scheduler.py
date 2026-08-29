@@ -255,10 +255,11 @@ class CasitaScheduler:
         )
 
     def get_radar(self, limit: int = 20, offset: int = 0,
-                  sort_by: str = "score", sort_dir: str = "desc") -> dict:
+                  sort_by: str = "score", sort_dir: str = "desc",
+                  filter_by: str | None = None) -> dict:
         result = self._db.get_radar_properties(
             min_score=55.0, limit=limit, offset=offset,
-            sort_by=sort_by, sort_dir=sort_dir,
+            sort_by=sort_by, sort_dir=sort_dir, filter_by=filter_by,
         )
         # Enriquecer cada item con distance_madrid_min de la zona
         for p in result["items"]:
