@@ -448,7 +448,7 @@ class CasitaScheduler:
             lines.append("")
             lines.append("_Sin casas nuevas por encima del umbral de 50 pts._")
         lines.append("")
-        lines.append("https://smart-home.local/smart-home/casita")
+        lines.append("https://raspberrypi.tailaa37cd.ts.net/smart-home/casita")
         self._notifier.send_status("\n".join(lines))
 
     def _notify_scraper_errors(self, errors: list[ScraperError]) -> None:
