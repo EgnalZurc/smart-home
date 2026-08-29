@@ -387,14 +387,21 @@ function _fmtFirstSeen(iso) {
 function _ageLabel(iso) { return _fmtFirstSeen(iso); }
 function _fmtPortal(portal) {
   if (!portal) return '';
-  const map = {
-    pisos:      { label: 'Pisos.com',  color: 'text-emerald-400 bg-emerald-950/50 border-emerald-800/40' },
-    habitaclia: { label: 'Habitaclia', color: 'text-orange-400 bg-orange-950/50 border-orange-800/40' },
-    idealista:  { label: 'Idealista',  color: 'text-blue-400 bg-blue-950/50 border-blue-800/40' },
-    fotocasa:   { label: 'Fotocasa',   color: 'text-pink-400 bg-pink-950/50 border-pink-800/40' },
+  const icons = {
+    pisos:      '/static/portal_pisos.png',
+    habitaclia: '/static/portal_habitaclia.png',
+    idealista:  '/static/portal_idealista.png',
   };
-  const p = map[portal] || { label: portal, color: 'text-slate-400 bg-slate-800/50 border-slate-700/40' };
-  return '<span class="text-[9px] font-medium px-1.5 py-0.5 rounded border ' + p.color + '">' + p.label + '</span>';
+  const colors = {
+    pisos:      'border-emerald-800/40',
+    habitaclia: 'border-orange-800/40',
+    idealista:  'border-indigo-800/40',
+  };
+  const iconSrc = icons[portal];
+  if (iconSrc) {
+    return `<span class="inline-flex items-center justify-center w-4 h-4 rounded border ${colors[portal] || 'border-slate-700/40'} bg-slate-800/60 overflow-hidden flex-shrink-0" title="${portal}"><img src="${iconSrc}" class="w-3.5 h-3.5 object-contain" alt="${portal}" onerror="this.style.display='none';this.parentNode.textContent='${portal[0].toUpperCase()}'"></span>`;
+  }
+  return `<span class="text-[9px] font-medium px-1.5 py-0.5 rounded border border-slate-700/40 text-slate-400">${portal}</span>`;
 }
 function _fmtMadrid(minutes) {
   if (!minutes) return null;
@@ -429,10 +436,10 @@ let _radarFilter = null;  // null | 'viewed' | 'not_viewed'
 // Filtro de portal
 let _portalFilter = null;  // null | 'idealista' | 'pisos' | 'habitaclia'
 const _portalStates = [
-  { key: null,        label: "P",         cls: "",                   title: "Todos los portales" },
-  { key: "idealista", label: "I",         cls: "filter-idealista",   title: "Solo Idealista" },
-  { key: "pisos",     label: "Pi",        cls: "filter-pisos",       title: "Solo Pisos.com" },
-  { key: "habitaclia",label: "H",         cls: "filter-habitaclia",  title: "Solo Habitaclia" },
+  { key: null,         icon: "P",    cls: "",                   title: "Todos los portales" },
+  { key: "idealista",  icon: "<img src='/static/portal_idealista.png' class='w-4 h-4' alt='I'>",  cls: "filter-idealista",   title: "Solo Idealista" },
+  { key: "pisos",      icon: "<img src='/static/portal_pisos.png' class='w-4 h-4' alt='Pi'>",     cls: "filter-pisos",       title: "Solo Pisos.com" },
+  { key: "habitaclia", icon: "<img src='/static/portal_habitaclia.png' class='w-4 h-4' alt='H'>", cls: "filter-habitaclia",  title: "Solo Habitaclia" },
 ];
 let _portalFilterIdx = 0;
 
@@ -447,7 +454,7 @@ function togglePortalFilter() {
     if (state.cls) btn.classList.add(state.cls);
     btn.title = state.title;
   }
-  if (icon) icon.textContent = state.label;
+  if (icon) icon.innerHTML = state.icon;
   _radarOffset = 0;
   document.getElementById("radar-list").innerHTML = "";
   loadRadar();

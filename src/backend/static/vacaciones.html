@@ -17,7 +17,6 @@
         #app-content.visible { opacity:1; }
         .spinner { width:32px; height:32px; border:3px solid rgba(255,255,255,.1); border-top-color:rgba(255,255,255,.7); border-radius:50%; animation:spin .8s linear infinite; }
         @keyframes spin { to { transform:rotate(360deg); } }
-        
         .cal-wrap { background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9)); border: 1px solid rgba(51,65,85,0.5); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
         .cal-wrap.past { opacity: 0.6; }
         .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
@@ -29,18 +28,15 @@
         .delete-year-btn { background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; width: 28px; height: 28px; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
         .delete-year-btn:hover:not(:disabled) { background: rgba(239,68,68,0.3); }
         .delete-year-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-        
         .meal-card { background: rgba(15,23,42,0.5); border-radius: 12px; padding: 12px; margin-bottom: 8px; border: 1px solid rgba(51,65,85,0.3); }
         .meal-card:last-child { margin-bottom: 0; }
         .meal-head { font-size: 13px; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(51,65,85,0.3); }
         .meal-important { border-left: 3px solid #6366f1; }
         .meal-wildcard { border-left: 3px solid #f59e0b; opacity: 0.8; }
-        
         .nucleo-section { margin-bottom: 10px; }
         .nucleo-section:last-child { margin-bottom: 0; }
         .nucleo-header { font-size: 11px; font-weight: 600; margin-bottom: 6px; padding: 4px 8px; border-radius: 6px; display: inline-block; }
         .personas-row { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 4px; }
-        
         .persona-chip { font-size: 10px; padding: 4px 8px; border-radius: 6px; font-weight: 600; transition: all 0.15s ease; user-select: none; border: 1px solid transparent; }
         .persona-chip.interactive { cursor: pointer; }
         .persona-chip.interactive:hover { transform: scale(1.05); }
@@ -48,13 +44,10 @@
         .persona-chip.unselected { background: rgba(51,65,85,0.3); color: #475569; border-color: rgba(51,65,85,0.3); }
         .persona-chip.selected { background: rgba(99,102,241,0.3); color: #c7d2fe; border-color: rgba(99,102,241,0.5); box-shadow: 0 0 8px rgba(99,102,241,0.3); }
         .persona-chip.readonly { cursor: default; opacity: 0.5; }
-        
         .add-year-btn { background: rgba(34,197,94,0.2); border: 1px dashed rgba(34,197,94,0.4); color: #86efac; padding: 12px; border-radius: 12px; font-size: 13px; font-weight: 500; cursor: pointer; text-align: center; transition: all 0.2s; width: 100%; margin-top: 8px; }
         .add-year-btn:hover { background: rgba(34,197,94,0.3); }
-
         .config-btn { background: rgba(99,102,241,0.2); border: 1px solid rgba(99,102,241,0.3); color: #a5b4fc; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
         .config-btn:hover { background: rgba(99,102,241,0.3); border-color: rgba(99,102,241,0.5); }
-        
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 16px; }
         .modal-overlay.open { display: flex; }
         .modal { background: #1e293b; border-radius: 16px; width: 100%; max-width: 400px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
@@ -63,32 +56,43 @@
         .modal-close { background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px; }
         .modal-body { padding: 16px; overflow-y: auto; flex: 1; }
         .modal-footer { padding: 16px; border-top: 1px solid rgba(51,65,85,0.5); display: flex; gap: 8px; justify-content: flex-end; }
-        
         .form-list { display: flex; flex-direction: column; gap: 8px; }
         .form-item { display: flex; align-items: center; gap: 8px; background: rgba(15,23,42,0.5); padding: 8px 12px; border-radius: 8px; }
         .form-item input { flex: 1; background: transparent; border: none; color: white; font-size: 13px; outline: none; }
         .form-item input::placeholder { color: #475569; }
-        .form-item .color-dot { width: 16px; height: 16px; border-radius: 50%; cursor: pointer; }
+        .form-item .color-dot { width: 16px; height: 16px; border-radius: 50%; cursor: pointer; flex-shrink: 0; }
         .form-item .delete-btn { background: none; border: none; color: #ef4444; cursor: pointer; padding: 4px; font-size: 14px; }
         .form-item .inicial-badge { font-size: 10px; padding: 2px 6px; background: rgba(99,102,241,0.3); color: #a5b4fc; border-radius: 4px; font-weight: 600; min-width: 24px; text-align: center; }
         .add-btn { background: rgba(34,197,94,0.2); border: 1px dashed rgba(34,197,94,0.4); color: #86efac; padding: 8px; border-radius: 8px; font-size: 12px; cursor: pointer; text-align: center; transition: all 0.2s; }
         .add-btn:hover { background: rgba(34,197,94,0.3); }
         .btn-primary { background: #6366f1; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; }
         .btn-secondary { background: rgba(51,65,85,0.5); color: #94a3b8; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; }
-        
         .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
         .tab { flex: 1; padding: 8px; text-align: center; font-size: 12px; font-weight: 500; border-radius: 6px; cursor: pointer; background: rgba(51,65,85,0.3); color: #94a3b8; transition: all 0.2s; }
         .tab.active { background: rgba(99,102,241,0.3); color: #a5b4fc; }
         .hint { font-size: 10px; color: #64748b; margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px; }
         .saving { position: fixed; bottom: 20px; right: 20px; background: rgba(99,102,241,0.9); color: white; padding: 8px 16px; border-radius: 8px; font-size: 12px; display: none; z-index: 100; }
         .saving.show { display: block; animation: fadeIn 0.2s ease; }
+        .nucleo-form-group { background: rgba(15,23,42,0.5); padding: 10px 12px; border-radius: 8px; display: flex; flex-direction: column; gap: 6px; }
+        .nucleo-form-row { display: flex; align-items: center; gap: 8px; }
+        .hijo-select { flex: 1; background: #0f172a; border: 1px solid rgba(51,65,85,0.5); color: white; font-size: 12px; outline: none; border-radius: 4px; padding: 3px 6px; }
+        .year-summary { margin-top: 14px; background: rgba(15,23,42,0.6); border: 1px solid rgba(51,65,85,0.4); border-radius: 12px; padding: 12px; }
+        .year-summary-title { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
+        .summary-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid rgba(51,65,85,0.2); }
+        .summary-row:last-child { border-bottom: none; padding-bottom: 0; }
+        .summary-left { display: flex; align-items: center; gap: 8px; }
+        .summary-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .summary-nombre { font-size: 12px; font-weight: 500; }
+        .summary-hijo-label { font-size: 10px; color: #94a3b8; }
+        .summary-right { text-align: right; }
+        .summary-count { font-size: 22px; font-weight: 700; line-height: 1; }
+        .summary-of { font-size: 10px; color: #64748b; }
+        .summary-no-hijo { font-size: 11px; color: #475569; font-style: italic; }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
-
 <div id="app-content">
 <div class="max-w-md mx-auto px-4 pt-6 pb-10 fade-in">
-    
     <header class="flex items-center justify-between mb-6">
         <h1 class="text-lg font-semibold tracking-tight">&#127876; Cuchi Vacaciones</h1>
         <div class="flex items-center gap-2">
@@ -105,11 +109,9 @@
             </a>
         </div>
     </header>
-
     <div id="calendar-container">
         <p class="text-slate-400 text-sm text-center py-8">Cargando...</p>
     </div>
-
 </div>
 </div>
 
@@ -118,22 +120,22 @@
 <div class="modal-overlay" id="config-modal">
     <div class="modal">
         <div class="modal-header">
-            <span class="modal-title">&#9881; Configuracion</span>
+            <span class="modal-title">&#9881; Configuraci&#243;n</span>
             <button class="modal-close" onclick="closeConfig()">&#10005;</button>
         </div>
         <div class="modal-body">
             <div class="tabs">
-                <div class="tab active" data-tab="nucleos" onclick="switchTab('nucleos')">Nucleos Familiares</div>
+                <div class="tab active" data-tab="nucleos" onclick="switchTab('nucleos')">N&#250;cleos</div>
                 <div class="tab" data-tab="personas" onclick="switchTab('personas')">Personas</div>
             </div>
             <div id="tab-nucleos" class="tab-content">
                 <div class="form-list" id="nucleos-list"></div>
-                <button class="add-btn" onclick="addNucleo()" style="margin-top:8px">+ Anadir Nucleo Familiar</button>
+                <button class="add-btn" onclick="addNucleo()" style="margin-top:8px">+ A&#241;adir N&#250;cleo Familiar</button>
             </div>
             <div id="tab-personas" class="tab-content" style="display:none">
                 <div class="form-list" id="personas-list"></div>
-                <button class="add-btn" onclick="addPersona()" style="margin-top:8px">+ Anadir Persona</button>
-                <div class="hint">&#128161; La inicial se genera automaticamente.</div>
+                <button class="add-btn" onclick="addPersona()" style="margin-top:8px">+ A&#241;adir Persona</button>
+                <div class="hint">&#128161; La inicial se genera autom&#225;ticamente.</div>
             </div>
         </div>
         <div class="modal-footer">
@@ -146,165 +148,188 @@
 <div id="loading-overlay"><div class="spinner"></div></div>
 
 <script>
-let appData = { nucleos: [], personas: [], years: [], momentos: [] };
-let editNucleos = [];
-let editPersonas = [];
-let saveTimeout = null;
-const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
-const currentYear = new Date().getFullYear();
+var appData = { nucleos: [], personas: [], years: [], momentos: [] };
+var editNucleos = [];
+var editPersonas = [];
+var saveTimeout = null;
+var COLORS = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#14b8a6'];
+var currentYear = new Date().getFullYear();
 
 function generateInicial(nombre, existingIniciales) {
-    const cleanName = nombre.trim().toUpperCase();
+    var cleanName = nombre.trim().toUpperCase();
     if (!cleanName) return '';
-    for (let len = 1; len <= cleanName.length; len++) {
-        const candidate = cleanName.substring(0, len);
-        if (!existingIniciales.includes(candidate)) return candidate;
+    for (var len = 1; len <= cleanName.length; len++) {
+        var candidate = cleanName.substring(0, len);
+        if (existingIniciales.indexOf(candidate) === -1) return candidate;
     }
-    let counter = 2;
-    while (existingIniciales.includes(cleanName + counter)) counter++;
+    var counter = 2;
+    while (existingIniciales.indexOf(cleanName + counter) !== -1) counter++;
     return cleanName + counter;
 }
 
-function isYearEditable(year) {
-    return year > currentYear;
+function isYearEditable(year) { return year >= currentYear; }
+
+function loadData() {
+    return fetch('/api/vacaciones')
+        .then(function(r) { return r.json(); })
+        .then(function(data) { appData = data; renderCalendar(); })
+        .catch(function() {
+            document.getElementById('calendar-container').innerHTML =
+                '<p class="text-red-400 text-sm text-center py-8">Error cargando datos</p>';
+        });
 }
 
-async function loadData() {
-    try {
-        const resp = await fetch('/api/vacaciones');
-        appData = await resp.json();
-        renderCalendar();
-    } catch (e) {
-        document.getElementById('calendar-container').innerHTML = '<p class="text-red-400 text-sm text-center py-8">Error cargando datos</p>';
-    }
+function calcSummary(yearData) {
+    var total = appData.momentos ? appData.momentos.length : 6;
+    return appData.nucleos.map(function(nucleo) {
+        var hijoId = nucleo.hijo_id || '';
+        var hijo = hijoId ? appData.personas.find(function(p) { return p.id === hijoId; }) : null;
+        var count = 0;
+        if (hijo) {
+            yearData.comidas.forEach(function(comida) {
+                var list = (comida.personas_por_nucleo && comida.personas_por_nucleo[nucleo.id]) || [];
+                if (list.indexOf(hijoId) !== -1) count++;
+            });
+        }
+        return { nucleo: nucleo, hijo: hijo, count: count, total: total };
+    });
+}
+
+function renderSummary(yearData) {
+    var items = calcSummary(yearData);
+    var rows = items.map(function(item) {
+        if (!item.hijo) {
+            return '<div class="summary-row">' +
+                '<div class="summary-left">' +
+                '<span class="summary-dot" style="background:' + item.nucleo.color + '"></span>' +
+                '<span class="summary-nombre">' + item.nucleo.nombre + '</span>' +
+                '</div>' +
+                '<span class="summary-no-hijo">Sin hijo/a asignado</span>' +
+                '</div>';
+        }
+        return '<div class="summary-row">' +
+            '<div class="summary-left">' +
+            '<span class="summary-dot" style="background:' + item.nucleo.color + '"></span>' +
+            '<div><div class="summary-nombre">' + item.nucleo.nombre + '</div>' +
+            '<div class="summary-hijo-label">con ' + item.hijo.nombre + '</div></div>' +
+            '</div>' +
+            '<div class="summary-right">' +
+            '<div class="summary-count" style="color:' + item.nucleo.color + '">' + item.count + '</div>' +
+            '<div class="summary-of">de ' + item.total + ' comidas</div>' +
+            '</div></div>';
+    }).join('');
+    return '<div class="year-summary">' +
+        '<div class="year-summary-title">&#128200; Resumen del a&#241;o</div>' +
+        rows + '</div>';
 }
 
 function renderCalendar() {
-    const container = document.getElementById('calendar-container');
+    var container = document.getElementById('calendar-container');
     if (!appData.nucleos || appData.nucleos.length === 0) {
-        container.innerHTML = '<div class="text-center py-8"><p class="text-slate-400 text-sm mb-4">No hay nucleos familiares configurados</p><button class="config-btn mx-auto" onclick="openConfig()">Configurar</button></div>';
+        container.innerHTML = '<div class="text-center py-8"><p class="text-slate-400 text-sm mb-4">No hay n\u00facleos familiares configurados</p><button class="config-btn mx-auto" onclick="openConfig()">Configurar</button></div>';
         return;
     }
     if (!appData.years || appData.years.length === 0) {
-        container.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">No hay anos configurados</p>';
+        container.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">No hay a\u00f1os configurados</p>';
         return;
     }
-    
-    const sortedYears = [...appData.years].sort((a, b) => a.year - b.year);
-    const maxYear = Math.max(...sortedYears.map(y => y.year));
-    const canDelete = sortedYears.length > 1;
-    
-    let html = sortedYears.map(year => renderYear(year, maxYear, canDelete)).join('');
-    html += '<button class="add-year-btn" onclick="addYear()">+ Anadir Ano</button>';
+    var sorted = appData.years.slice().sort(function(a, b) { return a.year - b.year; });
+    var maxYear = Math.max.apply(null, sorted.map(function(y) { return y.year; }));
+    var canDelete = sorted.length > 1;
+    var html = sorted.map(function(y) { return renderYear(y, maxYear, canDelete); }).join('');
+    html += '<button class="add-year-btn" onclick="addYear()">+ A\u00f1adir A\u00f1o</button>';
     container.innerHTML = html;
 }
 
 function renderYear(year, maxYear, canDelete) {
-    const editable = isYearEditable(year.year);
-    const canDeleteThis = canDelete && year.year === maxYear;
-    const badgeClass = editable ? 'future' : 'past';
-    const badgeText = editable ? 'Editable' : 'Pasado';
-    
-    const meals = appData.momentos.map(m => {
-        const comida = year.comidas.find(c => c.momento === m.id) || { momento: m.id, personas_por_nucleo: {} };
-        const isImportant = m.importante;
-        
-        const nucleosHtml = appData.nucleos.map(nucleo => {
-            const selectedPersonas = comida.personas_por_nucleo ? (comida.personas_por_nucleo[nucleo.id] || []) : [];
-            const personasHtml = appData.personas.map(persona => {
-                const isSelected = selectedPersonas.includes(persona.id);
-                const chipClass = editable ? 'interactive' : 'readonly';
-                const onclick = editable ? `onclick="togglePersona(this)"` : '';
-                return `<span class="persona-chip ${chipClass} ${isSelected ? 'selected' : 'unselected'}" 
-                    data-year="${year.year}" data-momento="${m.id}" data-nucleo="${nucleo.id}" data-persona="${persona.id}"
-                    ${onclick}>${persona.inicial}</span>`;
+    var editable = isYearEditable(year.year);
+    var canDel = canDelete && year.year === maxYear;
+    var meals = appData.momentos.map(function(m) {
+        var comida = null;
+        for (var ci = 0; ci < year.comidas.length; ci++) { if (year.comidas[ci].momento === m.id) { comida = year.comidas[ci]; break; } }
+        if (!comida) comida = { momento: m.id, personas_por_nucleo: {} };
+        var nucleosHtml = appData.nucleos.map(function(nucleo) {
+            var sel = (comida.personas_por_nucleo && comida.personas_por_nucleo[nucleo.id]) || [];
+            var chips = appData.personas.map(function(persona) {
+                var selected = sel.indexOf(persona.id) !== -1;
+                var cls = editable ? 'interactive' : 'readonly';
+                var oc = editable ? 'onclick="togglePersona(this)"' : '';
+                return '<span class="persona-chip ' + cls + ' ' + (selected ? 'selected' : 'unselected') + '"' +
+                    ' data-year="' + year.year + '" data-momento="' + m.id + '"' +
+                    ' data-nucleo="' + nucleo.id + '" data-persona="' + persona.id + '" ' + oc + '>' +
+                    persona.inicial + '</span>';
             }).join('');
-            return `<div class="nucleo-section">
-                <div class="nucleo-header" style="background:${nucleo.color}30;color:${nucleo.color}">${nucleo.nombre}</div>
-                <div class="personas-row">${personasHtml}</div>
-            </div>`;
+            return '<div class="nucleo-section">' +
+                '<div class="nucleo-header" style="background:' + nucleo.color + '30;color:' + nucleo.color + '">' + nucleo.nombre + '</div>' +
+                '<div class="personas-row">' + chips + '</div></div>';
         }).join('');
-        
-        return `<div class="meal-card ${isImportant ? 'meal-important' : 'meal-wildcard'}">
-            <div class="meal-head"><span>${m.icon}</span><span>${m.label}</span>${!isImportant ? '<span class="text-amber-500 text-[10px]">(comodin)</span>' : ''}</div>
-            ${nucleosHtml}
-        </div>`;
+        return '<div class="meal-card ' + (m.importante ? 'meal-important' : 'meal-wildcard') + '">' +
+            '<div class="meal-head"><span>' + m.icon + '</span><span>' + m.label + '</span>' +
+            (!m.importante ? '<span class="text-amber-500 text-[10px]">(comod\u00edn)</span>' : '') +
+            '</div>' + nucleosHtml + '</div>';
     }).join('');
-    
-    return `<div class="cal-wrap ${editable ? '' : 'past'}">
-        <div class="cal-head">
-            <div class="flex items-center gap-2">
-                <span class="cal-year">&#127876; ${year.year}</span>
-                <span class="year-badge ${badgeClass}">${badgeText}</span>
-            </div>
-            <div class="cal-actions">
-                <button class="delete-year-btn" onclick="deleteYear(${year.year})" ${canDeleteThis ? '' : 'disabled'} title="${canDeleteThis ? 'Eliminar ano' : 'Solo se puede eliminar el ultimo ano'}">&#128465;</button>
-            </div>
-        </div>
-        ${meals}
-    </div>`;
+    return '<div class="cal-wrap ' + (editable ? '' : 'past') + '" id="yw-' + year.year + '">' +
+        '<div class="cal-head">' +
+        '<div class="flex items-center gap-2">' +
+        '<span class="cal-year">&#127876; ' + year.year + '</span>' +
+        '<span class="year-badge ' + (editable ? 'future' : 'past') + '">' + (editable ? 'Editable' : 'Pasado') + '</span>' +
+        '</div>' +
+        '<div class="cal-actions">' +
+        '<button class="delete-year-btn" onclick="deleteYear(' + year.year + ')" ' + (canDel ? '' : 'disabled') + '>&#128465;</button>' +
+        '</div></div>' +
+        meals +
+        renderSummary(year) +
+        '</div>';
 }
 
 function togglePersona(el) {
-    const year = parseInt(el.dataset.year);
+    var year = parseInt(el.dataset.year);
     if (!isYearEditable(year)) return;
-    
-    const momento = el.dataset.momento;
-    const nucleoId = el.dataset.nucleo;
-    const personaId = el.dataset.persona;
-    
+    var momento = el.dataset.momento;
+    var nucleoId = el.dataset.nucleo;
+    var personaId = el.dataset.persona;
     el.classList.toggle('selected');
     el.classList.toggle('unselected');
-    
-    const yearData = appData.years.find(y => y.year === year);
+    var yearData = null;
+    for (var i = 0; i < appData.years.length; i++) { if (appData.years[i].year === year) { yearData = appData.years[i]; break; } }
     if (!yearData) return;
-    
-    let comida = yearData.comidas.find(c => c.momento === momento);
-    if (!comida) {
-        comida = { momento, nucleo_id: null, personas: [], notas: '', personas_por_nucleo: {} };
-        yearData.comidas.push(comida);
-    }
+    var comida = null;
+    for (var j = 0; j < yearData.comidas.length; j++) { if (yearData.comidas[j].momento === momento) { comida = yearData.comidas[j]; break; } }
+    if (!comida) { comida = { momento: momento, nucleo_id: null, personas: [], notas: '', personas_por_nucleo: {} }; yearData.comidas.push(comida); }
     if (!comida.personas_por_nucleo) comida.personas_por_nucleo = {};
     if (!comida.personas_por_nucleo[nucleoId]) comida.personas_por_nucleo[nucleoId] = [];
-    
-    const idx = comida.personas_por_nucleo[nucleoId].indexOf(personaId);
+    var idx = comida.personas_por_nucleo[nucleoId].indexOf(personaId);
     if (idx === -1) comida.personas_por_nucleo[nucleoId].push(personaId);
     else comida.personas_por_nucleo[nucleoId].splice(idx, 1);
-    
+    var wrap = document.getElementById('yw-' + year);
+    if (wrap) { var oldS = wrap.querySelector('.year-summary'); if (oldS) oldS.outerHTML = renderSummary(yearData); }
     debouncedSave(year);
 }
 
 function debouncedSave(year) {
     if (saveTimeout) clearTimeout(saveTimeout);
     document.getElementById('saving-indicator').classList.add('show');
-    saveTimeout = setTimeout(async () => {
-        const yearData = appData.years.find(y => y.year === year);
-        if (yearData) {
-            try {
-                await fetch(`/api/vacaciones/year/${year}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ comidas: yearData.comidas, notas: yearData.notas || '' })
-                });
-            } catch (e) { console.error('Error saving', e); }
+    saveTimeout = setTimeout(function() {
+        var yd = null;
+        for (var i = 0; i < appData.years.length; i++) { if (appData.years[i].year === year) { yd = appData.years[i]; break; } }
+        if (yd) {
+            fetch('/api/vacaciones/year/' + year, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ comidas: yd.comidas, notas: yd.notas || '' })
+            }).catch(function(e) { console.error('Error saving', e); });
         }
         document.getElementById('saving-indicator').classList.remove('show');
     }, 500);
 }
 
-async function deleteYear(year) {
-    if (!confirm(`Eliminar el ano ${year}?`)) return;
-    try {
-        const resp = await fetch(`/api/vacaciones/year/${year}`, { method: 'DELETE' });
-        if (resp.ok) await loadData();
-    } catch (e) { console.error('Error deleting year', e); }
+function deleteYear(year) {
+    if (!confirm('\u00bfEliminar el a\u00f1o ' + year + '?')) return;
+    fetch('/api/vacaciones/year/' + year, { method: 'DELETE' })
+        .then(function(r) { if (r.ok) loadData(); }).catch(function(e) { console.error(e); });
 }
-
-async function addYear() {
-    try {
-        const resp = await fetch('/api/vacaciones/year', { method: 'POST' });
-        if (resp.ok) await loadData();
-    } catch (e) { console.error('Error adding year', e); }
+function addYear() {
+    fetch('/api/vacaciones/year', { method: 'POST' })
+        .then(function(r) { if (r.ok) loadData(); }).catch(function(e) { console.error(e); });
 }
 
 function openConfig() {
@@ -314,61 +339,78 @@ function openConfig() {
     renderPersonasList();
     document.getElementById('config-modal').classList.add('open');
 }
-
 function closeConfig() { document.getElementById('config-modal').classList.remove('open'); }
-
 function switchTab(tab) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelector('[data-tab="' + tab + '"]').classList.add('active');
     document.getElementById('tab-nucleos').style.display = tab === 'nucleos' ? 'block' : 'none';
     document.getElementById('tab-personas').style.display = tab === 'personas' ? 'block' : 'none';
 }
 
 function renderNucleosList() {
-    document.getElementById('nucleos-list').innerHTML = editNucleos.map((n, i) => `
-        <div class="form-item">
-            <span class="color-dot" style="background:${n.color}" onclick="cycleColor(${i})"></span>
-            <input type="text" value="${n.nombre}" placeholder="Nombre del nucleo" onchange="editNucleos[${i}].nombre=this.value">
-            <button class="delete-btn" onclick="deleteNucleo(${i})">&#128465;</button>
-        </div>`).join('');
+    document.getElementById('nucleos-list').innerHTML = editNucleos.map(function(n, i) {
+        var opts = '<option value="">-- Ninguno --</option>' +
+            editPersonas.filter(function(p) { return p.nombre.trim(); }).map(function(p) {
+                return '<option value="' + p.id + '"' + ((n.hijo_id || '') === p.id ? ' selected' : '') + '>' + p.nombre + '</option>';
+            }).join('');
+        return '<div class="nucleo-form-group">' +
+            '<div class="nucleo-form-row">' +
+            '<span class="color-dot" style="background:' + n.color + '" onclick="cycleColor(' + i + ')"></span>' +
+            '<input type="text" value="' + n.nombre + '" placeholder="Nombre del n\u00facleo"' +
+            ' onchange="editNucleos[' + i + '].nombre=this.value"' +
+            ' style="flex:1;background:transparent;border:none;color:white;font-size:13px;outline:none">' +
+            '<button style="background:none;border:none;color:#ef4444;cursor:pointer;padding:4px;font-size:14px"' +
+            ' onclick="deleteNucleo(' + i + ')">&#128465;</button>' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:8px">' +
+            '<span style="font-size:10px;color:#64748b;white-space:nowrap">Hijo/a:</span>' +
+            '<select class="hijo-select" onchange="editNucleos[' + i + '].hijo_id=this.value">' + opts + '</select>' +
+            '</div></div>';
+    }).join('');
 }
 
 function renderPersonasList() {
-    const usedIniciales = [];
-    editPersonas.forEach(p => {
-        if (p.nombre.trim()) { p._previewInicial = generateInicial(p.nombre, usedIniciales); usedIniciales.push(p._previewInicial); }
-        else p._previewInicial = '';
+    var used = [];
+    editPersonas.forEach(function(p) {
+        if (p.nombre.trim()) { p._ini = generateInicial(p.nombre, used); used.push(p._ini); }
+        else p._ini = '';
     });
-    document.getElementById('personas-list').innerHTML = editPersonas.map((p, i) => `
-        <div class="form-item">
-            <span class="inicial-badge">${p._previewInicial || '-'}</span>
-            <input type="text" value="${p.nombre}" placeholder="Nombre" onchange="updatePersonaNombre(${i}, this.value)">
-            <button class="delete-btn" onclick="deletePersona(${i})">&#128465;</button>
-        </div>`).join('');
+    document.getElementById('personas-list').innerHTML = editPersonas.map(function(p, i) {
+        return '<div class="form-item">' +
+            '<span class="inicial-badge">' + (p._ini || '-') + '</span>' +
+            '<input type="text" value="' + p.nombre + '" placeholder="Nombre" onchange="updatePersonaNombre(' + i + ', this.value)">' +
+            '<button class="delete-btn" onclick="deletePersona(' + i + ')">&#128465;</button>' +
+            '</div>';
+    }).join('');
 }
 
-function updatePersonaNombre(i, value) { editPersonas[i].nombre = value; renderPersonasList(); }
-function addNucleo() { editNucleos.push({ id: 'n_' + Date.now(), nombre: '', color: COLORS[editNucleos.length % COLORS.length] }); renderNucleosList(); }
+function updatePersonaNombre(i, v) { editPersonas[i].nombre = v; renderPersonasList(); renderNucleosList(); }
+function addNucleo() { editNucleos.push({ id: 'n_' + Date.now(), nombre: '', color: COLORS[editNucleos.length % COLORS.length], hijo_id: '' }); renderNucleosList(); }
 function deleteNucleo(i) { editNucleos.splice(i, 1); renderNucleosList(); }
-function cycleColor(i) { const idx = COLORS.indexOf(editNucleos[i].color); editNucleos[i].color = COLORS[(idx + 1) % COLORS.length]; renderNucleosList(); }
-function addPersona() { editPersonas.push({ id: 'p_' + Date.now(), nombre: '', inicial: '' }); renderPersonasList(); }
-function deletePersona(i) { editPersonas.splice(i, 1); renderPersonasList(); }
+function cycleColor(i) { var idx = COLORS.indexOf(editNucleos[i].color); editNucleos[i].color = COLORS[(idx+1)%COLORS.length]; renderNucleosList(); }
+function addPersona() { editPersonas.push({ id: 'p_' + Date.now(), nombre: '', inicial: '' }); renderPersonasList(); renderNucleosList(); }
+function deletePersona(i) { editPersonas.splice(i, 1); renderPersonasList(); renderNucleosList(); }
 
-async function saveConfig() {
-    const nucleos = editNucleos.filter(n => n.nombre.trim()).map(n => ({id: n.id, nombre: n.nombre, color: n.color}));
-    const personas = editPersonas.filter(p => p.nombre.trim()).map(p => ({id: p.id, nombre: p.nombre}));
-    try {
-        const resp = await fetch('/api/vacaciones/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nucleos, personas }) });
-        if (resp.ok) { closeConfig(); await loadData(); }
-    } catch (e) { console.error('Error saving config', e); }
+function saveConfig() {
+    var nucleos = editNucleos.filter(function(n) { return n.nombre.trim(); }).map(function(n) {
+        return { id: n.id, nombre: n.nombre, color: n.color, hijo_id: n.hijo_id || '' };
+    });
+    var personas = editPersonas.filter(function(p) { return p.nombre.trim(); }).map(function(p) {
+        return { id: p.id, nombre: p.nombre };
+    });
+    fetch('/api/vacaciones/config', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nucleos: nucleos, personas: personas })
+    }).then(function(r) {
+        if (r.ok) { closeConfig(); loadData(); }
+    }).catch(function(e) { console.error('Error saving config', e); });
 }
 
-(async function init() {
-    await loadData();
+loadData().then(function() {
     document.getElementById('app-content').classList.add('visible');
     document.getElementById('loading-overlay').classList.add('done');
-    setTimeout(() => { document.getElementById('loading-overlay').style.display = 'none'; }, 400);
-})();
+    setTimeout(function() { document.getElementById('loading-overlay').style.display = 'none'; }, 400);
+});
 </script>
 </body>
 </html>
