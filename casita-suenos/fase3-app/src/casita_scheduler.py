@@ -275,6 +275,14 @@ class CasitaScheduler:
     def undismiss_property(self, uid: str) -> bool:
         return self._db.undismiss(uid)
 
+    def mark_viewed(self, uid: str) -> bool:
+        """Marca una propiedad como vista."""
+        return self._db.mark_viewed(uid)
+
+    def save_comment(self, uid: str, comment: str) -> bool:
+        """Guarda un comentario para una propiedad."""
+        return self._db.save_comment(uid, comment)
+
     def get_schedule_config(self) -> dict:
         return self._db.get_schedule_config()
 

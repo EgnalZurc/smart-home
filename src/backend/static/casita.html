@@ -50,6 +50,22 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 .badge-warn{color:#fb923c;background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.3);border-radius:.375rem;padding:1px 7px;font-size:10px}
 .badge-err{color:#f87171;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:.375rem;padding:1px 7px;font-size:10px}
 .badge-never{color:#94a3b8;background:rgba(148,163,184,.1);border:1px solid rgba(148,163,184,.2);border-radius:.375rem;padding:1px 7px;font-size:10px}
+/* Swipe cards */
+.prop-card{position:relative;overflow:hidden;touch-action:pan-y;user-select:none;cursor:pointer;transition:transform .2s ease,opacity .2s ease}
+.prop-card:active{opacity:.92}
+.swipe-hint-left,.swipe-hint-right{position:absolute;top:50%;transform:translateY(-50%);opacity:0;transition:opacity .15s;pointer-events:none;font-size:11px;font-weight:600;white-space:nowrap;z-index:10}
+.swipe-hint-left{right:12px;color:#f87171}
+.swipe-hint-right{left:12px;color:#34d399}
+.prop-card.swiping-left .swipe-hint-left{opacity:1}
+.prop-card.swiping-right .swipe-hint-right{opacity:1}
+.prop-card.swiping-left{background:linear-gradient(135deg,rgba(30,41,59,.6),rgba(127,29,29,.4))}
+.prop-card.swiping-right{background:linear-gradient(135deg,rgba(6,78,59,.3),rgba(30,41,59,.6))}
+/* Indicador visto */
+.viewed-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;color:#34d399;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25);border-radius:.25rem;padding:1px 5px}
+/* Modal comentario */
+#modal-comment .modal-box{border-radius:1.25rem 1.25rem 0 0}
+.comment-textarea{width:100%;background:rgba(30,41,59,.8);border:1px solid rgba(71,85,105,.5);border-radius:.75rem;color:#e2e8f0;font-size:13px;padding:10px 12px;resize:none;outline:none;min-height:100px;font-family:inherit}
+.comment-textarea:focus{border-color:rgba(99,102,241,.6)}
 </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
@@ -282,6 +298,28 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
   </div>
 </div>
 
+<!-- ══ MODAL: COMENTARIO ════════════════════════════════════════════════ -->
+<div id="modal-comment" class="modal-overlay hidden" onclick="closeIfOverlay(event,'modal-comment')">
+  <div class="modal-box">
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-bold">Comentario</h2>
+      <button onclick="closeModal('modal-comment')" class="text-slate-500 hover:text-white p-1">✕</button>
+    </div>
+    <p id="comment-prop-title" class="text-xs text-slate-400 mb-3 line-clamp-2"></p>
+    <textarea id="comment-textarea" class="comment-textarea" placeholder="Añade tus notas sobre esta casa..."></textarea>
+    <div class="flex gap-2 mt-3">
+      <button onclick="closeModal('modal-comment')"
+        class="flex-1 bg-slate-700/50 text-slate-400 text-xs py-2.5 rounded-xl transition-colors">
+        Cancelar
+      </button>
+      <button onclick="saveComment()"
+        class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2.5 rounded-xl transition-colors font-medium">
+        Guardar
+      </button>
+    </div>
+  </div>
+</div>
 <script>
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -404,8 +442,8 @@ function renderRadar(props, append = false) {
     return;
   }
   empty.classList.add("hidden");
-  const html = props.map(p => {
-    const scoreW = Math.round((p.score_total / 93) * 100);
+  const cards = props.map(p => {
+    const scoreW = Math.round((p.score_total / 97) * 100);
     const details = [
       p.rooms ? `${p.rooms} hab.` : null,
       p.size_m2 ? `${Math.round(p.size_m2)} m²` : null,
@@ -414,13 +452,30 @@ function renderRadar(props, append = false) {
     const portalBadge = _fmtPortal(p.portal);
     const seenLabel   = _fmtFirstSeen(p.first_seen);
     const madridLabel = _fmtMadrid(p.distance_madrid_min);
+    const viewedBadge = p.viewed
+      ? '<span class="viewed-badge">✓ Visto</span>'
+      : '';
+    const commentIcon = p.comment
+      ? '<span class="text-[9px] text-amber-400" title="' + p.comment.replace(/"/g,'&quot;') + '">📝</span>'
+      : '';
+    const cardCls = p.viewed
+      ? "prop-card p-3 opacity-70"
+      : "prop-card p-3";
     return `
-      <div class="prop-card p-3" data-uid="${p.uid}">
+      <div class="${cardCls}" data-uid="${p.uid}" data-url="${p.url}"
+           data-title="${(p.title||'').replace(/"/g,'&quot;')}"
+           data-comment="${(p.comment||'').replace(/"/g,'&quot;')}"
+           data-viewed="${p.viewed ? '1' : '0'}">
+        <!-- Hints de swipe -->
+        <div class="swipe-hint-right">→ ✓ Marcar visto</div>
+        <div class="swipe-hint-left">Descartar ←</div>
         <div class="flex items-start justify-between gap-2">
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-1.5 mb-0.5 flex-wrap">
               <span class="text-[10px] text-indigo-400 font-semibold uppercase tracking-wide">${fmtZone(p.zone_id)}</span>
               ${portalBadge}
+              ${viewedBadge}
+              ${commentIcon}
               <span class="text-[9px] text-slate-500">${seenLabel}</span>
             </div>
             <p class="text-xs text-white leading-snug line-clamp-2 mb-1.5">${p.title || "Sin título"}</p>
@@ -431,26 +486,160 @@ function renderRadar(props, append = false) {
           </div>
           <div class="text-right shrink-0">
             <div class="text-sm font-bold text-white">${fmtPrice(p.price)}</div>
-            <div class="text-[10px] text-indigo-300 font-semibold">${p.score_total?.toFixed(1)} / 93</div>
+            <div class="text-[10px] text-indigo-300 font-semibold">${p.score_total?.toFixed(1)} / 97</div>
           </div>
         </div>
-        <div class="score-bar-bg mt-2 mb-2.5">
+        <div class="score-bar-bg mt-2">
           <div class="score-bar-fill" style="width:${scoreW}%"></div>
-        </div>
-        <div class="flex gap-2">
-          <a href="${p.url}" target="_blank" rel="noopener"
-             class="flex-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 text-[11px] py-1.5 rounded-lg text-center transition-colors">
-            Ver anuncio ↗
-          </a>
-          <button onclick="dismiss('${p.uid}', this)"
-             class="flex-1 bg-slate-700/50 hover:bg-red-900/40 text-slate-400 hover:text-red-400 text-[11px] py-1.5 rounded-lg transition-colors">
-            Descartar
-          </button>
         </div>
       </div>`;
   }).join("");
-  list.insertAdjacentHTML("beforeend", html);
+  list.insertAdjacentHTML("beforeend", cards);
+  // Attachar eventos a las nuevas tarjetas
+  list.querySelectorAll(".prop-card").forEach(card => {
+    if (!card.dataset.eventsAttached) {
+      _attachCardEvents(card);
+      card.dataset.eventsAttached = "1";
+    }
+  });
 }
+
+// ── Swipe logic ───────────────────────────────────────────────────────────────
+let _commentUid = null;
+let _commentTitle = null;
+
+function _attachCardEvents(card) {
+  let startX = 0, startY = 0, dx = 0, dragging = false;
+  const THRESHOLD = 72;   // px para activar acción
+  const HINT_SHOW = 28;  // px para mostrar hint
+
+  function _onStart(x, y) {
+    startX = x; startY = y; dx = 0; dragging = false;
+  }
+  function _onMove(x, y) {
+    dx = x - startX;
+    const dy = Math.abs(y - startY);
+    if (!dragging && (Math.abs(dx) > 6 || dy > 6)) dragging = true;
+    if (!dragging) return;
+    if (dy > Math.abs(dx) * 1.4) return; // scroll vertical dominante
+    card.style.transform = `translateX(${dx * 0.55}px)`;
+    if (dx < -HINT_SHOW) { card.classList.add("swiping-left"); card.classList.remove("swiping-right"); }
+    else if (dx > HINT_SHOW) { card.classList.add("swiping-right"); card.classList.remove("swiping-left"); }
+    else { card.classList.remove("swiping-left","swiping-right"); }
+  }
+  function _onEnd() {
+    card.classList.remove("swiping-left","swiping-right");
+    card.style.transform = "";
+    if (!dragging) return;
+    if (dx < -THRESHOLD) {
+      _swipeDiscard(card);
+    } else if (dx > THRESHOLD) {
+      _swipeViewed(card);
+    }
+    dragging = false; dx = 0;
+  }
+
+  // Touch
+  card.addEventListener("touchstart", e => _onStart(e.touches[0].clientX, e.touches[0].clientY), {passive:true});
+  card.addEventListener("touchmove",  e => _onMove(e.touches[0].clientX, e.touches[0].clientY), {passive:true});
+  card.addEventListener("touchend",   _onEnd);
+  // Mouse (desktop)
+  card.addEventListener("mousedown", e => { _onStart(e.clientX, e.clientY); card.addEventListener("mousemove", _onMouseMove); });
+  function _onMouseMove(e) { _onMove(e.clientX, e.clientY); }
+  document.addEventListener("mouseup", () => { card.removeEventListener("mousemove", _onMouseMove); _onEnd(); });
+
+  // Click = abrir anuncio (solo si no fue un swipe)
+  card.addEventListener("click", e => {
+    if (dragging || Math.abs(dx) > 6) return;
+    const url = card.dataset.url;
+    if (url) window.open(url, "_blank", "noopener");
+  });
+}
+
+async function _swipeDiscard(card) {
+  const uid = card.dataset.uid;
+  card.style.transition = "transform .25s ease, opacity .25s ease";
+  card.style.transform = "translateX(-110%)";
+  card.style.opacity = "0";
+  setTimeout(() => card.remove(), 260);
+  try {
+    await fetch(API + "/dismiss", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({uid})
+    });
+    const el = document.getElementById("st-dismissed");
+    if (el) el.textContent = (parseInt(el.textContent)||0) + 1;
+  } catch(e) { console.warn("dismiss error", e); }
+}
+
+async function _swipeViewed(card) {
+  const uid   = card.dataset.uid;
+  const title = card.dataset.title;
+  const existingComment = card.dataset.comment || "";
+
+  // Marcar como visto en BD
+  try {
+    await fetch(API + "/mark-viewed", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({uid})
+    });
+  } catch(e) { console.warn("mark-viewed error", e); }
+
+  // Actualizar visualmente la tarjeta
+  card.classList.add("opacity-70");
+  card.dataset.viewed = "1";
+  // Insertar badge visto si no existe
+  const header = card.querySelector(".flex.items-center.gap-1\.5");
+  if (header && !header.querySelector(".viewed-badge")) {
+    const badge = document.createElement("span");
+    badge.className = "viewed-badge";
+    badge.textContent = "✓ Visto";
+    header.insertBefore(badge, header.children[2] || null);
+  }
+
+  // Abrir popup comentario
+  _commentUid   = uid;
+  _commentTitle = title;
+  document.getElementById("comment-prop-title").textContent = title;
+  document.getElementById("comment-textarea").value = existingComment;
+  openModal("modal-comment");
+  setTimeout(() => document.getElementById("comment-textarea").focus(), 200);
+}
+
+async function saveComment() {
+  const uid     = _commentUid;
+  const comment = document.getElementById("comment-textarea").value.trim();
+  if (!uid) { closeModal("modal-comment"); return; }
+  try {
+    await fetch(API + "/save-comment", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({uid, comment})
+    });
+    // Actualizar dataset de la tarjeta
+    const card = document.querySelector(`[data-uid="${uid}"]`);
+    if (card) {
+      card.dataset.comment = comment;
+      // Mostrar/ocultar icono de nota
+      const header = card.querySelector(".flex.items-center.gap-1\.5");
+      if (header) {
+        const existing = header.querySelector(".text-amber-400");
+        if (comment && !existing) {
+          const icon = document.createElement("span");
+          icon.className = "text-[9px] text-amber-400";
+          icon.title = comment;
+          icon.textContent = "📝";
+          header.appendChild(icon);
+        } else if (!comment && existing) {
+          existing.remove();
+        } else if (existing && comment) {
+          existing.title = comment;
+        }
+      }
+    }
+  } catch(e) { console.warn("save-comment error", e); }
+  closeModal("modal-comment");
+}
+
 
 async function dismiss(uid, btn) {
   btn.disabled = true;

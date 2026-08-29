@@ -78,6 +78,9 @@ CREATE TABLE IF NOT EXISTS scored_properties (
     alerted         INTEGER NOT NULL DEFAULT 0,
     dismissed       INTEGER NOT NULL DEFAULT 0,
     dismissed_at    TEXT,
+    viewed          INTEGER NOT NULL DEFAULT 0,
+    viewed_at       TEXT,
+    comment         TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (property_uid) REFERENCES properties(uid)
 );
 
@@ -140,6 +143,9 @@ class Database:
             ("scored_properties", "score_p13",    "REAL NOT NULL DEFAULT 0"),
             ("scored_properties", "dismissed",     "INTEGER NOT NULL DEFAULT 0"),
             ("scored_properties", "dismissed_at",  "TEXT"),
+            ("scored_properties", "viewed",        "INTEGER NOT NULL DEFAULT 0"),
+            ("scored_properties", "viewed_at",     "TEXT"),
+            ("scored_properties", "comment",       "TEXT NOT NULL DEFAULT ''"),
         ]
         for table, col, definition in migrations:
             try:
@@ -259,14 +265,14 @@ class Database:
                (property_uid, zone_id, score_total,
                 score_p1, score_p2, score_p3, score_p4, score_p5,
                 score_p6, score_p7, score_p8, score_p9, score_p10, score_p11, score_p12, score_p13,
-                scored_at, alerted, dismissed, dismissed_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                scored_at, alerted, dismissed, dismissed_at, viewed, viewed_at, comment)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 uid, scored.zone.id, s.total,
                 s.p1_rooms, s.p2_piscina, s.p3_distance, s.p4_beach, s.p5_pools,
                 s.p6_supermarket, s.p7_health, s.p8_hospital, s.p9_price,
                 s.p10_fire, getattr(s, "p11_preference", 0.0), getattr(s, "p12_flood", 0.0), getattr(s, "p13_ac", 0.0),
-                now, alerted, dismissed, dism_at,
+                now, alerted, dismissed, dism_at, viewed, viewed_at, comment,
             ),
         )
         self._conn.commit()
@@ -384,7 +390,9 @@ class Database:
                       s.score_total, s.score_p1, s.score_p2, s.score_p3,
                       s.score_p4, s.score_p5, s.score_p6, s.score_p7,
                       s.score_p8, s.score_p9, s.score_p10, s.score_p11,
-                      COALESCE(s.score_p12, 0) as score_p12
+                      COALESCE(s.score_p12, 0) as score_p12,
+                      COALESCE(s.viewed, 0) as viewed,
+                      s.viewed_at, COALESCE(s.comment, '') as comment
                FROM scored_properties s
                JOIN properties p ON p.uid = s.property_uid
                WHERE s.score_total >= ? AND s.dismissed = 0
@@ -482,6 +490,38 @@ class Database:
             "SELECT zone_id, COUNT(*) as cnt FROM properties GROUP BY zone_id"
         ).fetchall()
         return {r["zone_id"]: r["cnt"] for r in rows}
+
+    # ------------------------------------------------------------------
+    # Visto y comentarios
+    # ------------------------------------------------------------------
+    def mark_viewed(self, property_uid: str) -> bool:
+        """Marca una propiedad como vista. Devuelve True si existia."""
+        row = self._conn.execute(
+            "SELECT 1 FROM scored_properties WHERE property_uid = ?", (property_uid,)
+        ).fetchone()
+        if not row:
+            return False
+        now = datetime.now().isoformat()
+        self._conn.execute(
+            "UPDATE scored_properties SET viewed=1, viewed_at=? WHERE property_uid=?",
+            (now, property_uid),
+        )
+        self._conn.commit()
+        return True
+
+    def save_comment(self, property_uid: str, comment: str) -> bool:
+        """Guarda un comentario para una propiedad. Devuelve True si existia."""
+        row = self._conn.execute(
+            "SELECT 1 FROM scored_properties WHERE property_uid = ?", (property_uid,)
+        ).fetchone()
+        if not row:
+            return False
+        self._conn.execute(
+            "UPDATE scored_properties SET comment=? WHERE property_uid=?",
+            (comment.strip(), property_uid),
+        )
+        self._conn.commit()
+        return True
 
     # ------------------------------------------------------------------
     # Telegram chats

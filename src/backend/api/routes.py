@@ -685,6 +685,28 @@ async def undismiss_casita_property(request: Request):
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
 
+@router.post("/casita/mark-viewed")
+async def mark_casita_viewed(request: Request):
+    """Marca una propiedad como vista."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post("http://casita-suenos:8001/mark-viewed", json=body)
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+@router.post("/casita/save-comment")
+async def save_casita_comment(request: Request):
+    """Guarda un comentario para una propiedad."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post("http://casita-suenos:8001/save-comment", json=body)
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
 
 @router.get("/casita/summary")
 async def get_casita_summary():

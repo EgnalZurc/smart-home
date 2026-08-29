@@ -265,6 +265,15 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 daemon=True, name="manual-summary"
             ).start()
             self._send_json(202, {"ok": True, "message": "Resumen iniciado"})
+        elif self.path == "/mark-viewed":
+            uid = body.get("uid", "")
+            ok = _scheduler_instance.mark_viewed(uid)
+            self._send_json(200 if ok else 404, {"ok": ok, "uid": uid})
+        elif self.path == "/save-comment":
+            uid = body.get("uid", "")
+            comment = body.get("comment", "")
+            ok = _scheduler_instance.save_comment(uid, comment)
+            self._send_json(200 if ok else 404, {"ok": ok, "uid": uid})
 
         else:
             self._send_json(404, {"error": "Not found"})
