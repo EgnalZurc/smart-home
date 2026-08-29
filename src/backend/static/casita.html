@@ -61,7 +61,16 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 .prop-card.swiping-left{background:linear-gradient(135deg,rgba(30,41,59,.6),rgba(127,29,29,.4))}
 .prop-card.swiping-right{background:linear-gradient(135deg,rgba(6,78,59,.3),rgba(30,41,59,.6))}
 /* Indicador visto */
-.viewed-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;color:#34d399;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25);border-radius:.25rem;padding:1px 5px}
+.viewed-badge{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:rgba(52,211,153,.15);border:1.5px solid rgba(52,211,153,.5);color:#34d399;flex-shrink:0}
+.viewed-badge svg{width:10px;height:10px}
+/* Botón ojo filtro — estados */
+#btn-viewed-filter{position:relative}
+#btn-viewed-filter.filter-viewed{background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.5);color:#34d399}
+#btn-viewed-filter.filter-not-viewed{background:rgba(148,163,184,.1);border-color:rgba(148,163,184,.4);color:#94a3b8}
+#btn-viewed-filter.filter-viewed::after{content:'';position:absolute;top:-3px;right:-3px;width:7px;height:7px;border-radius:50%;background:#34d399}
+#btn-viewed-filter.filter-not-viewed::after{content:'';position:absolute;top:-3px;right:-3px;width:7px;height:7px;border-radius:50%;background:#94a3b8}
+/* Línea tachada en el ojo cuando filter=not_viewed */
+#btn-viewed-filter.filter-not-viewed #eye-icon{opacity:.5}
 /* Modal comentario */
 #modal-comment .modal-box{border-radius:1.25rem 1.25rem 0 0}
 .comment-textarea{width:100%;background:rgba(30,41,59,.8);border:1px solid rgba(71,85,105,.5);border-radius:.75rem;color:#e2e8f0;font-size:13px;padding:10px 12px;resize:none;outline:none;min-height:100px;font-family:inherit}
@@ -143,16 +152,25 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
     <!-- Cabecera con total y controles de orden -->
     <div class="flex items-center justify-between mb-3 px-1">
       <p class="text-[10px] text-slate-500 uppercase tracking-widest">🏠 En el radar <span id="radar-total-label" class="text-slate-600"></span></p>
-      <select id="radar-sort" onchange="onSortChange()"
-        class="text-[10px] bg-slate-800/60 border border-slate-700/50 text-slate-300 rounded-lg px-2 py-1 outline-none">
-        <option value="score">Por puntos</option>
-        <option value="price">Por precio</option>
-        <option value="zone">Por zona</option>
-        <option value="portal">Por portal</option>
-        <option value="date">Más recientes</option>
-        <option value="viewed_only">Solo vistas</option>
-        <option value="not_viewed">No vistas</option>
-      </select>
+      <div class="flex items-center gap-2">
+        <!-- Botón toggle filtro vistas -->
+        <button id="btn-viewed-filter" onclick="toggleViewedFilter()"
+          title="Filtrar por estado de visita"
+          class="flex items-center justify-center w-7 h-7 rounded-lg border border-slate-700/50 bg-slate-800/60 text-slate-500 hover:text-slate-200 hover:border-slate-500 transition-all">
+          <svg id="eye-icon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </button>
+        <select id="radar-sort" onchange="onSortChange()"
+          class="text-[10px] bg-slate-800/60 border border-slate-700/50 text-slate-300 rounded-lg px-2 py-1 outline-none">
+          <option value="score">Por puntos</option>
+          <option value="price">Por precio</option>
+          <option value="zone">Por zona</option>
+          <option value="portal">Por portal</option>
+          <option value="date">Más recientes</option>
+        </select>
+      </div>
     </div>
     <div id="radar-list" class="space-y-2.5"></div>
     <!-- Botón cargar más -->
@@ -393,20 +411,42 @@ let _radarSort   = "score";
 let _radarLoading = false;
 
 let _radarFilter = null;  // null | 'viewed' | 'not_viewed'
+// Ciclo del botón ojo: null → 'viewed' → 'not_viewed' → null
+const _viewedFilterStates = [null, 'viewed', 'not_viewed'];
+let _viewedFilterIdx = 0;
+
+function toggleViewedFilter() {
+  _viewedFilterIdx = (_viewedFilterIdx + 1) % _viewedFilterStates.length;
+  _radarFilter = _viewedFilterStates[_viewedFilterIdx];
+  // Actualizar apariencia del botón
+  const btn = document.getElementById("btn-viewed-filter");
+  if (btn) {
+    btn.classList.remove("filter-viewed", "filter-not-viewed");
+    btn.title = _radarFilter === "viewed" ? "Mostrando: Solo vistas"
+              : _radarFilter === "not_viewed" ? "Mostrando: No vistas"
+              : "Filtrar por visitas";
+    if (_radarFilter === "viewed")     btn.classList.add("filter-viewed");
+    if (_radarFilter === "not_viewed") btn.classList.add("filter-not-viewed");
+    // Actualizar icono: ojo abierto (todas/vistas) o ojo cerrado (no vistas)
+    const icon = document.getElementById("eye-icon");
+    if (icon) {
+      if (_radarFilter === "not_viewed") {
+        // Ojo con línea tachada
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/>';
+      } else {
+        // Ojo abierto
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>';
+      }
+    }
+  }
+  _radarOffset = 0;
+  document.getElementById("radar-list").innerHTML = "";
+  loadRadar();
+}
 
 function onSortChange() {
   const sel = document.getElementById("radar-sort");
-  const val = sel ? sel.value : "score";
-  if (val === "viewed_only") {
-    _radarFilter = "viewed";
-    _radarSort = "score";
-  } else if (val === "not_viewed") {
-    _radarFilter = "not_viewed";
-    _radarSort = "score";
-  } else {
-    _radarFilter = null;
-    _radarSort = val;
-  }
+  _radarSort = sel ? sel.value : "score";
   _radarOffset = 0;
   document.getElementById("radar-list").innerHTML = "";
   loadRadar();
@@ -468,7 +508,7 @@ function renderRadar(props, append = false) {
     const seenLabel   = _fmtFirstSeen(p.first_seen);
     const madridLabel = _fmtMadrid(p.distance_madrid_min);
     const viewedBadge = p.viewed
-      ? '<span class="viewed-badge">✓ Visto</span>'
+      ? `<span class="viewed-badge" title="Vista"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg></span>`
       : '';
     const commentIcon = p.comment
       ? '<span class="text-[9px] text-amber-400" title="' + p.comment.replace(/"/g,'&quot;') + '">📝</span>'
@@ -547,20 +587,18 @@ function _attachCardEvents(card) {
   }
   function _end() {
     card.classList.remove("swiping-left","swiping-right");
+    // SIEMPRE resetear transform al soltar — evita que quede pillada
+    card.style.transition = "transform .2s ease";
+    card.style.transform = "";
     const absDx = Math.abs(curDx), absDy = Math.abs(curDy);
     const wasHorizontal = absDx >= 6 && absDx > absDy;
-    if (!wasHorizontal) {
-      card.style.transform = "";
-      return;
-    }
+    if (!wasHorizontal) return;
     if (curDx < -THRESHOLD) {
       _swiped = true;
       _swipeDiscard(card);
     } else if (curDx > THRESHOLD) {
       _swiped = true;
       _swipeViewed(card);
-    } else {
-      card.style.transform = "";
     }
   }
 
@@ -640,17 +678,23 @@ async function _swipeViewed(card) {
   if (header && !header.querySelector(".viewed-badge")) {
     const badge = document.createElement("span");
     badge.className = "viewed-badge";
-    badge.textContent = "✓ Visto";
+    badge.title = "Vista";
+    badge.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>';
     header.insertBefore(badge, header.children[2] || null);
   }
 
-  // Abrir popup comentario
+  // Resetear transform de la tarjeta antes de abrir modal
+  card.style.transition = "transform .2s ease";
+  card.style.transform = "";
+  // Abrir popup comentario (pequeño delay para que la animacion termine)
   _commentUid   = uid;
   _commentTitle = title;
   document.getElementById("comment-prop-title").textContent = title;
   document.getElementById("comment-textarea").value = existingComment;
-  openModal("modal-comment");
-  setTimeout(() => document.getElementById("comment-textarea").focus(), 200);
+  setTimeout(() => {
+    openModal("modal-comment");
+    setTimeout(() => document.getElementById("comment-textarea").focus(), 200);
+  }, 220);
 }
 
 async function saveComment() {
