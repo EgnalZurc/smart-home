@@ -40,48 +40,92 @@
         #dash-content.visible { opacity:1; }
         .spinner { width:32px; height:32px; border:3px solid rgba(255,255,255,.1); border-top-color:rgba(255,255,255,.7); border-radius:50%; animation:spin .8s linear infinite; }
         @keyframes spin { to { transform:rotate(360deg); } }
+        /* User / logout area */
+        .user-bar { display:flex; align-items:center; gap:8px; }
+        .user-chip {
+            display:flex; align-items:center; gap:5px;
+            background:rgba(30,41,59,.6);
+            border:1px solid rgba(51,65,85,.5);
+            border-radius:20px;
+            padding:3px 10px 3px 6px;
+            font-size:0.75rem;
+            color:#94a3b8;
+            line-height:1;
+        }
+        .user-avatar {
+            width:20px; height:20px;
+            background:linear-gradient(135deg,rgba(79,70,229,.4),rgba(99,102,241,.2));
+            border:1px solid rgba(99,102,241,.3);
+            border-radius:50%;
+            display:flex; align-items:center; justify-content:center;
+            font-size:0.625rem;
+            font-weight:700;
+            color:#a5b4fc;
+            text-transform:uppercase;
+        }
+        .btn-logout {
+            background:none;
+            border:1px solid rgba(51,65,85,.5);
+            border-radius:8px;
+            padding:4px 10px;
+            font-size:0.75rem;
+            color:#64748b;
+            cursor:pointer;
+            transition:all .2s;
+            white-space:nowrap;
+        }
+        .btn-logout:hover { border-color:rgba(239,68,68,.4); color:#f87171; background:rgba(239,68,68,.06); }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
-
 <div id="dash-content">
 <div class="max-w-md mx-auto px-4 pt-7 pb-12 fade-in">
-
     <header class="flex items-center justify-between mb-8">
         <h1 id="title" class="text-xl font-bold tracking-tight">Cuchi Casa</h1>
-        <div class="lang-dropdown">
-            <div class="lang-current" onclick="toggleLang()" id="lang-btn">
-                <img id="current-flag" src="/static/flags/es.svg" alt="Language" class="flag-img">
-            </div>
-            <div class="lang-menu" id="lang-menu">
-                <div class="lang-option" onclick="setLang('en')" data-lang="en" title="English">
-                    <img src="/static/flags/gb.svg" alt="English" class="flag-img">
+        <div class="flex items-center gap-2">
+            <!-- User chip + logout -->
+            <div class="user-bar" id="user-bar" style="display:none">
+                <div class="user-chip">
+                    <div class="user-avatar" id="user-avatar">?</div>
+                    <span id="user-name">—</span>
                 </div>
-                <div class="lang-option" onclick="setLang('es')" data-lang="es" title="Espa\u00f1ol">
-                    <img src="/static/flags/es.svg" alt="Espa\u00f1ol" class="flag-img">
+                <form method="post" action="/auth/logout" id="logout-form">
+                    <button type="submit" class="btn-logout" id="logout-btn" aria-label="Cerrar sesión">
+                        ↩
+                    </button>
+                </form>
+            </div>
+            <!-- Language selector -->
+            <div class="lang-dropdown">
+                <div class="lang-current" onclick="toggleLang()" id="lang-btn">
+                    <img id="current-flag" src="/static/flags/es.svg" alt="Language" class="flag-img">
+                </div>
+                <div class="lang-menu" id="lang-menu">
+                    <div class="lang-option" onclick="setLang('en')" data-lang="en" title="English">
+                        <img src="/static/flags/gb.svg" alt="English" class="flag-img">
+                    </div>
+                    <div class="lang-option" onclick="setLang('es')" data-lang="es" title="Español">
+                        <img src="/static/flags/es.svg" alt="Español" class="flag-img">
+                    </div>
                 </div>
             </div>
         </div>
     </header>
-
     <section>
         <p id="apps-label" class="text-[10px] text-slate-500 uppercase tracking-widest mb-3 px-1"></p>
         <div id="apps-list" class="space-y-2"></div>
     </section>
-
 </div>
 </div>
-
 <div id="loading-overlay"><div class="spinner"></div></div>
-
 <script>
-// â”€â”€ Translations (self-contained, no dependency on i18n.js) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Translations ──────────────────────────────────────────────────────────────
 const T = {
     es: {
         title:        'Cuchi Casa',
         applications: 'Aplicaciones',
         connected:    'Conectado',
-        offline:      'Sin conexi\u00f3n',
+        offline:      'Sin conexión',
         ac_name:      'Control AC',
         ac_desc:      'Control de temperatura, sensores Zigbee, MELCloud',
         zigbee_name:  'Zigbee2MQTT',
@@ -92,6 +136,7 @@ const T = {
         vacaciones_desc: 'Planificador de cuchi vacaciones',
         casita_name: 'Casita Sueños',
         casita_desc: 'Monitor de precios inmobiliarios',
+        logout_label: 'Salir',
     },
     en: {
         title:        'Cuchi Casa',
@@ -108,10 +153,10 @@ const T = {
         vacaciones_desc: 'Holiday planner',
         casita_name: 'Casita Sueños',
         casita_desc: 'Real estate price monitor',
+        logout_label: 'Sign out',
     },
 };
-
-// â”€â”€ App Registry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── App Registry ──────────────────────────────────────────────────────────────
 const APPS = [
     { key: 'ac',     url: '/smart-home/ac', nameKey: 'ac_name',     descKey: 'ac_desc',     statusUrl: '/api/status', getStatus: d => d?.mqtt_connected },
     { key: 'zigbee', url: '/zigbee/',        nameKey: 'zigbee_name', descKey: 'zigbee_desc', statusUrl: '/api/health/zigbee', getStatus: d => d?.online === true },
@@ -119,8 +164,7 @@ const APPS = [
     { key: 'vacaciones', url: '/smart-home/vacaciones', nameKey: 'vacaciones_name', descKey: 'vacaciones_desc', statusUrl: '/api/health/vacaciones', getStatus: d => d?.online === true },
     { key: 'casita', url: '/smart-home/casita?' + Date.now(), nameKey: 'casita_name', descKey: 'casita_desc', statusUrl: '/api/health/casita', getStatus: d => d?.online === true },
 ];
-
-// â”€â”€ Language â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Language ──────────────────────────────────────────────────────────────────
 const COOKIE = 'locale';
 function getLang() {
     const m = document.cookie.match(/(?:^|;\s*)locale=([^;]+)/);
@@ -130,11 +174,8 @@ function saveLang(l) {
     const exp = new Date(); exp.setFullYear(exp.getFullYear() + 1);
     document.cookie = `${COOKIE}=${l};expires=${exp.toUTCString()};path=/;SameSite=Lax`;
 }
-
 let currentLang = getLang();
-
 function t(key) { return T[currentLang][key] || T.en[key] || key; }
-
 function applyLang() {
     const flags = { en: '/static/flags/gb.svg', es: '/static/flags/es.svg' };
     document.getElementById('current-flag').src = flags[currentLang];
@@ -143,13 +184,13 @@ function applyLang() {
     });
     document.getElementById('title').textContent        = t('title');
     document.getElementById('apps-label').textContent   = t('applications');
-    // Also sync with i18n.js cookie so AC app picks it up
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) logoutBtn.title = t('logout_label');
     saveLang(currentLang);
     if (window.i18n && i18n.switchLocale && i18n.currentLocale !== currentLang) {
         i18n.switchLocale(currentLang).catch(() => {});
     }
 }
-
 function setLang(l) {
     document.getElementById('lang-menu').classList.remove('open');
     currentLang = l;
@@ -157,14 +198,12 @@ function setLang(l) {
     render();
     loadStatus();
 }
-
 function toggleLang() { document.getElementById('lang-menu').classList.toggle('open'); }
 document.addEventListener('click', e => {
     const dd = document.querySelector('.lang-dropdown');
     if (dd && !dd.contains(e.target)) document.getElementById('lang-menu').classList.remove('open');
 });
-
-// â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Render ────────────────────────────────────────────────────────────────────
 function render() {
     const list = document.getElementById('apps-list');
     list.innerHTML = APPS.map(app => `
@@ -175,7 +214,7 @@ function render() {
                         <span class="text-sm font-semibold">${t(app.nameKey)}</span>
                         <span id="status-${app.key}" class="flex items-center gap-1 text-[10px] text-slate-500">
                             <span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span>
-                            <span>\u2014</span>
+                            <span>—</span>
                         </span>
                     </div>
                     <p class="text-[11px] text-slate-400 truncate">${t(app.descKey)}</p>
@@ -185,8 +224,7 @@ function render() {
         </a>
     `).join('');
 }
-
-// â”€â”€ Status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Status ────────────────────────────────────────────────────────────────────
 async function loadStatus() {
     for (const app of APPS) {
         if (!app.statusUrl || !app.getStatus) continue;
@@ -201,12 +239,32 @@ async function loadStatus() {
         } catch { /* offline */ }
     }
 }
-
-// â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── User info ─────────────────────────────────────────────────────────────────
+async function loadUser() {
+    try {
+        const res = await fetch('/auth/me');
+        if (!res.ok) return;
+        const data = await res.json();
+        const username = data.username || '';
+        if (!username) return;
+        const bar     = document.getElementById('user-bar');
+        const nameEl  = document.getElementById('user-name');
+        const avatar  = document.getElementById('user-avatar');
+        nameEl.textContent  = username;
+        avatar.textContent  = username.charAt(0).toUpperCase();
+        bar.style.display   = 'flex';
+    } catch { /* ignore — session may be valid but /auth/me temporarily unavailable */ }
+}
+// ── Init ──────────────────────────────────────────────────────────────────────
 (async function init() {
     applyLang();
     render();
-    try { await Promise.race([loadStatus(), new Promise(r => setTimeout(r, 5000))]); } catch {}
+    try {
+        await Promise.race([
+            Promise.all([loadStatus(), loadUser()]),
+            new Promise(r => setTimeout(r, 5000))
+        ]);
+    } catch {}
     // Reveal
     const overlay = document.getElementById('loading-overlay');
     const content = document.getElementById('dash-content');
@@ -218,10 +276,3 @@ async function loadStatus() {
 </script>
 </body>
 </html>
-
-
-
-
-
-
-

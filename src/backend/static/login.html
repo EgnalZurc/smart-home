@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cuchi Casa — Acceso</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon-32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="stylesheet" href="/static/tailwind.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .fade-in { animation: fadeIn 0.35s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Card */
+        .login-card {
+            background: linear-gradient(145deg, rgba(30,41,59,0.85), rgba(15,23,42,0.95));
+            border: 1px solid rgba(51,65,85,0.5);
+            backdrop-filter: blur(12px);
+        }
+
+        /* Input */
+        .field {
+            background: rgba(15,23,42,0.6);
+            border: 1px solid rgba(51,65,85,0.6);
+            color: #e2e8f0;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            outline: none;
+            width: 100%;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 0.9375rem;
+        }
+        .field:focus {
+            border-color: rgba(99,102,241,0.6);
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+        }
+        .field::placeholder { color: #475569; }
+
+        /* Label */
+        .field-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #94a3b8;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        /* Submit button */
+        .btn-primary {
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            color: #fff;
+            font-weight: 600;
+            border: none;
+            border-radius: 10px;
+            padding: 11px 0;
+            width: 100%;
+            font-size: 0.9375rem;
+            cursor: pointer;
+            transition: opacity 0.15s ease, transform 0.1s ease;
+            letter-spacing: 0.01em;
+        }
+        .btn-primary:hover  { opacity: 0.92; }
+        .btn-primary:active { transform: scale(0.98); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Checkbox */
+        .trust-label {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .trust-checkbox {
+            width: 18px; height: 18px;
+            min-width: 18px;
+            accent-color: #6366f1;
+            cursor: pointer;
+            margin-top: 1px;
+        }
+        .trust-text {
+            font-size: 0.8125rem;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+        .trust-text strong { color: #cbd5e1; }
+
+        /* Error banner */
+        #error-msg {
+            background: rgba(220,38,38,0.12);
+            border: 1px solid rgba(220,38,38,0.3);
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 0.875rem;
+            color: #fca5a5;
+        }
+        #error-msg.hidden { display: none; }
+
+        /* Trust info box */
+        #trust-info {
+            background: rgba(99,102,241,0.08);
+            border: 1px solid rgba(99,102,241,0.25);
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 0.8125rem;
+            color: #a5b4fc;
+            line-height: 1.5;
+            display: none;
+        }
+
+        /* Eye toggle */
+        .pw-wrapper { position: relative; }
+        .pw-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #475569;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            transition: color 0.15s;
+        }
+        .pw-toggle:hover { color: #94a3b8; }
+        .field-pw { padding-right: 42px; }
+
+        /* Spinner inside button */
+        .btn-spinner {
+            display: inline-block;
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Home icon on top */
+        .home-icon {
+            width: 48px; height: 48px;
+            background: linear-gradient(135deg, rgba(79,70,229,0.2), rgba(99,102,241,0.1));
+            border: 1px solid rgba(99,102,241,0.25);
+            border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem;
+            margin: 0 auto 16px;
+        }
+    </style>
+</head>
+<body class="bg-[#0f172a] text-white min-h-screen flex items-center justify-center px-4">
+
+<div class="w-full max-w-sm fade-in">
+
+    <!-- Header -->
+    <div class="text-center mb-6">
+        <div class="home-icon" aria-hidden="true">🏠</div>
+        <h1 class="text-xl font-bold tracking-tight">Cuchi Casa</h1>
+        <p class="text-sm text-slate-400 mt-1">Inicia sesión para continuar</p>
+    </div>
+
+    <!-- Card -->
+    <div class="login-card rounded-2xl px-6 py-7">
+
+        <!-- Error message (shown on failed login) -->
+        <div id="error-msg" class="hidden mb-5" role="alert" aria-live="polite">
+            __ERROR__
+        </div>
+
+        <form
+            id="login-form"
+            method="post"
+            action="/auth/token"
+            novalidate
+            autocomplete="on"
+        >
+            <!-- Hidden: preserve redirect target -->
+            <input type="hidden" name="next_url" id="next-url" value="/smart-home">
+
+            <!-- Username -->
+            <div class="mb-4">
+                <label class="field-label" for="username">Usuario</label>
+                <input
+                    class="field"
+                    type="text"
+                    id="username"
+                    name="username"
+                    autocomplete="username"
+                    required
+                    autofocus
+                    placeholder="tu usuario"
+                    spellcheck="false"
+                    autocapitalize="none"
+                    autocorrect="off"
+                >
+            </div>
+
+            <!-- Password -->
+            <div class="mb-5">
+                <label class="field-label" for="password">Contraseña</label>
+                <div class="pw-wrapper">
+                    <input
+                        class="field field-pw"
+                        type="password"
+                        id="password"
+                        name="password"
+                        autocomplete="current-password"
+                        required
+                        placeholder="••••••••"
+                    >
+                    <button
+                        type="button"
+                        class="pw-toggle"
+                        id="pw-toggle"
+                        aria-label="Mostrar/ocultar contraseña"
+                        tabindex="-1"
+                    >
+                        <!-- Eye icon -->
+                        <svg id="eye-show" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        <svg id="eye-hide" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+                            <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Trusted device checkbox -->
+            <div class="mb-4">
+                <label class="trust-label" for="trusted">
+                    <input
+                        class="trust-checkbox"
+                        type="checkbox"
+                        id="trusted"
+                        name="trusted"
+                        value="true"
+                    >
+                    <span class="trust-text">
+                        <strong>Dispositivo de confianza</strong><br>
+                        Solicitar sesión de 1 año. Requiere aprobación del administrador.
+                    </span>
+                </label>
+            </div>
+
+            <!-- Trust info (shown when checkbox is checked) -->
+            <div id="trust-info" class="mb-5" role="status">
+                📬 Se enviará un correo al administrador para aprobar este dispositivo.
+                Tu sesión actual durará 24h hasta que sea aprobado.
+            </div>
+
+            <!-- Submit -->
+            <button class="btn-primary" type="submit" id="submit-btn">
+                Entrar
+            </button>
+        </form>
+    </div>
+
+    <p class="text-center text-xs text-slate-600 mt-5">
+        Cuchi Casa &mdash; acceso privado
+    </p>
+</div>
+
+<script>
+(function () {
+    // ── Read ?next= from URL and pass it to the form ───────────────────────
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get('next');
+    if (next && next.startsWith('/') && !next.startsWith('//')) {
+        document.getElementById('next-url').value = next;
+    }
+
+    // ── Password visibility toggle ─────────────────────────────────────────
+    const pwInput  = document.getElementById('password');
+    const pwToggle = document.getElementById('pw-toggle');
+    const eyeShow  = document.getElementById('eye-show');
+    const eyeHide  = document.getElementById('eye-hide');
+
+    pwToggle.addEventListener('click', () => {
+        const isHidden = pwInput.type === 'password';
+        pwInput.type  = isHidden ? 'text' : 'password';
+        eyeShow.style.display = isHidden ? 'none'  : '';
+        eyeHide.style.display = isHidden ? ''      : 'none';
+    });
+
+    // ── Trusted device checkbox ────────────────────────────────────────────
+    const trustedCb  = document.getElementById('trusted');
+    const trustInfo  = document.getElementById('trust-info');
+
+    trustedCb.addEventListener('change', () => {
+        trustInfo.style.display = trustedCb.checked ? 'block' : 'none';
+    });
+
+    // ── Form submit: show spinner, prevent double-submit ──────────────────
+    const form      = document.getElementById('login-form');
+    const submitBtn = document.getElementById('submit-btn');
+
+    form.addEventListener('submit', (e) => {
+        const username = document.getElementById('username').value.trim();
+        const password = pwInput.value;
+
+        if (!username || !password) {
+            e.preventDefault();
+            showError('Por favor, rellena usuario y contraseña.');
+            return;
+        }
+
+        // Show loading state
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="btn-spinner"></span>Verificando…';
+    });
+
+    // ── Autofocus on the right field ──────────────────────────────────────
+    const usernameField = document.getElementById('username');
+    if (usernameField.value.trim()) {
+        pwInput.focus();
+    } else {
+        usernameField.focus();
+    }
+
+    // ── Error helper (for client-side only; server errors injected in HTML) ─
+    function showError(msg) {
+        const el = document.getElementById('error-msg');
+        el.textContent = msg;
+        el.classList.remove('hidden');
+    }
+})();
+</script>
+</body>
+</html>

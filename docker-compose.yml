@@ -43,6 +43,7 @@
       - 8080
     volumes:
       - ./data/backend:/app/data
+      - ./infrastructure/nginx/.htpasswd:/etc/nginx/.htpasswd:ro
     env_file:
       - .env
     environment:
