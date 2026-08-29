@@ -580,10 +580,19 @@ class CasitaScheduler:
                     logger.warning("[casita] Idealista bloqueo status=%d: %s", r.status_code, alert.url)
         except Exception as e:
             logger.warning("[casita] Error scraping %s: %s", alert.url, e)
+        # Fallback al precio del email si el scraping fue bloqueado (403)
+        if not price and alert.price:
+            price = alert.price
+            logger.info("[casita] Precio del email como fallback: %d EUR", price)
+        if not rooms and alert.rooms:
+            rooms = alert.rooms
+        if not size_m2 and alert.size_m2:
+            size_m2 = alert.size_m2
         if not price:
+            logger.debug("[casita] Sin precio para %s, descartando", alert.url)
             return None
-        if not has_garden: has_garden = True
-        if not has_garage: has_garage = True
+        if not has_garden: has_garden = True  # Idealista ya filtro jardin
+        if not has_garage: has_garage = True  # Idealista ya filtro garaje
         return Property(
             portal=Portal.IDEALISTA, portal_id=alert.property_id, url=alert.url,
             zone_id=zone.id, title=title or "Idealista {}".format(alert.property_id),
