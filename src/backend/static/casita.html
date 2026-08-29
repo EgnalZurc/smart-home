@@ -73,6 +73,14 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 #btn-viewed-filter.filter-not-viewed::after{content:'';position:absolute;top:-3px;right:-3px;width:7px;height:7px;border-radius:50%;background:#94a3b8}
 /* Línea tachada en el ojo cuando filter=not_viewed */
 #btn-viewed-filter.filter-not-viewed #eye-icon{opacity:.5}
+/* Botón portal filter */
+#btn-portal-filter{position:relative;font-size:11px;font-weight:700;letter-spacing:.5px}
+#btn-portal-filter.filter-idealista{background:rgba(99,102,241,.15);border-color:rgba(99,102,241,.5);color:#818cf8}
+#btn-portal-filter.filter-pisos{background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.5);color:#34d399}
+#btn-portal-filter.filter-habitaclia{background:rgba(251,146,60,.15);border-color:rgba(251,146,60,.5);color:#fb923c}
+#btn-portal-filter.filter-idealista::after,
+#btn-portal-filter.filter-pisos::after,
+#btn-portal-filter.filter-habitaclia::after{content:'';position:absolute;top:-3px;right:-3px;width:7px;height:7px;border-radius:50%;background:currentColor}
 /* Modal comentario */
 #modal-comment .modal-box{border-radius:1.25rem 1.25rem 0 0}
 .comment-textarea{width:100%;background:rgba(30,41,59,.8);border:1px solid rgba(71,85,105,.5);border-radius:.75rem;color:#e2e8f0;font-size:13px;padding:10px 12px;resize:none;outline:none;min-height:100px;font-family:inherit}
@@ -155,6 +163,12 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
     <div class="flex items-center justify-between mb-3 px-1">
       <p class="text-[10px] text-slate-500 uppercase tracking-widest">🏠 En el radar <span id="radar-total-label" class="text-slate-600"></span></p>
       <div class="flex items-center gap-2">
+        <!-- Botón filtro portal (P = sin filtro) -->
+        <button id="btn-portal-filter" onclick="togglePortalFilter()"
+          title="Sin filtro de portal"
+          class="flex items-center justify-center w-7 h-7 rounded-lg border border-slate-700/50 bg-slate-800/60 text-slate-500 hover:text-slate-200 hover:border-slate-500 transition-all">
+          <span id="portal-icon">P</span>
+        </button>
         <!-- Botón toggle filtro vistas -->
         <button id="btn-viewed-filter" onclick="toggleViewedFilter()"
           title="Filtrar por estado de visita"
@@ -169,7 +183,6 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
           <option value="score">Por puntos</option>
           <option value="price">Por precio</option>
           <option value="zone">Por zona</option>
-          <option value="portal">Por portal</option>
           <option value="date">Más recientes</option>
         </select>
       </div>
@@ -413,6 +426,32 @@ let _radarSort   = "score";
 let _radarLoading = false;
 
 let _radarFilter = null;  // null | 'viewed' | 'not_viewed'
+// Filtro de portal
+let _portalFilter = null;  // null | 'idealista' | 'pisos' | 'habitaclia'
+const _portalStates = [
+  { key: null,        label: "P",         cls: "",                   title: "Todos los portales" },
+  { key: "idealista", label: "I",         cls: "filter-idealista",   title: "Solo Idealista" },
+  { key: "pisos",     label: "Pi",        cls: "filter-pisos",       title: "Solo Pisos.com" },
+  { key: "habitaclia",label: "H",         cls: "filter-habitaclia",  title: "Solo Habitaclia" },
+];
+let _portalFilterIdx = 0;
+
+function togglePortalFilter() {
+  _portalFilterIdx = (_portalFilterIdx + 1) % _portalStates.length;
+  const state = _portalStates[_portalFilterIdx];
+  _portalFilter = state.key;
+  const btn = document.getElementById("btn-portal-filter");
+  const icon = document.getElementById("portal-icon");
+  if (btn) {
+    btn.classList.remove("filter-idealista", "filter-pisos", "filter-habitaclia");
+    if (state.cls) btn.classList.add(state.cls);
+    btn.title = state.title;
+  }
+  if (icon) icon.textContent = state.label;
+  _radarOffset = 0;
+  document.getElementById("radar-list").innerHTML = "";
+  loadRadar();
+}
 // Ciclo del botón ojo: null → 'viewed' → 'not_viewed' → null
 const _viewedFilterStates = [null, 'viewed', 'not_viewed'];
 let _viewedFilterIdx = 0;
@@ -460,8 +499,9 @@ async function loadRadar(append = false) {
   const offline = document.getElementById("radar-offline");
   offline.classList.add("hidden");
   try {
-    const filterParam = _radarFilter ? `&filter=${_radarFilter}` : "";
-    const url = `${API}/radar?limit=${RADAR_PAGE_SIZE}&offset=${_radarOffset}&sort_by=${_radarSort}&sort_dir=desc${filterParam}`;
+    const filterParam  = _radarFilter  ? `&filter=${_radarFilter}`   : "";
+    const portalParam  = _portalFilter  ? `&portal=${_portalFilter}`   : "";
+    const url = `${API}/radar?limit=${RADAR_PAGE_SIZE}&offset=${_radarOffset}&sort_by=${_radarSort}&sort_dir=desc${filterParam}${portalParam}`;
     const data = await fetch(url, {cache:"no-store"}).then(r => r.json());
     _radarTotal = data.total ?? 0;
     const items = data.items ?? [];

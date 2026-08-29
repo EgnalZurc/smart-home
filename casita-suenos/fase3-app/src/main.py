@@ -179,10 +179,12 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 sort_dir= _qs("sort_dir", "desc")
             except (ValueError, TypeError):
                 limit, offset, sort_by, sort_dir = 20, 0, "score", "desc"
-            filter_by = _qs("filter", None)
+            filter_by     = _qs("filter", None)
+            portal_filter = _qs("portal", None)
             result = _scheduler_instance.get_radar(
                 limit=limit, offset=offset,
-                sort_by=sort_by, sort_dir=sort_dir, filter_by=filter_by,
+                sort_by=sort_by, sort_dir=sort_dir,
+                filter_by=filter_by, portal_filter=portal_filter,
             )
             self._send_json(200, result)
 

@@ -365,6 +365,7 @@ class Database:
         sort_by: str = "score",   # score | price | distance | portal | zone
         sort_dir: str = "desc",
         filter_by: str | None = None,  # viewed | not_viewed | None
+        portal_filter: str | None = None,  # pisos | habitaclia | idealista | None
     ) -> dict:
         """
         Devuelve propiedades en el radar con paginación y ordenación configurable.
@@ -382,10 +383,11 @@ class Database:
         order_dir = "DESC" if sort_dir.lower() == "desc" else "ASC"
 
         _fc = "AND s.viewed = 1" if filter_by == "viewed" else ("AND COALESCE(s.viewed,0) = 0" if filter_by == "not_viewed" else "")
+        _pf = f"AND p.portal = '{portal_filter}'" if portal_filter else ""
         total = self._conn.execute(
             f"SELECT COUNT(*) FROM scored_properties s "
             f"JOIN properties p ON p.uid=s.property_uid "
-            f"WHERE s.score_total >= ? AND s.dismissed = 0 {_fc}",
+            f"WHERE s.score_total >= ? AND s.dismissed = 0 {_fc} {_pf}",
             (min_score,),
         ).fetchone()[0]
 
@@ -402,7 +404,7 @@ class Database:
                       s.viewed_at, COALESCE(s.comment, '') as comment
                FROM scored_properties s
                JOIN properties p ON p.uid = s.property_uid
-               WHERE s.score_total >= ? AND s.dismissed = 0 {_fc}
+               WHERE s.score_total >= ? AND s.dismissed = 0 {_fc} {_pf}
                ORDER BY {order_col} {order_dir}
                LIMIT ? OFFSET ?""",
             (min_score, limit, offset),
