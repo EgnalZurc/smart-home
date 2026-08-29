@@ -144,6 +144,19 @@ def get_trust_status(token: str) -> Optional[str]:
     return row["status"] if row else None
 
 
+def has_active_trust_request(username: str) -> bool:
+    """Return True if the user already has a pending or approved trust request.
+
+    Used to avoid sending duplicate approval emails.
+    """
+    with _get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM trusted_devices WHERE username = ? AND status IN ('pending', 'approved') LIMIT 1",
+            (username,),
+        ).fetchone()
+    return row is not None
+
+
 # ---------------------------------------------------------------------------
 # HMAC-signed action tokens for email links
 # ---------------------------------------------------------------------------

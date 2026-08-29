@@ -177,12 +177,18 @@ async def post_token(
     token = auth_core.create_token(username, trusted=False)
 
     if trusted:
-        # Create a pending trust request and email the admin
-        ip = request.client.host if request.client else "unknown"
-        ua = request.headers.get("User-Agent", "unknown")
-        trust_token = auth_users.create_trust_request(username, ua, ip)
-        _send_trust_email(username, ua, ip, trust_token)
-        logger.info("Trust request created for user %r, token prefix: %s", username, trust_token[:8])
+        # Only create a new trust request if there is no pending or approved one
+        # for this user already — avoids duplicate emails on repeated logins.
+        if auth_users.has_active_trust_request(username):
+            logger.info(
+                "Trust request skipped for user %r — active request already exists", username
+            )
+        else:
+            ip = request.client.host if request.client else "unknown"
+            ua = request.headers.get("User-Agent", "unknown")
+            trust_token = auth_users.create_trust_request(username, ua, ip)
+            _send_trust_email(username, ua, ip, trust_token)
+            logger.info("Trust request created for user %r, token prefix: %s", username, trust_token[:8])
 
     # Sanitise redirect target: only allow relative paths
     if not next_url.startswith("/") or next_url.startswith("//"):
