@@ -16,6 +16,7 @@ from api import routes
 from api import auth_routes
 import auth as auth_core
 import auth_users
+import auth_devices
 from humidity_analysis import HumidityAnalysisScheduler
 from error_tracker import ErrorTracker
 from cleanup import CleanupScheduler
@@ -94,10 +95,9 @@ AUTH_SECRET = os.environ.get("AUTH_SECRET", "")
 AUTH_HTPASSWD = os.environ.get("AUTH_HTPASSWD_PATH", "/etc/nginx/.htpasswd")
 AUTH_DB_PATH = os.environ.get("AUTH_DB_PATH", "/app/data/auth.db")
 AUTH_SESSION_TTL = int(os.environ.get("AUTH_SESSION_TTL", "86400"))
-AUTH_TRUSTED_TTL = int(os.environ.get("AUTH_TRUSTED_TTL", "31536000"))
 AUTH_SMTP_USER = os.environ.get("AUTH_SMTP_USER", "")
 AUTH_SMTP_PASS = os.environ.get("AUTH_SMTP_PASSWORD", "")
-AUTH_BASE_URL = os.environ.get("AUTH_BASE_URL", "https://raspberrypi.local")
+AUTH_BASE_URL = os.environ.get("AUTH_BASE_URL", "https://raspberrypi.tailaa37cd.ts.net")
 if not AUTH_SECRET:
     logger.error("AUTH_SECRET is required — generate with: python3 -c \"import secrets; print(secrets.token_hex(32))\"")
     raise RuntimeError("AUTH_SECRET not configured")
@@ -122,10 +122,10 @@ async def lifespan(app: FastAPI):
     # AUTH: inject configuration into auth modules
     auth_core.AUTH_SECRET = AUTH_SECRET
     auth_core.AUTH_SESSION_TTL = AUTH_SESSION_TTL
-    auth_core.AUTH_TRUSTED_TTL = AUTH_TRUSTED_TTL
     auth_users.HTPASSWD_PATH = AUTH_HTPASSWD
     auth_users.AUTH_DB_PATH = AUTH_DB_PATH
     auth_users.TRUST_SECRET = AUTH_SECRET
+    auth_devices.AUTH_DB_PATH = AUTH_DB_PATH
     auth_routes.SMTP_USER = AUTH_SMTP_USER
     auth_routes.SMTP_PASSWORD = AUTH_SMTP_PASS
     auth_routes.BASE_URL = AUTH_BASE_URL
@@ -304,30 +304,73 @@ _AUTH_PUBLIC_PREFIXES = (
 )
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Redirect unauthenticated requests to /auth/login.
+    """Central authentication gate for all requests.
 
-    All routes are protected by default. Public paths (login page, health
-    check, PWA manifest, favicon) are exempted. Static assets are allowed
-    through so the login page itself can load its CSS.
+    Decision tree for every incoming request:
+    1. Public path (/auth/*, /health, PWA assets) → pass through
+    2. Static files (/static/*) → pass through (login page needs CSS)
+    3. Valid JWT session cookie → pass through
+    4. Expired JWT + valid device cookie (Jaspan token):
+       a. Verify and rotate the device token
+       b. Issue a fresh 24h JWT
+       c. Attach both updated cookies to the response
+       d. Pass through — user never sees a login prompt
+       e. If theft detected → clear all cookies, redirect to login with warning
+    5. No valid session and no valid device token → redirect to /auth/login
     """
 
     async def dispatch(self, request, call_next):
         path = request.url.path
 
-        # Always allow public paths
+        # 1. Public paths
         if any(path.startswith(p) for p in _AUTH_PUBLIC_PREFIXES):
             return await call_next(request)
 
-        # Static files: allow through (login page needs tailwind.css etc.)
+        # 2. Static assets
         if path.startswith("/static/"):
             return await call_next(request)
 
-        # Check for valid session cookie
+        # 3. Valid JWT
         user = auth_core.get_current_user(request)
         if user:
             return await call_next(request)
 
-        # Not authenticated — redirect to login preserving destination
+        # 4. Expired/missing JWT — check device cookie
+        device_cookie = auth_devices.get_device_cookie_from_request(request)
+        if device_cookie:
+            result = auth_devices.verify_and_rotate(device_cookie)
+
+            if result.theft_detected:
+                # Cookie stolen — clear everything, send to login with alert
+                logger.warning(
+                    "Cookie theft detected for user %r — invalidating all device tokens",
+                    result.username,
+                )
+                login_url = "/auth/login?alert=theft"
+                redirect = StarletteRedirect(login_url, status_code=302)
+                redirect.delete_cookie(auth_core.COOKIE_NAME, path="/")
+                redirect.delete_cookie(auth_devices.DEVICE_COOKIE_NAME, path="/")
+                return redirect
+
+            if result.ok:
+                # Valid device token — issue fresh JWT and rotate device cookie
+                new_jwt = auth_core.create_token(result.username)
+                response = await call_next(request)
+                auth_core.set_session_cookie(response, new_jwt)
+                # Set rotated device cookie
+                response.set_cookie(
+                    key=auth_devices.DEVICE_COOKIE_NAME,
+                    value=result.new_cookie_value,
+                    max_age=auth_devices.DEVICE_TOKEN_TTL,
+                    httponly=True,
+                    secure=True,
+                    samesite="strict",
+                    path="/",
+                )
+                logger.debug("Session silently refreshed for user %r", result.username)
+                return response
+
+        # 5. Not authenticated — redirect to login
         login_url = f"/auth/login?next={request.url.path}"
         return StarletteRedirect(login_url, status_code=302)
 

@@ -250,8 +250,7 @@
                         value="true"
                     >
                     <span class="trust-text">
-                        <strong>Dispositivo de confianza</strong><br>
-                        Solicitar sesión de 1 año. Requiere aprobación del administrador.
+                        <strong>Recordar dispositivo</strong>
                     </span>
                 </label>
             </div>
@@ -281,6 +280,13 @@
     const next = params.get('next');
     if (next && next.startsWith('/') && !next.startsWith('//')) {
         document.getElementById('next-url').value = next;
+    }
+
+    // ── Theft alert ────────────────────────────────────────────────────────
+    if (params.get('alert') === 'theft') {
+        const el = document.getElementById('error-msg');
+        el.textContent = '⚠️ Sesión invalidada por seguridad. Se detectó uso de credenciales desde un dispositivo no reconocido. Todos tus dispositivos de confianza han sido desvinculados.';
+        el.classList.remove('hidden');
     }
 
     // ── Password visibility toggle ─────────────────────────────────────────

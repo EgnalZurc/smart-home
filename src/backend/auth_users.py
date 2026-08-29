@@ -157,6 +157,28 @@ def has_active_trust_request(username: str) -> bool:
     return row is not None
 
 
+def get_approved_trust_request(username: str) -> Optional[dict]:
+    """Return the first approved (not yet consumed) trust request for a user, or None."""
+    with _get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM trusted_devices WHERE username = ? AND status = 'approved' LIMIT 1",
+            (username,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def delete_trust_request(token: str) -> bool:
+    """Delete a trust request row by its token (consumed after device token issued).
+
+    Returns True if the row was found and deleted.
+    """
+    with _get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM trusted_devices WHERE token = ?", (token,)
+        )
+    return cur.rowcount > 0
+
+
 # ---------------------------------------------------------------------------
 # HMAC-signed action tokens for email links
 # ---------------------------------------------------------------------------
