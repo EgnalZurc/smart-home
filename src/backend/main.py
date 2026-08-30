@@ -511,25 +511,71 @@ async def proxy_flood(lat: float, lon: float):
 @app.get("/api/proxy/firms")
 async def proxy_firms(lat: float, lon: float):
     """
-    Proxy para NASA FIRMS — focos de calor VIIRS SNPP últimos 5 años.
-    Requiere MAP_KEY en variable de entorno FIRMS_MAP_KEY.
-    Si no hay key, devuelve status='no_key'.
+    Proxy para NASA FIRMS — focos de calor VIIRS SNPP últimos 3 años.
+    Límite API: DAY_RANGE máx 5 días por petición / 5000 transacciones por 10 min.
+    Estrategia: consultar meses de riesgo alto (junio-octubre) en bloques de 5 días.
+    Total aprox: 3 años × 5 meses × 6 bloques = ~90 peticiones — muy por debajo del límite.
     """
-    import os, httpx
+    import os, asyncio
+    import httpx
+    from datetime import date, timedelta
+
     key = os.environ.get("FIRMS_MAP_KEY", "")
     if not key:
         return {"status": "no_key", "focos": None}
 
-    delta = 0.27  # ~30 km
-    bbox  = f"{lon-delta},{lat-delta},{lon+delta},{lat+delta}"
-    url   = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_SP/{bbox}/5"
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.get(url)
-        lines = [l for l in r.text.split("\n") if l.strip() and not l.startswith("latitude")]
-        return {"status": "ok", "focos": len(lines)}
-    except Exception as e:
-        return {"status": "error", "focos": None, "error": str(e)}
+    delta = 0.27  # ~30 km en España
+    bbox  = f"{lon-delta:.4f},{lat-delta:.4f},{lon+delta:.4f},{lat+delta:.4f}"
+    base  = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
+    source = "VIIRS_SNPP_SP"  # Standard Processing = histórico completo
+
+    # Construir lista de fechas de inicio para ventanas de 5 días
+    # Solo meses jun-oct (riesgo alto de incendio) de los últimos 3 años completos
+    today = date.today()
+    windows: list[str] = []
+
+    for years_back in range(1, 4):  # 1, 2, 3 años atrás
+        year = today.year - years_back
+        for month in (6, 7, 8, 9, 10):  # jun, jul, ago, sep, oct
+            # Dividir el mes en bloques de 5 días: días 1, 6, 11, 16, 21, 26
+            for day_start in range(1, 29, 5):
+                try:
+                    d = date(year, month, day_start)
+                    # No pedir fechas futuras ni anteriores al 2012 (inicio VIIRS)
+                    if d < date(2012, 1, 19) or d >= today:
+                        continue
+                    windows.append(d.strftime("%Y-%m-%d"))
+                except ValueError:
+                    pass
+
+    if not windows:
+        return {"status": "error", "focos": None, "error": "Sin ventanas disponibles"}
+
+    # Lanzar todas las peticiones en paralelo (asyncio.gather)
+    # La key tiene 5000 transacciones / 10 min → ~90 peticiones simultáneas: sin problema
+    async def _fetch_window(start_date: str) -> int:
+        url = f"{base}/{key}/{source}/{bbox}/5/{start_date}"
+        try:
+            async with httpx.AsyncClient(timeout=12) as client:
+                r = await client.get(url)
+            if r.status_code != 200:
+                return 0
+            lines = [l for l in r.text.split("\n")
+                     if l.strip() and not l.startswith("latitude")]
+            return len(lines)
+        except Exception:
+            return 0
+
+    results = await asyncio.gather(*[_fetch_window(w) for w in windows])
+    total_focos = sum(results)
+
+    return {
+        "status": "ok",
+        "focos": total_focos,
+        "radio_km": 30,
+        "periodo": "jun-oct ultimos 3 anos",
+        "peticiones": len(windows),
+    }
 
 @app.get("/health")
 def health():
