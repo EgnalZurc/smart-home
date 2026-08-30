@@ -1334,92 +1334,119 @@ async function _locFlood(lat, lon) {
 }
 // ── Calidad del aire (Open-Meteo Air Quality API) ────────────────────────────
 async function _locAirQuality(lat, lon) {
+  // Media anual: último año completo via Open-Meteo Historical Air Quality
+  // (datos horarios ERA5 — más representativo que la media de 7 días)
+  const now   = new Date();
+  const end   = new Date(now); end.setDate(end.getDate() - 1);
+  const start = new Date(end); start.setFullYear(start.getFullYear() - 1);
+  const fmt = d => d.toISOString().split('T')[0];
+
   const url = `https://air-quality-api.open-meteo.com/v1/air-quality` +
     `?latitude=${lat}&longitude=${lon}` +
-    `&hourly=pm10,pm2_5,european_aqi&timezone=Europe%2FMadrid&past_days=7&forecast_days=1`;
-
-  const r = await fetch(url);
-  const d = await r.json();
-  if (!d.hourly) return null;
-
-  const pm25 = d.hourly.pm2_5.filter(v => v !== null);
-  const aqi  = d.hourly.european_aqi.filter(v => v !== null);
-  const avg  = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
-
-  return {
-    pm25Avg:  pm25.length ? +avg(pm25).toFixed(1) : null,
-    aqiAvg:   aqi.length  ? +avg(aqi).toFixed(0)  : null,
-    aqiMax:   aqi.length  ? Math.max(...aqi)       : null,
-  };
+    `&hourly=pm2_5,european_aqi` +
+    `&start_date=${fmt(start)}&end_date=${fmt(end)}` +
+    `&timezone=Europe%2FMadrid`;
+  try {
+    const r = await fetch(url);
+    const d = await r.json();
+    if (!d.hourly) return null;
+    const pm25 = d.hourly.pm2_5.filter(v => v !== null);
+    const aqi  = d.hourly.european_aqi.filter(v => v !== null);
+    const avg  = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+    return {
+      pm25Avg:  pm25.length ? +avg(pm25).toFixed(1) : null,
+      aqiAvg:   aqi.length  ? +avg(aqi).toFixed(0)  : null,
+      aqiMax:   aqi.length  ? Math.max(...aqi)       : null,
+      period:   'anual',
+    };
+  } catch { return null; }
 }
 
 // ── Distancias OSRM (driving) ────────────────────────────────────────────────
 async function _locDistances(lat, lon) {
-  // Destinos: Madrid (centro), hospital más cercano buscado via Overpass
-  const MADRID = { lat: 40.4168, lon: -3.7038, label: 'Madrid centro' };
+  // Busca los POI más cercanos via Overpass, luego calcula tiempo en coche via OSRM.
+  // El scorer usa valores fijos por zona; aquí calculamos para la dirección exacta.
+  // Destinos: hospital, centro de salud, supermercado, playa.
+  // (Distancia Madrid ya la evalúa el scorer con alta precisión.)
 
-  // Distancia a Madrid
-  const routeUrl = `https://router.project-osrm.org/route/v1/driving/${lon},${lat};${MADRID.lon},${MADRID.lat}?overview=false`;
+  // ── Buscar POI cercanos via Overpass ────────────────────────────────────
+  const overpassBase = 'https://overpass-api.de/api/interpreter';
 
-  let madrid = null;
-  try {
-    const r = await fetch(routeUrl);
-    const d = await r.json();
-    if (d.routes?.length) {
-      madrid = {
-        km:  +(d.routes[0].distance/1000).toFixed(0),
-        min: +(d.routes[0].duration/60).toFixed(0),
-      };
-    }
-  } catch { /* ignorar */ }
+  const q_hospital = `[out:json][timeout:10];
+    (node["amenity"="hospital"](around:40000,${lat},${lon});
+     way["amenity"="hospital"](around:40000,${lat},${lon}););
+    out center 1;`;
 
-  // Hospital más cercano via Overpass (radio 30km)
-  const overpassQ = `[out:json][timeout:10];
-    (node["amenity"="hospital"](around:30000,${lat},${lon});
-     way["amenity"="hospital"](around:30000,${lat},${lon}););
-    out center 3;`;
-  let hospital = null;
-  try {
-    const r = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      body: 'data=' + encodeURIComponent(overpassQ),
-    });
-    const d = await r.json();
-    if (d.elements?.length) {
-      const el = d.elements[0];
-      const hLat = el.lat || el.center?.lat;
-      const hLon = el.lon || el.center?.lon;
-      const hName = el.tags?.name || 'Hospital cercano';
-      // Distancia directa haversine (estimación)
-      const R=6371, dLat=(hLat-lat)*Math.PI/180, dLon=(hLon-lon)*Math.PI/180;
-      const a = Math.sin(dLat/2)**2 + Math.cos(lat*Math.PI/180)*Math.cos(hLat*Math.PI/180)*Math.sin(dLon/2)**2;
-      const dist = +(R*2*Math.asin(Math.sqrt(a))).toFixed(0);
-      hospital = { name: hName, km: dist, lat: hLat, lon: hLon };
-    }
-  } catch { /* ignorar */ }
-
-  // Supermercado más cercano (radio 10km)
-  const superQ = `[out:json][timeout:8];
-    (node["shop"~"supermarket|convenience"](around:10000,${lat},${lon}););
+  const q_health = `[out:json][timeout:10];
+    (node["amenity"~"clinic|health_post|doctors"](around:30000,${lat},${lon});
+     node["amenity"="clinic"]["healthcare"](around:30000,${lat},${lon}););
     out 1;`;
-  let super_ = null;
-  try {
-    const r = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      body: 'data=' + encodeURIComponent(superQ),
-    });
-    const d = await r.json();
-    if (d.elements?.length) {
-      const el = d.elements[0];
-      const sName = el.tags?.name || 'Supermercado cercano';
-      const R=6371, dLat=(el.lat-lat)*Math.PI/180, dLon=(el.lon-lon)*Math.PI/180;
-      const a = Math.sin(dLat/2)**2 + Math.cos(lat*Math.PI/180)*Math.cos(el.lat*Math.PI/180)*Math.sin(dLon/2)**2;
-      const dist = +(R*2*Math.asin(Math.sqrt(a))).toFixed(1);
-      super_ = { name: sName, km: dist };
-    }
-  } catch { /* ignorar */ }
 
-  return { madrid, hospital, super: super_ };
+  const q_super = `[out:json][timeout:8];
+    (node["shop"~"^(supermarket|convenience)$"](around:15000,${lat},${lon}););
+    out 1;`;
+
+  const q_beach = `[out:json][timeout:10];
+    (node["natural"="beach"](around:80000,${lat},${lon});
+     way["natural"="beach"](around:80000,${lat},${lon}););
+    out center 1;`;
+
+  const _overpass = async (query) => {
+    try {
+      const r = await fetch(overpassBase, { method: 'POST',
+        body: 'data=' + encodeURIComponent(query) });
+      const d = await r.json();
+      if (!d.elements?.length) return null;
+      const el = d.elements[0];
+      return {
+        lat:  el.lat  ?? el.center?.lat,
+        lon:  el.lon  ?? el.center?.lon,
+        name: el.tags?.name || null,
+      };
+    } catch { return null; }
+  };
+
+  // Lanzar búsquedas en paralelo
+  const [h_poi, hc_poi, s_poi, b_poi] = await Promise.all([
+    _overpass(q_hospital), _overpass(q_health),
+    _overpass(q_super),    _overpass(q_beach),
+  ]);
+
+  // ── Calcular tiempos de conducción via OSRM ──────────────────────────────
+  const _osrm = async (toLat, toLon) => {
+    if (toLat == null || toLon == null) return null;
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/` +
+        `${lon},${lat};${toLon},${toLat}?overview=false`;
+      const r = await fetch(url);
+      const d = await r.json();
+      if (!d.routes?.length) return null;
+      return {
+        min: +(d.routes[0].duration / 60).toFixed(0),
+        km:  +(d.routes[0].distance / 1000).toFixed(0),
+      };
+    } catch { return null; }
+  };
+
+  // Solo calcular ruta OSRM para los POI encontrados
+  const [h_rt, hc_rt, s_rt, b_rt] = await Promise.all([
+    h_poi  ? _osrm(h_poi.lat,  h_poi.lon)  : null,
+    hc_poi ? _osrm(hc_poi.lat, hc_poi.lon) : null,
+    s_poi  ? _osrm(s_poi.lat,  s_poi.lon)  : null,
+    b_poi  ? _osrm(b_poi.lat,  b_poi.lon)  : null,
+  ]);
+
+  const _build = (poi, rt, defaultName) => {
+    if (!poi || !rt) return null;
+    return { name: poi.name || defaultName, min: rt.min, km: rt.km };
+  };
+
+  return {
+    hospital:    _build(h_poi,  h_rt,  'Hospital'),
+    healthCenter:_build(hc_poi, hc_rt, 'Centro de salud'),
+    super:       _build(s_poi,  s_rt,  'Supermercado'),
+    beach:       _build(b_poi,  b_rt,  'Playa'),
+  };
 }
 
 // ── Datos INE del municipio ──────────────────────────────────────────────────
@@ -1637,7 +1664,7 @@ function _locRender(container, geo, climate, fire, flood, air, distances, ine) {
     let aq = '';
     if (air.pm25Avg !== null) {
       const pmCls = air.pm25Avg > 25 ? 'bad' : air.pm25Avg > 12 ? 'warn' : 'good';
-      aq += _locRow('PM2.5 media 7 días', `${air.pm25Avg} µg/m³`, pmCls);
+      aq += _locRow('PM2.5 media anual', `${air.pm25Avg} µg/m³`, pmCls);
     }
     if (air.aqiAvg !== null) {
       let aqBadge, aqCls;
@@ -1654,27 +1681,34 @@ function _locRender(container, geo, climate, fire, flood, air, distances, ine) {
     rows.push(_locBlock('🌬️ Calidad del aire', aq || '<span class="loc-value muted">Sin datos</span>'));
   }
 
-  // ── Bloque 6: Distancias ─────────────────────────────────────────────────
+  // ── Bloque 6: Distancias exactas por ubicación ──────────────────────────
+  // Nota: distancia Madrid y valores generales de zona los calcula el scorer.
+  // Aquí se muestran las distancias reales en coche desde la dirección exacta.
   if (distances) {
     let dist = '';
-    if (distances.madrid) {
-      const m = distances.madrid;
-      const cls = m.min > 270 ? 'bad' : m.min > 210 ? 'warn' : 'good';
-      dist += _locRow('A Madrid (conduciendo)', `${m.min} min · ${m.km} km`, cls);
+
+    const _fmtDist = (d, warnMin, badMin) => {
+      if (!d) return null;
+      const cls = d.min > badMin ? 'bad' : d.min > warnMin ? 'warn' : 'good';
+      const name = d.name ? ` · ${d.name.substring(0, 25)}${d.name.length > 25 ? '…' : ''}` : '';
+      return { text: `${d.min} min · ${d.km} km${name}`, cls };
+    };
+
+    const hosp = _fmtDist(distances.hospital,     45, 90);
+    const hc   = _fmtDist(distances.healthCenter,  20, 60);
+    const sup  = _fmtDist(distances.super,          10, 30);
+    const bch  = _fmtDist(distances.beach,          30, 60);
+
+    if (hosp) dist += _locRow('Hospital (en coche)', hosp.text, hosp.cls);
+    if (hc)   dist += _locRow('Centro de salud (en coche)', hc.text, hc.cls);
+    if (sup)  dist += _locRow('Supermercado (en coche)', sup.text, sup.cls);
+    if (bch)  dist += _locRow('Playa (en coche)', bch.text, bch.cls);
+
+    if (!hosp && !hc && !sup && !bch) {
+      dist += '<div class="loc-label" style="color:#475569;font-size:10px">No se encontraron POI en el radio de búsqueda</div>';
     }
-    if (distances.hospital) {
-      const h = distances.hospital;
-      const cls = h.km > 60 ? 'bad' : h.km > 30 ? 'warn' : 'good';
-      dist += _locRow('Hospital más cercano',
-        `~${h.km} km · ${h.name.substring(0,28)}${h.name.length>28?'…':''}`, cls);
-    }
-    if (distances.super) {
-      const s = distances.super;
-      const cls = s.km > 15 ? 'warn' : 'good';
-      dist += _locRow('Supermercado más cercano',
-        `~${s.km} km · ${s.name.substring(0,25)}${s.name.length>25?'…':''}`, cls);
-    }
-    if (dist) rows.push(_locBlock('🚗 Distancias', dist));
+    dist += '<div class="loc-row"><span class="loc-label" style="font-size:9px;color:#334155">Rutas en coche · OSRM/OpenStreetMap · Dist. Madrid: ver puntuación de zona</span></div>';
+    rows.push(_locBlock('🚗 Distancias exactas (por ubicación)', dist));
   }
 
   // ── Bloque 7: Datos del municipio (INE) ─────────────────────────────────
