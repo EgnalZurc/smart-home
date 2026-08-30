@@ -298,6 +298,7 @@ async def lifespan(app: FastAPI):
 _AUTH_PUBLIC_PREFIXES = (
     "/auth/",
     "/health",
+    "/api/proxy/",
     "/static/manifest.json",
     "/static/favicon.ico",
     "/favicon.ico",
@@ -458,6 +459,77 @@ async def serve_casita():
 frontend_path = Path(__file__).parent / "static"
 if frontend_path.exists():
     app.mount("/static", StaticFiles(directory=str(frontend_path)), name="frontend")
+
+
+# ── Proxies para casita.html (CORS) ──────────────────────────────────────────
+
+@app.get("/api/proxy/flood")
+async def proxy_flood(lat: float, lon: float):
+    """
+    Proxy para SNCZI (MITECO) — peligrosidad por inundación fluvial.
+    Consulta T=10, T=100 y T=500 años para las coordenadas dadas.
+    Devuelve { t10, t100, t500 } con el valor GRAY_INDEX de cada capa
+    (-9999 = sin datos / no inundable, >0 = calado en metros).
+    """
+    import httpx
+    BASE = "https://servicios.idee.es/wms-inspire/riesgos-naturales/inundaciones"
+    delta = 0.002  # ~200m de BBOX alrededor del punto
+
+    async def _query(layer: str) -> float | None:
+        bbox  = f"{lon-delta},{lat-delta},{lon+delta},{lat+delta}"
+        url   = (
+            f"{BASE}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo"
+            f"&BBOX={bbox}&WIDTH=10&HEIGHT=10"
+            f"&LAYERS={layer}&QUERY_LAYERS={layer}"
+            f"&INFO_FORMAT=text/plain&X=5&Y=5&SRS=EPSG:4326"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                r = await client.get(url)
+                txt = r.text
+            # Extraer GRAY_INDEX = <valor>
+            import re
+            m = re.search(r"GRAY_INDEX\s*=\s*([-\d.]+)", txt)
+            return float(m.group(1)) if m else None
+        except Exception:
+            return None
+
+    import asyncio
+    t10, t100, t500 = await asyncio.gather(
+        _query("NZ.Flood.FluvialT10"),
+        _query("NZ.Flood.FluvialT100"),
+        _query("NZ.Flood.FluvialT500"),
+    )
+    def _norm(v):
+        # -9999 = sin datos, -3 = fuera del raster (GeoServer artefacto), null = sin datos
+        if v is None or v == -9999.0 or v < -2:
+            return None
+        return round(v, 2)
+    return {"t10": _norm(t10), "t100": _norm(t100), "t500": _norm(t500)}
+
+
+@app.get("/api/proxy/firms")
+async def proxy_firms(lat: float, lon: float):
+    """
+    Proxy para NASA FIRMS — focos de calor VIIRS SNPP últimos 5 años.
+    Requiere MAP_KEY en variable de entorno FIRMS_MAP_KEY.
+    Si no hay key, devuelve status='no_key'.
+    """
+    import os, httpx
+    key = os.environ.get("FIRMS_MAP_KEY", "")
+    if not key:
+        return {"status": "no_key", "focos": None}
+
+    delta = 0.27  # ~30 km
+    bbox  = f"{lon-delta},{lat-delta},{lon+delta},{lat+delta}"
+    url   = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_SP/{bbox}/5"
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(url)
+        lines = [l for l in r.text.split("\n") if l.strip() and not l.startswith("latitude")]
+        return {"status": "ok", "focos": len(lines)}
+    except Exception as e:
+        return {"status": "error", "focos": None, "error": str(e)}
 
 @app.get("/health")
 def health():

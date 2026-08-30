@@ -1178,9 +1178,10 @@ async function runLocAnalysis() {
     if (!geo) throw new Error('No se encontró la ubicación. Prueba con otro formato.');
 
     // Pasos 2-6 en paralelo
-    const [climate, fire, air, distances, ine] = await Promise.allSettled([
+    const [climate, fire, flood, air, distances, ine] = await Promise.allSettled([
       _locClimate(geo.lat, geo.lon),
       _locFireRisk(geo.lat, geo.lon),
+      _locFlood(geo.lat, geo.lon),
       _locAirQuality(geo.lat, geo.lon),
       _locDistances(geo.lat, geo.lon),
       _locINE(geo.municipio, geo.provincia, geo.cp),
@@ -1189,6 +1190,7 @@ async function runLocAnalysis() {
     _locRender(res, geo,
       climate.status === 'fulfilled'  ? climate.value  : null,
       fire.status    === 'fulfilled'  ? fire.value     : null,
+      flood.status   === 'fulfilled'  ? flood.value    : null,
       air.status     === 'fulfilled'  ? air.value      : null,
       distances.status === 'fulfilled'? distances.value: null,
       ine.status     === 'fulfilled'  ? ine.value      : null,
@@ -1306,24 +1308,30 @@ async function _locClimate(lat, lon) {
   };
 }
 
-// ── Riesgo incendio — NASA FIRMS (últimos 5 años, bbox ±30km) ────────────────
+// ── Riesgo incendio — via proxy backend → NASA FIRMS VIIRS ─────────────────
 async function _locFireRisk(lat, lon) {
-  // Aprox: 0.27° ≈ 30km en España
-  const delta = 0.27;
-  const bbox  = `${lon-delta},${lat-delta},${lon+delta},${lat+delta}`;
-  // FIRMS CSV VIIRS últimos 5 años — free, no key, CORS habilitado
-  const url = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/VIIRS_SNPP_NRT/${bbox}/5`;
-
   try {
-    const r  = await fetch(url);
-    const txt = await r.text();
-    const lines = txt.split('\n').filter(l => l.trim() && !l.startsWith('latitude'));
-    return { focos: lines.length, radio_km: 30 };
+    const r = await fetch(`/api/proxy/firms?lat=${lat}&lon=${lon}`);
+    const d = await r.json();
+    if (d.status === 'no_key') return { focos: null, radio_km: 30, no_key: true };
+    if (d.status === 'ok')     return { focos: d.focos, radio_km: 30 };
+    return { focos: null, radio_km: 30 };
   } catch {
     return { focos: null, radio_km: 30 };
   }
 }
 
+
+// ── Riesgo inundación — via proxy backend → SNCZI MITECO ────────────────────
+async function _locFlood(lat, lon) {
+  try {
+    const r = await fetch(`/api/proxy/flood?lat=${lat}&lon=${lon}`);
+    const d = await r.json();
+    return d;  // { t10, t100, t500 }
+  } catch {
+    return null;
+  }
+}
 // ── Calidad del aire (Open-Meteo Air Quality API) ────────────────────────────
 async function _locAirQuality(lat, lon) {
   const url = `https://air-quality-api.open-meteo.com/v1/air-quality` +
@@ -1509,7 +1517,7 @@ async function _locINE(municipio, provincia, cp) {
 }
 
 // ── Render de resultados ─────────────────────────────────────────────────────
-function _locRender(container, geo, climate, fire, air, distances, ine) {
+function _locRender(container, geo, climate, fire, flood, air, distances, ine) {
   const rows = [];
 
   // ── Bloque 1: Identificación ────────────────────────────────────────────
@@ -1561,7 +1569,9 @@ function _locRender(container, geo, climate, fire, air, distances, ine) {
   if (fire) {
     const focos = fire.focos;
     let badge, badgeCls, desc;
-    if (focos === null) {
+    if (fire.no_key) {
+      badge = 'Sin clave'; badgeCls = 'gray'; desc = 'NASA FIRMS requiere MAP_KEY (var FIRMS_MAP_KEY)';
+    } else if (focos === null) {
       badge = 'Sin datos'; badgeCls = 'gray'; desc = 'No se pudo consultar NASA FIRMS';
     } else if (focos === 0) {
       badge = 'Muy bajo'; badgeCls = 'green'; desc = 'Sin focos detectados en 30 km (5 años)';
@@ -1582,7 +1592,47 @@ function _locRender(container, geo, climate, fire, air, distances, ine) {
     rows.push(_locBlock('🔥 Riesgo de incendio', fr));
   }
 
-  // ── Bloque 4: Calidad del aire ────────────────────────────────────────────
+
+  // ── Bloque 4: Riesgo de inundación (SNCZI MITECO) ───────────────────────
+  if (flood) {
+    // GRAY_INDEX: -9999 = sin datos, >0 = calado estimado en metros
+    // Interpretación: si algún T tiene valor >0 → posible zona inundable
+    // Valores normalizados: null=sin datos/no mapeado, 0=límite zona, >0=calado metros
+    const inT10  = flood.t10  !== null && flood.t10  >= 0;
+    const inT100 = flood.t100 !== null && flood.t100 >= 0;
+    const inT500 = flood.t500 !== null && flood.t500 >= 0;
+    const noData = flood.t10 === null && flood.t100 === null && flood.t500 === null;
+
+    let badge, badgeCls, desc, detail = '';
+    if (noData) {
+      badge = 'Sin datos'; badgeCls = 'gray';
+      desc = 'No se obtuvieron datos del SNCZI';
+    } else if (inT10) {
+      badge = 'Muy Alto'; badgeCls = 'red';
+      desc = 'Zona inundable en escenario frecuente (T=10 años)';
+      if (flood.t10 > 0) detail = `Calado estimado T10: ${flood.t10.toFixed(2)} m`;
+    } else if (inT100) {
+      badge = 'Alto'; badgeCls = 'orange';
+      desc = 'Zona inundable en escenario ordinario (T=100 años)';
+      if (flood.t100 > 0) detail = `Calado estimado T100: ${flood.t100.toFixed(2)} m`;
+    } else if (inT500) {
+      badge = 'Moderado'; badgeCls = 'yellow';
+      desc = 'Solo en escenario excepcional (T=500 años)';
+      if (flood.t500 > 0) detail = `Calado estimado T500: ${flood.t500.toFixed(2)} m`;
+    } else {
+      badge = 'Bajo/Nulo'; badgeCls = 'green';
+      desc = 'No detectado en ningún escenario (T=10/100/500 años)';
+    }
+
+    const fl = `<div class="loc-row">
+      <span class="loc-label">${desc}</span>
+      <span class="loc-badge ${badgeCls}">${badge}</span>
+    </div>
+    ${detail ? `<div class="loc-row"><span class="loc-label">${detail}</span></div>` : ''}
+    <div class="loc-row"><span class="loc-label" style="font-size:9px;color:#475569">SNCZI · MITECO España · T=10/100/500 años</span></div>`;
+    rows.push(_locBlock('🌊 Riesgo de inundación', fl));
+  }
+  // ── Bloque 5: Calidad del aire ────────────────────────────────────────────
   if (air) {
     let aq = '';
     if (air.pm25Avg !== null) {
@@ -1604,7 +1654,7 @@ function _locRender(container, geo, climate, fire, air, distances, ine) {
     rows.push(_locBlock('🌬️ Calidad del aire', aq || '<span class="loc-value muted">Sin datos</span>'));
   }
 
-  // ── Bloque 5: Distancias ─────────────────────────────────────────────────
+  // ── Bloque 6: Distancias ─────────────────────────────────────────────────
   if (distances) {
     let dist = '';
     if (distances.madrid) {
@@ -1627,7 +1677,7 @@ function _locRender(container, geo, climate, fire, air, distances, ine) {
     if (dist) rows.push(_locBlock('🚗 Distancias', dist));
   }
 
-  // ── Bloque 6: Datos del municipio (INE) ─────────────────────────────────
+  // ── Bloque 7: Datos del municipio (INE) ─────────────────────────────────
   if (ine) {
     let mun = '';
     if (ine.poblacion)
