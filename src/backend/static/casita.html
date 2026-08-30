@@ -1465,8 +1465,6 @@ async function _locDistances(lat, lon) {
                name: best.tags?.name || null, coastal: true };
     } catch { return null; }
   };
-    } catch { return null; }
-  };
 
   const [h_poi, hc3, s800, b_poi] = await Promise.all([
     _nearest(q_hospital),
