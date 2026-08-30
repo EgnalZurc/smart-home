@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 _FOTOCASA_SENDER  = "enviosfotocasa@fotocasa.es"
 _IMAP_HOST        = "imap.gmail.com"
 _IMAP_PORT        = 993
-_SEARCH_FOLDERS   = ["INBOX", "[Gmail]/Todos"]
+_SEARCH_FOLDERS   = ["INBOX", "[Gmail]/Todos", "[Gmail]/Papelera", "[Gmail]/Spam"]
 
 # URL completa de anuncio:  /es/comprar/vivienda/{municipio}/{filtros}/{ID}/d
 _URL_PATTERN = re.compile(
@@ -330,7 +330,14 @@ def fetch_new_fotocasa_alerts(
             status, _ = imap.select(folder)
             if status != "OK":
                 continue
-            _, message_numbers = imap.search(None, search_criteria)
+            # Para Papelera/Spam: solo emails no leídos (evita reprocesar)
+            trash_folders = {"[Gmail]/Papelera", "[Gmail]/Spam",
+                             "[Gmail]/Trash", "[Gmail]/Junk"}
+            if folder in trash_folders:
+                criteria_folder = f"(UNSEEN {search_criteria[1:-1]})"
+            else:
+                criteria_folder = search_criteria
+            _, message_numbers = imap.search(None, criteria_folder)
             if not message_numbers or not message_numbers[0]:
                 logger.info("[fotocasa] %s: 0 emails de Fotocasa", folder)
                 continue
@@ -380,11 +387,18 @@ def delete_processed_fotocasa_emails(
         return
 
     by_folder: dict[str, set[str]] = {}
+    seen_folder: dict[str, set[str]] = {}
     for a in alerts:
         if not a.property_id:
             continue
         if failed_ids and a.email_id in failed_ids:
             logger.info("[fotocasa] Email %s conservado (tuvo error)", a.email_id)
+            continue
+        # No eliminar emails de Papelera/Spam — ya están descartados.
+        # Los marcamos como leídos (\Seen) para no reprocesarlos.
+        if a.folder in ("[Gmail]/Papelera", "[Gmail]/Spam",
+                        "[Gmail]/Trash", "[Gmail]/Junk"):
+            seen_folder.setdefault(a.folder, set()).add(a.email_id)
             continue
         by_folder.setdefault(a.folder, set()).add(a.email_id)
 
@@ -397,6 +411,14 @@ def delete_processed_fotocasa_emails(
             logger.info("[fotocasa] %d emails eliminados de %s", len(ids), folder)
         except Exception as e:
             logger.warning("[fotocasa] Error eliminando de %s: %s", folder, e)
+    for folder, ids in seen_folder.items():
+        try:
+            imap.select(folder)
+            for msg_id in ids:
+                imap.store(msg_id.encode(), "+FLAGS", "\\Seen")
+            logger.info("[fotocasa] %d emails marcados como leídos en %s", len(ids), folder)
+        except Exception as e:
+            logger.warning("[fotocasa] Error marcando como leídos en %s: %s", folder, e)
 
     try:
         imap.close()

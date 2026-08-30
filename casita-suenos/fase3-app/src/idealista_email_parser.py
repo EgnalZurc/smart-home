@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 _IDEALISTA_SENDER = "noresponder@idealista.com"
 _IMAP_HOST  = "imap.gmail.com"
 _IMAP_PORT  = 993
-_SEARCH_FOLDERS = ["INBOX", "[Gmail]/Todos"]
+_SEARCH_FOLDERS = ["INBOX", "[Gmail]/Todos", "[Gmail]/Papelera", "[Gmail]/Spam"]
 
 _URL_PATTERN = re.compile(r"https://www\.idealista\.com/inmueble/(\d+)/?", re.IGNORECASE)
 
@@ -304,7 +304,14 @@ def fetch_new_alerts(
             status, _ = imap.select(folder)
             if status != "OK":
                 continue
-            _, message_numbers = imap.search(None, search_criteria)
+            # Para Papelera/Spam: solo emails no leídos (evita reprocesar)
+            trash_folders = {"[Gmail]/Papelera", "[Gmail]/Spam",
+                             "[Gmail]/Trash", "[Gmail]/Junk"}
+            if folder in trash_folders:
+                criteria_folder = f"(UNSEEN {search_criteria[1:-1]})"
+            else:
+                criteria_folder = search_criteria
+            _, message_numbers = imap.search(None, criteria_folder)
             if not message_numbers or not message_numbers[0]:
                 continue
             ids = message_numbers[0].split()
@@ -373,12 +380,19 @@ def delete_processed_emails(
         return
 
     by_folder: dict[str, set[str]] = {}
+    seen_folder: dict[str, set[str]] = {}
     for a in alerts:
         # No eliminar si el email tuvo error o si no hay property_id (no procesado)
         if not a.property_id:
             continue
         if failed_ids and a.email_id in failed_ids:
             logger.info("[gmail] Email %s conservado (tuvo error)", a.email_id)
+            continue
+        # No eliminar emails de Papelera/Spam — ya están descartados.
+        # Los marcamos como leídos (\Seen) para no reprocesarlos.
+        if a.folder in ("[Gmail]/Papelera", "[Gmail]/Spam",
+                        "[Gmail]/Trash", "[Gmail]/Junk"):
+            seen_folder.setdefault(a.folder, set()).add(a.email_id)
             continue
         by_folder.setdefault(a.folder, set()).add(a.email_id)
 
@@ -391,6 +405,14 @@ def delete_processed_emails(
             logger.info("[gmail] %d emails eliminados de %s", len(ids), folder)
         except Exception as e:
             logger.warning("[gmail] Error eliminando de %s: %s", folder, e)
+    for folder, ids in seen_folder.items():
+        try:
+            imap.select(folder)
+            for msg_id in ids:
+                imap.store(msg_id.encode(), "+FLAGS", "\\Seen")
+            logger.info("[gmail] %d emails marcados como leídos en %s", len(ids), folder)
+        except Exception as e:
+            logger.warning("[gmail] Error marcando como leídos en %s: %s", folder, e)
 
     try:
         imap.close()
