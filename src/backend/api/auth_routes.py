@@ -35,6 +35,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 import auth as auth_core
 import auth_devices
 import auth_users
+import user_profiles
 
 logger = logging.getLogger(__name__)
 
@@ -257,15 +258,23 @@ async def post_logout(request: Request):
 
 @router.get("/me")
 async def get_me(request: Request):
-    """Return the current authenticated user info, or 401."""
+    """Return the current authenticated user info, or 401.
+
+    Response includes profile key and the list of apps the user can access,
+    so the dashboard can filter its app list without an extra round-trip.
+    """
     user = auth_core.get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    # Check if this session was refreshed from a device token
     has_device = bool(auth_devices.get_device_cookie_from_request(request))
 
-    return JSONResponse({"username": user, "trusted_device": has_device})
+    return JSONResponse({
+        "username": user,
+        "trusted_device": has_device,
+        "profile": user_profiles.get_profile_key(user),
+        "apps": user_profiles.app_permissions(user),
+    })
 
 
 # ---------------------------------------------------------------------------

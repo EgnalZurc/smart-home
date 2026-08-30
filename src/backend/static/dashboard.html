@@ -98,12 +98,7 @@
 <div id="dash-content">
 <div class="max-w-md mx-auto px-4 pt-7 pb-12 fade-in">
     <header class="flex items-center justify-between mb-8">
-        <div class="flex items-center gap-3">
-            <a href="/smart-home" class="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-700/40 transition-all flex-shrink-0" aria-label="Recargar dashboard" title="Cuchi Casa">
-                <img src="/static/icono-cuchi-casa.png" class="w-5 h-5 object-contain rounded" alt="Home">
-            </a>
-            <h1 id="title" class="text-xl font-bold tracking-tight">Cuchi Casa</h1>
-        </div>
+        <h1 id="title" class="text-xl font-bold tracking-tight">Cuchi Casa</h1>
         <div class="flex items-center gap-2">
             <!-- User dropdown -->
             <div class="user-dropdown" id="user-dropdown" style="display:none">
@@ -182,13 +177,17 @@ const T = {
     },
 };
 // ── App Registry ──────────────────────────────────────────────────────────────
-const APPS = [
-    { key: 'ac',         url: '/smart-home/ac',                                    nameKey: 'ac_name',         descKey: 'ac_desc',         statusUrl: '/api/status',           getStatus: d => d?.mqtt_connected     },
-    { key: 'casita',     url: '/smart-home/casita?' + Date.now(),                  nameKey: 'casita_name',     descKey: 'casita_desc',     statusUrl: '/api/health/casita',    getStatus: d => d?.online === true    },
-    { key: 'vacaciones', url: '/smart-home/vacaciones',                             nameKey: 'vacaciones_name', descKey: 'vacaciones_desc', statusUrl: '/api/health/vacaciones', getStatus: d => d?.online === true   },
-    { key: 'photos',     url: 'https://raspberrypi.tailaa37cd.ts.net:10000/',       nameKey: 'photos_name',     descKey: 'photos_desc',     statusUrl: '/api/health/immich',    getStatus: d => d?.online === true    },
-    { key: 'zigbee',     url: '/zigbee/',                                           nameKey: 'zigbee_name',     descKey: 'zigbee_desc',     statusUrl: '/api/health/zigbee',    getStatus: d => d?.online === true    },
-];
+// Full catalogue — filtered at runtime by the profile returned from /auth/me.
+// To add a new app: add an entry here AND in user_profiles.APP_REGISTRY (backend).
+const APP_CATALOGUE = {
+    ac:        { url: '/smart-home/ac',                                    nameKey: 'ac_name',        descKey: 'ac_desc',        statusUrl: '/api/status',           getStatus: d => d?.mqtt_connected },
+    zigbee:    { url: '/zigbee/',                                           nameKey: 'zigbee_name',    descKey: 'zigbee_desc',    statusUrl: '/api/health/zigbee',    getStatus: d => d?.online === true },
+    photos:    { url: 'https://raspberrypi.tailaa37cd.ts.net:10000/',       nameKey: 'photos_name',    descKey: 'photos_desc',    statusUrl: '/api/health/immich',    getStatus: d => d?.online === true },
+    vacaciones:{ url: '/smart-home/vacaciones',                             nameKey: 'vacaciones_name',descKey: 'vacaciones_desc',statusUrl: '/api/health/vacaciones',getStatus: d => d?.online === true },
+    casita:    { url: '/smart-home/casita?' + Date.now(),                   nameKey: 'casita_name',    descKey: 'casita_desc',    statusUrl: '/api/health/casita',    getStatus: d => d?.online === true },
+};
+// Populated after /auth/me resolves; used by render() and loadStatus().
+let APPS = [];
 // ── Language ──────────────────────────────────────────────────────────────────
 const COOKIE = 'locale';
 function getLang() {
@@ -281,18 +280,24 @@ async function loadUser() {
         const data = await res.json();
         const username = data.username || '';
         if (!username) return;
-        document.getElementById('user-name').textContent  = username;
+        document.getElementById('user-name').textContent   = username;
         document.getElementById('user-avatar').textContent = username.charAt(0).toUpperCase();
         document.getElementById('user-dropdown').style.display = 'block';
+        // Build the visible app list from the profile returned by the server.
+        APPS = (data.apps || []).map(p => ({ key: p.key, ...APP_CATALOGUE[p.key] })).filter(a => a.url);
+        render();
+        loadStatus();
     } catch { /* ignore */ }
 }
 // ── Init ──────────────────────────────────────────────────────────────────────
 (async function init() {
     applyLang();
+    // Apps are populated by loadUser() once /auth/me resolves — render a
+    // placeholder-free empty list until then.
     render();
     try {
         await Promise.race([
-            Promise.all([loadStatus(), loadUser()]),
+            loadUser(),
             new Promise(r => setTimeout(r, 5000))
         ]);
     } catch {}
