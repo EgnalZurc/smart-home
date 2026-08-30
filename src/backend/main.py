@@ -501,11 +501,30 @@ async def proxy_flood(lat: float, lon: float):
         _query("NZ.Flood.FluvialT500"),
     )
     def _norm(v):
-        # -9999 = sin datos, -3 = fuera del raster (GeoServer artefacto), null = sin datos
+        # Valores de "sin datos" del raster SNCZI:
+        #   None   → petición fallida
+        #   -9999  → nodata estándar del raster
+        #   < -2   → artefacto GeoServer (p.ej. -3) fuera del polígono inundable
+        #   ~3.4   → fill value de celdas dentro del bbox de la demarcación
+        #            hidrográfica pero fuera del polígono inundable real.
+        #            (valor exacto: 3.3999999521443642 ≈ 3.4)
         if v is None or v == -9999.0 or v < -2:
             return None
+        # Filtrar el fill value 3.4 (nodata dentro de la demarcación)
+        if abs(v - 3.4) < 0.05:
+            return None
         return round(v, 2)
-    return {"t10": _norm(t10), "t100": _norm(t100), "t500": _norm(t500)}
+
+    t10n, t100n, t500n = _norm(t10), _norm(t100), _norm(t500)
+
+    # Sanity check: si los tres valores son idénticos y positivos es artefacto.
+    # En datos reales, T10 siempre tiene calado >= T100 >= T500.
+    # Un valor uniforme idéntico en las tres capas es imposible en la realidad.
+    if (t10n is not None and t100n is not None and t500n is not None
+            and t10n == t100n == t500n):
+        t10n = t100n = t500n = None
+
+    return {"t10": t10n, "t100": t100n, "t500": t500n}
 
 
 @app.get("/api/proxy/firms")
