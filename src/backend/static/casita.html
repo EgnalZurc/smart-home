@@ -1364,55 +1364,103 @@ async function _locAirQuality(lat, lon) {
 
 // ── Distancias OSRM (driving) ────────────────────────────────────────────────
 async function _locDistances(lat, lon) {
-  // Busca los POI más cercanos via Overpass, luego calcula tiempo en coche via OSRM.
-  // El scorer usa valores fijos por zona; aquí calculamos para la dirección exacta.
-  // Destinos: hospital, centro de salud, supermercado, playa.
-  // (Distancia Madrid ya la evalúa el scorer con alta precisión.)
+  // Busca los POI más cercanos via Overpass, toma el más próximo por haversine,
+  // luego calcula tiempo en coche via OSRM.
+  const OVP = 'https://overpass-api.de/api/interpreter';
 
-  // ── Buscar POI cercanos via Overpass ────────────────────────────────────
-  const overpassBase = 'https://overpass-api.de/api/interpreter';
+  // Distancia haversine auxiliar
+  const _hav = (la1, lo1, la2, lo2) => {
+    const R=6371, dLa=(la2-la1)*Math.PI/180, dLo=(lo2-lo1)*Math.PI/180;
+    const a=Math.sin(dLa/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLo/2)**2;
+    return R*2*Math.asin(Math.sqrt(a));
+  };
 
-  const q_hospital = `[out:json][timeout:10];
-    (node["amenity"="hospital"](around:40000,${lat},${lon});
-     way["amenity"="hospital"](around:40000,${lat},${lon}););
-    out center 1;`;
-
-  const q_health = `[out:json][timeout:10];
-    (node["amenity"~"clinic|health_post|doctors"](around:30000,${lat},${lon});
-     node["amenity"="clinic"]["healthcare"](around:30000,${lat},${lon}););
-    out 1;`;
-
-  const q_super = `[out:json][timeout:8];
-    (node["shop"~"^(supermarket|convenience)$"](around:15000,${lat},${lon}););
-    out 1;`;
-
-  const q_beach = `[out:json][timeout:10];
-    (node["natural"="beach"](around:80000,${lat},${lon});
-     way["natural"="beach"](around:80000,${lat},${lon}););
-    out center 1;`;
-
-  const _overpass = async (query) => {
+  // Ejecuta Overpass y devuelve el elemento MÁS CERCANO (no el primero del resultado)
+  const _nearest = async (query) => {
     try {
-      const r = await fetch(overpassBase, { method: 'POST',
-        body: 'data=' + encodeURIComponent(query) });
+      const r = await fetch(OVP, { method:'POST', body:'data='+encodeURIComponent(query) });
       const d = await r.json();
       if (!d.elements?.length) return null;
-      const el = d.elements[0];
+      let best = null, bestDist = Infinity;
+      for (const el of d.elements) {
+        const eLat = el.lat ?? el.center?.lat;
+        const eLon = el.lon ?? el.center?.lon;
+        if (eLat == null || eLon == null) continue;
+        const dist = _hav(lat, lon, eLat, eLon);
+        if (dist < bestDist) { bestDist = dist; best = el; }
+      }
+      if (!best) return null;
       return {
-        lat:  el.lat  ?? el.center?.lat,
-        lon:  el.lon  ?? el.center?.lon,
-        name: el.tags?.name || null,
+        lat:  best.lat  ?? best.center?.lat,
+        lon:  best.lon  ?? best.center?.lon,
+        name: best.tags?.name || null,
       };
     } catch { return null; }
   };
 
-  // Lanzar búsquedas en paralelo
-  const [h_poi, hc_poi, s_poi, b_poi] = await Promise.all([
-    _overpass(q_hospital), _overpass(q_health),
-    _overpass(q_super),    _overpass(q_beach),
+  // ── Queries Overpass ────────────────────────────────────────────────────
+
+  // Hospital: radio 15km, devolver top 10 y tomar el más cercano
+  const q_hospital = `[out:json][timeout:12];
+    (node["amenity"="hospital"](around:15000,${lat},${lon});
+     way["amenity"="hospital"](around:15000,${lat},${lon});
+     relation["amenity"="hospital"](around:15000,${lat},${lon}););
+    out center 10;`;
+
+  // Centro de salud: en OSM España los CS públicos usan healthcare=centre
+  // o amenity=clinic con nombre "Centro de Salud"
+  // Radio progresivo: primero 3km, si no hay resultado ampliar a 8km
+  const q_health_3km = `[out:json][timeout:10];
+    (node["healthcare"="centre"](around:3000,${lat},${lon});
+     way["healthcare"="centre"](around:3000,${lat},${lon});
+     node["amenity"="clinic"]["name"~"[Cc]entro|[Ss]alud|CS "](around:3000,${lat},${lon});
+     node["amenity"="doctors"](around:3000,${lat},${lon}););
+    out center 10;`;
+  const q_health_8km = `[out:json][timeout:10];
+    (node["healthcare"="centre"](around:8000,${lat},${lon});
+     way["healthcare"="centre"](around:8000,${lat},${lon});
+     node["amenity"="clinic"]["name"~"[Cc]entro|[Ss]alud|CS "](around:8000,${lat},${lon}););
+    out center 10;`;
+
+  // Supermercado: radio progresivo 800m→2km→5km, solo shop=supermarket
+  const q_super_800 = `[out:json][timeout:8];
+    (node["shop"="supermarket"](around:800,${lat},${lon}););
+    out 10;`;
+  const q_super_2k  = `[out:json][timeout:8];
+    (node["shop"="supermarket"](around:2000,${lat},${lon}););
+    out 10;`;
+  const q_super_5k  = `[out:json][timeout:8];
+    (node["shop"="supermarket"](around:5000,${lat},${lon}););
+    out 10;`;
+
+  // Playa costera: excluir playas de río/lago filtrando por nombre y tipo
+  // Radio 180km (Madrid está ~200km de las costas más cercanas en línea recta)
+  // Solo considerar playa costera si hay mar cerca: filtrar por nombre
+  const q_beach = `[out:json][timeout:15];
+    (way["natural"="beach"]["name"!~"[Rr]ío|[Rr]io|[Ee]mbalse|[Ll]ago|[Pp]antano|[Ff]luvial"](around:180000,${lat},${lon});
+     node["natural"="beach"]["name"!~"[Rr]ío|[Rr]io|[Ee]mbalse|[Ll]ago|[Pp]antano|[Ff]luvial"](around:180000,${lat},${lon}););
+    out center 5;`;
+
+  // ── Buscar POI en paralelo ───────────────────────────────────────────────
+  const [h_poi, hc3, s800, b_poi] = await Promise.all([
+    _nearest(q_hospital),
+    _nearest(q_health_3km),
+    _nearest(q_super_800),
+    _nearest(q_beach),
   ]);
 
-  // ── Calcular tiempos de conducción via OSRM ──────────────────────────────
+  // Centro de salud: fallback a 8km si no hay en 3km
+  let hc_poi = hc3;
+  if (!hc_poi) {
+    hc_poi = await _nearest(q_health_8km);
+  }
+
+  // Supermercado: fallback progresivo
+  let s_poi = s800;
+  if (!s_poi) s_poi = await _nearest(q_super_2k);
+  if (!s_poi) s_poi = await _nearest(q_super_5k);
+
+  // ── Rutas OSRM ──────────────────────────────────────────────────────────
   const _osrm = async (toLat, toLon) => {
     if (toLat == null || toLon == null) return null;
     try {
@@ -1422,13 +1470,12 @@ async function _locDistances(lat, lon) {
       const d = await r.json();
       if (!d.routes?.length) return null;
       return {
-        min: +(d.routes[0].duration / 60).toFixed(0),
-        km:  +(d.routes[0].distance / 1000).toFixed(0),
+        min: +(d.routes[0].duration/60).toFixed(0),
+        km:  +(d.routes[0].distance/1000).toFixed(1),
       };
     } catch { return null; }
   };
 
-  // Solo calcular ruta OSRM para los POI encontrados
   const [h_rt, hc_rt, s_rt, b_rt] = await Promise.all([
     h_poi  ? _osrm(h_poi.lat,  h_poi.lon)  : null,
     hc_poi ? _osrm(hc_poi.lat, hc_poi.lon) : null,
@@ -1436,10 +1483,8 @@ async function _locDistances(lat, lon) {
     b_poi  ? _osrm(b_poi.lat,  b_poi.lon)  : null,
   ]);
 
-  const _build = (poi, rt, defaultName) => {
-    if (!poi || !rt) return null;
-    return { name: poi.name || defaultName, min: rt.min, km: rt.km };
-  };
+  const _build = (poi, rt, def) =>
+    poi && rt ? { name: poi.name || def, min: rt.min, km: rt.km } : null;
 
   return {
     hospital:    _build(h_poi,  h_rt,  'Hospital'),
