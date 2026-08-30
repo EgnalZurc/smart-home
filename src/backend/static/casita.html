@@ -1413,13 +1413,13 @@ async function _locDistances(lat, lon) {
   const q_health_3km = `[out:json][timeout:10];
     (node["healthcare"="centre"](around:3000,${lat},${lon});
      way["healthcare"="centre"](around:3000,${lat},${lon});
-     node["amenity"="clinic"]["name"~"[Cc]entro|[Ss]alud|CS "](around:3000,${lat},${lon});
+     node["amenity"="clinic"](around:3000,${lat},${lon});
      node["amenity"="doctors"](around:3000,${lat},${lon}););
     out center 10;`;
   const q_health_8km = `[out:json][timeout:10];
     (node["healthcare"="centre"](around:8000,${lat},${lon});
      way["healthcare"="centre"](around:8000,${lat},${lon});
-     node["amenity"="clinic"]["name"~"[Cc]entro|[Ss]alud|CS "](around:8000,${lat},${lon}););
+     node["amenity"="clinic"](around:8000,${lat},${lon}););
     out center 10;`;
 
   // Supermercado: radio progresivo 800m→2km→5km, solo shop=supermarket
@@ -1435,18 +1435,44 @@ async function _locDistances(lat, lon) {
 
   // Playa costera: excluir playas de río/lago filtrando por nombre y tipo
   // Radio 180km (Madrid está ~200km de las costas más cercanas en línea recta)
-  // Solo considerar playa costera si hay mar cerca: filtrar por nombre
+  // Playa: sin regex negativo (causa HTTP 400). Filtramos fluviales en JS.
   const q_beach = `[out:json][timeout:15];
-    (way["natural"="beach"]["name"!~"[Rr]ío|[Rr]io|[Ee]mbalse|[Ll]ago|[Pp]antano|[Ff]luvial"](around:180000,${lat},${lon});
-     node["natural"="beach"]["name"!~"[Rr]ío|[Rr]io|[Ee]mbalse|[Ll]ago|[Pp]antano|[Ff]luvial"](around:180000,${lat},${lon}););
-    out center 5;`;
+    (node["natural"="beach"]["name"](around:200000,${lat},${lon}););
+    out 10;`;
 
   // ── Buscar POI en paralelo ───────────────────────────────────────────────
+  // Para playa: filtrar en JS los resultados con nombres de zonas fluviales
+  const _nearestBeach = async (query) => {
+    try {
+      const r = await fetch(OVP, { method:'POST', body:'data='+encodeURIComponent(query) });
+      const d = await r.json();
+      if (!d.elements?.length) return null;
+      const RIVER_WORDS = /río|rio|embalse|lago|pantano|fluvial|presa|canal|ribera/i;
+      // Filtrar playas fluviales, tomar la más cercana costera
+      let best = null, bestDist = Infinity;
+      for (const el of d.elements) {
+        const name = el.tags?.name || '';
+        if (RIVER_WORDS.test(name)) continue;  // excluir playas de río/embalse
+        const eLat = el.lat ?? el.center?.lat;
+        const eLon = el.lon ?? el.center?.lon;
+        if (eLat == null) continue;
+        const dist = _hav(lat, lon, eLat, eLon);
+        if (dist < bestDist) { bestDist = dist; best = el; }
+      }
+      if (!best) return null;
+      return {
+        lat:  best.lat  ?? best.center?.lat,
+        lon:  best.lon  ?? best.center?.lon,
+        name: best.tags?.name || null,
+      };
+    } catch { return null; }
+  };
+
   const [h_poi, hc3, s800, b_poi] = await Promise.all([
     _nearest(q_hospital),
     _nearest(q_health_3km),
     _nearest(q_super_800),
-    _nearest(q_beach),
+    _nearestBeach(q_beach),
   ]);
 
   // Centro de salud: fallback a 8km si no hay en 3km
