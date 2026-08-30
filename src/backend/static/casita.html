@@ -1620,43 +1620,64 @@ function _locRender(container, geo, climate, fire, flood, air, distances, ine) {
   }
 
 
-  // ── Bloque 4: Riesgo de inundación (SNCZI MITECO) ───────────────────────
+  // ── Bloque 4: Riesgo de inundación (SNCZI + GloFAS) ───────────────────
   if (flood) {
-    // GRAY_INDEX: -9999 = sin datos, >0 = calado estimado en metros
-    // Interpretación: si algún T tiene valor >0 → posible zona inundable
-    // Valores normalizados: null=sin datos/no mapeado, 0=límite zona, >0=calado metros
-    const inT10  = flood.t10  !== null && flood.t10  >= 0;
-    const inT100 = flood.t100 !== null && flood.t100 >= 0;
-    const inT500 = flood.t500 !== null && flood.t500 >= 0;
-    const noData = flood.t10 === null && flood.t100 === null && flood.t500 === null;
+    const level  = flood.risk_level;   // muy_alto|alto|moderado|bajo|sin_datos
+    const source = flood.risk_source;  // snczi|glofas|sin_datos
+    const snczi  = flood.snczi;
+    const glo    = flood.glofas;
 
-    let badge, badgeCls, desc, detail = '';
-    if (noData) {
-      badge = 'Sin datos'; badgeCls = 'gray';
-      desc = 'No se obtuvieron datos del SNCZI';
-    } else if (inT10) {
-      badge = 'Muy Alto'; badgeCls = 'red';
-      desc = 'Zona inundable en escenario frecuente (T=10 años)';
-      if (flood.t10 > 0) detail = `Calado estimado T10: ${flood.t10.toFixed(2)} m`;
-    } else if (inT100) {
-      badge = 'Alto'; badgeCls = 'orange';
-      desc = 'Zona inundable en escenario ordinario (T=100 años)';
-      if (flood.t100 > 0) detail = `Calado estimado T100: ${flood.t100.toFixed(2)} m`;
-    } else if (inT500) {
-      badge = 'Moderado'; badgeCls = 'yellow';
-      desc = 'Solo en escenario excepcional (T=500 años)';
-      if (flood.t500 > 0) detail = `Calado estimado T500: ${flood.t500.toFixed(2)} m`;
+    const LEVEL_MAP = {
+      muy_alto: { badge: 'Muy Alto',  cls: 'red'    },
+      alto:     { badge: 'Alto',      cls: 'orange'  },
+      moderado: { badge: 'Moderado',  cls: 'yellow'  },
+      bajo:     { badge: 'Bajo',      cls: 'green'   },
+      sin_datos:{ badge: 'Sin datos', cls: 'gray'    },
+    };
+    const lv = LEVEL_MAP[level] || LEVEL_MAP['sin_datos'];
+
+    // Descripción principal según fuente
+    let mainDesc = '';
+    if (source === 'snczi' && snczi) {
+      const { t10, t100, t500 } = snczi;
+      if (t10 !== null && t10 >= 0)
+        mainDesc = `Inundable escenario frecuente (T=10a) · calado ${t10.toFixed(2)} m`;
+      else if (t100 !== null && t100 >= 0)
+        mainDesc = `Inundable escenario ordinario (T=100a) · calado ${t100.toFixed(2)} m`;
+      else if (t500 !== null && t500 >= 0)
+        mainDesc = `Solo escenario excepcional (T=500a) · calado ${t500.toFixed(2)} m`;
+      else
+        mainDesc = 'Sin peligrosidad fluvial en el mapa oficial';
+      if (snczi.bbox_radius_m && snczi.bbox_radius_m > 100)
+        mainDesc += ` (área búsqueda ~${snczi.bbox_radius_m} m)`;
+    } else if (source === 'glofas' && glo) {
+      mainDesc = `Río más cercano · caudal máx histórico ${glo.max_hist_m3s} m³/s · p99: ${glo.p99_m3s} m³/s`;
     } else {
-      badge = 'Bajo/Nulo'; badgeCls = 'green';
-      desc = 'No detectado en ningún escenario (T=10/100/500 años)';
+      mainDesc = 'Sin cobertura en ninguna fuente consultada';
     }
 
-    const fl = `<div class="loc-row">
-      <span class="loc-label">${desc}</span>
-      <span class="loc-badge ${badgeCls}">${badge}</span>
-    </div>
-    ${detail ? `<div class="loc-row"><span class="loc-label">${detail}</span></div>` : ''}
-    <div class="loc-row"><span class="loc-label" style="font-size:9px;color:#475569">SNCZI · MITECO España · T=10/100/500 años</span></div>`;
+    let fl = `<div class="loc-row">
+      <span class="loc-label">${mainDesc}</span>
+      <span class="loc-badge ${lv.cls}">${lv.badge}</span>
+    </div>`;
+
+    // Caudal GloFAS como contexto adicional (siempre que exista)
+    if (glo) {
+      fl += `<div class="loc-row">
+        <span class="loc-label" style="color:#475569;font-size:10px">
+          Histórico 30 años · media ${glo.mean_m3s} m³/s · máx ${glo.max_hist_m3s} m³/s
+        </span>
+      </div>`;
+    }
+
+    // Nota de fuente
+    const srcNote = source === 'snczi'
+      ? 'SNCZI MITECO España (fuente oficial)'
+      : source === 'glofas'
+        ? 'SNCZI sin cobertura aquí · estimación vía GloFAS/Open-Meteo'
+        : 'Sin cobertura SNCZI ni GloFAS';
+    fl += `<div class="loc-row"><span class="loc-label" style="font-size:9px;color:#334155">${srcNote}</span></div>`;
+
     rows.push(_locBlock('🌊 Riesgo de inundación', fl));
   }
   // ── Bloque 5: Calidad del aire ────────────────────────────────────────────

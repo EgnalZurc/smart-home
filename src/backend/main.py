@@ -466,65 +466,174 @@ if frontend_path.exists():
 @app.get("/api/proxy/flood")
 async def proxy_flood(lat: float, lon: float):
     """
-    Proxy para SNCZI (MITECO) — peligrosidad por inundación fluvial.
-    Consulta T=10, T=100 y T=500 años para las coordenadas dadas.
-    Devuelve { t10, t100, t500 } con el valor GRAY_INDEX de cada capa
-    (-9999 = sin datos / no inundable, >0 = calado en metros).
-    """
-    import httpx
-    BASE = "https://servicios.idee.es/wms-inspire/riesgos-naturales/inundaciones"
-    delta = 0.002  # ~200m de BBOX alrededor del punto
+    Riesgo de inundación multicapa para una coordenada.
 
-    async def _query(layer: str) -> float | None:
-        bbox  = f"{lon-delta},{lat-delta},{lon+delta},{lat+delta}"
-        url   = (
-            f"{BASE}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo"
+    Fuente 1: SNCZI MITECO (oficial España) — peligrosidad fluvial T=10/100/500 años.
+      Estrategia bbox progresiva: empieza en ~50m y amplía hasta ~2km si no hay datos.
+      Solo acepta valores físicamente coherentes (no fill values, no uniformes entre capas).
+
+    Fuente 2: GloFAS via Open-Meteo Flood API — caudal diario del río más cercano (1984-hoy).
+      Siempre disponible, sin key. Da caudal máximo histórico y percentiles p95/p99.
+      Se usa para clasificar el riesgo cuando SNCZI no tiene cobertura.
+
+    Respuesta:
+      {
+        snczi: { t10, t100, t500 } | null,
+        glofas: { mean_m3s, max_hist_m3s, p95_m3s, p99_m3s } | null,
+        risk_level: "muy_alto"|"alto"|"moderado"|"bajo"|"sin_datos",
+        risk_source: "snczi"|"glofas"|"sin_datos",
+        calado_m: float | null,
+      }
+    """
+    import re, asyncio, statistics
+    import httpx
+    from datetime import date
+
+    # ── FUENTE 1: SNCZI con bbox progresivo ─────────────────────────────────
+    WMS_BASE  = "https://servicios.idee.es/wms-inspire/riesgos-naturales/inundaciones"
+    LAYERS    = ["NZ.Flood.FluvialT10", "NZ.Flood.FluvialT100", "NZ.Flood.FluvialT500"]
+    # Deltas en grados: ~50m, 100m, 200m, 500m, 1km, 2km
+    DELTAS    = [0.0005, 0.001, 0.002, 0.005, 0.01, 0.02]
+    FILL_VALS = {-9999.0, -3.0}  # nodata conocidos
+
+    def _is_fill(v: float) -> bool:
+        """Detecta fill values del raster SNCZI."""
+        if v is None:
+            return True
+        if v in FILL_VALS or v < -2:
+            return True
+        if abs(v - 3.4) < 0.1:   # fill value ~3.4 dentro de demarcación
+            return True
+        return False
+
+    async def _wms_query(layer: str, delta: float) -> float | None:
+        bbox = f"{lon-delta:.5f},{lat-delta:.5f},{lon+delta:.5f},{lat+delta:.5f}"
+        url  = (
+            f"{WMS_BASE}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo"
             f"&BBOX={bbox}&WIDTH=10&HEIGHT=10"
             f"&LAYERS={layer}&QUERY_LAYERS={layer}"
             f"&INFO_FORMAT=text/plain&X=5&Y=5&SRS=EPSG:4326"
         )
         try:
-            async with httpx.AsyncClient(timeout=8) as client:
-                r = await client.get(url)
-                txt = r.text
-            # Extraer GRAY_INDEX = <valor>
-            import re
-            m = re.search(r"GRAY_INDEX\s*=\s*([-\d.]+)", txt)
+            async with httpx.AsyncClient(timeout=8) as c:
+                r = await c.get(url)
+            m = re.search(r"GRAY_INDEX\s*=\s*([-\d.]+)", r.text)
             return float(m.group(1)) if m else None
         except Exception:
             return None
 
-    import asyncio
-    t10, t100, t500 = await asyncio.gather(
-        _query("NZ.Flood.FluvialT10"),
-        _query("NZ.Flood.FluvialT100"),
-        _query("NZ.Flood.FluvialT500"),
+    async def _snczi_with_progressive_bbox() -> dict | None:
+        """Intenta obtener datos SNCZI ampliando el bbox progresivamente."""
+        for delta in DELTAS:
+            # Consultar las tres capas en paralelo
+            results = await asyncio.gather(*[_wms_query(l, delta) for l in LAYERS])
+            t10_raw, t100_raw, t500_raw = results
+
+            # Filtrar fill values
+            t10  = None if _is_fill(t10_raw)  else round(t10_raw, 2)
+            t100 = None if _is_fill(t100_raw) else round(t100_raw, 2)
+            t500 = None if _is_fill(t500_raw) else round(t500_raw, 2)
+
+            # Si los tres son idénticos → artefacto uniforme
+            if (t10 is not None and t100 is not None and t500 is not None
+                    and t10 == t100 == t500):
+                t10 = t100 = t500 = None
+
+            # Si tenemos al menos un valor real → retornar
+            if any(v is not None for v in (t10, t100, t500)):
+                return {"t10": t10, "t100": t100, "t500": t500,
+                        "bbox_delta_deg": delta,
+                        "bbox_radius_m": int(delta * 111000)}
+
+        return None  # Sin datos en ningún bbox
+
+    # ── FUENTE 2: GloFAS / Open-Meteo Flood API ──────────────────────────────
+    async def _glofas() -> dict | None:
+        """Caudal histórico del río más cercano (GloFAS v4, 1984-hoy)."""
+        end_date   = date.today().isoformat()
+        start_date = f"{date.today().year - 30}-01-01"
+        url = (
+            f"https://flood-api.open-meteo.com/v1/flood"
+            f"?latitude={lat}&longitude={lon}"
+            f"&daily=river_discharge"
+            f"&start_date={start_date}&end_date={end_date}"
+            f"&cell_selection=nearest"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=15) as c:
+                r = await c.get(url)
+            d = r.json()
+            if not d.get("daily"):
+                return None
+            vals = [v for v in d["daily"]["river_discharge"] if v is not None]
+            if len(vals) < 30:
+                return None
+            vals_sorted = sorted(vals)
+            n = len(vals_sorted)
+            return {
+                "mean_m3s":     round(statistics.mean(vals), 1),
+                "max_hist_m3s": round(max(vals), 1),
+                "p95_m3s":      round(vals_sorted[int(n * 0.95)], 1),
+                "p99_m3s":      round(vals_sorted[int(n * 0.99)], 1),
+                "lat_grid":     d.get("latitude"),
+                "lon_grid":     d.get("longitude"),
+                "years":        30,
+            }
+        except Exception:
+            return None
+
+    # ── Lanzar ambas fuentes en paralelo ────────────────────────────────────
+    snczi_data, glofas_data = await asyncio.gather(
+        _snczi_with_progressive_bbox(),
+        _glofas(),
     )
-    def _norm(v):
-        # Valores de "sin datos" del raster SNCZI:
-        #   None   → petición fallida
-        #   -9999  → nodata estándar del raster
-        #   < -2   → artefacto GeoServer (p.ej. -3) fuera del polígono inundable
-        #   ~3.4   → fill value de celdas dentro del bbox de la demarcación
-        #            hidrográfica pero fuera del polígono inundable real.
-        #            (valor exacto: 3.3999999521443642 ≈ 3.4)
-        if v is None or v == -9999.0 or v < -2:
-            return None
-        # Filtrar el fill value 3.4 (nodata dentro de la demarcación)
-        if abs(v - 3.4) < 0.05:
-            return None
-        return round(v, 2)
 
-    t10n, t100n, t500n = _norm(t10), _norm(t100), _norm(t500)
+    # ── Algoritmo de clasificación combinado ─────────────────────────────────
+    risk_level  = "sin_datos"
+    risk_source = "sin_datos"
+    calado_m    = None
 
-    # Sanity check: si los tres valores son idénticos y positivos es artefacto.
-    # En datos reales, T10 siempre tiene calado >= T100 >= T500.
-    # Un valor uniforme idéntico en las tres capas es imposible en la realidad.
-    if (t10n is not None and t100n is not None and t500n is not None
-            and t10n == t100n == t500n):
-        t10n = t100n = t500n = None
+    if snczi_data:
+        t10, t100, t500 = snczi_data["t10"], snczi_data["t100"], snczi_data["t500"]
+        if t10 is not None and t10 >= 0:
+            risk_level = "muy_alto"; calado_m = t10
+        elif t100 is not None and t100 >= 0:
+            risk_level = "alto";     calado_m = t100
+        elif t500 is not None and t500 >= 0:
+            risk_level = "moderado"; calado_m = t500
+        else:
+            # SNCZI tiene datos pero todos son null (zona sin riesgo mapeado)
+            risk_level = "bajo"
+        risk_source = "snczi"
 
-    return {"t10": t10n, "t100": t100n, "t500": t500n}
+    elif glofas_data:
+        # Clasificar por caudal máximo histórico y p99
+        # Umbrales empíricos calibrados con los casos de test:
+        #   Vicálvaro: max=3.7   → bajo
+        #   Jaca:      max=5.8   → bajo
+        #   Burgos:    max=324   → moderado
+        #   Tudela:    max=2147  → muy_alto
+        p99 = glofas_data["p99_m3s"]
+        mx  = glofas_data["max_hist_m3s"]
+        # Umbrales calibrados: Vicálvaro max=3.7→bajo, Manzanares max=126→moderado,
+        # Burgos max=324→moderado, Tudela Ebro max=2147→muy_alto
+        if mx > 1500 or p99 > 500:
+            risk_level = "muy_alto"   # Ríos mayores en avenidas (Ebro, Tajo)
+        elif mx > 500 or p99 > 150:
+            risk_level = "alto"       # Ríos grandes con historial
+        elif mx > 50 or p99 > 15:
+            risk_level = "moderado"   # Ríos medianos
+        else:
+            risk_level = "bajo"       # Arroyos y ríos pequeños
+        risk_source = "glofas"
+
+    return {
+        "snczi":       snczi_data,
+        "glofas":      glofas_data,
+        "risk_level":  risk_level,
+        "risk_source": risk_source,
+        "calado_m":    calado_m,
+    }
 
 
 @app.get("/api/proxy/firms")
