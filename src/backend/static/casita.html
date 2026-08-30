@@ -1592,34 +1592,69 @@ function _locRender(container, geo, climate, fire, flood, air, distances, ine) {
     rows.push(_locBlock('🌡️ Clima', '<div class="loc-error">No disponible</div>'));
   }
 
-  // ── Bloque 3: Riesgo de incendio (NASA FIRMS) ────────────────────────────
-  if (fire) {
-    const focos = fire.focos;
-    let badge, badgeCls, desc;
-    if (fire.no_key) {
-      badge = 'Sin clave'; badgeCls = 'gray'; desc = 'NASA FIRMS requiere MAP_KEY (var FIRMS_MAP_KEY)';
-    } else if (focos === null) {
-      badge = 'Sin datos'; badgeCls = 'gray'; desc = 'No se pudo consultar NASA FIRMS';
-    } else if (focos === 0) {
-      badge = 'Muy bajo'; badgeCls = 'green'; desc = 'Sin focos detectados en 30 km (5 años)';
-    } else if (focos < 5) {
-      badge = 'Bajo'; badgeCls = 'green'; desc = `${focos} focos en 30 km (5 años)`;
-    } else if (focos < 20) {
-      badge = 'Moderado'; badgeCls = 'yellow'; desc = `${focos} focos detectados en radio 30 km`;
-    } else if (focos < 60) {
-      badge = 'Elevado'; badgeCls = 'orange'; desc = `${focos} focos detectados — zona con actividad`;
+  // ── Bloque 3: Riesgo de incendio ───────────────────────────────────────
+  // Fuente principal: índice climático (precipitación + días lluvia + viento)
+  // Fuente secundaria: FIRMS como contexto de actividad térmica reciente
+  {
+    let fl = '';
+    let badge = 'Sin datos', badgeCls = 'gray', mainDesc = '';
+
+    // Índice climático (basado en datos Open-Meteo ya calculados en bloque clima)
+    if (climate) {
+      const prec  = climate.precipAnnual || 0;
+      const rainD = climate.rainDaysYear  || 0;
+      const wind  = climate.windMaxKmh    || 0;
+
+      // Clasificación por sequedad y viento (correlación fuerte con riesgo forestal):
+      //   < 400mm/año + < 60 días lluvia = zona seca mediterránea/interior → riesgo elevado
+      //   > 800mm/año = zona húmeda atlántica → riesgo bajo
+      if (prec < 400 && rainD < 60) {
+        badge = 'Alto'; badgeCls = 'red';
+        mainDesc = `Zona seca: ${prec}mm/año · ${rainD} días lluvia/año`;
+      } else if (prec < 600 && rainD < 80) {
+        badge = 'Moderado'; badgeCls = 'orange';
+        mainDesc = `Clima seco-mediterráneo: ${prec}mm/año · ${rainD} días lluvia/año`;
+      } else if (prec < 800) {
+        badge = 'Bajo-Moderado'; badgeCls = 'yellow';
+        mainDesc = `Clima intermedio: ${prec}mm/año · ${rainD} días lluvia/año`;
+      } else {
+        badge = 'Bajo'; badgeCls = 'green';
+        mainDesc = `Zona húmeda: ${prec}mm/año · ${rainD} días lluvia/año`;
+      }
+      // Viento máximo como agravante
+      if (wind > 120 && badgeCls !== 'red') {
+        mainDesc += ` · viento máx ${wind} km/h`;
+        if (badgeCls === 'green') badgeCls = 'yellow';
+      }
     } else {
-      badge = 'Alto'; badgeCls = 'red'; desc = `${focos} focos detectados — zona con historial significativo`;
+      mainDesc = 'Sin datos climáticos para calcular índice de riesgo';
     }
-    const fr = `<div class="loc-row">
-      <span class="loc-label">${desc}</span>
+
+    fl += `<div class="loc-row">
+      <span class="loc-label">${mainDesc}</span>
       <span class="loc-badge ${badgeCls}">${badge}</span>
-    </div>
-    <div class="loc-row"><span class="loc-label" style="font-size:9px;color:#475569">Satélite VIIRS SNPP · NASA FIRMS · radio 30 km · meses jun-oct · últimos 3 años</span></div>`;
-    rows.push(_locBlock('🔥 Riesgo de incendio', fr));
+    </div>`;
+
+    // FIRMS como contexto de actividad reciente (no como nivel de riesgo)
+    if (fire && !fire.no_key) {
+      const focos = fire.focos;
+      if (focos !== null) {
+        const firmsNote = focos === 0
+          ? 'Sin actividad térmica reciente detectada por satélite'
+          : focos < 10
+            ? `${focos} anomalías térmicas recientes (focos satélite h+n)`
+            : `${focos} anomalías térmicas recientes — incluye quemas agrícolas`;
+        fl += `<div class="loc-row">
+          <span class="loc-label" style="color:#475569;font-size:10px">🛰 ${firmsNote}</span>
+        </div>`;
+      }
+    } else if (fire && fire.no_key) {
+      fl += `<div class="loc-row"><span class="loc-label" style="color:#334155;font-size:9px">NASA FIRMS no configurado (FIRMS_MAP_KEY)</span></div>`;
+    }
+
+    fl += `<div class="loc-row"><span class="loc-label" style="font-size:9px;color:#334155">Índice climático · Open-Meteo ERA5 · 10 años</span></div>`;
+    rows.push(_locBlock('🔥 Riesgo de incendio', fl));
   }
-
-
   // ── Bloque 4: Riesgo de inundación (SNCZI + GloFAS) ───────────────────
   if (flood) {
     const level  = flood.risk_level;   // muy_alto|alto|moderado|bajo|sin_datos

@@ -652,7 +652,7 @@ async def proxy_firms(lat: float, lon: float):
     if not key:
         return {"status": "no_key", "focos": None}
 
-    delta = 0.27  # ~30 km en España
+    delta = 0.27   # ~30 km en España — captura el entorno forestal de la ubicación
     bbox  = f"{lon-delta:.4f},{lat-delta:.4f},{lon+delta:.4f},{lat+delta:.4f}"
     base  = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
     source = "VIIRS_SNPP_SP"  # Standard Processing = histórico completo
@@ -688,9 +688,28 @@ async def proxy_firms(lat: float, lon: float):
                 r = await client.get(url)
             if r.status_code != 200:
                 return 0
-            lines = [l for l in r.text.split("\n")
-                     if l.strip() and not l.startswith("latitude")]
-            return len(lines)
+            raw_lines = r.text.strip().split("\n")
+            if not raw_lines or len(raw_lines) < 2:
+                return 0
+            # Parsear cabecera para encontrar columna confidence
+            header = raw_lines[0].split(",")
+            try:
+                ci = header.index("confidence")
+            except ValueError:
+                ci = None
+            count = 0
+            for l in raw_lines[1:]:
+                if not l.strip():
+                    continue
+                if ci is not None:
+                    parts = l.split(",")
+                    if len(parts) > ci:
+                        # Excluir 'l' (low) = quemas agrícolas/industriales
+                        # Mantener 'h' (high) y 'n' (nominal) = incendios reales
+                        if parts[ci].strip().lower() == "l":
+                            continue
+                count += 1
+            return count
         except Exception:
             return 0
 
@@ -701,7 +720,7 @@ async def proxy_firms(lat: float, lon: float):
         "status": "ok",
         "focos": total_focos,
         "radio_km": 30,
-        "periodo": "jun-oct ultimos 3 anos",
+        "periodo": "jun-oct ultimos 3 anos (confidence h+n)",
         "peticiones": len(windows),
     }
 
