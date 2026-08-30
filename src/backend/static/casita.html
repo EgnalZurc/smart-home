@@ -1435,24 +1435,25 @@ async function _locDistances(lat, lon) {
 
   // Playa costera: excluir playas de río/lago filtrando por nombre y tipo
   // Radio 180km (Madrid está ~200km de las costas más cercanas en línea recta)
-  // Playa: sin regex negativo (causa HTTP 400). Filtramos fluviales en JS.
-  const q_beach = `[out:json][timeout:15];
-    (node["natural"="beach"]["name"](around:200000,${lat},${lon}););
-    out 10;`;
-
-  // ── Buscar POI en paralelo ───────────────────────────────────────────────
+  // Playa COSTERA: usa Overpass con coastline para distinguir playa marina de embalse/río.
+  // Busca playas a ≤250km que tengan una línea de costa marina a <3km → excluye embalses.
+  // Sin nombre → artefacto OSM → ignorado en _nearestBeach.
+  const q_beach = `[out:json][timeout:20];
+    (node["natural"="beach"](around:250000,${lat},${lon}) -> .b;
+     way["natural"="coastline"](around.b:3000);
+     .b;);
+    out 5;`;
   // Para playa: filtrar en JS los resultados con nombres de zonas fluviales
   const _nearestBeach = async (query) => {
     try {
       const r = await fetch(OVP, { method:'POST', body:'data='+encodeURIComponent(query) });
       const d = await r.json();
       if (!d.elements?.length) return null;
-      const RIVER_WORDS = /río|rio|embalse|lago|pantano|fluvial|presa|canal|ribera/i;
-      // Filtrar playas fluviales, tomar la más cercana costera
+      // Descartar sin nombre (artefactos OSM de embalses mapeados con coastline)
       let best = null, bestDist = Infinity;
       for (const el of d.elements) {
-        const name = el.tags?.name || '';
-        if (RIVER_WORDS.test(name)) continue;  // excluir playas de río/embalse
+        const name = (el.tags?.name || '').trim();
+        if (!name) continue;
         const eLat = el.lat ?? el.center?.lat;
         const eLon = el.lon ?? el.center?.lon;
         if (eLat == null) continue;
@@ -1460,11 +1461,10 @@ async function _locDistances(lat, lon) {
         if (dist < bestDist) { bestDist = dist; best = el; }
       }
       if (!best) return null;
-      return {
-        lat:  best.lat  ?? best.center?.lat,
-        lon:  best.lon  ?? best.center?.lon,
-        name: best.tags?.name || null,
-      };
+      return { lat: best.lat ?? best.center?.lat, lon: best.lon ?? best.center?.lon,
+               name: best.tags?.name || null, coastal: true };
+    } catch { return null; }
+  };
     } catch { return null; }
   };
 
@@ -1829,9 +1829,16 @@ function _locRender(container, geo, climate, fire, flood, air, distances, ine) {
     if (hosp) dist += _locRow('Hospital (en coche)', hosp.text, hosp.cls);
     if (hc)   dist += _locRow('Centro de salud (en coche)', hc.text, hc.cls);
     if (sup)  dist += _locRow('Supermercado (en coche)', sup.text, sup.cls);
-    if (bch)  dist += _locRow('Playa (en coche)', bch.text, bch.cls);
+    if (bch) {
+      dist += _locRow('🏖 Playa costera (en coche)', bch.text, bch.cls);
+    } else {
+      dist += `<div class="loc-row">
+        <span class="loc-label" style="color:#475569">🏖 Playa costera</span>
+        <span class="loc-value muted">Sin playa costera en radio de búsqueda</span>
+      </div>`;
+    }
 
-    if (!hosp && !hc && !sup && !bch) {
+    if (!hosp && !hc && !sup) {
       dist += '<div class="loc-label" style="color:#475569;font-size:10px">No se encontraron POI en el radio de búsqueda</div>';
     }
     dist += '<div class="loc-row"><span class="loc-label" style="font-size:9px;color:#334155">Rutas en coche · OSRM/OpenStreetMap · Dist. Madrid: ver puntuación de zona</span></div>';
