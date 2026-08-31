@@ -420,6 +420,8 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const API = '/api/casita';
+let _scoreMax = 180;        // máx pts del sistema de scoring (se actualiza desde /status)
+let _alertThreshold = 108;  // umbral de alerta (se actualiza desde /status)
 let _statusCache = null;
 let _configDirty = false;
 
@@ -610,7 +612,7 @@ function renderRadar(props, append = false) {
   }
   empty.classList.add("hidden");
   const cards = props.map(p => {
-    const scoreW = Math.round((p.score_total / 97) * 100);
+    const scoreW = Math.round((p.score_total / _scoreMax) * 100);
     const details = [
       p.rooms ? `${p.rooms} hab.` : null,
       p.size_m2 ? `${Math.round(p.size_m2)} m²` : null,
@@ -653,7 +655,7 @@ function renderRadar(props, append = false) {
           </div>
           <div class="text-right shrink-0">
             <div class="text-sm font-bold text-white">${fmtPrice(p.price)}</div>
-            <div class="text-[10px] text-indigo-300 font-semibold">${p.score_total?.toFixed(1)} / 97</div>
+            <div class="text-[10px] text-indigo-300 font-semibold">${p.score_total?.toFixed(1)} / ${_scoreMax}</div>
           </div>
         </div>
         <div class="score-bar-bg mt-2">
@@ -871,6 +873,8 @@ async function dismiss(uid, btn) {
 async function loadStatus() {
   try {
     const data = await fetch(API + '/status', {cache:'no-store'}).then(r=>r.json());
+    if (data.score_max)     _scoreMax        = data.score_max;
+    if (data.alert_threshold) _alertThreshold = data.alert_threshold;
     _statusCache = data;
     updateOrchestratorDot(data.online, data.scraper_errors?.length > 0);
     document.getElementById('st-total').textContent = data.total_properties ?? '—';

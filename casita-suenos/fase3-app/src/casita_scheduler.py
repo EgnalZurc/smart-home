@@ -16,6 +16,7 @@ También expone get_status() para el endpoint HTTP del dashboard.
 """
 
 from __future__ import annotations
+from scorer import ALERT_THRESHOLD as _ALERT_THRESHOLD, MAX_SCORE as _MAX_SCORE
 
 import logging
 import threading
@@ -266,17 +267,17 @@ class CasitaScheduler:
             last_summary=self._last_summary_date,
             last_scraping_result=result,
             total_properties=self._db.count_properties(),
-            radar_count=self._db.get_radar_properties(min_score=55.0, limit=1, offset=0).get("total", 0),
+            radar_count=self._db.get_radar_properties(min_score=_ALERT_THRESHOLD, limit=1, offset=0).get("total", 0),
             dismissed_count=len(self._db.get_dismissed()),
             scraper_errors=errors,
-            top_properties=self._db.get_top_scored(limit=5, min_score=50.0),
+            top_properties=self._db.get_top_scored(limit=5, min_score=_ALERT_THRESHOLD),
         )
 
     def get_radar(self, limit: int = 20, offset: int = 0,
                   sort_by: str = "score", sort_dir: str = "desc",
                   filter_by: str | None = None, portal_filter: str | None = None) -> dict:
         result = self._db.get_radar_properties(
-            min_score=55.0, limit=limit, offset=offset,
+            min_score=_ALERT_THRESHOLD, limit=limit, offset=offset,
             sort_by=sort_by, sort_dir=sort_dir, filter_by=filter_by,
             portal_filter=portal_filter,
         )
@@ -891,7 +892,7 @@ class CasitaScheduler:
         """Envía el resumen semanal por Telegram y lo guarda en DB."""
         logger.info("[casita] Enviando resumen semanal")
         try:
-            top = self._db.get_top_scored(limit=5, min_score=50.0)
+            top = self._db.get_top_scored(limit=5, min_score=_ALERT_THRESHOLD)
             self._notifier.send_weekly_summary(top)
             stats = self._db.count_by_zone()
             total = self._db.count_properties()

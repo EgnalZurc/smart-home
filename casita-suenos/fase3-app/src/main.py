@@ -14,6 +14,7 @@ Responsabilidades:
 """
 
 from __future__ import annotations
+from scorer import ALERT_THRESHOLD as _ALERT_THRESHOLD, MAX_SCORE as _MAX_SCORE
 
 import json
 import logging
@@ -152,6 +153,9 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 "dismissed_count": status.dismissed_count,
                 "scraper_errors": scraper_errors,
                 "scraper_errors_count": len(scraper_errors),
+                "score_max": __import__("scorer").MAX_SCORE,
+                "alert_threshold": __import__("scorer").ALERT_THRESHOLD,
+                "alert_threshold_pct": round(__import__("scorer").ALERT_THRESHOLD / __import__("scorer").MAX_SCORE * 100),
                 "schedule": cfg,
                 "top_properties": [
                     {"uid": p.get("uid",""), "title": p.get("title",""),
@@ -385,7 +389,7 @@ def main() -> None:
     _start_status_server(STATUS_PORT)
 
     # Notificar arranque
-    radar_count = len(db.get_radar_properties(min_score=55.0, limit=500).get("items", []))
+    radar_count = len(db.get_radar_properties(min_score=_ALERT_THRESHOLD, limit=500).get("items", []))
     notifier.send_status(
         "🚀 Casita Suenos arrancado "
         "· {} casas en el radar".format(radar_count)
