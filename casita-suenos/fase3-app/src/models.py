@@ -204,7 +204,7 @@ class ScoredProperty:
 
     @property
     def passes_alert_threshold(self) -> bool:
-        return self.total_score >= 50.0
+        return self.total_score >= 57.0  # sincronizado con ALERT_THRESHOLD en scorer.py
 
 
 # ---------------------------------------------------------------------------

@@ -374,7 +374,7 @@ class CasitaScheduler:
                         continue
                     self._db.upsert_score(scored)
                     total_scored += 1
-                    if is_new and scored.passes_alert_threshold:
+                    if scored.passes_alert_threshold:  # notificar si pasa threshold y no fue alertado (independiente de is_new)
                         if not self._db.is_alerted(prop.unique_id):
                             # No enviamos alerta individual ? solo el resumen al final
                             self._db.mark_alerted(prop.unique_id)
@@ -531,7 +531,7 @@ class CasitaScheduler:
                 if scored is None:
                     processed_email_ids.append(alert.email_id); continue
                 self._db.upsert_score(scored)
-                if is_new and scored.passes_alert_threshold:
+                if scored.passes_alert_threshold:  # notificar si pasa threshold y no fue alertado (independiente de is_new)
                     if not self._db.is_alerted(prop.unique_id):
                         self._db.mark_alerted(prop.unique_id)
                         total_new += 1
@@ -668,7 +668,7 @@ class CasitaScheduler:
                     continue
                 self._db.upsert_score(scored)
 
-                if is_new and scored.passes_alert_threshold:
+                if scored.passes_alert_threshold:  # notificar si pasa threshold y no fue alertado (independiente de is_new)
                     if not self._db.is_alerted(prop.unique_id):
                         self._db.mark_alerted(prop.unique_id)
                         total_new += 1
