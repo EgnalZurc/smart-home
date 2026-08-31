@@ -165,6 +165,48 @@ class Database:
             logger.info("[db] Migracion: has_ac en properties")
         except sqlite3.OperationalError:
             pass  # ya existe
+
+        # Rework R1-R18: nuevas columnas en properties
+        new_cols_props = [
+            ("properties", "terrain_m2",    "REAL"),
+            ("properties", "garage_type",   "TEXT NOT NULL DEFAULT 'ninguno'"),
+            ("properties", "habitability",  "TEXT NOT NULL DEFAULT 'desconocido'"),
+            ("properties", "internet",      "TEXT NOT NULL DEFAULT 'ninguno'"),
+            ("properties", "has_ac_preinstalled", "INTEGER NOT NULL DEFAULT 0"),
+        ]
+        for table, col, defn in new_cols_props:
+            try:
+                self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
+                logger.info("[db] Migración R1-R18: añadida %s.%s", table, col)
+            except sqlite3.OperationalError:
+                pass  # ya existe
+        # Rework: nuevas columnas en scored_properties (r8-r18)
+        new_cols_score = [
+            ("scored_properties", "score_r1",  "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r2",  "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r3",  "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r4",  "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r5",  "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r6",  "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r7",  "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r8",  "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r9",  "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r10", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r11", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r12", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r13", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r14", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r15", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r16", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r17", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r18", "REAL NOT NULL DEFAULT 0"),
+        ]
+        for table, col, defn in new_cols_score:
+            try:
+                self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
+                logger.info("[db] Migración R1-R18: añadida %s.%s", table, col)
+            except sqlite3.OperationalError:
+                pass  # ya existe
         # Asegurar que tabla telegram_chats existe (por si la BD era antigua)
         try:
             self._conn.execute(
@@ -217,8 +259,9 @@ class Database:
                 """INSERT INTO properties
                    (uid, portal, portal_id, zone_id, url, title, price, rooms, size_m2,
                     has_garage, has_garden, has_ac, piscina, habitable, description,
-                    first_seen, last_seen, source, published_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    first_seen, last_seen, source, published_at,
+                    terrain_m2, garage_type, habitability, internet, has_ac_preinstalled)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     uid, prop.portal.value, prop.portal_id, prop.zone_id,
                     prop.url, prop.title, prop.price,
@@ -229,6 +272,17 @@ class Database:
                     prop.description,
                     prop.first_seen.isoformat(), now, prop.source,
                     getattr(prop, "published_at", None),
+                    getattr(prop, "terrain_m2", None),
+                    getattr(prop, "garage_type", "ninguno").value
+                        if hasattr(getattr(prop, "garage_type", None), "value")
+                        else str(getattr(prop, "garage_type", "ninguno")),
+                    getattr(prop, "habitability", "desconocido").value
+                        if hasattr(getattr(prop, "habitability", None), "value")
+                        else str(getattr(prop, "habitability", "desconocido")),
+                    getattr(prop, "internet", "ninguno").value
+                        if hasattr(getattr(prop, "internet", None), "value")
+                        else str(getattr(prop, "internet", "ninguno")),
+                    int(getattr(prop, "has_ac_preinstalled", False)),
                 ),
             )
             logger.debug("[db] Nueva propiedad: %s — %d€", uid, prop.price)
@@ -268,13 +322,43 @@ class Database:
                (property_uid, zone_id, score_total,
                 score_p1, score_p2, score_p3, score_p4, score_p5,
                 score_p6, score_p7, score_p8, score_p9, score_p10, score_p11, score_p12, score_p13,
+                score_r1, score_r2, score_r3, score_r4, score_r5, score_r6,
+                score_r7, score_r8, score_r9, score_r10, score_r11, score_r12,
+                score_r13, score_r14, score_r15, score_r16, score_r17, score_r18,
                 scored_at, alerted, dismissed, dismissed_at, viewed, viewed_at, comment)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?,
+                       ?, ?, ?, ?, ?,
+                       ?, ?, ?, ?, ?, ?, ?, ?,
+                       ?, ?, ?, ?, ?, ?,
+                       ?, ?, ?, ?, ?, ?,
+                       ?, ?, ?, ?, ?, ?,
+                       ?, ?, ?, ?, ?, ?, ?)""",
             (
                 uid, scored.zone.id, s.total,
-                s.p1_rooms, s.p2_piscina, s.p3_distance, s.p4_beach, s.p5_pools,
-                s.p6_supermarket, s.p7_health, s.p8_hospital, s.p9_price,
-                s.p10_fire, getattr(s, "p11_preference", 0.0), getattr(s, "p12_flood", 0.0), getattr(s, "p13_ac", 0.0),
+                # legado p1-p13 (0 si nuevo sistema)
+                getattr(s, "p1_rooms",       getattr(s, "r1_rooms",      0.0)),
+                getattr(s, "p2_piscina",     getattr(s, "r5_piscina",    0.0)),
+                getattr(s, "p3_distance",    getattr(s, "r12_madrid",    0.0)),
+                getattr(s, "p4_beach",       getattr(s, "r13_beach",     0.0)),
+                getattr(s, "p5_pools",       getattr(s, "r14_pools",     0.0)),
+                getattr(s, "p6_supermarket", getattr(s, "r8_supermarket",0.0)),
+                getattr(s, "p7_health",      getattr(s, "r9_health",     0.0)),
+                getattr(s, "p8_hospital",    getattr(s, "r10_hospital",  0.0)),
+                getattr(s, "p9_price",       getattr(s, "r7_price",      0.0)),
+                getattr(s, "p10_fire",       getattr(s, "r15_fire",      0.0)),
+                getattr(s, "p11_preference", 0.0),
+                getattr(s, "p12_flood",      getattr(s, "r16_flood",     0.0)),
+                getattr(s, "p13_ac",         getattr(s, "r6_ac",         0.0)),
+                # R1-R18
+                getattr(s, "r1_rooms",       0.0), getattr(s, "r2_terrain",    0.0),
+                getattr(s, "r3_garage",      0.0), getattr(s, "r4_habitability",0.0),
+                getattr(s, "r5_piscina",     0.0), getattr(s, "r6_ac",          0.0),
+                getattr(s, "r7_price",       0.0), getattr(s, "r8_supermarket", 0.0),
+                getattr(s, "r9_health",      0.0), getattr(s, "r10_hospital",   0.0),
+                getattr(s, "r11_internet",   0.0), getattr(s, "r12_madrid",     0.0),
+                getattr(s, "r13_beach",      0.0), getattr(s, "r14_pools",      0.0),
+                getattr(s, "r15_fire",       0.0), getattr(s, "r16_flood",      0.0),
+                getattr(s, "r17_coast",      0.0), getattr(s, "r18_beach_plot", 0.0),
                 now, alerted, dismissed, dism_at, viewed, viewed_at, comment,
             ),
         )

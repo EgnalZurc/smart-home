@@ -2,13 +2,10 @@
 Modelos de datos para Casita Sueños.
 Todos los objetos son dataclasses inmutables o mutables según necesidad.
 """
-
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -20,13 +17,11 @@ class Portal(str, Enum):
     PISOS      = "pisos"
     HABITACLIA = "habitaclia"
 
-
 class Piscina(str, Enum):
     PROPIA       = "propia"
-    ESPACIO      = "espacio"       # cabe instalarla
+    ESPACIO      = "espacio"       # cabe instalarla en la parcela
     COMUNITARIA  = "comunitaria"
     NINGUNA      = "ninguna"
-
 
 class FireRisk(str, Enum):
     """Nivel de riesgo de incendio de la zona."""
@@ -36,17 +31,38 @@ class FireRisk(str, Enum):
     MEDIO       = "medio"
     MEDIO_ALTO  = "medio_alto"
     ALTO        = "alto"
-    MUY_ALTO    = "muy_alto"   # → descarte automático (L10)
+    MUY_ALTO    = "muy_alto"
 
 class FloodRisk(str, Enum):
     """Nivel de riesgo de inundación de la zona (SNCZI/CHE/CHC/PATRICOVA)."""
-    NULO        = "nulo"        # P12=9 — sin riesgo
-    BAJO        = "bajo"        # P12=7
-    BAJO_MEDIO  = "bajo_medio"  # P12=5
-    MEDIO       = "medio"       # P12=3
-    MEDIO_ALTO  = "medio_alto"  # P12=1
-    ALTO        = "alto"        # → descarte automático (L12)
+    NULO        = "nulo"
+    BAJO        = "bajo"
+    BAJO_MEDIO  = "bajo_medio"
+    MEDIO       = "medio"
+    MEDIO_ALTO  = "medio_alto"
+    ALTO        = "alto"
 
+class Habitability(str, Enum):
+    """Estado de habitabilidad de la vivienda (R4)."""
+    RUINA      = "ruina"        # Para rehabilitar / en ruinas          → -10 pts
+    REFORMA    = "reforma"      # Para reformar / necesita reforma       → -10 pts
+    DESCONOCIDO = "desconocido" # Sin especificar                        →   0 pts
+    PENDIENTE  = "pendiente"    # Pendiente de alguna reforma menor      →   4 pts
+    BUENO      = "bueno"        # Buen estado                            →   7 pts
+    REFORMADO  = "reformado"    # Recién reformado / a estrenar          →  10 pts
+
+class Internet(str, Enum):
+    """Tipo de conexión a internet mencionada (R11)."""
+    NINGUNO    = "ninguno"      # Sin cobertura o no mencionado          →   4 pts
+    INSTALACION = "instalacion" # ADSL / 4G / instalación básica         →   8 pts
+    FIBRA      = "fibra"        # Fibra óptica confirmada                →  10 pts
+
+class GarageType(str, Enum):
+    """Tipo de garaje/aparcamiento (R3)."""
+    NINGUNO    = "ninguno"      # Sin info y sin terreno                 →   0 pts
+    EXTERIOR   = "exterior"     # Plaza exterior / cochera / sin techn   →   5 pts
+    EDIFICIO   = "edificio"     # Garaje en edificio / plaza cubierta    →  10 pts
+    # Nota: "sin info pero con terreno" → EXTERIOR (5 pts) por defecto
 
 # ---------------------------------------------------------------------------
 # Zona geográfica candidata
@@ -54,42 +70,26 @@ class FloodRisk(str, Enum):
 
 @dataclass(frozen=True)
 class Zone:
-    """
-    Una zona candidata del estudio de Fase 1.
-    Contiene los valores de referencia para calcular P3-P10.
-    """
-    id: str                          # ej: "zamora_meseta"
-    name: str                        # ej: "Zamora meseta central"
-
-    # Distancias de referencia de la zona (minutos en coche, sin peaje)
-    distance_madrid_min: int         # P3
-    distance_beach_min: int | None   # P4 — None si no aplica / muy lejos
-    distance_natural_pools_min: int | None  # P5
-
-    # Servicios de referencia (minutos al más cercano típico de la zona)
-    distance_supermarket_min: int    # P6
-    distance_health_center_min: int  # P7
-    distance_hospital_min: int       # P8
-
-    # Riesgo de incendio de la zona
-    fire_risk: FireRisk              # P10 / L10
-
-    # Rango de precio orientativo de la zona (€)
+    """Una zona candidata del estudio. Contiene valores de referencia para R12-R17."""
+    id: str
+    name: str
+    distance_madrid_min: int         # R12
+    distance_beach_min: int | None   # R13 — None si no aplica
+    distance_natural_pools_min: int | None  # R14
+    distance_supermarket_min: int    # R8
+    distance_health_center_min: int  # R9
+    distance_hospital_min: int       # R10
+    fire_risk: FireRisk              # R15
     price_min: int
     price_max: int
-
-    # Gusto personal por la provincia (P11) — valor entre 0 y 9
-    zone_preference: float = 5.0
-    flood_risk: "FloodRisk" = None  # P12 / L12 — None se trata como BAJO
-
-    # Búsquedas configuradas para scrapers (URLs o términos)
+    has_coast: bool = False          # R17 — True si la provincia tiene costa
+    zone_preference: float = 5.0    # legado, ya no se usa en scoring (reemplazado por has_coast)
+    flood_risk: "FloodRisk" = None  # R16
     fotocasa_search_urls: tuple[str, ...] = field(default_factory=tuple)
     pisos_search_urls: tuple[str, ...] = field(default_factory=tuple)
     habitaclia_search_urls: tuple[str, ...] = field(default_factory=tuple)
     idealista_alert_keywords: tuple[str, ...] = field(default_factory=tuple)
-    # Municipios de Fotocasa que corresponden a esta zona
     fotocasa_municipios: tuple[str, ...] = field(default_factory=tuple)
-
 
 # ---------------------------------------------------------------------------
 # Propiedad (anuncio inmobiliario)
@@ -97,102 +97,118 @@ class Zone:
 
 @dataclass
 class Property:
-    """
-    Representa un anuncio inmobiliario normalizado, independientemente
-    del portal del que provenga.
-    """
+    """Representa un anuncio inmobiliario normalizado."""
     # Identificación
     portal: Portal
-    portal_id: str                   # ID único en ese portal
+    portal_id: str
     url: str
-    zone_id: str                     # ID de la Zone a la que pertenece
+    zone_id: str
 
     # Datos del anuncio
     title: str
-    price: int                       # € — entero para comparaciones exactas
-    size_m2: float | None            # metros cuadrados construidos
-    rooms: int | None                # número de habitaciones
-    has_garage: bool                 # L2
-    has_garden_or_plot: bool         # L3 — parcela/jardín
-    piscina: Piscina                 # P2
-    has_internet_mention: bool       # L5 — mención a fibra/internet en descripción
+    price: int
+    size_m2: float | None
+    rooms: int | None
+
+    # Campos R2/R3: terreno y garaje con más granularidad
+    has_garden_or_plot: bool         # R2 — True si hay terreno/jardín/parcela
+    terrain_m2: float | None         # R2 — m² de terreno (None = desconocido)
+    garage_type: GarageType          # R3 — tipo de garaje
+
+    # Campos de calidad y servicios
+    piscina: Piscina                 # R5
+    habitability: Habitability       # R4 — estado de habitabilidad
+    internet: Internet               # R11 — tipo de conexión
+
+    # Compatibilidad legada con scorer anterior
+    has_garage: bool = False         # derivado de garage_type != NINGUNO
+    has_internet_mention: bool = True # legado — se mantiene por compatibilidad
 
     # Servicios específicos del anuncio (override de zona si se conocen)
     distance_supermarket_min: int | None = None
     distance_health_center_min: int | None = None
     distance_hospital_min: int | None = None
 
-    # Estado de la vivienda
-    habitable: bool = True           # L4 — False si descripción indica ruina/derruida
-    description: str = ""
+    # Estado de la vivienda (legado — usar habitability)
+    habitable: bool = True           # legado — False si habitability in (RUINA, REFORMA)
 
-    # Metadatos
+    description: str = ""
     first_seen: datetime = field(default_factory=datetime.now)
     last_seen: datetime = field(default_factory=datetime.now)
-    source: str = ""                 # info adicional de origen (ej: "gmail_alert")
-    published_at: str | None = None  # fecha de publicacion en el portal (ISO str o None)
-    has_ac: bool = False             # P13 ? aire acondicionado
+    source: str = ""
+    published_at: str | None = None
+    has_ac: bool = False             # R6 (preinstalación detectada en descripción)
+    has_ac_preinstalled: bool = False # R6 — True si solo hay preinstalación
 
     @property
     def unique_id(self) -> str:
-        """ID global único: portal + id en portal."""
         return f"{self.portal.value}:{self.portal_id}"
 
-
 # ---------------------------------------------------------------------------
-# Propiedad puntuada
+# Puntuación (nuevo sistema R1-R18)
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class ScoreBreakdown:
-    """Desglose de puntuación por criterio."""
-    p1_rooms: float        # máx 5
-    p2_piscina: float      # máx 8
-    p3_distance: float     # máx 6
-    p4_beach: float        # máx 7
-    p5_pools: float        # máx 6
-    p6_supermarket: float  # máx 8
-    p7_health: float       # máx 9
-    p8_hospital: float     # máx 9
-    p9_price: float        # máx 8
-    p10_fire: float        # máx 9
-    p11_preference: float  # máx 9 — gusto personal por la provincia
-    p12_flood: float       # máx 9 — riesgo inundación
-    p13_ac: float          # máx 4 — aire acondicionado
+    """Desglose de puntuación por criterio R1-R18."""
+    r1_rooms: float          # máx 10 — habitaciones
+    r2_terrain: float        # máx 10 (mín -5) — terreno
+    r3_garage: float         # máx 10 — garaje
+    r4_habitability: float   # máx 10 (mín -10) — habitabilidad
+    r5_piscina: float        # máx 10 — piscina
+    r6_ac: float             # máx 10 — aire acondicionado
+    r7_price: float          # máx 10 — precio
+    r8_supermarket: float    # máx 10 — supermercado
+    r9_health: float         # máx 10 — centro de salud
+    r10_hospital: float      # máx 10 — hospital
+    r11_internet: float      # máx 10 — internet
+    r12_madrid: float        # 0 o 10 — distancia Madrid
+    r13_beach: float         # máx 10 — playa
+    r14_pools: float         # máx 10 — piscinas naturales
+    r15_fire: float          # máx 10 (mín -10) — riesgo incendio
+    r16_flood: float         # máx 10 (mín -10) — riesgo inundación
+    r17_coast: float         # 0 o 10 — provincia con costa
+    r18_beach_plot: float    # 0 o 10 — bonus playa+terreno
+
+    # Puntuación máxima posible: 18 criterios × 10 = 180 pts
+    MAX_SCORE: float = 180.0
 
     @property
     def total(self) -> float:
         return (
-            self.p1_rooms + self.p2_piscina + self.p3_distance +
-            self.p4_beach + self.p5_pools + self.p6_supermarket +
-            self.p7_health + self.p8_hospital + self.p9_price +
-            self.p10_fire + self.p11_preference + self.p12_flood + self.p13_ac
+            self.r1_rooms + self.r2_terrain + self.r3_garage + self.r4_habitability +
+            self.r5_piscina + self.r6_ac + self.r7_price +
+            self.r8_supermarket + self.r9_health + self.r10_hospital +
+            self.r11_internet + self.r12_madrid + self.r13_beach + self.r14_pools +
+            self.r15_fire + self.r16_flood + self.r17_coast + self.r18_beach_plot
         )
-
-    MAX_SCORE: float = 97.0   # 75 + 9 P11 + 9 P12 + 4 P13
 
     def as_dict(self) -> dict[str, float]:
         return {
-            "P1_habitaciones": self.p1_rooms,
-            "P2_piscina": self.p2_piscina,
-            "P3_distancia_madrid": self.p3_distance,
-            "P4_playa": self.p4_beach,
-            "P5_piscinas_naturales": self.p5_pools,
-            "P6_supermercado": self.p6_supermarket,
-            "P7_centro_salud": self.p7_health,
-            "P8_hospital": self.p8_hospital,
-            "P9_precio": self.p9_price,
-            "P10_incendio": self.p10_fire,
-            "P11_preferencia_provincia": self.p11_preference,
-            "P12_riesgo_inundacion": self.p12_flood,
-            "P13_aire_acondicionado": self.p13_ac,
-            "TOTAL": self.total,
+            "R1_habitaciones":      self.r1_rooms,
+            "R2_terreno":           self.r2_terrain,
+            "R3_garaje":            self.r3_garage,
+            "R4_habitabilidad":     self.r4_habitability,
+            "R5_piscina":           self.r5_piscina,
+            "R6_aire_acondicionado":self.r6_ac,
+            "R7_precio":            self.r7_price,
+            "R8_supermercado":      self.r8_supermarket,
+            "R9_centro_salud":      self.r9_health,
+            "R10_hospital":         self.r10_hospital,
+            "R11_internet":         self.r11_internet,
+            "R12_distancia_madrid": self.r12_madrid,
+            "R13_playa":            self.r13_beach,
+            "R14_piscinas_naturales": self.r14_pools,
+            "R15_riesgo_incendio":  self.r15_fire,
+            "R16_riesgo_inundacion":self.r16_flood,
+            "R17_provincia_costa":  self.r17_coast,
+            "R18_bonus_playa_terreno": self.r18_beach_plot,
+            "TOTAL":                self.total,
         }
-
 
 @dataclass(frozen=True)
 class ScoredProperty:
-    """Propiedad que ha pasado los limitantes y tiene puntuación calculada."""
+    """Propiedad con puntuación calculada."""
     prop: Property
     zone: Zone
     score: ScoreBreakdown
@@ -204,16 +220,15 @@ class ScoredProperty:
 
     @property
     def passes_alert_threshold(self) -> bool:
-        return self.total_score >= 57.0  # sincronizado con ALERT_THRESHOLD en scorer.py
-
+        """60% de 180 = 108 pts."""
+        return self.total_score >= 108.0
 
 # ---------------------------------------------------------------------------
-# Resultado de filtrado de limitantes
+# Resultado de filtrado
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class FilterResult:
-    """Resultado de aplicar los limitantes L1-L11 a una propiedad."""
     passes: bool
     failed_limiters: tuple[str, ...] = field(default_factory=tuple)
 
@@ -225,17 +240,15 @@ class FilterResult:
     def fail(cls, *reasons: str) -> FilterResult:
         return cls(passes=False, failed_limiters=reasons)
 
-
 # ---------------------------------------------------------------------------
-# Evento de precio (para historial)
+# Evento de precio
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class PriceEvent:
-    """Cambio de precio detectado en un anuncio."""
-    property_uid: str        # Property.unique_id
-    old_price: int           # € anterior
-    new_price: int           # € actual
+    property_uid: str
+    old_price: int
+    new_price: int
     detected_at: datetime = field(default_factory=datetime.now)
 
     @property

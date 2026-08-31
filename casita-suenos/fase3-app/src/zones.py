@@ -75,6 +75,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-vinaros/habitaciones-3/jardin/",
                 "https://www.pisos.com/venta/casas-benicarlo/habitaciones-3/jardin/",
             ),
+                        has_coast=True,
             idealista_alert_keywords=("vinaros", "benicarlo", "peniscola"),
             fotocasa_municipios=("vinaros", "benicarlo", "peniscola", "santa-barbara", "amposta", "deltebre", "tortosa", "alcanar", "ulldecona", "la-senia", "gratallops", "vila-real", "benicarló", "peníscola"),
         ),
@@ -148,6 +149,7 @@ ZONES: dict[str, Zone] = {
             pisos_search_urls=(
                 "https://www.pisos.com/venta/casas-sagunto/habitaciones-3/jardin/",
             ),
+                        has_coast=True,
             idealista_alert_keywords=("sagunto", "canet d'en berenguer", "pucol"),
             fotocasa_municipios=("sagunto", "canet-den-berenguer", "pucol", "el-puig-de-santa-maria", "benavites", "faura", "quartell", "benifairo-de-les-valls"),
         ),
@@ -292,6 +294,7 @@ ZONES: dict[str, Zone] = {
             pisos_search_urls=(
                 "https://www.pisos.com/venta/casas-burgos/habitaciones-3/jardin/",
             ),
+                        has_coast=True,
             idealista_alert_keywords=("medina de pomar", "villarcayo", "merindad de mena"),
             fotocasa_municipios=("medina-de-pomar", "villarcayo", "espinosa-de-los-monteros", "merindad-de-mena", "torme", "la-pola-de-gordon", "nava-de-ordunte"),
         ),
@@ -316,6 +319,7 @@ ZONES: dict[str, Zone] = {
             pisos_search_urls=(
                 "https://www.pisos.com/venta/casas-potes/habitaciones-3/jardin/",
             ),
+                        has_coast=True,
             idealista_alert_keywords=("potes", "liebana", "camaleno"),
             fotocasa_municipios=("potes", "camaleno", "liebana", "cabezón-de-liebana", "cillorigo-de-liebana", "vega-de-liebana"),
         ),
@@ -342,6 +346,7 @@ ZONES: dict[str, Zone] = {
                 "https://www.pisos.com/venta/casas-villaviciosa/habitaciones-3/jardin/",
                 "https://www.pisos.com/venta/casas-ribadesella/habitaciones-3/jardin/",
             ),
+                        has_coast=True,
             idealista_alert_keywords=("villaviciosa", "ribadesella", "colunga", "lastres"),
             fotocasa_municipios=("villaviciosa", "ribadesella", "colunga", "lastres", "arriondas", "nava", "parres", "caravia"),
         ),

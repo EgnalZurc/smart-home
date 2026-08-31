@@ -23,17 +23,17 @@ import httpx
 from models import Portal, Property
 from scraper_base import (
     get_html,
-    infer_ac,
-    infer_habitable,
-    infer_has_garage,
-    infer_has_garden,
-    infer_no_internet,
+    infer_ac, infer_ac_type,
+    infer_habitable, infer_habitability,
+    infer_has_garage, infer_has_garden,
+    infer_garage_type,
+    infer_internet, infer_no_internet,
     infer_piscina,
+    infer_terrain_m2,
     make_client,
-    parse_price,
-    parse_rooms,
-    parse_size,
+    parse_price, parse_rooms, parse_size,
 )
+from models import GarageType, Habitability, Internet, Piscina, Portal, Property
 from zones import Zone
 
 logger = logging.getLogger(__name__)
@@ -122,9 +122,14 @@ def _extract_listings(soup, base_url: str, zone: Zone, now: datetime) -> list[Pr
                 price=price,
                 size_m2=parse_size(size_raw),
                 rooms=parse_rooms(rooms_raw),
-                has_garage=has_garage,
                 has_garden_or_plot=has_garden,
-                has_ac=infer_ac(description, extras),
+                terrain_m2=infer_terrain_m2(description, extras),
+                garage_type=infer_garage_type(description, extras),
+                habitability=infer_habitability(description, title),
+                internet=infer_internet(description, extras),
+                has_garage=has_garage,
+                has_ac=(lambda t: t[0])(infer_ac_type(description, extras)),
+                has_ac_preinstalled=(lambda t: t[1])(infer_ac_type(description, extras)),
                 piscina=infer_piscina(description, extras),
                 has_internet_mention=not infer_no_internet(description),
                 habitable=infer_habitable(description, title),

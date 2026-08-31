@@ -585,8 +585,8 @@ class CasitaScheduler:
             delete_processed_fotocasa_emails,
             FotocasaAlert,
         )
-        from models import Property, Portal, Piscina
-        from scraper_base import infer_habitable, infer_has_garage, infer_has_garden, infer_ac, infer_piscina
+        from models import Property, Portal, Piscina, GarageType, Habitability, Internet
+        from scraper_base import (infer_habitable, infer_habitability, infer_has_garage, infer_has_garden, infer_garage_type, infer_ac, infer_ac_type, infer_internet, infer_piscina)
         from datetime import datetime as _dt
 
         logger.info("[casita] Comprobando alertas Gmail de Fotocasa")
@@ -639,6 +639,8 @@ class CasitaScheduler:
                 has_garden = alert.has_garden or True   # filtro Fotocasa ya aplicado
                 has_garage = alert.has_garage or True   # filtro Fotocasa ya aplicado
 
+                # Inferir garage_type desde has_garage del alert
+                garage_t = GarageType.EXTERIOR if has_garage else GarageType.NINGUNO
                 prop = Property(
                     portal=Portal.FOTOCASA,
                     portal_id=alert.property_id,
@@ -650,7 +652,12 @@ class CasitaScheduler:
                     rooms=alert.rooms,
                     has_garage=has_garage,
                     has_garden_or_plot=has_garden,
+                    terrain_m2=None,
+                    garage_type=garage_t,
+                    habitability=Habitability.DESCONOCIDO,
+                    internet=Internet.NINGUNO,
                     has_ac=alert.has_ac,
+                    has_ac_preinstalled=False,
                     piscina=Piscina.NINGUNA,
                     has_internet_mention=True,
                     habitable=True,
@@ -813,8 +820,8 @@ class CasitaScheduler:
     def _scrape_idealista_property(self, alert, zone):
         import httpx
         from bs4 import BeautifulSoup
-        from models import Property, Portal, Piscina
-        from scraper_base import infer_habitable, infer_has_garage, infer_has_garden, infer_piscina, infer_ac, parse_price, parse_rooms, parse_size
+        from models import Property, Portal, Piscina, GarageType, Habitability, Internet
+        from scraper_base import (infer_habitable, infer_habitability, infer_has_garage, infer_has_garden, infer_garage_type, infer_piscina, infer_ac, infer_ac_type, infer_internet, infer_terrain_m2, parse_price, parse_rooms, parse_size)
         from datetime import datetime as _dt
         title, price, rooms, size_m2, desc = alert.title, alert.price, alert.rooms, alert.size_m2, ""
         has_garage, has_garden, has_ac_v, piscina = False, False, False, Piscina.NINGUNA
@@ -864,8 +871,17 @@ class CasitaScheduler:
             portal=Portal.IDEALISTA, portal_id=alert.property_id, url=alert.url,
             zone_id=zone.id, title=title or "Idealista {}".format(alert.property_id),
             price=price, size_m2=size_m2, rooms=rooms,
-            has_garage=has_garage, has_garden_or_plot=has_garden, has_ac=has_ac_v,
-            piscina=piscina, has_internet_mention=True,
+            has_garage=has_garage,
+            has_garden_or_plot=has_garden,
+            terrain_m2=infer_terrain_m2(desc, feats) if desc else None,
+            garage_type=infer_garage_type(desc, feats) if desc else (
+                "edificio" if has_garage else "ninguno"),
+            habitability=infer_habitability(desc, title or "") if desc else None,
+            internet=infer_internet(desc, feats) if desc else None,
+            has_ac=(lambda t: t[0])(infer_ac_type(desc, feats)) if desc else has_ac_v,
+            has_ac_preinstalled=(lambda t: t[1])(infer_ac_type(desc, feats)) if desc else False,
+            piscina=piscina,
+            has_internet_mention=True,
             habitable=infer_habitable(desc, title or "") if desc else True,
             description=desc, source="gmail_idealista",
             first_seen=_dt.now(), last_seen=_dt.now(),

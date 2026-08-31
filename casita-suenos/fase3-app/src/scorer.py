@@ -1,320 +1,354 @@
 """
-Motor de scoring para Casita Suenos.
-Aplica:
-  - Limitantes L1, L4–L11: si alguno falla, la propiedad se descarta.
-  - L2 (garaje) y L3 (jardin): SOFT — no descartan cuando el dato es desconocido
-    porque los scrapers de listado no tienen esa informacion en el DOM.
-    Solo descartan si el dato esta explicitamente a False Y la descripcion
-    menciona ausencia activa. Si es True (garantizado por URL de busqueda), suma puntos.
-  - Criterios de puntuacion P1–P11 con ponderaciones definidas en el estudio.
-Puntuacion maxima: 84 puntos (75 base + 9 de P11 gusto provincia).
-Umbral de alerta: 50 puntos.
+Motor de scoring para Casita Sueños — sistema R1-R18.
+
+No hay distinción entre limitantes y puntuación.
+Todos los criterios puntúan, con posibilidad de puntuación negativa.
+
+Puntuación máxima: 180 pts
+Umbral de alerta: 60% → 108 pts
 """
 from __future__ import annotations
 import logging
-from dataclasses import dataclass
+import math
 from models import (
-    FilterResult,
-    FireRisk,
-    FloodRisk,
-    Piscina,
-    Property,
-    ScoreBreakdown,
-    ScoredProperty,
-    Zone,
+    FireRisk, FloodRisk, GarageType, Habitability, Internet,
+    Piscina, Property, ScoreBreakdown, ScoredProperty, Zone,
 )
+
 logger = logging.getLogger(__name__)
-ALERT_THRESHOLD = 57.0  # +5 P12 +2 P13
-MAX_PRICE = 320_000
-# ---------------------------------------------------------------------------
-# Limitantes
-# ---------------------------------------------------------------------------
-def apply_limiters(prop: Property, zone: Zone) -> FilterResult:
-    """
-    Aplica los limitantes. L2 y L3 son soft: no descartan si el dato
-    es desconocido (los scrapers de listado no tienen garaje/jardin en el DOM).
-    Solo descartan si la descripcion menciona EXPLICITAMENTE la ausencia.
-    """
-    failures: list[str] = []
 
-    # L1 — Minimo 3 habitaciones (solo descarta si conocemos el dato y es < 3)
-    if prop.rooms is not None and prop.rooms < 3:
-        failures.append(f"L1: habitaciones={prop.rooms} < 3")
-
-    # L2 — Garaje/aparcamiento (SEMI-SOFT)
-    # Si la casa tiene jardin/parcela pero garaje no se menciona: NO descartar.
-    # Una casa con parcela en zona rural implica espacio para aparcar.
-    # Descartamos solo si: descripcion dice explicitamente sin garaje
-    # O si no tiene ni jardin ni garaje (piso urbano sin exterior).
-    if not prop.has_garage:
-        desc_lower_l2 = prop.description.lower()
-        explicit_no_garage = any(s in desc_lower_l2 for s in (
-            "sin garaje", "sin parking", "sin aparcamiento",
-            "no dispone de garaje", "no incluye garaje", "no tiene garaje",
-        ))
-        if explicit_no_garage:
-            failures.append("L2: descripcion indica sin garaje/aparcamiento")
-        elif not prop.has_garden_or_plot:
-            # Sin jardin Y sin garaje: propiedad urbana sin exterior
-            failures.append("L2: sin garaje ni parcela (urbano sin exterior)")
-        # Con jardin pero sin mencion garaje: pass (parcela implica espacio coche)
-
-    # L3 — Jardin/parcela (HARD)
-    # Requisito real: parcela con espacio para huerto y barbacoa.
-    # Pisos.com garantiza por URL, Habitaclia infiere del texto.
-    # Si no hay mención de jardín/parcela → descarte.
-    if not prop.has_garden_or_plot:
-        failures.append("L3: sin parcela o jardin (no mencionado o ausente)")
-
-    # L4 — Estructura sana (habitable)
-    if not prop.habitable:
-        failures.append("L4: vivienda no habitable (ruina / obra mayor)")
-
-    # L5 — Conectividad: solo descarta si descripcion menciona explicitamente sin cobertura
-    desc_lower = prop.description.lower()
-    no_internet_signals = ("sin cobertura", "sin internet", "sin wifi", "sin fibra")
-    if any(s in desc_lower for s in no_internet_signals):
-        failures.append("L5: descripcion indica sin cobertura de internet")
-
-    # L6 — Maximo 4h30 desde Vicalvaro (270 min)
-    if zone.distance_madrid_min > 270:
-        failures.append(f"L6: distancia Madrid={zone.distance_madrid_min}min > 270min")
-
-    # L7 — Supermercado maximo 30 min
-    supermarket_min = prop.distance_supermarket_min or zone.distance_supermarket_min
-    if supermarket_min > 30:
-        failures.append(f"L7: supermercado={supermarket_min}min > 30min")
-
-    # L8 — Centro de salud maximo 60 min
-    health_min = prop.distance_health_center_min or zone.distance_health_center_min
-    if health_min > 60:
-        failures.append(f"L8: centro salud={health_min}min > 60min")
-
-    # L9 — Hospital maximo 90 min
-    hospital_min = prop.distance_hospital_min or zone.distance_hospital_min
-    if hospital_min > 90:
-        failures.append(f"L9: hospital={hospital_min}min > 90min")
-
-    # L10 — Riesgo de incendio MUY ALTO → descarte
-    if zone.fire_risk == FireRisk.MUY_ALTO:
-        failures.append(f"L10: riesgo incendio MUY_ALTO en zona {zone.id}")
-
-    # L11 — Precio maximo 320.000 EUR
-    if prop.price > MAX_PRICE:
-        failures.append(f"L11: precio={prop.price}EUR > {MAX_PRICE}EUR")
-
-    # L12 — Riesgo de inundacion ALTO → descarte automatico
-    flood = getattr(zone, "flood_risk", None)
-    if flood is not None and flood == FloodRisk.ALTO:
-        failures.append(f"L12: riesgo inundacion ALTO en zona {zone.id}")
-
-    if failures:
-        return FilterResult.fail(*failures)
-    return FilterResult.ok()
+ALERT_THRESHOLD = 108.0   # 60% de 180
+MAX_SCORE       = 180.0
 
 
 # ---------------------------------------------------------------------------
-# Puntuacion
+# R1 — Habitaciones (máx 10)
 # ---------------------------------------------------------------------------
-def _score_rooms(rooms: int | None) -> float:
-    """P1 — Habitaciones (max 5)."""
-    if rooms is None:
-        return 2.5   # desconocido: valor neutro (puede tener 3 o 4)
-    if rooms >= 5:
+
+def _r1_rooms(rooms: int | None) -> float:
+    if rooms is None or rooms <= 2:
+        return 0.0
+    if rooms == 3:
         return 5.0
-    if rooms == 4:
-        return 3.5
-    return 2.0  # 3 hab
+    # 4=6, 5=7, 6=8, 7=9, 8+=10
+    return min(10.0, float(4 + rooms))
 
 
-def _score_piscina(piscina: Piscina) -> float:
-    """P2 — Piscina (max 8).
-    ESPACIO baja de 5 a 2: en parcelas pequeñas (<200m²) no cabe
-    piscina + huerto + barbacoa. Sin datos de tamaño de parcela,
-    valoramos conservadoramente el "espacio para piscina".
-    """
+# ---------------------------------------------------------------------------
+# R2 — Terreno (máx 10, mín -5)
+# ---------------------------------------------------------------------------
+
+def _r2_terrain(has_garden: bool, terrain_m2: float | None) -> float:
+    if not has_garden:
+        return -5.0
+    # Tiene terreno: sin dato → 5, linear 100-400m² → 5-10, ≥400 → 10
+    if terrain_m2 is None or terrain_m2 <= 0:
+        return 5.0
+    if terrain_m2 < 100:
+        return 5.0
+    if terrain_m2 >= 400:
+        return 10.0
+    # Linear entre 100m²=5 y 400m²=10
+    return round(5.0 + (terrain_m2 - 100) / (400 - 100) * 5.0, 1)
+
+
+# ---------------------------------------------------------------------------
+# R3 — Garaje (máx 10)
+# ---------------------------------------------------------------------------
+
+def _r3_garage(garage_type: GarageType, has_garden: bool) -> float:
+    if garage_type == GarageType.EDIFICIO:
+        return 10.0
+    if garage_type == GarageType.EXTERIOR:
+        return 5.0
+    # Sin info: si tiene terreno → 5, si no → 0
+    if has_garden:
+        return 5.0
+    return 0.0
+
+
+# ---------------------------------------------------------------------------
+# R4 — Habitabilidad (máx 10, mín -10)
+# ---------------------------------------------------------------------------
+
+def _r4_habitability(hab: Habitability) -> float:
     return {
-        Piscina.PROPIA:      8.0,
-        Piscina.ESPACIO:     2.0,  # bajado de 5 — parcela pequeña no permite todo
-        Piscina.COMUNITARIA: 3.0,
-        Piscina.NINGUNA:     0.0,
+        Habitability.RUINA:       -10.0,
+        Habitability.REFORMA:     -10.0,
+        Habitability.DESCONOCIDO:   0.0,
+        Habitability.PENDIENTE:     4.0,
+        Habitability.BUENO:         7.0,
+        Habitability.REFORMADO:    10.0,
+    }[hab]
+
+
+# ---------------------------------------------------------------------------
+# R5 — Piscina (máx 10)
+# ---------------------------------------------------------------------------
+
+def _r5_piscina(piscina: Piscina) -> float:
+    return {
+        Piscina.PROPIA:      10.0,
+        Piscina.COMUNITARIA:  8.0,
+        Piscina.ESPACIO:      6.0,
+        Piscina.NINGUNA:      0.0,
     }[piscina]
 
 
-def _score_distance_madrid(minutes: int) -> float:
-    """P3 — Distancia Madrid (max 6). Sin peaje."""
-    if minutes <= 90:
-        return 6.0
-    if minutes <= 120:
-        return 5.0
-    if minutes <= 150:
-        return 4.0
-    if minutes <= 180:
-        return 3.0
-    if minutes <= 210:
-        return 2.0
-    if minutes <= 240:
-        return 1.0
-    return 0.5
+# ---------------------------------------------------------------------------
+# R6 — Aire acondicionado (máx 10)
+# ---------------------------------------------------------------------------
+
+def _r6_ac(has_ac: bool, has_ac_preinstalled: bool) -> float:
+    if has_ac:
+        return 10.0
+    if has_ac_preinstalled:
+        return 8.0
+    return 5.0  # Sin info: 5 pts (puede instalarse)
 
 
-def _score_beach(minutes: int | None) -> float:
-    """P4 — Playa (max 7). None = muy lejos."""
-    if minutes is None:
-        return 0.5
-    if minutes <= 30:
-        return 7.0
-    if minutes <= 60:
-        return 5.0
-    if minutes <= 90:
-        return 3.0
-    if minutes <= 120:
-        return 1.5
-    return 0.5
+# ---------------------------------------------------------------------------
+# R7 — Precio (máx 10, mín 0)
+#   0€ → 0 | 0-50k lineal 0→3 | 50-100k lineal 3→10
+#   100k → 10 (pico) | 100-300k lineal 10→5 | 300k → 5
+#   300-350k lineal 5→0 | ≥350k → 0
+# ---------------------------------------------------------------------------
+
+def _r7_price(price: int) -> float:
+    if price <= 0:
+        return 0.0
+    if price <= 50_000:
+        return round(price / 50_000 * 3.0, 1)
+    if price <= 100_000:
+        return round(3.0 + (price - 50_000) / 50_000 * 7.0, 1)
+    if price <= 300_000:
+        return round(10.0 - (price - 100_000) / 200_000 * 5.0, 1)
+    if price <= 350_000:
+        return round(5.0 - (price - 300_000) / 50_000 * 5.0, 1)
+    return 0.0
 
 
-def _score_natural_pools(minutes: int | None) -> float:
-    """P5 — Piscinas naturales (max 6)."""
-    if minutes is None:
-        return 0.5
-    if minutes <= 15:
-        return 6.0
-    if minutes <= 30:
-        return 4.5
-    if minutes <= 60:
-        return 3.0
-    return 1.0
+# ---------------------------------------------------------------------------
+# R8 — Supermercado (máx 10)
+#   ≤5min → 10 | 5-20min lineal 10→5 | >20min → 0
+# ---------------------------------------------------------------------------
 
-
-def _score_supermarket(minutes: int) -> float:
-    """P6 — Supermercado (max 8)."""
+def _r8_supermarket(minutes: int) -> float:
     if minutes <= 5:
-        return 8.0
-    if minutes <= 10:
-        return 6.0
-    if minutes <= 20:
-        return 4.0
-    return 2.0
+        return 10.0
+    if minutes > 20:
+        return 0.0
+    # 5-20min → 10 a 5 (lineal, redondeo arriba sin decimales)
+    raw = 10.0 - (minutes - 5) / (20 - 5) * 5.0
+    return math.ceil(raw)
 
 
-def _score_health_center(minutes: int) -> float:
-    """P7 — Centro de salud (max 9)."""
-    if minutes <= 10:
-        return 9.0
-    if minutes <= 20:
-        return 7.0
-    if minutes <= 30:
-        return 5.0
-    if minutes <= 45:
-        return 3.0
-    return 1.0
+# ---------------------------------------------------------------------------
+# R9 — Centro de salud (máx 10)
+#   ≤5min → 10 | 5-60min lineal 10→0 | >60min → 0
+# ---------------------------------------------------------------------------
+
+def _r9_health(minutes: int) -> float:
+    if minutes <= 5:
+        return 10.0
+    if minutes >= 60:
+        return 0.0
+    raw = 10.0 - (minutes - 5) / (60 - 5) * 10.0
+    return math.ceil(raw)
 
 
-def _score_hospital(minutes: int) -> float:
-    """P8 — Hospital (max 9)."""
-    if minutes <= 20:
-        return 9.0
-    if minutes <= 30:
-        return 7.0
-    if minutes <= 45:
-        return 5.0
-    if minutes <= 60:
-        return 3.0
-    return 1.0
+# ---------------------------------------------------------------------------
+# R10 — Hospital (máx 10)
+#   ≤5min → 10 | 5-90min lineal 10→0 | >90min → 0
+# ---------------------------------------------------------------------------
+
+def _r10_hospital(minutes: int) -> float:
+    if minutes <= 5:
+        return 10.0
+    if minutes >= 90:
+        return 0.0
+    raw = 10.0 - (minutes - 5) / (90 - 5) * 10.0
+    return math.ceil(raw)
 
 
-def _score_price(price: int) -> float:
-    """P9 — Precio (max 8). Cuanto mas barato mejor."""
-    if price <= 150_000:
-        return 8.0
-    if price <= 200_000:
-        return 6.5
-    if price <= 250_000:
-        return 5.0
-    if price <= 270_000:
-        return 3.5
-    return 2.0
+# ---------------------------------------------------------------------------
+# R11 — Internet (máx 10)
+# ---------------------------------------------------------------------------
 
-
-def _score_fire_risk(risk: FireRisk) -> float:
-    """P10 — Riesgo incendio (max 9)."""
+def _r11_internet(internet: Internet) -> float:
     return {
-        FireRisk.NULO:       9.0,
-        FireRisk.MUY_BAJO:   7.0,
-        FireRisk.BAJO:       5.0,
-        FireRisk.MEDIO:      3.0,
-        FireRisk.MEDIO_ALTO: 2.0,
-        FireRisk.ALTO:       1.0,
-        FireRisk.MUY_ALTO:   0.0,
+        Internet.NINGUNO:     4.0,
+        Internet.INSTALACION: 8.0,
+        Internet.FIBRA:       10.0,
+    }[internet]
+
+
+# ---------------------------------------------------------------------------
+# R12 — Distancia Madrid (0 o 10)
+#   ≤270min → 10 | >270min → 0
+# ---------------------------------------------------------------------------
+
+def _r12_madrid(minutes: int) -> float:
+    return 10.0 if minutes <= 270 else 0.0
+
+
+# ---------------------------------------------------------------------------
+# R13 — Playa (máx 10)
+#   ≤5min → 10 | 5-30min lineal 10→0 | ≥30min → 0
+# ---------------------------------------------------------------------------
+
+def _r13_beach(minutes: int | None) -> float:
+    if minutes is None:
+        return 0.0
+    if minutes <= 5:
+        return 10.0
+    if minutes >= 30:
+        return 0.0
+    raw = 10.0 - (minutes - 5) / (30 - 5) * 10.0
+    return max(0.0, math.ceil(raw))
+
+
+# ---------------------------------------------------------------------------
+# R14 — Piscinas naturales (máx 10)
+#   ≤5min → 10 | 5-20min lineal 10→0 | ≥20min → 0
+# ---------------------------------------------------------------------------
+
+def _r14_pools(minutes: int | None) -> float:
+    if minutes is None:
+        return 0.0
+    if minutes <= 5:
+        return 10.0
+    if minutes >= 20:
+        return 0.0
+    raw = 10.0 - (minutes - 5) / (20 - 5) * 10.0
+    return max(0.0, math.ceil(raw))
+
+
+# ---------------------------------------------------------------------------
+# R15 — Riesgo de incendio (máx 10, mín -10)
+# ---------------------------------------------------------------------------
+
+def _r15_fire(risk: FireRisk) -> float:
+    return {
+        FireRisk.MUY_ALTO:   -10.0,
+        FireRisk.ALTO:         0.0,
+        FireRisk.MEDIO_ALTO:   3.0,
+        FireRisk.MEDIO:        5.0,
+        FireRisk.MUY_BAJO:     7.0,  # MUY_BAJO usa misma escala que MEDIO_BAJO
+        FireRisk.BAJO:         9.0,
+        FireRisk.NULO:        10.0,
     }[risk]
 
 
-def _score_preference(preference: float) -> float:
-    """P11 — Gusto personal por la provincia (max 9)."""
-    return max(0.0, min(9.0, float(preference)))
+# ---------------------------------------------------------------------------
+# R16 — Riesgo de inundación (máx 10, mín -10)
+# ---------------------------------------------------------------------------
 
-def _score_flood_risk(risk) -> float:
-    """P12 — Riesgo inundacion (max 9). ALTO ya fue descartado en L12."""
+def _r16_flood(risk) -> float:
     if risk is None:
-        return 7.0  # Sin dato → tratar como BAJO
-    return {
-        FloodRisk.NULO:        9.0,
-        FloodRisk.BAJO:        7.0,
-        FloodRisk.BAJO_MEDIO:  5.0,
-        FloodRisk.MEDIO:       3.0,
-        FloodRisk.MEDIO_ALTO:  1.0,
-        FloodRisk.ALTO:        0.0,  # nunca debería llegar aquí
-    }.get(risk, 7.0)
-
-def _score_ac(has_ac: bool) -> float:
-    """P13 — Aire acondicionado (max 4). Solo puntua si hay certeza de que existe."""
-    return 4.0 if has_ac else 0.0
+        return 4.0  # Sin datos → neutro
+    mapping = {
+        FloodRisk.ALTO:        0.0,   # No hay MUY_ALTO en FloodRisk → ALTO = 0
+        FloodRisk.MEDIO_ALTO:  3.0,
+        FloodRisk.MEDIO:       5.0,
+        FloodRisk.BAJO_MEDIO:  7.0,
+        FloodRisk.BAJO:        9.0,
+        FloodRisk.NULO:       10.0,
+    }
+    val = mapping.get(risk, 4.0)
+    return val
 
 
-def calculate_score(prop: Property, zone: Zone) -> ScoreBreakdown:
-    """Calcula la puntuacion completa de una propiedad que ya paso los limitantes."""
+# ---------------------------------------------------------------------------
+# R17 — Provincia con costa (0 o 10)
+# ---------------------------------------------------------------------------
+
+def _r17_coast(has_coast: bool) -> float:
+    return 10.0 if has_coast else 0.0
+
+
+# ---------------------------------------------------------------------------
+# R18 — Bonus playa+terreno (0 o 10)
+#   Condición: terreno confirmado (has_garden=True) Y playa a ≤1.5km
+#   Proxy: distance_beach_min <= 2 min en coche ≈ ≤1.5km
+# ---------------------------------------------------------------------------
+
+def _r18_beach_plot(has_garden: bool, beach_min: int | None) -> float:
+    if not has_garden:
+        return 0.0
+    if beach_min is None:
+        return 0.0
+    # ≤1.5km ≈ ≤2 min en coche o ≤30min andando (proxy)
+    if beach_min <= 2:
+        return 10.0
+    return 0.0
+
+
+# ---------------------------------------------------------------------------
+# Función principal
+# ---------------------------------------------------------------------------
+
+def evaluate(prop: Property, zone: Zone) -> ScoredProperty:
+    """
+    Evalúa una propiedad y devuelve ScoredProperty con puntuación R1-R18.
+    Siempre devuelve un resultado (no hay descarte por limitantes — todo puntúa).
+    Una propiedad con muchas penalizaciones puede quedar en puntuación negativa
+    y no pasará el umbral de alerta.
+    """
     supermarket_min = prop.distance_supermarket_min or zone.distance_supermarket_min
-    health_min = prop.distance_health_center_min or zone.distance_health_center_min
-    hospital_min = prop.distance_hospital_min or zone.distance_hospital_min
-    return ScoreBreakdown(
-        p1_rooms=_score_rooms(prop.rooms),
-        p2_piscina=_score_piscina(prop.piscina),
-        p3_distance=_score_distance_madrid(zone.distance_madrid_min),
-        p4_beach=_score_beach(zone.distance_beach_min),
-        p5_pools=_score_natural_pools(zone.distance_natural_pools_min),
-        p6_supermarket=_score_supermarket(supermarket_min),
-        p7_health=_score_health_center(health_min),
-        p8_hospital=_score_hospital(hospital_min),
-        p9_price=_score_price(prop.price),
-        p10_fire=_score_fire_risk(zone.fire_risk),
-        p11_preference=_score_preference(zone.zone_preference),
-        p12_flood=_score_flood_risk(getattr(zone, "flood_risk", None)),
-        p13_ac=_score_ac(getattr(prop, "has_ac", False)),
+    health_min      = prop.distance_health_center_min or zone.distance_health_center_min
+    hospital_min    = prop.distance_hospital_min or zone.distance_hospital_min
+    beach_min       = zone.distance_beach_min
+
+    # Habitability desde el nuevo campo; fallback desde bool habitable legado
+    hab = getattr(prop, 'habitability', None)
+    if hab is None:
+        hab = Habitability.BUENO if prop.habitable else Habitability.REFORMA
+
+    # Internet desde el nuevo campo; fallback desde has_internet_mention legado
+    internet = getattr(prop, 'internet', None)
+    if internet is None:
+        internet = Internet.INSTALACION if prop.has_internet_mention else Internet.NINGUNO
+
+    # GarageType desde el nuevo campo; fallback desde has_garage legado
+    garage_type = getattr(prop, 'garage_type', None)
+    if garage_type is None:
+        garage_type = GarageType.EXTERIOR if prop.has_garage else GarageType.NINGUNO
+
+    # terrain_m2 — puede ser None
+    terrain_m2 = getattr(prop, 'terrain_m2', None)
+
+    # has_ac y has_ac_preinstalled
+    has_ac = getattr(prop, 'has_ac', False)
+    has_ac_pre = getattr(prop, 'has_ac_preinstalled', False)
+
+    # has_coast desde la zona
+    has_coast = getattr(zone, 'has_coast', False)
+
+    score = ScoreBreakdown(
+        r1_rooms      = _r1_rooms(prop.rooms),
+        r2_terrain    = _r2_terrain(prop.has_garden_or_plot, terrain_m2),
+        r3_garage     = _r3_garage(garage_type, prop.has_garden_or_plot),
+        r4_habitability = _r4_habitability(hab),
+        r5_piscina    = _r5_piscina(prop.piscina),
+        r6_ac         = _r6_ac(has_ac, has_ac_pre),
+        r7_price      = _r7_price(prop.price),
+        r8_supermarket = _r8_supermarket(supermarket_min),
+        r9_health     = _r9_health(health_min),
+        r10_hospital  = _r10_hospital(hospital_min),
+        r11_internet  = _r11_internet(internet),
+        r12_madrid    = _r12_madrid(zone.distance_madrid_min),
+        r13_beach     = _r13_beach(beach_min),
+        r14_pools     = _r14_pools(zone.distance_natural_pools_min),
+        r15_fire      = _r15_fire(zone.fire_risk),
+        r16_flood     = _r16_flood(getattr(zone, 'flood_risk', None)),
+        r17_coast     = _r17_coast(has_coast),
+        r18_beach_plot = _r18_beach_plot(prop.has_garden_or_plot, beach_min),
     )
 
-
-# ---------------------------------------------------------------------------
-# Funcion principal
-# ---------------------------------------------------------------------------
-def evaluate(prop: Property, zone: Zone) -> ScoredProperty | None:
-    """
-    Evalua una propiedad aplicando limitantes y puntuacion.
-    L2/L3 son soft: no descartan si el dato es desconocido (scraper de listado).
-    Returns:
-        ScoredProperty si pasa los limitantes, None si es descartada.
-    """
-    filter_result = apply_limiters(prop, zone)
-    if not filter_result.passes:
-        logger.debug(
-            "[scorer] Descartada %s: %s",
-            prop.unique_id,
-            ", ".join(filter_result.failed_limiters),
-        )
-        return None
-    score = calculate_score(prop, zone)
     scored = ScoredProperty(prop=prop, zone=zone, score=score)
     logger.info(
-        "[scorer] %s -> %.1f/97 %s",
+        "[scorer] %s → %.1f/180 %s",
         prop.unique_id,
         scored.total_score,
         "ALERTA" if scored.passes_alert_threshold else "",

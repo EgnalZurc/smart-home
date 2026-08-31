@@ -2,68 +2,129 @@
 Base común para todos los scrapers.
 Gestiona sesión HTTP, headers, rate limiting y parsing de campos comunes.
 """
-
 from __future__ import annotations
-
 import logging
 import re
 import time
 from dataclasses import dataclass
-
 import httpx
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
-# Palabras clave que indican ruina / inhabitable (L4)
-# Captura tanto obras mayores como casas "para reformar" que requieren inversion importante
-_INHABITABLE_KEYWORDS = (
-    # Reforma integral / obra mayor
-    "para rehabilitar", "rehabilitación integral", "en ruinas", "derruid",
+# ---------------------------------------------------------------------------
+# Keywords
+# ---------------------------------------------------------------------------
+
+# R4 — Habitabilidad: ruina/reforma total → -10 pts
+_RUINA_KEYWORDS = (
+    "en ruinas", "derruid", "en estado ruinoso",
+    "para rehabilitar", "rehabilitación integral", "rehabilitacion integral",
     "obra negra", "sin terminar", "sin cédula", "precisa reforma integral",
     "completamente a reformar", "totalmente a reformar",
-    # Frases comunes en títulos de portales (Pisos.com, Habitaclia)
-    "para reformar", "a reformar", "proyecto de reforma", "necesita reforma",
-    "requiere reforma", "ideal para reformar", "oportunidad para reformar",
-    "oportunidad única para reformar", "gran oportunidad para reformar",
-    "casa a rehabilitar", "chalet a rehabilitar", "vivienda a reformar",
-    "vivienda para reformar", "para restaurar", "a restaurar",
-    "obra a reformar", "estado de reforma", "pendiente de reforma",
+    "casa a rehabilitar", "chalet a rehabilitar",
+    "para reformar", "a reformar", "proyecto de reforma",
+    "necesita reforma", "requiere reforma", "ideal para reformar",
+    "oportunidad para reformar", "gran oportunidad para reformar",
+    "vivienda a reformar", "vivienda para reformar",
+    "para restaurar", "a restaurar", "estado de reforma",
     "necesitada de reforma", "precisa de reforma",
+    "obra a reformar", "casa a restaurar",
 )
 
-# Palabras clave que indican piscina propia
-_POOL_OWN_KEYWORDS = ("piscina propia", "piscina privada", "piscina individual")
-# Palabras clave que indican espacio para piscina
-_POOL_SPACE_KEYWORDS = ("posibilidad de piscina", "espacio para piscina", "parcela para piscina")
-# Palabras clave que indican piscina comunitaria
-_POOL_COMMUNITY_KEYWORDS = ("piscina comunitaria", "piscina común", "zona comunitaria con piscina", "comunidad con piscina", "urbanización con piscina", "urbanizacion con piscina", "residencial con piscina", "complejo con piscina")
-# Palabras clave que indican piscina sin especificar (asumir propia si casa independiente)
-_POOL_GENERIC_KEYWORDS = ("piscina",)
+# R4 — Pendiente de alguna reforma menor → 4 pts
+_PENDIENTE_REFORMA_KEYWORDS = (
+    "pendiente de reforma", "necesita alguna reforma", "pequeña reforma",
+    "requiere pequeña reforma", "alguna mejora", "necesita actualización",
+    "necesita actualizar", "reformar cocina", "reformar baño",
+    "pintura", "actualizar cocina",
+)
 
-# Palabras clave que sugieren parcela/jardín (L3)
+# R4 — Recién reformado → 10 pts
+_REFORMADO_KEYWORDS = (
+    "recién reformado", "recien reformado", "totalmente reformado",
+    "completamente reformado", "reforma integral reciente", "reforma total",
+    "recién renovado", "recien renovado", "totalmente renovado",
+    "a estrenar", "obra nueva", "nuevo a estrenar", "sin estrenar",
+    "llave en mano", "reformado en", "reformado recientemente",
+    "reciente reforma", "reforma reciente", "perfectas condiciones",
+    "impecable estado", "inmaculado", "completamente rehabilitado",
+)
+
+# R4 — Buen estado → 7 pts (se asume si no hay keywords de ruina/reforma/reformado)
+# No hace falta lista separada: es el fallback
+
+# R2 — Indicadores de terreno/parcela
 _GARDEN_KEYWORDS = (
     "jardín", "jardin", "parcela", "finca", "huerto", "patio exterior",
-    "terreno", "solar", "corral",
+    "terreno", "solar", "corral", "patio amplio",
 )
 
-# Palabras clave que sugieren garaje/aparcamiento (L2)
-_GARAGE_KEYWORDS = (
+# R3 — Garaje en edificio (cubierto, plaza)
+_GARAGE_EDIFICIO_KEYWORDS = (
+    "garaje en edificio", "plaza de garaje", "garaje cerrado",
+    "garaje cubierto", "plaza cubierta", "garaje propio",
+    "garaje individual", "parking cerrado", "cochera cerrada",
+    "garaje incluido", "garaje en planta",
+)
+
+# R3 — Garaje exterior / cochera abierta
+_GARAGE_EXTERIOR_KEYWORDS = (
     "garaje", "garage", "cochera", "aparcamiento", "parking",
-    "plaza de garaje", "espacio para coche",
+    "espacio para coche", "plaza de parking", "zona de aparcamiento",
 )
 
-# Palabras que indican ausencia de internet (L5)
+# R11 — Fibra óptica
+_FIBRA_KEYWORDS = (
+    "fibra óptica", "fibra optica", "internet por fibra", "fibra hasta el hogar",
+    "ftth", "ftto", "fibra instalada", "conexión de fibra",
+)
+
+# R11 — Instalación básica (ADSL, 4G, etc.)
+_INTERNET_INSTALACION_KEYWORDS = (
+    "internet", "adsl", "wifi", "banda ancha", "4g", "5g",
+    "conexión a internet", "acceso a internet", "preparado para fibra",
+    "preinstalación de internet",
+)
+
+# R11 — Sin internet
 _NO_INTERNET_KEYWORDS = (
     "sin cobertura", "sin internet", "sin wifi", "sin fibra",
 )
-# Palabras clave que indican aire acondicionado (P13)
+
+# R6 — Preinstalación de AC
+_AC_PREINSTALLED_KEYWORDS = (
+    "preinstalación aire", "preinstalacion aire", "preinstalación a/c",
+    "preparado para aire acondicionado", "preparado para a/c",
+    "preinst. aire", "preinstalado para",
+)
+
+# R6 — Aire acondicionado instalado
 _AC_KEYWORDS = (
     "aire acondicionado", "a/c", "a.a.", "climatizado", "climatizacion",
     "climatización", "split", "bomba de calor", "bomba calor",
     "calefaccion y refrigeracion", "calefacción y refrigeración",
     "frio y calor", "frío y calor",
 )
+
+# R2 — Extracción de m² de terreno
+_TERRAIN_PATTERNS = [
+    # "450 m² de terreno", "450m² parcela", "terreno de 450 m²"
+    r"(\d[\d\.]+)\s*m[²2]\s*(?:de\s+)?(?:terreno|parcela|finca|solar|huerto)",
+    r"(?:terreno|parcela|finca|solar)\s+(?:de\s+)?(\d[\d\.]+)\s*m[²2]",
+    r"(\d[\d\.]+)\s*m[²2]\s+(?:de\s+)?(?:jardin|jardín)",
+    r"(?:jardin|jardín|terreno|parcela)\s+(?:de\s+)?(\d[\d\.]+)\s*m[²2]",
+]
+
+# R5 — Piscina
+_POOL_OWN_KEYWORDS = ("piscina propia", "piscina privada", "piscina individual")
+_POOL_SPACE_KEYWORDS = ("posibilidad de piscina", "espacio para piscina", "parcela para piscina")
+_POOL_COMMUNITY_KEYWORDS = (
+    "piscina comunitaria", "piscina común", "zona comunitaria con piscina",
+    "comunidad con piscina", "urbanización con piscina", "urbanizacion con piscina",
+    "residencial con piscina", "complejo con piscina",
+)
+_POOL_GENERIC_KEYWORDS = ("piscina",)
 
 _DEFAULT_HEADERS = {
     "User-Agent": (
@@ -76,33 +137,37 @@ _DEFAULT_HEADERS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Dataclass de listado crudo
+# ---------------------------------------------------------------------------
+
 @dataclass
 class RawListing:
-    """Datos crudos extraídos de un portal antes de normalizar a Property."""
     portal_id: str
     url: str
     title: str
-    price_raw: str        # "189.000 €" — se parsea después
-    rooms_raw: str | None  # "4 hab." — se parsea después
-    size_raw: str | None   # "230 m²" — se parsea después
+    price_raw: str
+    rooms_raw: str | None
+    size_raw: str | None
     description: str
-    extras: list[str]     # tags/chips del anuncio: "Jardín", "Garaje", etc.
+    extras: list[str]
 
+
+# ---------------------------------------------------------------------------
+# Parseo de campos básicos
+# ---------------------------------------------------------------------------
 
 def parse_price(raw: str) -> int | None:
-    """Extrae el precio en € como entero desde strings tipo '189.000 €' o '189000'."""
     digits = re.sub(r"[^\d]", "", raw)
     if not digits:
         return None
     price = int(digits)
-    # Sanity check: descartamos precios absurdos
     if price < 5_000 or price > 10_000_000:
         return None
     return price
 
 
 def parse_rooms(raw: str | None) -> int | None:
-    """Extrae número de habitaciones desde '4 hab.' o '4 habitaciones'."""
     if not raw:
         return None
     m = re.search(r"(\d+)", raw)
@@ -110,47 +175,119 @@ def parse_rooms(raw: str | None) -> int | None:
 
 
 def parse_size(raw: str | None) -> float | None:
-    """Extrae m² desde '230 m²'."""
     if not raw:
         return None
     m = re.search(r"([\d.,]+)", raw.replace(",", "."))
     return float(m.group(1)) if m else None
 
 
-def infer_habitable(description: str, title: str) -> bool:
-    """L4 — Devuelve False si los textos sugieren ruina o reforma integral."""
+# ---------------------------------------------------------------------------
+# Inferencia de campos nuevos
+# ---------------------------------------------------------------------------
+
+def infer_habitability(description: str, title: str):
+    """R4 — Infiere el nivel de habitabilidad desde la descripción y el título."""
+    from models import Habitability
     text = (description + " " + title).lower()
-    return not any(kw in text for kw in _INHABITABLE_KEYWORDS)
+    if any(kw in text for kw in _RUINA_KEYWORDS):
+        return Habitability.REFORMA   # agrupa ruina y reforma integral
+    if any(kw in text for kw in _REFORMADO_KEYWORDS):
+        return Habitability.REFORMADO
+    if any(kw in text for kw in _PENDIENTE_REFORMA_KEYWORDS):
+        return Habitability.PENDIENTE
+    # Sin keywords → buen estado por defecto si tiene descripción; desconocido si no
+    if description.strip():
+        return Habitability.BUENO
+    return Habitability.DESCONOCIDO
+
+
+def infer_internet(description: str, extras: list[str]):
+    """R11 — Infiere nivel de internet desde descripción y extras."""
+    from models import Internet
+    text = (description + " " + " ".join(extras)).lower()
+    if any(kw in text for kw in _NO_INTERNET_KEYWORDS):
+        return Internet.NINGUNO
+    if any(kw in text for kw in _FIBRA_KEYWORDS):
+        return Internet.FIBRA
+    if any(kw in text for kw in _INTERNET_INSTALACION_KEYWORDS):
+        return Internet.INSTALACION
+    return Internet.NINGUNO  # sin info → valor neutro (puntúa 4)
+
+
+def infer_garage_type(description: str, extras: list[str]):
+    """R3 — Infiere tipo de garaje."""
+    from models import GarageType
+    text = (description + " " + " ".join(extras)).lower()
+    if any(kw in text for kw in _GARAGE_EDIFICIO_KEYWORDS):
+        return GarageType.EDIFICIO
+    if any(kw in text for kw in _GARAGE_EXTERIOR_KEYWORDS):
+        return GarageType.EXTERIOR
+    return GarageType.NINGUNO
+
+
+def infer_terrain_m2(description: str, extras: list[str]) -> float | None:
+    """R2 — Intenta extraer m² de terreno/parcela de la descripción."""
+    text = (description + " " + " ".join(extras)).lower()
+    for pattern in _TERRAIN_PATTERNS:
+        m = re.search(pattern, text, re.I)
+        if m:
+            raw = m.group(1).replace(".", "").replace(",", ".")
+            try:
+                val = float(raw)
+                if 1 < val < 100_000:
+                    return val
+            except ValueError:
+                continue
+    return None
+
+
+def infer_ac_type(description: str, extras: list[str]) -> tuple[bool, bool]:
+    """
+    R6 — Infiere si hay AC instalado o solo preinstalación.
+    Returns: (has_ac, has_ac_preinstalled)
+    """
+    text = (description + " " + " ".join(extras)).lower()
+    if any(kw in text for kw in _AC_PREINSTALLED_KEYWORDS):
+        return False, True
+    if any(kw in text for kw in _AC_KEYWORDS):
+        return True, False
+    return False, False
+
+
+# ---------------------------------------------------------------------------
+# Funciones legadas (mantener compatibilidad)
+# ---------------------------------------------------------------------------
+
+def infer_habitable(description: str, title: str) -> bool:
+    """Legado — devuelve False si la habitabilidad es RUINA o REFORMA."""
+    hab = infer_habitability(description, title)
+    from models import Habitability
+    return hab not in (Habitability.RUINA, Habitability.REFORMA)
 
 
 def infer_has_garden(description: str, extras: list[str]) -> bool:
-    """L3 — True si hay mención a parcela/jardín."""
     text = (description + " " + " ".join(extras)).lower()
     return any(kw in text for kw in _GARDEN_KEYWORDS)
 
 
 def infer_has_garage(description: str, extras: list[str]) -> bool:
-    """L2 — True si hay mención a garaje/aparcamiento."""
     text = (description + " " + " ".join(extras)).lower()
-    return any(kw in text for kw in _GARAGE_KEYWORDS)
+    return any(kw in text for kw in _GARAGE_EXTERIOR_KEYWORDS)
 
 
 def infer_no_internet(description: str) -> bool:
-    """L5 — True si la descripción menciona explícitamente falta de internet."""
     text = description.lower()
     return any(kw in text for kw in _NO_INTERNET_KEYWORDS)
 
+
 def infer_ac(description: str, extras: list[str]) -> bool:
-    """P13 — True si hay mención a aire acondicionado/climatización."""
-    text = (description + " " + " ".join(extras)).lower()
-    return any(kw in text for kw in _AC_KEYWORDS)
+    has_ac, _ = infer_ac_type(description, extras)
+    return has_ac
 
 
 def infer_piscina(description: str, extras: list[str]) -> str:
-    """P2 — Infiere tipo de piscina desde descripción y extras."""
     from models import Piscina
     text = (description + " " + " ".join(extras)).lower()
-
     if any(kw in text for kw in _POOL_OWN_KEYWORDS):
         return Piscina.PROPIA
     if any(kw in text for kw in _POOL_SPACE_KEYWORDS):
@@ -158,13 +295,15 @@ def infer_piscina(description: str, extras: list[str]) -> str:
     if any(kw in text for kw in _POOL_COMMUNITY_KEYWORDS):
         return Piscina.COMUNITARIA
     if any(kw in text for kw in _POOL_GENERIC_KEYWORDS):
-        # "piscina" sin especificar → asumimos propia si es chalet/casa
         return Piscina.PROPIA
     return Piscina.NINGUNA
 
 
+# ---------------------------------------------------------------------------
+# HTTP helpers
+# ---------------------------------------------------------------------------
+
 def get_html(url: str, client: httpx.Client, delay: float = 2.0) -> BeautifulSoup | None:
-    """Descarga una URL y devuelve BeautifulSoup. Respeta un delay entre peticiones."""
     try:
         time.sleep(delay)
         response = client.get(url, follow_redirects=True, timeout=15)
@@ -179,22 +318,20 @@ def get_html(url: str, client: httpx.Client, delay: float = 2.0) -> BeautifulSou
 
 
 def make_client() -> httpx.Client:
-    """Crea un cliente HTTP con headers por defecto."""
     return httpx.Client(headers=_DEFAULT_HEADERS, follow_redirects=True)
 
 
 # ---------------------------------------------------------------------------
-# Resultado de scraping — incluye estado de error para notificación
+# Resultado de scraping
 # ---------------------------------------------------------------------------
 
 @dataclass
 class ScraperResult:
-    """Resultado de ejecutar un scraper sobre una zona."""
     portal: str
     zone_id: str
-    properties: list          # lista de Property
+    properties: list
     success: bool
-    error_message: str = ""   # vacío si success=True
+    error_message: str = ""
 
     @classmethod
     def ok(cls, portal: str, zone_id: str, properties: list) -> "ScraperResult":
