@@ -29,7 +29,7 @@ import fotocasa_scraper
 import habitaclia_scraper
 import pisos_scraper
 from scraper_base import ScraperResult
-from scorer import evaluate
+from scorer import evaluate, evaluate_from_email
 from zones import ZONES, ZONE_COORDS
 
 if TYPE_CHECKING:
@@ -528,7 +528,7 @@ class CasitaScheduler:
                     processed_email_ids.append(alert.email_id); continue
                 is_new = self._db.is_new(prop)
                 price_event = self._db.upsert_property(prop)
-                scored = evaluate(prop, zone)
+                scored = evaluate_from_email(prop, zone)  # bonus email: defaults garantizados por filtros del portal
                 if scored is None:
                     processed_email_ids.append(alert.email_id); continue
                 self._db.upsert_score(scored)
@@ -670,7 +670,7 @@ class CasitaScheduler:
 
                 is_new = self._db.is_new(prop)
                 price_event = self._db.upsert_property(prop)
-                scored = evaluate(prop, zone)
+                scored = evaluate_from_email(prop, zone)  # bonus email
                 if scored is None:
                     processed_email_ids.append(alert.email_id)
                     continue

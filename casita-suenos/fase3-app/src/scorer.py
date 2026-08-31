@@ -354,3 +354,89 @@ def evaluate(prop: Property, zone: Zone) -> ScoredProperty:
         "ALERTA" if scored.passes_alert_threshold else "",
     )
     return scored
+
+
+# ---------------------------------------------------------------------------
+# Bonus de fuente email — solo para casas que llegan por correo de portal
+# ---------------------------------------------------------------------------
+
+EMAIL_BONUS = 8.0  # pts extra por haber pasado los filtros configurados en el portal
+
+def evaluate_from_email(prop: "Property", zone: "Zone") -> "ScoredProperty":
+    """
+    Evalúa una propiedad proveniente de email de portal (Idealista, Fotocasa).
+    Aplica defaults garantizados por los filtros del portal antes de puntuar,
+    y suma EMAIL_BONUS para reconocer que ya pasó validación humana.
+
+    Defaults aplicados (solo si el campo es desconocido/nulo):
+      R1 habitaciones : si None → asumir 3 (portales permiten filtrar por mínimo)
+      R2 terreno      : has_garden=True ya garantizado → al menos 5 pts
+      R3 garaje       : has_garage=True (Idealista filtra) → EXTERIOR como mínimo
+      R4 habitabilidad: si DESCONOCIDO → BUENO (los portales no mandan ruinas)
+      EMAIL_BONUS     : +8 pts por haber superado los filtros del portal
+
+    No modifica el objeto Property original.
+    """
+    import copy
+    from models import GarageType, Habitability, Internet
+
+    # Copiar para no mutar el original
+    p = copy.copy(prop)
+
+    # R1 — habitaciones: si no hay dato, asumir 3 (filtro mínimo del portal)
+    if p.rooms is None or p.rooms < 1:
+        object.__setattr__(p, 'rooms', 3) if hasattr(p, '__dataclass_fields__') else setattr(p, 'rooms', 3)
+
+    # R2/R3 — terreno y garaje: el portal ya los garantizó
+    if not p.has_garden_or_plot:
+        try: object.__setattr__(p, 'has_garden_or_plot', True)
+        except: pass
+    current_gt = getattr(p, 'garage_type', GarageType.NINGUNO)
+    if current_gt == GarageType.NINGUNO and p.has_garage:
+        gt_val = GarageType.EXTERIOR
+        try: object.__setattr__(p, 'garage_type', gt_val)
+        except: setattr(p, 'garage_type', gt_val)
+
+    # R4 — habitabilidad: si desconocida, el portal no manda ruinas
+    hab = getattr(p, 'habitability', None)
+    if hab is None or hab == Habitability.DESCONOCIDO:
+        try: object.__setattr__(p, 'habitability', Habitability.BUENO)
+        except: setattr(p, 'habitability', Habitability.BUENO)
+
+    # Calcular score base con el scorer estándar
+    base_scored = evaluate(p, zone)
+
+    # Construir nuevo ScoreBreakdown con el bonus sumado en r18 (reutilizamos el campo
+    # o creamos un campo virtual). Lo más limpio: el bonus se suma al total directamente
+    # via un ScoreBreakdown modificado donde r18 absorbe el bonus si no lo usa la casa.
+    base_score = base_scored.score
+    bonus_to_add = EMAIL_BONUS
+
+    # Añadir el bonus al breakdown — lo incorporamos en r18 si está a 0
+    # (r18 solo puntúa con playa+terreno, que pocas casas de email tienen)
+    from models import ScoreBreakdown, ScoredProperty
+    r18_val = base_score.r18_beach_plot + bonus_to_add  # suma al bonus existente
+
+    new_score = ScoreBreakdown(
+        r1_rooms=base_score.r1_rooms,
+        r2_terrain=base_score.r2_terrain,
+        r3_garage=base_score.r3_garage,
+        r4_habitability=base_score.r4_habitability,
+        r5_piscina=base_score.r5_piscina,
+        r6_ac=base_score.r6_ac,
+        r7_price=base_score.r7_price,
+        r8_supermarket=base_score.r8_supermarket,
+        r9_health=base_score.r9_health,
+        r10_hospital=base_score.r10_hospital,
+        r11_internet=base_score.r11_internet,
+        r12_madrid=base_score.r12_madrid,
+        r13_beach=base_score.r13_beach,
+        r14_pools=base_score.r14_pools,
+        r15_fire=base_score.r15_fire,
+        r16_flood=base_score.r16_flood,
+        r17_coast=base_score.r17_coast,
+        r18_beach_plot=r18_val,  # absorbe el bonus de email
+    )
+
+    return ScoredProperty(prop=base_scored.prop, zone=zone, score=new_score,
+                          scored_at=base_scored.scored_at)
