@@ -5,7 +5,7 @@ No hay distinción entre limitantes y puntuación.
 Todos los criterios puntúan, con posibilidad de puntuación negativa.
 
 Puntuación máxima: 180 pts
-Umbral de alerta: 60% → 108 pts
+Umbral de alerta: 66% → 119 pts
 """
 from __future__ import annotations
 import logging
@@ -17,7 +17,7 @@ from models import (
 
 logger = logging.getLogger(__name__)
 
-ALERT_THRESHOLD = 108.0   # 60% de 180
+ALERT_THRESHOLD = 119.0   # 66% de 180 (redondeado a entero)
 MAX_SCORE       = 180.0
 
 

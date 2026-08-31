@@ -94,17 +94,27 @@ _NO_INTERNET_KEYWORDS = (
 
 # R6 — Preinstalación de AC
 _AC_PREINSTALLED_KEYWORDS = (
-    "preinstalación aire", "preinstalacion aire", "preinstalación a/c",
+    "preinstalación aire acondicionado", "preinstalacion aire acondicionado",
+    "preinstalación a/c", "preinstalacion a/c",
     "preparado para aire acondicionado", "preparado para a/c",
-    "preinst. aire", "preinstalado para",
+    "preinst. aire", "preinstalado para a/c",
+    "preinstalación de climatización",
 )
 
 # R6 — Aire acondicionado instalado
+# Keywords de AC confirmado (frío+calor garantizado)
 _AC_KEYWORDS = (
     "aire acondicionado", "a/c", "a.a.", "climatizado", "climatizacion",
-    "climatización", "split", "bomba de calor", "bomba calor",
+    "climatización", "split",
     "calefaccion y refrigeracion", "calefacción y refrigeración",
     "frio y calor", "frío y calor",
+    "frio/calor", "frío/calor",
+    "sistema de climatizacion", "sistema de climatización",
+)
+# Keywords de solo calefacción (NO cuentan como AC para R6=10)
+_HEATING_ONLY_KEYWORDS = (
+    "bomba de calor", "bomba calor", "calefaccion", "calefacción",
+    "radiadores", "suelo radiante", "aerotermia",
 )
 
 # R2 — Extracción de m² de terreno
@@ -245,12 +255,14 @@ def infer_ac_type(description: str, extras: list[str]) -> tuple[bool, bool]:
     """
     R6 — Infiere si hay AC instalado o solo preinstalación.
     Returns: (has_ac, has_ac_preinstalled)
+    Solo devuelve has_ac=True si hay certeza de frío+calor (no solo calefacción).
     """
     text = (description + " " + " ".join(extras)).lower()
     if any(kw in text for kw in _AC_PREINSTALLED_KEYWORDS):
         return False, True
     if any(kw in text for kw in _AC_KEYWORDS):
         return True, False
+    # Calefacción sola no cuenta como AC — devuelve (False, False) → 5 pts por defecto
     return False, False
 
 
@@ -295,7 +307,8 @@ def infer_piscina(description: str, extras: list[str]) -> str:
     if any(kw in text for kw in _POOL_COMMUNITY_KEYWORDS):
         return Piscina.COMUNITARIA
     if any(kw in text for kw in _POOL_GENERIC_KEYWORDS):
-        return Piscina.PROPIA
+        # No se puede asegurar si es privada → asumir comunitaria
+        return Piscina.COMUNITARIA
     return Piscina.NINGUNA
 
 
