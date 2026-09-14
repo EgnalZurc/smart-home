@@ -17,7 +17,7 @@ from models import (
 
 logger = logging.getLogger(__name__)
 
-ALERT_THRESHOLD = 108.0   # 60% de 180
+ALERT_THRESHOLD = 119.0   # 66% de 180 — umbral radar
 MAX_SCORE       = 180.0
 
 
