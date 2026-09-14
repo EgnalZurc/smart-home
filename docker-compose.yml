@@ -173,8 +173,9 @@
       - TZ=Europe/Madrid
       - WEBSOCKET_ENABLED=true
       - SIGNUPS_ALLOWED=false
-      - DOMAIN=https://raspberrypi.tailaa37cd.ts.net/passwords
+      - DOMAIN=https://raspberrypi.tailaa37cd.ts.net
       - LOG_LEVEL=warn
+      - ADMIN_TOKEN=EpnvVReMBddBzfGLCL3lPDaB5dVdgd0whq83zKbFRgyKmawU
     networks:
       - smart-home
     healthcheck:
