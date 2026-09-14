@@ -164,16 +164,16 @@
     image: vaultwarden/server:latest
     container_name: vaultwarden
     restart: unless-stopped
-    expose:
-      - 80
-      - 3012
+    ports:
+      - "127.0.0.1:8445:80"
+      - "127.0.0.1:8446:3012"
     volumes:
       - ./data/vaultwarden:/data
     environment:
       - TZ=Europe/Madrid
       - WEBSOCKET_ENABLED=true
-      - SIGNUPS_ALLOWED=false
-      - DOMAIN=https://raspberrypi.tailaa37cd.ts.net
+      - SIGNUPS_ALLOWED=true
+      - DOMAIN=https://raspberrypi.tailaa37cd.ts.net:8444
       - LOG_LEVEL=warn
       - ADMIN_TOKEN=EpnvVReMBddBzfGLCL3lPDaB5dVdgd0whq83zKbFRgyKmawU
     networks:

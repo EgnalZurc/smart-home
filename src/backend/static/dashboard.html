@@ -189,7 +189,7 @@ const APP_CATALOGUE = {
     photos:    { url: 'https://raspberrypi.tailaa37cd.ts.net:10000/',       nameKey: 'photos_name',    descKey: 'photos_desc',    statusUrl: '/api/health/immich',    getStatus: d => d?.online === true },
     vacaciones:{ url: '/smart-home/vacaciones',                             nameKey: 'vacaciones_name',descKey: 'vacaciones_desc',statusUrl: '/api/health/vacaciones',getStatus: d => d?.online === true },
     casita:    { url: '/smart-home/casita?' + Date.now(),                   nameKey: 'casita_name',    descKey: 'casita_desc',    statusUrl: '/api/health/casita',    getStatus: d => d?.online === true },
-    passwords: { url: '/passwords/',                                        nameKey: 'passwords_name', descKey: 'passwords_desc', statusUrl: '/api/health/passwords', getStatus: d => d?.online === true },
+    passwords: { url: 'https://raspberrypi.tailaa37cd.ts.net:8444/',        nameKey: 'passwords_name', descKey: 'passwords_desc', statusUrl: '/api/health/passwords', getStatus: d => d?.online === true },
 };
 // Populated after /auth/me resolves; used by render() and loadStatus().
 let APPS = [];
