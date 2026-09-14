@@ -595,6 +595,21 @@ async def get_casita_health():
         return {"online": False}
 
 
+@router.get("/health/passwords")
+async def get_passwords_health():
+    """Health check for Vaultwarden password manager (PWD-1).
+
+    Hits the Vaultwarden container root endpoint inside the Docker network.
+    Returns online=True if Vaultwarden responds with HTTP 200.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get("http://vaultwarden:80/")
+            return {"online": resp.status_code == 200}
+    except Exception:
+        return {"online": False}
+
+
 @router.get("/casita/status")
 async def get_casita_status():
     """Estado detallado de Casita Sueños para la página de detalle del dashboard."""

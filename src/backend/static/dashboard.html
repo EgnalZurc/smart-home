@@ -156,6 +156,8 @@ const T = {
         vacaciones_desc: 'Planificador de cuchi vacaciones',
         casita_name: 'Casita Sueños',
         casita_desc: 'Monitor de precios inmobiliarios',
+        passwords_name: 'Contraseñas',
+        passwords_desc: 'Gestor de contraseñas Vaultwarden',
         logout_label: 'Salir',
     },
     en: {
@@ -173,6 +175,8 @@ const T = {
         vacaciones_desc: 'Holiday planner',
         casita_name: 'Casita Sueños',
         casita_desc: 'Real estate price monitor',
+        passwords_name: 'Passwords',
+        passwords_desc: 'Vaultwarden password manager',
         logout_label: 'Sign out',
     },
 };
@@ -185,6 +189,7 @@ const APP_CATALOGUE = {
     photos:    { url: 'https://raspberrypi.tailaa37cd.ts.net:10000/',       nameKey: 'photos_name',    descKey: 'photos_desc',    statusUrl: '/api/health/immich',    getStatus: d => d?.online === true },
     vacaciones:{ url: '/smart-home/vacaciones',                             nameKey: 'vacaciones_name',descKey: 'vacaciones_desc',statusUrl: '/api/health/vacaciones',getStatus: d => d?.online === true },
     casita:    { url: '/smart-home/casita?' + Date.now(),                   nameKey: 'casita_name',    descKey: 'casita_desc',    statusUrl: '/api/health/casita',    getStatus: d => d?.online === true },
+    passwords: { url: '/passwords/',                                        nameKey: 'passwords_name', descKey: 'passwords_desc', statusUrl: '/api/health/passwords', getStatus: d => d?.online === true },
 };
 // Populated after /auth/me resolves; used by render() and loadStatus().
 let APPS = [];
