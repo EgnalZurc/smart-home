@@ -62,9 +62,13 @@ def _serve_login_html(error: Optional[str] = None) -> HTMLResponse:
     login_path = Path(__file__).parent.parent / "static" / "login.html"
     content = login_path.read_text(encoding="utf-8")
     if error:
-        content = content.replace(
-            'id="error-msg" class="hidden"',
-            'id="error-msg" class=""',
+        # Remove 'hidden' from the error div class (works regardless of other classes)
+        import re as _re
+        content = _re.sub(
+            r'(id="error-msg"[^>]*?)\bhidden\b',
+            r'\1',
+            content,
+            count=1,
         ).replace("__ERROR__", error)
     else:
         content = content.replace("__ERROR__", "")
@@ -269,10 +273,15 @@ async def get_me(request: Request):
 
     has_device = bool(auth_devices.get_device_cookie_from_request(request))
 
+    profile_key = user_profiles.get_profile_key(user)
+    profile_def = user_profiles.PROFILES.get(profile_key, {})
     return JSONResponse({
         "username": user,
         "trusted_device": has_device,
-        "profile": user_profiles.get_profile_key(user),
+        "profile": profile_key,
+        "profile_data": {
+            "show_config_apps": profile_def.get("show_config_apps", False),
+        },
         "apps": user_profiles.app_permissions(user),
     })
 
@@ -362,3 +371,27 @@ def _result_page(title: str, message: str, success: bool) -> str:
   </div>
 </body>
 </html>"""
+
+
+# ── nginx auth_request guard ──────────────────────────────────────────────────
+
+@router.get('/verify')
+async def verify_session(request: Request):
+    '''Endpoint for nginx auth_request.
+
+    nginx calls this before forwarding requests to external microservices
+    (ac-service, vacaciones-service, etc.).
+
+    Returns:
+        200 if the request carries a valid JWT session cookie.
+        401 if not authenticated (nginx will redirect to login).
+    '''
+    from fastapi.responses import Response as FastAPIResponse
+    import auth as auth_core
+    user = auth_core.get_current_user(request)
+    if user:
+        # Pass username downstream so microservices can log it if needed
+        resp = FastAPIResponse(status_code=200)
+        resp.headers['X-Auth-User'] = user
+        return resp
+    return FastAPIResponse(status_code=401)

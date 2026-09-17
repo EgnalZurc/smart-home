@@ -1,8 +1,10 @@
-﻿services:
+services:
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: mosquitto
     restart: unless-stopped
+    mem_limit: 16m
+    memswap_limit: 16m
     ports:
       - 1883:1883
     volumes:
@@ -11,11 +13,14 @@
       - ./data/mosquitto/log:/mosquitto/log
     networks:
       - smart-home
+      - cuchi-casa
 
   zigbee2mqtt:
     image: koenkk/zigbee2mqtt:latest
     container_name: zigbee2mqtt
     restart: unless-stopped
+    mem_limit: 128m
+    memswap_limit: 128m
     depends_on:
       - mosquitto
     expose:
@@ -29,6 +34,7 @@
       - TZ=Europe/Madrid
     networks:
       - smart-home
+      - cuchi-casa
 
   backend:
     build:
@@ -36,9 +42,8 @@
       dockerfile: Dockerfile
     container_name: smart-home-backend
     restart: unless-stopped
-    depends_on:
-      - mosquitto
-      - zigbee2mqtt
+    mem_limit: 96m
+    memswap_limit: 96m
     expose:
       - 8080
     volumes:
@@ -48,15 +53,16 @@
       - .env
     environment:
       - TZ=Europe/Madrid
-      - MQTT_BROKER=mosquitto
-      - MQTT_PORT=1883
     networks:
       - smart-home
+      - cuchi-casa
 
   nginx:
     image: nginx:alpine
     container_name: nginx-reverse-proxy
     restart: unless-stopped
+    mem_limit: 64m
+    memswap_limit: 64m
     depends_on:
       - backend
       - zigbee2mqtt
@@ -71,122 +77,53 @@
       - ./data/nginx/logs:/var/log/nginx
     networks:
       - smart-home
+      - cuchi-casa
 
-  # ?? Immich Photo Backup (PHO-1) ??????????????????????????????????????????????
-  immich-server:
-    container_name: immich_server
-    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
-    volumes:
-      - /mnt/immich/upload:/data
-      - /etc/localtime:/etc/localtime:ro
-    env_file:
-      - .env.immich
-    ports:
-      - "127.0.0.1:2283:2283"  # localhost only, accessed via Tailscale Serve
-    depends_on:
-      - immich-redis
-      - immich-database
+
+  # 🔌 Docker Socket Proxy — Acceso controlado al socket Docker (DSP-1) ████████
+  docker-socket-proxy:
+    image: ghcr.io/tecnativa/docker-socket-proxy:latest
+    container_name: docker-socket-proxy
     restart: unless-stopped
-    networks:
-      - smart-home
-    healthcheck:
-      disable: false
-
-  immich-machine-learning:
-    container_name: immich_machine_learning
-    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}
-    volumes:
-      - immich-model-cache:/cache
-    env_file:
-      - .env.immich
-    restart: unless-stopped
-    networks:
-      - smart-home
-    profiles:
-      - ml
-    healthcheck:
-      disable: false
-
-  immich-redis:
-    container_name: immich_redis
-    image: docker.io/valkey/valkey:9@sha256:4963247afc4cd33c7d3b2d2816b9f7f8eeebab148d29056c2ca4d7cbc966f2d9
-    restart: unless-stopped
-    networks:
-      - smart-home
-    healthcheck:
-      test: redis-cli ping || exit 1
-
-  immich-database:
-    container_name: immich_postgres
-    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
-    env_file:
-      - .env.immich
+    mem_limit: 32m
+    memswap_limit: 32m
     environment:
-      POSTGRES_INITDB_ARGS: '--data-checksums'
+      # Lectura — necesario para listar y consultar containers
+      CONTAINERS: 1
+      # Escritura — necesario para start/stop
+      POST: 1
+      # Todo lo demás desactivado explícitamente
+      IMAGES: 0
+      INFO: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      EXEC: 0
+      SERVICES: 0
+      SWARM: 0
+      TASKS: 0
+      BUILD: 0
+      COMMIT: 0
+      CONFIGS: 0
+      DISTRIBUTION: 0
+      NODES: 0
+      PLUGINS: 0
+      SECRETS: 0
+      SESSION: 0
+      SYSTEM: 0
+      AUTH: 0
     volumes:
-      - /mnt/immich/database:/var/lib/postgresql/data
-    shm_size: 128mb
-    restart: unless-stopped
-    networks:
-      - smart-home
-    healthcheck:
-      disable: false
-
-
-  # 🏡 Casita Sueños — Monitor de precios inmobiliarios ████████████████████████
-  casita-suenos:
-    build:
-      context: ./casita-suenos/fase3-app
-      dockerfile: Dockerfile
-    container_name: casita-suenos
-    restart: unless-stopped
-    volumes:
-      - ./data/casita-suenos:/app/data
-    env_file:
-      - .env
-    environment:
-      - TZ=Europe/Madrid
-      - CASITA_DATA_DIR=/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # Sin ports: — solo accesible internamente desde la red smart-home
     expose:
-      - 8001
+      - 2375
     networks:
       - smart-home
-    healthcheck:
-      test: ["CMD", "python", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
-      interval: 60s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      - cuchi-casa
 
-  # 🔐 Vaultwarden — Self-hosted password manager (Bitwarden-compatible) ████████
-  vaultwarden:
-    image: vaultwarden/server:latest
-    container_name: vaultwarden
-    restart: unless-stopped
-    expose:
-      - 80
-      - 3012
-    volumes:
-      - ./data/vaultwarden:/data
-    environment:
-      - TZ=Europe/Madrid
-      - WEBSOCKET_ENABLED=true
-      - SIGNUPS_ALLOWED=true
-      - DOMAIN=https://raspberrypi.tailaa37cd.ts.net
-      - LOG_LEVEL=warn
-      - ADMIN_TOKEN=EpnvVReMBddBzfGLCL3lPDaB5dVdgd0whq83zKbFRgyKmawU
-    networks:
-      - smart-home
-    healthcheck:
-      test: ["CMD", "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "http://localhost:80/"]
-      interval: 60s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-volumes:
-  immich-model-cache:
+
 
 networks:
   smart-home:
     driver: bridge
+  cuchi-casa:
+    external: true

@@ -11,19 +11,108 @@
     <link rel="stylesheet" href="/static/tailwind.css">
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+        /* ── Service card ────────────────────────────────────────────────── */
         .app-card {
             background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9));
             border: 1px solid rgba(51,65,85,0.5);
             backdrop-filter: blur(10px);
             transition: transform 0.15s ease, border-color 0.2s ease;
             text-decoration: none; display: block;
+            border-radius: 16px;
         }
         .app-card:active { transform: scale(0.97); }
         @media (hover:hover) { .app-card:hover { border-color: rgba(99,102,241,0.4); transform: translateY(-1px); } }
+
+        /* ── Stop/start button ───────────────────────────────────────────── */
+        .svc-btn {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 10px; font-weight: 600;
+            padding: 4px 9px; border-radius: 6px; border: 1px solid;
+            cursor: pointer; transition: opacity 0.15s, background 0.15s;
+            white-space: nowrap; user-select: none; flex-shrink: 0;
+            background: none; line-height: 1;
+        }
+        .svc-btn:active { opacity: 0.7; }
+        .svc-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .svc-btn.running  { color:#f87171; border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.08); }
+        .svc-btn.running:hover { background:rgba(239,68,68,.15); }
+        .svc-btn.stopped  { color:#86efac; border-color:rgba(34,197,94,.4); background:rgba(34,197,94,.08); }
+        .svc-btn.stopped:hover { background:rgba(34,197,94,.15); }
+        .svc-btn.loading  { color:#94a3b8; border-color:rgba(148,163,184,.3); background:rgba(148,163,184,.05); }
+
+        /* ── Resources button (SUPER only) ──────────────────────────────── */
+        .res-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 28px; height: 28px; border-radius: 8px;
+            background: rgba(30,41,59,.5); border: 1px solid rgba(51,65,85,.5);
+            cursor: pointer; transition: background .15s, border-color .15s;
+            color: #64748b; flex-shrink: 0;
+        }
+        .res-btn:hover { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.4); color: #a5b4fc; }
+        .res-btn:active { transform: scale(0.92); }
+
+        /* ── Resources modal ─────────────────────────────────────────────── */
+        #res-modal {
+            position: fixed; inset: 0; z-index: 9000;
+            display: flex; align-items: flex-end; justify-content: center;
+            padding: 0 0 env(safe-area-inset-bottom, 0);
+            background: rgba(0,0,0,.55);
+            backdrop-filter: blur(4px);
+            opacity: 0; pointer-events: none;
+            transition: opacity .2s ease;
+        }
+        #res-modal.open { opacity: 1; pointer-events: all; }
+        #res-panel {
+            background: #0f172a;
+            border: 1px solid rgba(51,65,85,.6);
+            border-bottom: none;
+            border-radius: 20px 20px 0 0;
+            width: 100%; max-width: 480px;
+            padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0));
+            transform: translateY(100%);
+            transition: transform .25s cubic-bezier(.4,0,.2,1);
+        }
+        #res-modal.open #res-panel { transform: translateY(0); }
+
+        /* drag handle */
+        .res-handle { width: 36px; height: 4px; background: rgba(100,116,139,.4); border-radius: 2px; margin: 0 auto 16px; }
+
+        /* resource rows */
+        .res-row { margin-bottom: 14px; }
+        .res-row:last-child { margin-bottom: 0; }
+        .res-row-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 5px; }
+        .res-label { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
+        .res-value { font-size: 12px; color: #94a3b8; }
+        .res-bar-bg { height: 6px; background: rgba(51,65,85,.5); border-radius: 3px; overflow: hidden; }
+        .res-bar { height: 100%; border-radius: 3px; transition: width .5s ease; }
+        .res-bar.green  { background: #22c55e; }
+        .res-bar.yellow { background: #f59e0b; }
+        .res-bar.red    { background: #ef4444; }
+
+        /* temp pill */
+        .temp-pill {
+            display: inline-block; padding: 2px 10px; border-radius: 99px;
+            font-size: 13px; font-weight: 700; letter-spacing: -.01em;
+        }
+        .temp-pill.green  { background: rgba(34,197,94,.15);  color: #86efac; }
+        .temp-pill.yellow { background: rgba(245,158,11,.15); color: #fcd34d; }
+        .temp-pill.red    { background: rgba(239,68,68,.15);  color: #fca5a5; }
+
+        /* ── Core infrastructure bar ─────────────────────────────────────── */
+        .core-bar { background: rgba(15,23,42,0.7); border: 1px solid rgba(51,65,85,0.35); border-radius: 14px; }
+        .core-item { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
+        .core-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; vertical-align: middle; animation: pulse 2s infinite; }
+        .core-label { font-size: 11px; color: #94a3b8; font-weight: 500; line-height: 1; margin-right: 6px; }
+        .core-item:hover .core-label { color: #cbd5e1; }
+
+        .section-label { font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
         .status-dot { animation: pulse 2s infinite; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
         .fade-in { animation: fadeIn 0.35s ease; }
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+        /* ── Language selector ───────────────────────────────────────────── */
         .lang-dropdown { position: relative; }
         .flag-img { width: 24px; height: 16px; object-fit: cover; border-radius: 2px; display: block; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
         .lang-current { padding:4px; border-radius:6px; cursor:pointer; border:2px solid rgba(100,116,139,.3); background:rgba(30,41,59,.4); transition:all .2s; display:flex; align-items:center; justify-content:center; }
@@ -33,73 +122,61 @@
         .lang-option { padding:4px; border-radius:4px; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; border:2px solid transparent; }
         .lang-option:hover { background:rgba(59,130,246,.2); border-color:rgba(59,130,246,.4); }
         .lang-option.active { background:rgba(59,130,246,.15); border-color:rgba(59,130,246,.5); }
-        /* Spinner */
+
+        /* ── Loading overlay ─────────────────────────────────────────────── */
         #loading-overlay { position:fixed; inset:0; z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#0f172a; transition:opacity .35s ease; }
         #loading-overlay.done { opacity:0; pointer-events:none; }
         #dash-content { opacity:0; transition:opacity .35s ease; }
         #dash-content.visible { opacity:1; }
         .spinner { width:32px; height:32px; border:3px solid rgba(255,255,255,.1); border-top-color:rgba(255,255,255,.7); border-radius:50%; animation:spin .8s linear infinite; }
         @keyframes spin { to { transform:rotate(360deg); } }
-        /* User dropdown */
+
+        /* ── User dropdown ───────────────────────────────────────────────── */
         .user-dropdown { position:relative; }
-        .user-chip {
-            display:flex; align-items:center; gap:6px;
-            background:rgba(30,41,59,.6);
-            border:1px solid rgba(51,65,85,.5);
-            border-radius:20px;
-            padding:3px 10px 3px 4px;
-            font-size:0.75rem;
-            color:#94a3b8;
-            line-height:1;
-            cursor:pointer;
-            user-select:none;
-            transition:border-color .2s, background .2s;
-        }
+        .user-chip { display:flex; align-items:center; gap:6px; background:rgba(30,41,59,.6); border:1px solid rgba(51,65,85,.5); border-radius:20px; padding:3px 10px 3px 4px; font-size:0.75rem; color:#94a3b8; line-height:1; cursor:pointer; user-select:none; transition:border-color .2s, background .2s; }
         .user-chip:hover { border-color:rgba(99,102,241,.4); background:rgba(30,41,59,.9); }
-        .user-avatar {
-            width:22px; height:22px;
-            background:linear-gradient(135deg,rgba(79,70,229,.5),rgba(99,102,241,.3));
-            border:1px solid rgba(99,102,241,.4);
-            border-radius:50%;
-            display:flex; align-items:center; justify-content:center;
-            font-size:0.6875rem;
-            font-weight:700;
-            color:#a5b4fc;
-            text-transform:uppercase;
-            flex-shrink:0;
-        }
-        .user-menu {
-            position:absolute; top:calc(100% + 8px); right:0;
-            background:rgba(15,23,42,.97);
-            border:1px solid rgba(51,65,85,.6);
-            border-radius:10px;
-            padding:4px;
-            min-width:130px;
-            box-shadow:0 8px 24px rgba(0,0,0,.4);
-            backdrop-filter:blur(12px);
-            display:none;
-            z-index:1000;
-        }
+        .user-avatar { width:22px; height:22px; background:linear-gradient(135deg,rgba(79,70,229,.5),rgba(99,102,241,.3)); border:1px solid rgba(99,102,241,.4); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.6875rem; font-weight:700; color:#a5b4fc; text-transform:uppercase; flex-shrink:0; }
+        .user-menu { position:absolute; top:calc(100% + 8px); right:0; background:rgba(15,23,42,.97); border:1px solid rgba(51,65,85,.6); border-radius:10px; padding:4px; min-width:130px; box-shadow:0 8px 24px rgba(0,0,0,.4); backdrop-filter:blur(12px); display:none; z-index:1000; }
         .user-menu.open { display:block; }
-        .user-menu-item {
-            display:flex; align-items:center; gap:8px;
-            padding:8px 12px;
-            border-radius:7px;
-            font-size:0.8125rem;
-            color:#94a3b8;
-            cursor:pointer;
-            transition:background .15s, color .15s;
-            border:none; background:none; width:100%; text-align:left;
-        }
+        .user-menu-item { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:7px; font-size:0.8125rem; color:#94a3b8; cursor:pointer; transition:background .15s, color .15s; border:none; background:none; width:100%; text-align:left; }
         .user-menu-item:hover { background:rgba(239,68,68,.1); color:#f87171; }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
+
+<!-- ── Resources modal (SUPER only) ──────────────────────────────────────── -->
+<div id="res-modal" onclick="closeResModal(event)">
+  <div id="res-panel">
+    <div class="res-handle"></div>
+    <div class="flex items-center justify-between mb-4">
+      <span id="res-title" class="text-sm font-semibold text-slate-200">Recursos del sistema</span>
+      <span id="res-timestamp" class="text-[10px] text-slate-600">—</span>
+    </div>
+    <div id="res-body">
+      <!-- filled by renderResources() -->
+      <div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>
+    </div>
+  </div>
+</div>
+
 <div id="dash-content">
 <div class="max-w-md mx-auto px-4 pt-7 pb-12 fade-in">
+
+    <!-- Header -->
     <header class="flex items-center justify-between mb-8">
         <h1 id="title" class="text-xl font-bold tracking-tight">Cuchi Casa</h1>
         <div class="flex items-center gap-2">
+            <!-- Resources button (SUPER only) -->
+            <button id="res-btn" class="res-btn" onclick="openResModal()" style="display:none" title="Recursos del sistema">
+                <!-- chip/CPU icon -->
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>
+                    <line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/>
+                    <line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/>
+                    <line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/>
+                    <line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>
+                </svg>
+            </button>
             <!-- User dropdown -->
             <div class="user-dropdown" id="user-dropdown" style="display:none">
                 <div class="user-chip" id="user-chip" onclick="toggleUserMenu()">
@@ -110,7 +187,7 @@
                     <form method="post" action="/auth/logout">
                         <button type="submit" class="user-menu-item">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                            Logout
+                            <span id="logout-text">Salir</span>
                         </button>
                     </form>
                 </div>
@@ -131,153 +208,338 @@
             </div>
         </div>
     </header>
-    <section>
-        <p id="apps-label" class="text-[10px] text-slate-500 uppercase tracking-widest mb-3 px-1"></p>
+
+    <!-- ── SECTION 1: Core infrastructure (SUPER only) ──────────────────── -->
+    <section class="mb-7" id="core-section" style="display:none">
+        <p id="core-label" class="section-label mb-2 px-1">Infraestructura</p>
+        <div class="core-bar px-4 py-3">
+            <div id="core-items" class="flex flex-wrap gap-x-5 gap-y-2 items-center"></div>
+        </div>
+    </section>
+
+    <!-- ── SECTION 2: Services ───────────────────────────────────────────── -->
+    <section id="services-section" style="display:none">
+        <p id="apps-label" class="section-label mb-3 px-1">Servicios</p>
         <div id="apps-list" class="space-y-2"></div>
     </section>
+
 </div>
 </div>
 <div id="loading-overlay"><div class="spinner"></div></div>
+
 <script>
 // ── Translations ──────────────────────────────────────────────────────────────
 const T = {
     es: {
-        title:        'Cuchi Casa',
-        applications: 'Aplicaciones',
-        connected:    'Conectado',
-        offline:      'Sin conexión',
-        ac_name:      'Control AC',
-        ac_desc:      'Control de temperatura, sensores Zigbee, MELCloud',
-        zigbee_name:  'Zigbee2MQTT',
-        zigbee_desc:  'Dispositivos Zigbee, sensores, coordinador',
-        photos_name:  'Fotos',
-        photos_desc:  'Copia de seguridad de fotos y vídeos',
-        vacaciones_name: 'Cuchi Vacaciones',
-        vacaciones_desc: 'Planificador de cuchi vacaciones',
-        casita_name: 'Casita Sueños',
-        casita_desc: 'Monitor de precios inmobiliarios',
-        passwords_name: 'Contraseñas',
-        passwords_desc: 'Gestor de contraseñas Vaultwarden',
-        logout_label: 'Salir',
+        title: 'Cuchi Casa', infrastructure: 'Infraestructura', services: 'Servicios',
+        connected: 'Conectado', offline: 'Sin conexión', logout_label: 'Salir',
+        core_backend: 'Backend', core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
+        svc_stop: 'Parar', svc_start: 'Arrancar', svc_loading: '…',
+        res_title: 'Recursos del sistema', res_ram: 'RAM', res_swap: 'Swap',
+        res_cpu: 'CPU', res_disk: 'Disco', res_temp: 'Temperatura',
+        res_used: 'usados', res_free: 'libres',
+        ac_name: 'Control AC', ac_desc: 'Temperatura, sensores Zigbee, MELCloud',
+        photos_name: 'Fotos', photos_desc: 'Copia de seguridad de fotos y vídeos',
+        vacaciones_name: 'Cuchi Vacaciones', vacaciones_desc: 'Planificador de cuchi vacaciones',
+        casita_name: 'Casita Sueños', casita_desc: 'Monitor de precios inmobiliarios',
+        passwords_name: 'Contraseñas', passwords_desc: 'Gestor de contraseñas Vaultwarden',
+        zigbee_name: 'Zigbee2MQTT', zigbee_desc: 'Dispositivos Zigbee y sensores',
+        valheim_name: 'Valheim', valheim_desc: 'Servidor de Valheim',
     },
     en: {
-        title:        'Cuchi Casa',
-        applications: 'Applications',
-        connected:    'Connected',
-        offline:      'Offline',
-        ac_name:      'AC Control',
-        ac_desc:      'Temperature control, Zigbee sensors, MELCloud',
-        zigbee_name:  'Zigbee2MQTT',
-        zigbee_desc:  'Zigbee devices, sensors, coordinator',
-        photos_name:  'Photos',
-        photos_desc:  'Photo and video backup',
-        vacaciones_name: 'Cuchi Vacaciones',
-        vacaciones_desc: 'Holiday planner',
-        casita_name: 'Casita Sueños',
-        casita_desc: 'Real estate price monitor',
-        passwords_name: 'Passwords',
-        passwords_desc: 'Vaultwarden password manager',
-        logout_label: 'Sign out',
+        title: 'Cuchi Casa', infrastructure: 'Infrastructure', services: 'Services',
+        connected: 'Connected', offline: 'Offline', logout_label: 'Sign out',
+        core_backend: 'Backend', core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
+        svc_stop: 'Stop', svc_start: 'Start', svc_loading: '…',
+        res_title: 'System resources', res_ram: 'RAM', res_swap: 'Swap',
+        res_cpu: 'CPU', res_disk: 'Disk', res_temp: 'Temperature',
+        res_used: 'used', res_free: 'free',
+        ac_name: 'AC Control', ac_desc: 'Temperature control, Zigbee sensors, MELCloud',
+        photos_name: 'Photos', photos_desc: 'Photo and video backup',
+        vacaciones_name: 'Cuchi Holidays', vacaciones_desc: 'Holiday planner',
+        casita_name: 'Casita Sueños', casita_desc: 'Real estate price monitor',
+        passwords_name: 'Passwords', passwords_desc: 'Vaultwarden password manager',
+        zigbee_name: 'Zigbee2MQTT', zigbee_desc: 'Zigbee devices and sensors',
+        valheim_name: 'Valheim', valheim_desc: 'Valheim server',
     },
 };
-// ── App Registry ──────────────────────────────────────────────────────────────
-// Full catalogue — filtered at runtime by the profile returned from /auth/me.
-// To add a new app: add an entry here AND in user_profiles.APP_REGISTRY (backend).
+
+// ── Core + app catalogues ─────────────────────────────────────────────────────
+const CORE_SERVICES = [
+    { key: 'core_backend', labelKey: 'core_backend', statusUrl: '/api/health/backend', getStatus: d => d?.online === true, url: null },
+    { key: 'core_mqtt',    labelKey: 'core_mqtt',    statusUrl: '/api/health/zigbee',  getStatus: d => d?.mqtt_connected === true, url: null },
+    { key: 'core_zigbee',  labelKey: 'core_zigbee',  statusUrl: '/api/health/zigbee',  getStatus: d => d?.online === true, url: '/zigbee/' },
+];
 const APP_CATALOGUE = {
-    ac:        { url: '/smart-home/ac',                                    nameKey: 'ac_name',        descKey: 'ac_desc',        statusUrl: '/api/status',           getStatus: d => d?.mqtt_connected },
-    zigbee:    { url: '/zigbee/',                                           nameKey: 'zigbee_name',    descKey: 'zigbee_desc',    statusUrl: '/api/health/zigbee',    getStatus: d => d?.online === true },
-    photos:    { url: 'https://raspberrypi.tailaa37cd.ts.net:10000/',       nameKey: 'photos_name',    descKey: 'photos_desc',    statusUrl: '/api/health/immich',    getStatus: d => d?.online === true },
-    vacaciones:{ url: '/smart-home/vacaciones',                             nameKey: 'vacaciones_name',descKey: 'vacaciones_desc',statusUrl: '/api/health/vacaciones',getStatus: d => d?.online === true },
-    casita:    { url: '/smart-home/casita?' + Date.now(),                   nameKey: 'casita_name',    descKey: 'casita_desc',    statusUrl: '/api/health/casita',    getStatus: d => d?.online === true },
-    passwords: { url: '/passwords/',        nameKey: 'passwords_name', descKey: 'passwords_desc', statusUrl: '/api/health/passwords', getStatus: d => d?.online === true },
+    ac:        { url: '/smart-home/ac',                               nameKey: 'ac_name',        descKey: 'ac_desc',        statusUrl: '/api/health/ac',        getStatus: d => d?.online === true },
+    photos:    { url: 'https://raspberrypi.tailaa37cd.ts.net:10000/', nameKey: 'photos_name',    descKey: 'photos_desc',    statusUrl: '/api/health/immich',    getStatus: d => d?.online === true },
+    vacaciones:{ url: '/smart-home/vacaciones',                       nameKey: 'vacaciones_name',descKey: 'vacaciones_desc',statusUrl: '/api/health/vacaciones',getStatus: d => d?.online === true },
+    casita:    { url: '/smart-home/casita?' + Date.now(),             nameKey: 'casita_name',    descKey: 'casita_desc',    statusUrl: '/api/health/casita',    getStatus: d => d?.online === true },
+    passwords: { url: '/passwords/',                                  nameKey: 'passwords_name', descKey: 'passwords_desc', statusUrl: '/api/health/passwords', getStatus: d => d?.online === true },
+    valheim:   { url: '/valheim-admin/',                                 nameKey: 'valheim_name',   descKey: 'valheim_desc',     statusUrl: '/api/health/valheim',       getStatus: d => d?.online === true },
 };
-// Populated after /auth/me resolves; used by render() and loadStatus().
 let APPS = [];
+let currentProfile = null;
+let containerState = {};
+
 // ── Language ──────────────────────────────────────────────────────────────────
 const COOKIE = 'locale';
-function getLang() {
-    const m = document.cookie.match(/(?:^|;\s*)locale=([^;]+)/);
-    return (m && T[m[1]]) ? m[1] : 'es';
-}
-function saveLang(l) {
-    const exp = new Date(); exp.setFullYear(exp.getFullYear() + 1);
-    document.cookie = `${COOKIE}=${l};expires=${exp.toUTCString()};path=/;SameSite=Lax`;
-}
+function getLang() { const m = document.cookie.match(/(?:^|;\s*)locale=([^;]+)/); return (m && T[m[1]]) ? m[1] : 'es'; }
+function saveLang(l) { const exp = new Date(); exp.setFullYear(exp.getFullYear() + 1); document.cookie = `${COOKIE}=${l};expires=${exp.toUTCString()};path=/;SameSite=Lax`; }
 let currentLang = getLang();
 function t(key) { return T[currentLang][key] || T.en[key] || key; }
 function applyLang() {
     const flags = { en: '/static/flags/gb.svg', es: '/static/flags/es.svg' };
     document.getElementById('current-flag').src = flags[currentLang];
-    document.querySelectorAll('.lang-option').forEach(o => {
-        o.classList.toggle('active', o.dataset.lang === currentLang);
-    });
-    document.getElementById('title').textContent        = t('title');
-    document.getElementById('apps-label').textContent   = t('applications');
-    const logoutBtn = document.getElementById('logout-btn');
-    if (logoutBtn) logoutBtn.title = t('logout_label');
+    document.querySelectorAll('.lang-option').forEach(o => o.classList.toggle('active', o.dataset.lang === currentLang));
+    document.getElementById('title').textContent      = t('title');
+    document.getElementById('core-label').textContent = t('infrastructure');
+    document.getElementById('apps-label').textContent = t('services');
+    document.getElementById('res-title').textContent  = t('res_title');
+    const logoutText = document.getElementById('logout-text');
+    if (logoutText) logoutText.textContent = t('logout_label');
     saveLang(currentLang);
-    if (window.i18n && i18n.switchLocale && i18n.currentLocale !== currentLang) {
-        i18n.switchLocale(currentLang).catch(() => {});
-    }
 }
 function setLang(l) {
     document.getElementById('lang-menu').classList.remove('open');
-    currentLang = l;
-    applyLang();
-    render();
-    loadStatus();
+    currentLang = l; applyLang(); renderCore(); renderApps(); loadStatus();
 }
 function toggleLang() { document.getElementById('lang-menu').classList.toggle('open'); }
 document.addEventListener('click', e => {
     const dd = document.querySelector('.lang-dropdown');
     if (dd && !dd.contains(e.target)) document.getElementById('lang-menu').classList.remove('open');
 });
-// ── Render ────────────────────────────────────────────────────────────────────
-function render() {
-    const list = document.getElementById('apps-list');
-    list.innerHTML = APPS.map(app => `
-        <a href="${app.url}" class="app-card rounded-2xl px-4 py-3.5">
-            <div class="flex items-center justify-between">
+
+// ── Core bar ──────────────────────────────────────────────────────────────────
+function renderCore() {
+    if (!currentProfile?.show_config_apps) return;
+    const container = document.getElementById('core-items');
+    container.innerHTML = CORE_SERVICES.map(svc => {
+        const inner = `<span class="core-dot bg-slate-600" id="core-dot-${svc.key}"></span><span class="core-label">${t(svc.labelKey)}</span>`;
+        return svc.url
+            ? `<a href="${svc.url}" class="core-item">${inner}</a>`
+            : `<div class="core-item">${inner}</div>`;
+    }).join('');
+    document.getElementById('core-section').style.display = 'block';
+}
+
+// ── Service cards ─────────────────────────────────────────────────────────────
+function isSuper() { return currentProfile?.show_config_apps === true; }
+function renderApps() {
+    if (!APPS.length) return;
+    const super_ = isSuper();
+    const showBtn_ = isSuper();
+    document.getElementById('apps-list').innerHTML = APPS.map(app => {
+        const btnHtml = showBtn_ ? `<button class="svc-btn loading" id="btn-${app.key}" onclick="toggleService(event,'${app.key}')">${t('svc_loading')}</button>` : '';
+
+        // Valheim: navigable to /valheim-admin/ with stop/start button
+        // Falls through to standard card render below (url is now set)
+
+        // Standard card with optional navigation arrow
+        const tag = app.url ? 'a' : 'div';
+        const href = app.url ? `href="${app.url}"` : '';
+        return `<${tag} ${href} class="app-card px-4 py-3.5">
+            <div class="flex items-center justify-between gap-2">
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 mb-0.5">
                         <span class="text-sm font-semibold">${t(app.nameKey)}</span>
                         <span id="status-${app.key}" class="flex items-center gap-1 text-[10px] text-slate-500">
-                            <span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span>
-                            <span>—</span>
+                            <span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span><span>—</span>
                         </span>
                     </div>
                     <p class="text-[11px] text-slate-400 truncate">${t(app.descKey)}</p>
                 </div>
-                <span class="text-slate-600 ml-3">&rsaquo;</span>
+                ${btnHtml}${(showBtn_ || !app.url) ? '' : '<span class="text-slate-600 ml-1">&rsaquo;</span>'}
             </div>
-        </a>
-    `).join('');
+        </${tag}>`;
+    }).join('');
+    document.getElementById('services-section').style.display = 'block';
+    if (isSuper()) loadContainerStates();
 }
-// ── Status ────────────────────────────────────────────────────────────────────
+
+// ── Container control ─────────────────────────────────────────────────────────
+async function loadContainerStates() {
+    try {
+        const r = await fetch('/api/containers');
+        if (!r.ok) return;
+        const data = await r.json();
+        containerState = {};
+        for (const [key, info] of Object.entries(data)) {
+            containerState[key] = info.running;
+            updateBtn(key, info.running);
+            // Valheim: update the description text and status indicator live
+            if (key === 'valheim') updateValheimCard(info.running);
+        }
+    } catch {}
+}
+function updateValheimCard(running) {
+    // Status dot is handled by loadStatus() via id="status-valheim" — same as all services.
+    // Nothing extra needed here. This function is kept for explicit refreshes.
+}
+
+function updateBtn(key, running) {
+    const btn = document.getElementById('btn-' + key);
+    if (!btn) return;
+    btn.disabled = false;
+    btn.className = running ? 'svc-btn running' : 'svc-btn stopped';
+    btn.textContent = running ? '⏹ ' + t('svc_stop') : '▶ ' + t('svc_start');
+}
+async function toggleService(event, key) {
+    event.preventDefault(); event.stopPropagation();
+    const btn = document.getElementById('btn-' + key);
+    if (!btn || btn.disabled) return;
+    const wasRunning = containerState[key];
+    btn.disabled = true; btn.className = 'svc-btn loading'; btn.textContent = t('svc_loading');
+    try {
+        const r = await fetch(`/api/containers/${key}/${wasRunning ? 'stop' : 'start'}`, { method: 'POST' });
+        if (r.ok) {
+            await new Promise(res => setTimeout(res, 1500));
+            await loadContainerStates();
+            const app = APPS.find(a => a.key === key);
+            if (app?.statusUrl) delete statusCache[app.statusUrl];
+            await loadStatus();
+        } else { updateBtn(key, wasRunning); }
+    } catch { updateBtn(key, wasRunning); }
+}
+
+// ── Status polling ────────────────────────────────────────────────────────────
+const statusCache = {};
+async function fetchStatus(url) {
+    if (statusCache[url] && (Date.now() - statusCache[url].ts) < 8000) return statusCache[url].data;
+    const data = await fetch(url).then(r => r.json());
+    statusCache[url] = { data, ts: Date.now() };
+    return data;
+}
 async function loadStatus() {
+    for (const svc of CORE_SERVICES) {
+        const dot = document.getElementById('core-dot-' + svc.key);
+        if (!dot) continue;
+        try {
+            const data = await fetchStatus(svc.statusUrl);
+            dot.className = `core-dot ${svc.getStatus(data) ? 'bg-green-500' : 'bg-red-400'} inline-block rounded-full flex-shrink-0`;
+        } catch { dot.className = 'core-dot bg-red-400 inline-block rounded-full flex-shrink-0'; }
+    }
     for (const app of APPS) {
         if (!app.statusUrl || !app.getStatus) continue;
         try {
-            const data = await fetch(app.statusUrl).then(r => r.json());
-            const online = app.getStatus(data);
+            const data = await fetchStatus(app.statusUrl);
             const el = document.getElementById('status-' + app.key);
             if (!el) continue;
-            el.querySelector('span:first-child').className =
-                `status-dot w-1.5 h-1.5 rounded-full inline-block ${online ? 'bg-green-500' : 'bg-red-400'}`;
-            el.querySelector('span:last-child').textContent = t(online ? 'connected' : 'offline');
-        } catch { /* offline */ }
+            el.querySelector('span:first-child').className = `status-dot w-1.5 h-1.5 rounded-full inline-block ${app.getStatus(data) ? 'bg-green-500' : 'bg-red-400'}`;
+            el.querySelector('span:last-child').textContent = t(app.getStatus(data) ? 'connected' : 'offline');
+        } catch {}
     }
 }
-// ── User info ─────────────────────────────────────────────────────────────────
-function toggleUserMenu() {
-    document.getElementById('user-menu').classList.toggle('open');
+
+// ── Resources modal ───────────────────────────────────────────────────────────
+let _resInterval = null;
+
+function _barColor(pct) {
+    if (pct < 70) return 'green';
+    if (pct < 85) return 'yellow';
+    return 'red';
 }
+
+function _tempColor(c) {
+    if (c < 60) return 'green';
+    if (c < 75) return 'yellow';
+    return 'red';
+}
+
+function _bar(pct, color) {
+    return `<div class="res-bar-bg"><div class="res-bar ${color}" style="width:${Math.min(pct,100)}%"></div></div>`;
+}
+
+function renderResources(d) {
+    if (!d) return;
+    const body = document.getElementById('res-body');
+    const ts   = document.getElementById('res-timestamp');
+    ts.textContent = new Date().toLocaleTimeString();
+
+    const ramPct  = d.ram?.percent  ?? 0;
+    const swapPct = d.swap?.percent ?? 0;
+    const cpuPct  = d.cpu?.percent  ?? 0;
+    const diskPct = d.disk?.percent ?? 0;
+    const tempC   = d.temp?.celsius ?? 0;
+
+    body.innerHTML = `
+      <!-- RAM -->
+      <div class="res-row">
+        <div class="res-row-header">
+          <span class="res-label">${t('res_ram')}</span>
+          <span class="res-value">${d.ram?.used_mb ?? '—'} / ${d.ram?.total_mb ?? '—'} MB &middot; <b>${ramPct}%</b>${d.ram?.cache_mb ? ` <span style="opacity:.5;font-size:.85em">+${d.ram.cache_mb}MB cache</span>` : ''}</span>
+        </div>
+        ${_bar(ramPct, _barColor(ramPct))}
+      </div>
+      <!-- Swap -->
+      <div class="res-row">
+        <div class="res-row-header">
+          <span class="res-label">${t('res_swap')}</span>
+          <span class="res-value">${d.swap?.used_mb ?? '—'} / ${d.swap?.total_mb ?? '—'} MB &middot; <b>${swapPct}%</b></span>
+        </div>
+        ${_bar(swapPct, _barColor(swapPct))}
+      </div>
+      <!-- CPU -->
+      <div class="res-row">
+        <div class="res-row-header">
+          <span class="res-label">${t('res_cpu')}</span>
+          <span class="res-value"><b>${cpuPct}%</b></span>
+        </div>
+        ${_bar(cpuPct, _barColor(cpuPct))}
+      </div>
+      <!-- Disk -->
+      <div class="res-row">
+        <div class="res-row-header">
+          <span class="res-label">${t('res_disk')} (/)</span>
+          <span class="res-value">${d.disk?.used_gb ?? '—'} / ${d.disk?.total_gb ?? '—'} GB &middot; <b>${diskPct}%</b></span>
+        </div>
+        ${_bar(diskPct, _barColor(diskPct))}
+      </div>
+      <!-- Temperature -->
+      <div class="res-row" style="margin-bottom:0">
+        <div class="res-row-header">
+          <span class="res-label">${t('res_temp')}</span>
+          <span class="temp-pill ${_tempColor(tempC)}">${tempC} °C</span>
+        </div>
+      </div>
+    `;
+}
+
+async function fetchAndRenderResources() {
+    try {
+        const r = await fetch('/api/system/stats');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        renderResources(await r.json());
+    } catch (e) {
+        document.getElementById('res-body').innerHTML =
+            `<p class="text-center text-slate-600 text-sm py-4">Error: ${e.message}</p>`;
+    }
+}
+
+function openResModal() {
+    document.getElementById('res-modal').classList.add('open');
+    fetchAndRenderResources();
+    _resInterval = setInterval(fetchAndRenderResources, 5000);
+}
+
+function closeResModal(e) {
+    // close if clicking the backdrop (not the panel itself)
+    if (e && document.getElementById('res-panel').contains(e.target)) return;
+    document.getElementById('res-modal').classList.remove('open');
+    clearInterval(_resInterval);
+    _resInterval = null;
+}
+
+// Close on Escape key
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeResModal(); });
+
+// ── User info ─────────────────────────────────────────────────────────────────
+function toggleUserMenu() { document.getElementById('user-menu').classList.toggle('open'); }
 document.addEventListener('click', e => {
     const dd = document.getElementById('user-dropdown');
-    if (dd && !dd.contains(e.target)) {
-        document.getElementById('user-menu').classList.remove('open');
-    }
+    if (dd && !dd.contains(e.target)) document.getElementById('user-menu')?.classList.remove('open');
 });
+
 async function loadUser() {
     try {
         const res = await fetch('/auth/me');
@@ -285,34 +547,35 @@ async function loadUser() {
         const data = await res.json();
         const username = data.username || '';
         if (!username) return;
+        currentProfile = data.profile_data || null;
         document.getElementById('user-name').textContent   = username;
         document.getElementById('user-avatar').textContent = username.charAt(0).toUpperCase();
         document.getElementById('user-dropdown').style.display = 'block';
-        // Build the visible app list from the profile returned by the server.
-        APPS = (data.apps || []).map(p => ({ key: p.key, ...APP_CATALOGUE[p.key] })).filter(a => a.url);
-        render();
+        // Show resources button for SUPER
+        if (isSuper()) document.getElementById('res-btn').style.display = 'flex';
+        APPS = (data.apps || [])
+            .filter(p => p.key !== 'zigbee')
+            .map(p => ({ key: p.key, ...APP_CATALOGUE[p.key] }))
+            .filter(a => a);  // url may be null (e.g. valheim has no web UI)
+        renderCore();
+        renderApps();
         loadStatus();
-    } catch { /* ignore */ }
+    } catch {}
 }
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 (async function init() {
     applyLang();
-    // Apps are populated by loadUser() once /auth/me resolves — render a
-    // placeholder-free empty list until then.
-    render();
     try {
-        await Promise.race([
-            loadUser(),
-            new Promise(r => setTimeout(r, 5000))
-        ]);
+        await Promise.race([ loadUser(), new Promise(r => setTimeout(r, 5000)) ]);
     } catch {}
-    // Reveal
     const overlay = document.getElementById('loading-overlay');
-    const content = document.getElementById('dash-content');
+    const content  = document.getElementById('dash-content');
     content.classList.add('visible');
     overlay.classList.add('done');
     setTimeout(() => { overlay.style.display = 'none'; }, 400);
     setInterval(loadStatus, 10000);
+    setInterval(() => { if (isSuper()) loadContainerStates(); }, 30000);
 })();
 </script>
 </body>

@@ -1,225 +1,471 @@
-"""Unit tests for api/routes.py"""
+"""Unit tests for api/routes.py — backend dashboard routes.
+
+Covers:
+  - Health check endpoints (all public, no auth)
+  - Container control endpoints (SUPER only)
+  - CONTROLLABLE_CONTAINERS mapping completeness
+  - _require_super authorization guard
+
+NOTE: AC-specific endpoints (/api/status, /api/sensors, etc.) are NOT tested here.
+They live in ac-service and are tested in ~/projects/smart-home/ac-service/tests/.
+"""
+import sys
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock, patch
+
+# ── Mock passlib before any auth import ───────────────────────────────────────
+# passlib is installed in the Docker container but not in the Pi test environment.
+_mock_passlib = MagicMock()
+_mock_passlib.hash.apr_md5_crypt.verify.return_value = True
+sys.modules.setdefault('passlib', _mock_passlib)
+sys.modules.setdefault('passlib.hash', _mock_passlib.hash)
+
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
-from api import routes
-from subscription_manager import SubscriptionManager, SubscriptionConfig
-from error_tracker import ErrorTracker
 
 
-def _mock_ac_state(control_mode="auto", action="off"):
-    state = MagicMock()
-    state.state = action
-    state.average_temp = 26.5
-    state.average_humidity = 40.0
-    state.active_sensors = 5
-    state.total_sensors = 5
-    state.control_mode = control_mode
-    state.sensor_alert = False
-    state.melcloud_error = False
-    state.setpoint = 24.0
-    state.ac_mode = "cool"
-    state.fan_speed = 0
-    state.ac_real_power = False
-    state.ac_real_mode = "cool"
-    state.ac_real_fan_speed = 0
-    state.ac_real_setpoint = 24.0
-    state.ac_real_room_temp = 25.0
-    state.ac_real_last_update = 1000.0
-    state.manual_params = MagicMock(mode="cool", fan_speed=0, temperature=23.0)
-    state.last_update = 1000.0
-    return state
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
-
-@pytest.fixture
-def client(error_tracker):
-    # Use full MagicMock for ac_controller so we control current_state
-    ac = MagicMock()
-    ac.current_state = _mock_ac_state()
-    ac.config.target_temperature = 26.0
-    ac.config.min_setpoint = 19.0
-    ac.config.max_setpoint = 30.0
-    ac.config.sensor_timeout = 3600
-    ac.config.hysteresis_on = 0.5
-    ac.config.hysteresis_off = 0.3
-    ac.config.loop_interval = 10
-    ac.config.ac_mode = "cool"
-    ac.config.fan_speed_max = 3
-    ac.config.fan_speed_modulate = 0
-    ac.get_history.return_value = []
-
-    mqtt = MagicMock()
-    mqtt.sensor_names = ["Salon"]
-    mqtt.readings = {}
-    mqtt.is_connected = True
-
-    sub = SubscriptionManager(SubscriptionConfig())
-    routes.mqtt_handler = mqtt
-    routes.ac_controller = ac
-    routes.subscription_manager = sub
-    routes.error_tracker = error_tracker
-    routes.energy_tracker = None
-
+def _make_client():
+    """TestClient for routes.py without auth."""
+    from api import routes
     app = FastAPI()
     app.include_router(routes.router)
-    return TestClient(app)
+    return TestClient(app, raise_server_exceptions=True)
 
 
-class TestGetStatus:
-    def test_status_200(self, client):
-        r = client.get("/api/status")
+def _make_client_authed(profile_key: str, username: str):
+    """TestClient with a fake user injected via _require_super patch."""
+    from api import routes
+    import user_profiles
+
+    app = FastAPI()
+
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    class FakeAuth(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            # Store fake identity on request.state so _require_super can read it
+            request.state._fake_user = username
+            request.state._fake_profile = profile_key
+            return await call_next(request)
+
+    app.add_middleware(FakeAuth)
+    app.include_router(routes.router)
+
+    client = TestClient(app, raise_server_exceptions=True)
+    return client, username, profile_key
+
+
+def _super_client():
+    """Client authenticated as SUPER."""
+    c, user, profile = _make_client_authed('SUPER', 'egnal')
+    return c, user, profile
+
+
+def _familia_client():
+    """Client authenticated as FAMILIA_PRINCIPAL."""
+    c, user, profile = _make_client_authed('FAMILIA_PRINCIPAL', 'virchi')
+    return c, user, profile
+
+
+def _patch_require_super(username: str, profile_key: str):
+    """Context manager: patch _require_super to return username or raise 403."""
+    import user_profiles
+    from fastapi import HTTPException
+
+    profiles = user_profiles.PROFILES
+    profile_def = profiles.get(profile_key, {})
+    is_super = profile_def.get('show_config_apps', False)
+
+    def fake_require_super(request):
+        if not is_super:
+            raise HTTPException(status_code=403, detail='SUPER profile required')
+        return username
+
+    return patch('api.routes._require_super', side_effect=fake_require_super)
+
+
+
+class TestHealthBackend:
+    """/api/health/backend — always returns online:true, no auth required."""
+
+    def test_returns_200(self):
+        assert _make_client().get("/api/health/backend").status_code == 200
+
+    def test_returns_online_true(self):
+        assert _make_client().get("/api/health/backend").json() == {"online": True}
+
+
+class TestHealthZigbee:
+    """/api/health/zigbee — proxies to ac-service."""
+
+    def test_returns_200_when_ac_service_responds(self):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"online": True, "mqtt_connected": True, "active_sensors": 5}
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+            r = _make_client().get("/api/health/zigbee")
         assert r.status_code == 200
+        assert r.json()["online"] is True
+        assert r.json()["mqtt_connected"] is True
 
-    def test_status_has_required_fields(self, client):
-        d = client.get("/api/status").json()
-        for field in ("average_temperature", "ac_state", "ac_real", "manual_params", "mqtt_connected"):
-            assert field in d, f"Missing field: {field}"
+    def test_returns_offline_when_ac_service_unreachable(self):
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                side_effect=Exception("connection refused")
+            )
+            r = _make_client().get("/api/health/zigbee")
+        assert r.json()["online"] is False
+        assert r.json()["mqtt_connected"] is False
 
-    def test_manual_params_always_present(self, client):
-        assert client.get("/api/status").json()["manual_params"] is not None
 
+class TestHealthAC:
+    """/api/health/ac — proxies to ac-service /health."""
 
-class TestGetSensors:
-    def test_sensors_200(self, client):
-        r = client.get("/api/sensors")
+    def test_returns_online_true_when_ac_healthy(self):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"online": True, "service": "ac"}
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+            r = _make_client().get("/api/health/ac")
         assert r.status_code == 200
-        assert "sensors" in r.json()
+        assert r.json()["online"] is True
 
-    def test_sensors_offline_when_no_reading(self, client):
-        sensors = client.get("/api/sensors").json()["sensors"]
-        assert sensors[0]["online"] is False
-        assert sensors[0]["temperature"] is None
-
-
-class TestPostConfig:
-    def test_no_changes_returns_400(self, client):
-        assert client.post("/api/config", json={}).status_code == 400
-
-    def test_temp_out_of_range_returns_400(self, client):
-        assert client.post("/api/config", json={"target_temperature": 5.0}).status_code == 400
-
-    def test_valid_update_returns_200(self, client):
-        r = client.post("/api/config", json={"target_temperature": 25.0})
-        assert r.status_code == 200
+    def test_returns_offline_when_ac_service_down(self):
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                side_effect=Exception("timeout")
+            )
+            r = _make_client().get("/api/health/ac")
+        assert r.json()["online"] is False
 
 
-class TestPostControlMode:
-    def test_invalid_mode_returns_400(self, client):
-        assert client.post("/api/control_mode", json={"mode": "invalid"}).status_code == 400
+class TestHealthVacaciones:
+    """/api/health/vacaciones."""
 
-    def test_valid_mode_off_returns_200(self, client):
-        r = client.post("/api/control_mode", json={"mode": "off"})
-        assert r.status_code == 200
+    def test_returns_online_true(self):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"online": True, "service": "vacaciones"}
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+            r = _make_client().get("/api/health/vacaciones")
+        assert r.json()["online"] is True
 
-    def test_switching_to_manual_calls_set_manual_params(self, client):
-        r = client.post("/api/control_mode", json={"mode": "manual"})
-        assert r.status_code == 200
-        # set_manual_params should have been called
-        routes.ac_controller.set_manual_params.assert_called_once()
-
-
-class TestGetErrors:
-    def test_no_errors_returns_empty(self, client, error_tracker):
-        r = client.get("/api/errors")
-        assert r.status_code == 200
-        assert r.json() == {"errors": [], "has_errors": False}
-
-    def test_with_errors_returns_list(self, client, error_tracker):
-        error_tracker.register("test_err", "error", "Test", "test")
-        r = client.get("/api/errors")
-        assert r.json()["has_errors"] is True
-        assert len(r.json()["errors"]) == 1
+    def test_returns_offline_on_error(self):
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                side_effect=Exception("down")
+            )
+            r = _make_client().get("/api/health/vacaciones")
+        assert r.json()["online"] is False
 
 
-class TestGetSensorsHistory:
-    """Tests for /api/sensors/history endpoint (AC-CHART.5)."""
+class TestHealthImmich:
+    """/api/health/immich."""
 
-    def _client_with_history(self, error_tracker):
-        """Client fixture with pre-populated sensor + AC history."""
-        import time as _time
-        from mqtt_handler import MqttHandler, SensorReading
-        from unittest.mock import patch as _patch
-        from fastapi import FastAPI
-        from fastapi.testclient import TestClient
+    def test_returns_online_true_when_pong(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"res": "pong"}
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+            r = _make_client().get("/api/health/immich")
+        assert r.json()["online"] is True
 
-        ac = MagicMock()
-        ac.current_state = _mock_ac_state()
-        ac.config.target_temperature = 26.0
-        ac.config.min_setpoint = 19.0
-        ac.config.max_setpoint = 30.0
-        ac.config.sensor_timeout = 3600
-        ac.config.hysteresis_on = 0.5
-        ac.config.hysteresis_off = 0.3
-        ac.config.loop_interval = 10
-        ac.config.ac_mode = "cool"
-        ac.config.fan_speed_max = 3
-        ac.config.fan_speed_modulate = 0
-        ac.get_history.return_value = []
+    def test_returns_offline_when_not_pong(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"res": "error"}
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+            r = _make_client().get("/api/health/immich")
+        assert r.json()["online"] is False
 
-        with _patch("mqtt_handler.mqtt"):
-            with _patch.object(MqttHandler, "_load_from_disk"):
-                mqtt = MqttHandler("localhost", 1883, ["Salon"], max_history=200)
-                mqtt._error_tracker = None
-                mqtt._connected = True
 
-        now = _time.time()
-        # Three readings: two recent, one old
-        mqtt.history["Salon"] = [
-            SensorReading(25.0, 40, 90, now - 7200),   # 2h ago
-            SensorReading(26.0, 42, 90, now - 3600),   # 1h ago
-            SensorReading(27.0, 44, 90, now - 60),     # 1 min ago
+# ── Container mapping ─────────────────────────────────────────────────────────
+
+class TestControllableContainersMapping:
+
+    def test_all_expected_keys_present(self):
+        from api.routes import CONTROLLABLE_CONTAINERS
+        assert set(CONTROLLABLE_CONTAINERS.keys()) == {"ac", "vacaciones", "casita", "photos", "passwords", "valheim"}
+
+    def test_ac_maps_to_ac_service_container(self):
+        from api.routes import CONTROLLABLE_CONTAINERS
+        assert CONTROLLABLE_CONTAINERS["ac"] == ["ac-service"]
+
+    def test_vacaciones_maps_to_vacaciones_service(self):
+        from api.routes import CONTROLLABLE_CONTAINERS
+        assert CONTROLLABLE_CONTAINERS["vacaciones"] == ["vacaciones-service"]
+
+    def test_casita_maps_to_casita_suenos(self):
+        from api.routes import CONTROLLABLE_CONTAINERS
+        assert CONTROLLABLE_CONTAINERS["casita"] == ["casita-suenos"]
+
+    def test_photos_maps_to_three_immich_containers(self):
+        from api.routes import CONTROLLABLE_CONTAINERS
+        containers = CONTROLLABLE_CONTAINERS["photos"]
+        assert "immich_server" in containers
+        assert "immich_postgres" in containers
+        assert "immich_redis" in containers
+        assert len(containers) == 3
+
+    def test_passwords_maps_to_vaultwarden(self):
+        from api.routes import CONTROLLABLE_CONTAINERS
+        assert CONTROLLABLE_CONTAINERS["passwords"] == ["vaultwarden"]
+
+    def test_valheim_maps_to_valheim_server(self):
+        from api.routes import CONTROLLABLE_CONTAINERS
+        assert CONTROLLABLE_CONTAINERS["valheim"] == ["valheim-server"]
+
+    def test_no_container_name_in_multiple_keys(self):
+        from api.routes import CONTROLLABLE_CONTAINERS
+        all_containers = [c for cs in CONTROLLABLE_CONTAINERS.values() for c in cs]
+        assert len(all_containers) == len(set(all_containers))
+
+
+# ── _require_super guard ──────────────────────────────────────────────────────
+
+
+
+def _patch_super_inline():
+    """Patch inline auth in GET /api/containers to simulate SUPER user."""
+    import auth as auth_core
+    import user_profiles
+    from contextlib import contextmanager
+    from unittest.mock import patch as _patch
+
+    class CombinedPatch:
+        def __init__(self):
+            self._patches = [
+                _patch.object(auth_core, 'get_current_user', return_value='egnal'),
+                _patch.object(user_profiles, 'get_profile_key', return_value='SUPER'),
+            ]
+        def __enter__(self):
+            for p in self._patches:
+                p.start()
+            return self
+        def __exit__(self, *args):
+            for p in self._patches:
+                p.stop()
+
+    return CombinedPatch()
+
+class TestRequireSuperGuard:
+
+    def test_familia_principal_returns_403(self):
+        """FAMILIA_PRINCIPAL (no show_gaming_apps) cannot access /api/containers."""
+        import auth as auth_core
+        import user_profiles
+        c = _make_client()
+        with patch.object(auth_core, 'get_current_user', return_value='virchi'),              patch.object(user_profiles, 'get_profile_key', return_value='FAMILIA_PRINCIPAL'):
+            r = c.get("/api/containers")
+        assert r.status_code == 403
+
+    def test_super_can_call_get_containers(self):
+        """SUPER can access /api/containers and sees all services."""
+        import auth as auth_core
+        import user_profiles
+        c = _make_client()
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = [
+            {"Names": ["/ac-service"], "State": "running"},
+            {"Names": ["/vacaciones-service"], "State": "running"},
+            {"Names": ["/casita-suenos"], "State": "running"},
+            {"Names": ["/immich_server"], "State": "running"},
+            {"Names": ["/immich_postgres"], "State": "running"},
+            {"Names": ["/immich_redis"], "State": "running"},
+            {"Names": ["/vaultwarden"], "State": "running"},
+            {"Names": ["/valheim-server"], "State": "running"},
         ]
-        # AC virtual sensor entry
-        mqtt.history["AC"] = [
-            SensorReading(24.0, None, None, now - 3600),
+        with patch.object(auth_core, 'get_current_user', return_value='egnal'),              patch.object(user_profiles, 'get_profile_key', return_value='SUPER'):
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+                r = c.get("/api/containers")
+        assert r.status_code == 200
+
+
+# ── GET /api/containers ───────────────────────────────────────────────────────
+
+class TestGetContainers:
+
+    def _docker_resp(self, states: dict):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = [
+            {"Names": [f"/{name}"], "State": state}
+            for name, state in states.items()
         ]
+        return mock_resp
 
-        sub = SubscriptionManager(SubscriptionConfig())
-        routes.mqtt_handler = mqtt
-        routes.ac_controller = ac
-        routes.subscription_manager = sub
-        routes.error_tracker = error_tracker
-        routes.energy_tracker = None
+    def _all_running(self):
+        return self._docker_resp({
+            "ac-service": "running", "vacaciones-service": "running",
+            "casita-suenos": "running", "immich_server": "running",
+            "immich_postgres": "running", "immich_redis": "running",
+            "vaultwarden": "running",
+        })
 
-        app = FastAPI()
-        app.include_router(routes.router)
-        return TestClient(app), now
-
-    def test_history_no_params_returns_all(self, error_tracker):
-        c, now = self._client_with_history(error_tracker)
-        r = c.get("/api/sensors/history")
+    def test_all_services_running(self):
+        c = _make_client()
+        with _patch_super_inline():
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=self._all_running())
+                r = c.get("/api/containers")
         assert r.status_code == 200
         data = r.json()
-        assert "Salon" in data
-        assert len(data["Salon"]) == 3
+        for key in ("ac", "vacaciones", "casita", "photos", "passwords"):
+            assert data[key]["running"] is True
 
-    def test_history_start_filters_old(self, error_tracker):
-        c, now = self._client_with_history(error_tracker)
-        # start = 90 minutes ago -> excludes the 2h-old reading
-        r = c.get(f"/api/sensors/history?start={now - 5400}")
+    def test_ac_stopped_photos_running(self):
+        c = _make_client()
+        mock_resp = self._docker_resp({
+            "ac-service": "exited", "vacaciones-service": "running",
+            "casita-suenos": "running", "immich_server": "running",
+            "immich_postgres": "running", "immich_redis": "running",
+            "vaultwarden": "running",
+        })
+        with _patch_super_inline():
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+                r = c.get("/api/containers")
         data = r.json()
-        assert len(data["Salon"]) == 2
+        assert data["ac"]["running"] is False
+        assert data["photos"]["running"] is True
 
-    def test_history_start_end_range(self, error_tracker):
-        c, now = self._client_with_history(error_tracker)
-        # Range: 90min ago to 30min ago -> only the 1h-ago reading
-        r = c.get(f"/api/sensors/history?start={now - 5400}&end={now - 1800}")
-        data = r.json()
-        assert len(data["Salon"]) == 1
-        assert data["Salon"][0]["temperature"] == 26.0
+    def test_photos_partial_stop_means_not_running(self):
+        c = _make_client()
+        mock_resp = self._docker_resp({
+            "ac-service": "running", "vacaciones-service": "running",
+            "casita-suenos": "running", "immich_server": "running",
+            "immich_postgres": "exited",   # ← postgres stopped
+            "immich_redis": "running", "vaultwarden": "running",
+        })
+        with _patch_super_inline():
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+                r = c.get("/api/containers")
+        assert r.json()["photos"]["running"] is False
 
-    def test_history_includes_ac_virtual_sensor(self, error_tracker):
-        c, now = self._client_with_history(error_tracker)
-        r = c.get("/api/sensors/history")
+    def test_response_includes_states_detail(self):
+        c = _make_client()
+        mock_resp = self._docker_resp({
+            "ac-service": "running", "vacaciones-service": "exited",
+            "casita-suenos": "running", "immich_server": "running",
+            "immich_postgres": "running", "immich_redis": "running",
+            "vaultwarden": "running",
+        })
+        with _patch_super_inline():
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+                r = c.get("/api/containers")
         data = r.json()
-        assert "AC" in data
-        assert data["AC"][0]["temperature"] == 24.0
-        assert data["AC"][0]["humidity"] is None
+        assert data["ac"]["states"]["ac-service"] == "running"
+        assert data["vacaciones"]["states"]["vacaciones-service"] == "exited"
 
-    def test_history_ac_range_filtered(self, error_tracker):
-        c, now = self._client_with_history(error_tracker)
-        # AC reading is 1h ago; start=30min ago should exclude it
-        r = c.get(f"/api/sensors/history?start={now - 1800}")
-        data = r.json()
-        assert "AC" not in data or len(data.get("AC", [])) == 0
+    def test_docker_proxy_unreachable_returns_503(self):
+        c = _make_client()
+        with _patch_super_inline():
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                    side_effect=Exception("connection refused")
+                )
+                r = c.get("/api/containers")
+        assert r.status_code == 503
+
+
+# ── POST /api/containers/{key}/stop ──────────────────────────────────────────
+
+class TestStopService:
+
+    def test_stop_known_service_returns_200(self):
+        c = _make_client()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 204
+        with _patch_require_super('egnal', 'SUPER'):
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_cls.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_resp)
+                r = c.post("/api/containers/ac/stop")
+        assert r.status_code == 200
+        assert r.json()["status"] == "ok"
+
+    def test_stop_unknown_service_returns_404(self):
+        c = _make_client()
+        with _patch_require_super('egnal', 'SUPER'):
+            r = c.post("/api/containers/nonexistent/stop")
+        assert r.status_code == 404
+
+    def test_stop_already_stopped_container_is_ok(self):
+        c = _make_client()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 304
+        with _patch_require_super('egnal', 'SUPER'):
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_cls.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_resp)
+                r = c.post("/api/containers/ac/stop")
+        assert r.json()["status"] == "ok"
+
+    def test_stop_non_super_returns_403(self):
+        c = _make_client()
+        with _patch_require_super('virchi', 'FAMILIA_PRINCIPAL'):
+            r = c.post("/api/containers/ac/stop")
+        assert r.status_code == 403
+
+    def test_stop_photos_stops_all_three_containers(self):
+        c = _make_client()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 204
+        call_urls = []
+
+        async def fake_post(url, **kwargs):
+            call_urls.append(url)
+            return mock_resp
+
+        with _patch_require_super('egnal', 'SUPER'):
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_cls.return_value.__aenter__.return_value.post = fake_post
+                r = c.post("/api/containers/photos/stop")
+
+        assert r.status_code == 200
+        assert any("immich_server" in u for u in call_urls)
+        assert any("immich_postgres" in u for u in call_urls)
+        assert any("immich_redis" in u for u in call_urls)
+        assert len(call_urls) == 3
+
+
+# ── POST /api/containers/{key}/start ─────────────────────────────────────────
+
+class TestStartService:
+
+    def test_start_known_service_returns_200(self):
+        c = _make_client()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 204
+        with _patch_require_super('egnal', 'SUPER'):
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_cls.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_resp)
+                r = c.post("/api/containers/ac/start")
+        assert r.status_code == 200
+        assert r.json()["status"] == "ok"
+
+    def test_start_unknown_service_returns_404(self):
+        c = _make_client()
+        with _patch_require_super('egnal', 'SUPER'):
+            r = c.post("/api/containers/unknown/start")
+        assert r.status_code == 404
+
+    def test_start_already_running_is_ok(self):
+        c = _make_client()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 304
+        with _patch_require_super('egnal', 'SUPER'):
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_cls.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_resp)
+                r = c.post("/api/containers/vacaciones/start")
+        assert r.json()["status"] == "ok"
+
+    def test_start_non_super_returns_403(self):
+        c = _make_client()
+        with _patch_require_super('virchi', 'FAMILIA_PRINCIPAL'):
+            r = c.post("/api/containers/ac/start")
+        assert r.status_code == 403

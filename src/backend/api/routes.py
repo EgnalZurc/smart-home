@@ -1,524 +1,69 @@
-"""REST API endpoints for the Web UI."""
+"""REST API endpoints for the backend dashboard.
 
-import time
+This module contains only:
+  - Health check proxies for all external services
+  - Casita Sueños proxy routes
+  - Proxy routes for external APIs (flood, firms - kept here for auth)
 
+AC endpoints (/api/status, /api/sensors, etc.) → proxied by nginx to ac-service:8002
+Vacaciones endpoints (/api/vacaciones/*) → proxied by nginx to vacaciones-service:8003
+"""
 import httpx
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
-
-# These references are injected from main.py
-mqtt_handler = None
-ac_controller = None
-energy_tracker = None
-subscription_manager = None
-error_tracker = None  # F0.30
-humidity_scheduler = None  # HUM-0
-
-# Injected configurations
-outdoor_cache_ttl = 600
-location_lat = 40.396644
-location_lon = -3.622511
 
 router = APIRouter(prefix="/api")
 
 
-class ConfigUpdate(BaseModel):
-    target_temperature: float | None = None
-    hysteresis_on: float | None = None
-    hysteresis_off: float | None = None
-    loop_interval: int | None = None
+# ── Health checks ────────────────────────────────────────────────────────────
 
 
-class ControlModeRequest(BaseModel):
-    mode: str  # "auto", "manual", "off"
-
-
-class ManualParamsRequest(BaseModel):
-    mode: str = "cool"  # "cool" or "heat"
-    fan_speed: int = 0  # 0=auto, 1=low, 2=mid, 3=high
-    temperature: float = 23.0  # 19-30
-
-
-class VacacionesConfigRequest(BaseModel):
-    nucleos: list = []
-    personas: list = []
-
-
-class VacacionesYearRequest(BaseModel):
-    comidas: list = []
-    notas: str = ""
-
-
-@router.get("/status")
-def get_status():
-    """General system status (includes cached AC real state)."""
-    state = ac_controller.current_state
-
-    # Use values ALREADY CALCULATED by controller (optimization)
-    # Controller calculates avg temp/hum every tick (10s) and saves them in state
-    # Don't recalculate here to avoid unnecessary duplication
-    return {
-        "average_temperature": state.average_temp,  # Already calculated and rounded
-        "average_humidity": state.average_humidity,  # Already calculated and rounded
-        "target_temperature": ac_controller.config.target_temperature,
-        "ac_state": {
-            "action": state.state,
-            "setpoint": state.setpoint,
-            "mode": state.ac_mode,  # "cool" or "heat"
-            "fan_speed": state.fan_speed,
-            "active_sensors": state.active_sensors,
-            "total_sensors": state.total_sensors,
-            "control_mode": state.control_mode,  # "auto", "manual", "off"
-            "sensor_alert": state.sensor_alert,
-            "melcloud_error": state.melcloud_error,
-        },
-        "ac_real": {
-            "power": state.ac_real_power,
-            "mode": state.ac_real_mode,
-            "fan_speed": state.ac_real_fan_speed,
-            "setpoint": state.ac_real_setpoint,
-            "room_temp": state.ac_real_room_temp,
-            "last_update": state.ac_real_last_update,
-        },
-        "manual_params": {
-            "mode": state.manual_params.mode if state.manual_params else "cool",
-            "fan_speed": state.manual_params.fan_speed if state.manual_params else 0,
-            "temperature": state.manual_params.temperature if state.manual_params else 23.0,
-        },  # Always return, even when not in manual mode
-        "last_update": state.last_update,
-        "mqtt_connected": mqtt_handler.is_connected,
-    }
-
-
-@router.get("/sensors")
-def get_sensors():
-    """Information from each sensor."""
-    all_sensors = mqtt_handler.sensor_names
-    now = time.time()
-
-    sensors = []
-    for name in all_sensors:
-        reading = mqtt_handler.readings.get(name)
-        if reading:
-            age = now - reading.timestamp
-            sensors.append({
-                "name": name,
-                "online": age < ac_controller.config.sensor_timeout,
-                "temperature": reading.temperature,
-                "humidity": reading.humidity,
-                "battery": reading.battery,
-                "last_seen_seconds": round(age, 1),
-                "timestamp": reading.timestamp,
-            })
-        else:
-            sensors.append({
-                "name": name,
-                "online": False,
-                "temperature": None,
-                "humidity": None,
-                "battery": None,
-                "last_seen_seconds": None,
-                "timestamp": None,
-            })
-
-    return {"sensors": sensors}
-
-
-@router.get("/history")
-def get_history(limit: int = 100):
-    """Controller action history."""
-    return {"history": ac_controller.get_history(limit)}
-
-
-@router.get("/sensors/history")
-def get_sensors_history(start: float | None = None, end: float | None = None, last: int | None = None):
-    """Reading history from all sensors.
-
-    Modes:
-    - No arguments: complete snapshot (all available data, max 200 per sensor)
-    - ?last=N: last N values per sensor
-    - ?start=X&end=Y: values in timestamp range [start, end]
-    - ?start=X: values from start until now
+@router.get("/health/backend")
+async def get_backend_health():
+    """Health check for the backend itself.
+    Returns JSON (unlike nginx /health which returns plain text).
+    Used by the dashboard infrastructure bar to check backend status.
     """
-    result = {}
-    with mqtt_handler._lock:
-        for name, readings_list in mqtt_handler.history.items():
-            # Filtrar por rango temporal
-            if start is not None or end is not None:
-                filtered = []
-                for r in readings_list:
-                    if start is not None and r.timestamp < start:
-                        continue
-                    if end is not None and r.timestamp > end:
-                        continue
-                    filtered.append(r)
-                entries = filtered
-            elif last is not None:
-                entries = readings_list[-last:]
-            else:
-                # Snapshot completo
-                entries = readings_list
-
-            result[name] = [
-                {"temperature": r.temperature, "humidity": r.humidity, "timestamp": r.timestamp}
-                for r in entries
-            ]
-    return result
-
-
-@router.get("/config")
-def get_config():
-    """Current configuration."""
-    cfg = ac_controller.config
-    return {
-        "target_temperature": cfg.target_temperature,
-        "hysteresis_on": cfg.hysteresis_on,
-        "hysteresis_off": cfg.hysteresis_off,
-        "min_setpoint": cfg.min_setpoint,
-        "max_setpoint": cfg.max_setpoint,
-        "loop_interval": cfg.loop_interval,
-        "sensor_timeout": cfg.sensor_timeout,
-        "ac_mode": cfg.ac_mode,
-        "fan_speed_max": cfg.fan_speed_max,
-        "fan_speed_modulate": cfg.fan_speed_modulate,
-    }
-
-
-@router.post("/config")
-def update_config(update: ConfigUpdate):
-    """Updates configuration."""
-    changes = update.model_dump(exclude_none=True)
-    if not changes:
-        raise HTTPException(400, "No changes")
-
-    # Validate ranges (return error 400 if out of range)
-    if "target_temperature" in changes:
-        temp = changes["target_temperature"]
-        if temp < ac_controller.config.min_setpoint or temp > ac_controller.config.max_setpoint:
-            raise HTTPException(
-                400, 
-                f"Target temperature must be between {ac_controller.config.min_setpoint}°C and {ac_controller.config.max_setpoint}°C"
-            )
-
-    ac_controller.update_config(**changes)
-    return {"status": "updated", "changes": changes}
-
-
-@router.post("/control_mode")
-def set_control_mode(req: ControlModeRequest):
-    """Set control mode: auto, manual, or off."""
-    if req.mode not in ("auto", "manual", "off"):
-        raise HTTPException(400, "mode must be 'auto', 'manual', or 'off'")
-
-    # When switching TO manual mode, initialize manual_params with current AC state
-    if req.mode == "manual":
-        state = ac_controller.current_state
-        # Use current AC state as starting point for manual control
-        ac_controller.set_manual_params(
-            temperature=state.setpoint,  # Current setpoint from controller
-            fan_speed=state.fan_speed,    # Current fan speed from controller
-            mode=state.ac_mode            # Current mode from controller
-        )
-
-    ac_controller.set_control_mode(req.mode)
-    return {"status": "ok", "control_mode": req.mode}
-
-
-@router.post("/manual_params")
-def set_manual_params(req: ManualParamsRequest):
-    """Set manual mode parameters (mode, fan_speed, temperature)."""
-    # Validate ranges
-    min_temp = ac_controller.config.min_setpoint
-    max_temp = ac_controller.config.max_setpoint
-    
-    if req.temperature < min_temp or req.temperature > max_temp:
-        raise HTTPException(
-            400,
-            f"Temperature must be between {min_temp}°C and {max_temp}°C"
-        )
-    
-    if req.fan_speed < 0 or req.fan_speed > 3:
-        raise HTTPException(400, "Fan speed must be between 0 (auto) and 3 (high)")
-    
-    if req.mode not in ("cool", "heat"):
-        raise HTTPException(400, "Mode must be 'cool' or 'heat'")
-
-    # Update manual parameters
-    ac_controller.set_manual_params(
-        temperature=req.temperature,
-        fan_speed=req.fan_speed,
-        mode=req.mode
-    )
-    
-    # If already in manual mode, apply immediately
-    state = ac_controller.current_state
-    if state.control_mode == "manual":
-        success = ac_controller.melcloud.set_temperature(
-            ac_controller.config.device_id,
-            req.temperature,
-            power=True,
-            mode=req.mode,
-            fan_speed=req.fan_speed,
-        )
-        
-        return {
-            "status": "ok" if success else "error",
-            "applied": {
-                "mode": req.mode,
-                "fan_speed": req.fan_speed,
-                "temperature": req.temperature
-            }
-        }
-    
-    return {"status": "ok", "message": "Parameters saved"}
-
-
-@router.post("/manual_param")
-def update_manual_param(param: str, value: str):
-    """Update a single manual parameter (for real-time UI)."""
-    state = ac_controller.current_state
-    
-    if state.control_mode != "manual":
-        raise HTTPException(400, "Not in manual mode")
-    
-    # Validate param
-    if param not in ("mode", "fan_speed", "temperature"):
-        raise HTTPException(400, f"Invalid parameter: {param}")
-    
-    # Convert value to correct type and validate
-    if param == "temperature":
-        try:
-            temp_value = float(value)
-        except ValueError:
-            raise HTTPException(400, "Temperature must be a number")
-        
-        min_temp = ac_controller.config.min_setpoint
-        max_temp = ac_controller.config.max_setpoint
-        if temp_value < min_temp or temp_value > max_temp:
-            raise HTTPException(400, f"Temperature must be between {min_temp}°C and {max_temp}°C")
-        converted_value = temp_value
-        
-    elif param == "fan_speed":
-        try:
-            fan_value = int(value)
-        except ValueError:
-            raise HTTPException(400, "Fan speed must be an integer")
-        
-        if fan_value < 0 or fan_value > 3:
-            raise HTTPException(400, "Fan speed must be between 0 and 3")
-        converted_value = fan_value
-        
-    elif param == "mode":
-        if value not in ("cool", "heat"):
-            raise HTTPException(400, "Mode must be 'cool' or 'heat'")
-        converted_value = value
-    
-    # Update the parameter
-    ac_controller.update_manual_param(param, converted_value)
-    
-    # Get current manual params
-    manual_params = state.manual_params
-    if param == "mode":
-        mode = converted_value
-        fan_speed = manual_params.fan_speed
-        temperature = manual_params.temperature
-    elif param == "fan_speed":
-        mode = manual_params.mode
-        fan_speed = converted_value
-        temperature = manual_params.temperature
-    else:  # temperature
-        mode = manual_params.mode
-        fan_speed = manual_params.fan_speed
-        temperature = converted_value
-    
-    # Apply to MELCloud
-    success = ac_controller.melcloud.set_temperature(
-        ac_controller.config.device_id,
-        temperature,
-        power=True,
-        mode=mode,
-        fan_speed=fan_speed,
-    )
-    
-    # Force immediate cache update from subscription manager
-    if success and subscription_manager is not None:
-        subscription_manager.force_update("melcloud")
-    
-    return {
-        "status": "ok" if success else "error",
-        "applied": {
-            "mode": mode,
-            "fan_speed": fan_speed,
-            "temperature": temperature
-        }
-    }
-
-    success = ac_controller.melcloud.set_temperature(
-        ac_controller.config.device_id,
-        24.0,
-        power=False,
-        fan_speed=0,
-    )
-
-    return {"status": "ok" if success else "error"}
-
-
-@router.get("/ac_real")
-def get_ac_real():
-    """Real AC state read from MELCloud."""
-    try:
-        from melcloud_client import MelCloudClient
-        state = ac_controller.melcloud.get_device_state(
-            ac_controller.config.device_id,
-            ac_controller.config.building_id,
-        )
-        if state is None:
-            return {"power": None, "mode": None, "fan_speed": None, "set_temp": None, "room_temp": None}
-
-        mode_names = {1: "HOT", 2: "DRY", 3: "COLD", 7: "FAN", 8: "AUTO"}
-        fan_names = {0: "Auto", 1: "Bajo", 2: "Medio", 3: "Alto"}
-
-        return {
-            "power": state.get("Power", False),
-            "mode": mode_names.get(state.get("OperationMode"), "?"),
-            "fan_speed": fan_names.get(state.get("SetFanSpeed"), "—"),
-            "set_temp": state.get("SetTemperature"),
-            "room_temp": state.get("RoomTemperature"),
-        }
-    except Exception:
-        return {"power": None, "mode": None, "fan_speed": None, "set_temp": None, "room_temp": None}
-
-
-@router.get("/outdoor")
-def get_outdoor():
-    """Outdoor temperature in Valdebernardo (Open-Meteo, cached)."""
-    # Get cached data from subscription manager (NEVER fetches directly)
-    outdoor_data = subscription_manager.get_cached("outdoor", default={})
-    
-    if outdoor_data is None or not outdoor_data:
-        return {"temperature": None, "humidity": None, "timestamp": 0}
-    
-    # Get timestamp from cache metadata
-    cache_entry = subscription_manager.cache.get("outdoor")
-    timestamp = cache_entry.timestamp if cache_entry else 0
-    
-    return {
-        "temperature": outdoor_data.get("temperature"),
-        "humidity": outdoor_data.get("humidity"),
-        "aqi": outdoor_data.get("aqi"),
-        "timestamp": timestamp
-    }
-
-
-def _load_outdoor_from_disk():
-    """Deprecated - now handled by subscription manager."""
-    pass
-
-
-def _save_outdoor_to_disk():
-    """Deprecated - now handled by subscription manager."""
-    pass
-
-
-
-
-@router.get("/errors")
-def get_errors():
-    """Active backend errors and warnings (F0.30)."""
-    if error_tracker is None:
-        return {"errors": [], "has_errors": False}
-    active = error_tracker.get_active()
-    return {"errors": active, "has_errors": bool(active)}
-
-
-@router.get("/humidity/study")
-def get_humidity_study():
-    """Humidity study data for humidifier decision (HUM-0, 3-week analysis)."""
-    from humidity_analysis import get_summary
-    summary = get_summary()
-    if summary is None:
-        return {"status": "no_data", "message": "Analysis not started yet. Check back in 24h."}
-    return summary
-
-
-@router.post("/humidity/study/run")
-def trigger_humidity_analysis():
-    """Manually trigger a humidity analysis snapshot (for testing)."""
-    if humidity_scheduler is None:
-        return {"status": "error", "message": "Humidity scheduler not initialized"}
-    humidity_scheduler.run_now()
-    return {"status": "ok", "message": "Analysis triggered"}
-
-@router.get("/energy/current")
-def get_energy_current():
-    """Consumption and cost of last 24h."""
-    if energy_tracker is None:
-        return {"kwh": 0.0, "cost": 0.0, "last_update": 0, "error": "Energy tracker not initialized"}
-    
-    totals = energy_tracker.get_current_24h()
-    return {
-        "kwh": totals["kwh"],
-        "cost": totals["cost"],
-        "last_update": time.time()
-    }
-
-
-@router.get("/energy/hourly")
-def get_energy_hourly():
-    """Data for hourly chart (24h)."""
-    if energy_tracker is None:
-        return {"data": {}}
-    
-    return {"data": energy_tracker.get_hourly_stats()}
-
-
-@router.get("/energy/monthly")
-def get_energy_monthly():
-    """Data for monthly chart (12 months)."""
-    if energy_tracker is None:
-        return {"data": {}}
-    
-    return {"data": energy_tracker.get_monthly_stats()}
-
-
-@router.get("/subscriptions/stats")
-def get_subscription_stats():
-    """Subscription manager statistics (cache usage, update intervals, etc.)."""
-    if subscription_manager is None:
-        return {"error": "Subscription manager not initialized"}
-    
-    return subscription_manager.get_stats()
+    return {"online": True}
 
 
 @router.get("/health/zigbee")
-def get_zigbee_health():
-    """Health check for Zigbee2MQTT service.
+async def get_zigbee_health():
+    """Proxy health check to ac-service (which manages Zigbee/MQTT)."""
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get("http://ac-service:8002/api/health/zigbee")
+            return r.json()
+    except Exception:
+        return {"online": False, "mqtt_connected": False, "active_sensors": 0}
 
-    Returns online=True if:
-    - MQTT broker is connected (zigbee2mqtt communicates via MQTT)
-    - At least one sensor has been seen recently
-    """
-    import time
-    mqtt_ok = mqtt_handler is not None and mqtt_handler.is_connected
-    # Consider zigbee healthy if we have active sensor readings
-    active = {}
-    if mqtt_handler is not None:
-        active = mqtt_handler.get_active_readings(max_age_seconds=7200)  # 2h tolerance
-    return {
-        "online": mqtt_ok,
-        "mqtt_connected": mqtt_ok,
-        "active_sensors": len(active),
-    }
+
+@router.get("/health/ac")
+async def get_ac_health():
+    """Health check for AC service."""
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get("http://ac-service:8002/health")
+            data = r.json()
+            return {"online": data.get("online", False)}
+    except Exception:
+        return {"online": False}
+
+
+@router.get("/health/vacaciones")
+async def get_vacaciones_health():
+    """Health check for Vacaciones service."""
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get("http://vacaciones-service:8003/health")
+            data = r.json()
+            return {"online": data.get("online", False)}
+    except Exception:
+        return {"online": False}
 
 
 @router.get("/health/immich")
 async def get_immich_health():
-    """Health check for Immich photo server.
-
-    Probes Immich /api/server/ping from within the Docker network.
-    Returns online=True if Immich responds with pong.
-    """
-    import httpx
+    """Health check for Immich photo server."""
     try:
         async with httpx.AsyncClient(timeout=4.0) as client:
             r = await client.get("http://immich-server:2283/api/server/ping")
@@ -527,65 +72,9 @@ async def get_immich_health():
         return {"online": False}
 
 
-@router.get("/vacaciones")
-def get_vacaciones():
-    """Returns all vacaciones data including config."""
-    from controllers.vacaciones_controller import get_vacaciones_data
-    return get_vacaciones_data()
-
-
-@router.get("/vacaciones/config")
-def get_vacaciones_config():
-    """Returns vacaciones configuration (nucleos and personas)."""
-    from controllers.vacaciones_controller import get_config
-    return get_config()
-
-
-@router.post("/vacaciones/config")
-def post_vacaciones_config(data: VacacionesConfigRequest):
-    """Save vacaciones configuration."""
-    from controllers.vacaciones_controller import save_config
-    return save_config(data.nucleos, data.personas)
-
-
-@router.post("/vacaciones/year/{year}")
-def post_vacaciones_year(year: int, data: VacacionesYearRequest):
-    """Save a year's planning."""
-    from controllers.vacaciones_controller import save_year
-    return save_year(year, data.comidas, data.notas)
-
-
-@router.delete("/vacaciones/year/{year}")
-def delete_vacaciones_year(year: int):
-    """Delete a year's planning. Only allowed if >1 years and is highest year."""
-    from controllers.vacaciones_controller import delete_year
-    return delete_year(year)
-
-
-@router.post("/vacaciones/year")
-def add_vacaciones_year():
-    """Add a new year (next year after the highest existing)."""
-    from controllers.vacaciones_controller import add_year
-    return add_year()
-
-
-@router.get("/health/vacaciones")
-def get_vacaciones_health():
-    """Health check for Vacaciones (Christmas Planning) app.
-    
-    Returns online=True if the vacaciones module is loaded and working.
-    """
-    from controllers.vacaciones_controller import is_healthy
-    return {"online": is_healthy()}
-
-
 @router.get("/health/casita")
 async def get_casita_health():
-    """Health check para Casita Sueños.
-
-    Llama al endpoint /health del servicio casita-suenos dentro de la red Docker.
-    Devuelve online=True si el servicio responde correctamente.
-    """
+    """Health check for Casita Sueños service."""
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
             resp = await client.get("http://casita-suenos:8001/health")
@@ -597,11 +86,7 @@ async def get_casita_health():
 
 @router.get("/health/passwords")
 async def get_passwords_health():
-    """Health check for Vaultwarden password manager (PWD-1).
-
-    Hits the Vaultwarden container root endpoint inside the Docker network.
-    Returns online=True if Vaultwarden responds with HTTP 200.
-    """
+    """Health check for Vaultwarden."""
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
             resp = await client.get("http://vaultwarden:80/")
@@ -610,27 +95,56 @@ async def get_passwords_health():
         return {"online": False}
 
 
+
+@router.get("/health/valheim")
+async def get_valheim_health():
+    """Health check for Valheim dedicated server.
+    Uses docker-socket-proxy:2375 to inspect the container state.
+    Returns online=True when the valheim-server container is running.
+    (Valheim has no HTTP endpoint — container state is the only signal.)
+    """
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(
+                "http://docker-socket-proxy:2375/v1.41/containers/valheim-server/json"
+            )
+            if r.status_code == 200:
+                state = r.json().get("State", {})
+                running = state.get("Status") == "running"
+                return {"online": running}
+            return {"online": False}
+    except Exception:
+        return {"online": False}
+
+
+
+@router.get("/health/valheim-admin")
+async def get_valheim_admin_health():
+    """Health check for Valheim Admin web app."""
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get("http://valheim-admin:8080/health")
+            data = r.json()
+            return {"online": data.get("online", False)}
+    except Exception:
+        return {"online": False}
+
+
+# ── Casita Sueños proxy routes ───────────────────────────────────────────────
+
 @router.get("/casita/status")
 async def get_casita_status():
-    """Estado detallado de Casita Sueños para la página de detalle del dashboard."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get("http://casita-suenos:8001/status")
             return resp.json()
     except Exception as e:
-        return {
-            "online": False,
-            "error": str(e),
-            "total_properties": 0,
-            "scraper_errors": [],
-            "top_properties": [],
-        }
+        return {"online": False, "error": str(e), "total_properties": 0,
+                "scraper_errors": [], "top_properties": []}
 
 
 @router.get("/casita/radar")
 async def get_casita_radar(request: Request):
-    """Propiedades en el radar con paginacion y orden. Pasa query params al container."""
-    # Reenviar todos los query params: limit, offset, sort_by, sort_dir
     qs = str(request.url.query)
     url = "http://casita-suenos:8001/radar"
     if qs:
@@ -645,7 +159,6 @@ async def get_casita_radar(request: Request):
 
 @router.get("/casita/dismissed")
 async def get_casita_dismissed():
-    """Propiedades descartadas."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get("http://casita-suenos:8001/dismissed")
@@ -656,7 +169,6 @@ async def get_casita_dismissed():
 
 @router.get("/casita/schedule")
 async def get_casita_schedule():
-    """Configuración de automatizaciones."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get("http://casita-suenos:8001/schedule")
@@ -667,7 +179,6 @@ async def get_casita_schedule():
 
 @router.post("/casita/schedule")
 async def save_casita_schedule(request: Request):
-    """Guarda la configuración de automatizaciones."""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -679,7 +190,6 @@ async def save_casita_schedule(request: Request):
 
 @router.post("/casita/dismiss")
 async def dismiss_casita_property(request: Request):
-    """Descarta una propiedad del radar."""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -691,7 +201,6 @@ async def dismiss_casita_property(request: Request):
 
 @router.post("/casita/undismiss")
 async def undismiss_casita_property(request: Request):
-    """Recupera una propiedad descartada."""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -700,9 +209,9 @@ async def undismiss_casita_property(request: Request):
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
 
+
 @router.post("/casita/mark-viewed")
 async def mark_casita_viewed(request: Request):
-    """Marca una propiedad como vista."""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -711,9 +220,9 @@ async def mark_casita_viewed(request: Request):
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
 
+
 @router.post("/casita/save-comment")
 async def save_casita_comment(request: Request):
-    """Guarda un comentario para una propiedad."""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -725,7 +234,6 @@ async def save_casita_comment(request: Request):
 
 @router.get("/casita/summary")
 async def get_casita_summary():
-    """Último resumen semanal enviado."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get("http://casita-suenos:8001/summary")
@@ -736,7 +244,6 @@ async def get_casita_summary():
 
 @router.post("/casita/run-scraping")
 async def run_casita_scraping():
-    """Lanza un scraping manual inmediato."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post("http://casita-suenos:8001/run-scraping")
@@ -747,10 +254,257 @@ async def run_casita_scraping():
 
 @router.post("/casita/run-summary")
 async def run_casita_summary():
-    """Lanza el resumen semanal manual."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post("http://casita-suenos:8001/run-summary")
             return resp.json()
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+
+"""Container control endpoints — appended to routes.py.
+
+Only SUPER profile can call these endpoints.
+Uses docker-socket-proxy:2375 (CONTAINERS=1, POST=1 — read + start/stop).
+
+Endpoints:
+  GET  /api/containers          → state of all controllable services
+  POST /api/containers/{name}/stop  → stop a container by name
+  POST /api/containers/{name}/start → start a container by name
+
+Auth: verified via /auth/me profile check on every call.
+      Returns 403 if caller is not SUPER.
+"""
+
+# ── Container control (SUPER only) ───────────────────────────────────────────
+
+# Mapping: app key → list of container names to stop/start together.
+# Immich requires stopping all 3 (server + db + redis) as a group.
+CONTROLLABLE_CONTAINERS: dict[str, list[str]] = {
+    "ac":         ["ac-service"],
+    "vacaciones": ["vacaciones-service"],
+    "casita":     ["casita-suenos"],
+    "photos":     ["immich_server", "immich_postgres", "immich_redis"],
+    "passwords":  ["vaultwarden"],
+    "valheim":    ["valheim-server"],
+}
+
+DOCKER_PROXY = "http://docker-socket-proxy:2375/v1.41"
+
+
+def _require_super(request: Request) -> str:
+    """Return username if caller is SUPER, raise 403 otherwise."""
+    import user_profiles
+    import auth as auth_core
+    user = auth_core.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    profile_key = user_profiles.get_profile_key(user)
+    profile = user_profiles.PROFILES.get(profile_key, {})
+    if not profile.get("show_config_apps", False):
+        raise HTTPException(status_code=403, detail="SUPER profile required")
+    return user
+
+
+
+
+
+@router.get("/containers")
+async def get_containers(request: Request):
+    """Return running state for all controllable services.
+
+    Response example:
+    {
+      "ac":        {"containers": ["ac-service"],        "running": true},
+      "photos":    {"containers": ["immich_server", ...], "running": true},
+      ...
+    }
+    Only accessible to SUPER profile.
+    """
+    _require_super(request)
+    result = {}
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{DOCKER_PROXY}/containers/json?all=true")
+            all_containers = r.json()
+            # Build name→state index
+            state_by_name: dict[str, str] = {}
+            for c in all_containers:
+                for name in c.get("Names", []):
+                    clean = name.lstrip("/")
+                    state_by_name[clean] = c.get("State", "unknown")
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Docker proxy unreachable: {e}")
+
+    for key, container_names in CONTROLLABLE_CONTAINERS.items():
+        states = [state_by_name.get(n, "unknown") for n in container_names]
+        # "running" = ALL containers in the group are running
+        running = all(s == "running" for s in states)
+        result[key] = {
+            "containers": container_names,
+            "running": running,
+            "states": {n: state_by_name.get(n, "unknown") for n in container_names},
+        }
+    return result
+
+
+@router.post("/containers/{app_key}/stop")
+async def stop_service(app_key: str, request: Request):
+    """Stop all containers for the given service app key.
+
+    Stops containers with a 10-second graceful timeout.
+    Only accessible to SUPER profile.
+    """
+    _require_super(request)
+    containers = CONTROLLABLE_CONTAINERS.get(app_key)
+    if not containers:
+        raise HTTPException(status_code=404, detail=f"Unknown service: {app_key}")
+
+    results = {}
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        for name in containers:
+            try:
+                r = await client.post(f"{DOCKER_PROXY}/containers/{name}/stop?t=10")
+                # 204 = stopped, 304 = already stopped — both are OK
+                results[name] = "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+            except Exception as e:
+                results[name] = f"error: {e}"
+
+    all_ok = all(v == "ok" or v == "http_304" for v in results.values())
+    return {"status": "ok" if all_ok else "partial", "results": results}
+
+
+@router.post("/containers/{app_key}/start")
+async def start_service(app_key: str, request: Request):
+    """Start all containers for the given service app key.
+
+    Only accessible to SUPER profile.
+    """
+    _require_super(request)
+    containers = CONTROLLABLE_CONTAINERS.get(app_key)
+    if not containers:
+        raise HTTPException(status_code=404, detail=f"Unknown service: {app_key}")
+
+    results = {}
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        for name in containers:
+            try:
+                r = await client.post(f"{DOCKER_PROXY}/containers/{name}/start")
+                # 204 = started, 304 = already running — both are OK
+                results[name] = "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+            except Exception as e:
+                results[name] = f"error: {e}"
+
+    all_ok = all(v == "ok" or v == "http_304" for v in results.values())
+    return {"status": "ok" if all_ok else "partial", "results": results}
+
+
+# ── System resource stats (SUPER only) ───────────────────────────────────────
+
+import os as _os
+import time as _time
+
+
+def _read_cpu_times() -> tuple[float, float]:
+    """Read total and idle CPU jiffies from /proc/stat."""
+    try:
+        line = open("/proc/stat").readline()  # first line: cpu aggregate
+        fields = [float(x) for x in line.split()[1:]]
+        idle = fields[3] + (fields[4] if len(fields) > 4 else 0)  # idle + iowait
+        total = sum(fields)
+        return total, idle
+    except Exception:
+        return 0.0, 0.0
+
+
+@router.get("/system/stats")
+async def get_system_stats(request: Request):
+    """Return Raspberry Pi system resource usage.
+
+    Reads from /proc/meminfo, /proc/stat, statvfs('/'), and the SoC thermal zone.
+    All paths are available inside the Docker container because Linux exposes
+    /proc (host memory/CPU) and /sys/class/thermal to all containers by default.
+
+    Only accessible to SUPER profile.
+
+    Response:
+    {
+      "ram":  {"total_mb": int, "used_mb": int, "available_mb": int, "percent": float},
+      "swap": {"total_mb": int, "used_mb": int, "percent": float},
+      "cpu":  {"percent": float},          # 1-second sample
+      "disk": {"total_gb": float, "used_gb": float, "free_gb": float, "percent": float},
+      "temp": {"celsius": float},          # SoC temperature
+    }
+    """
+    _require_super(request)
+
+    stats: dict = {}
+
+    # ── RAM ──────────────────────────────────────────────────────────────────
+    try:
+        mem: dict[str, int] = {}
+        for line in open("/proc/meminfo"):
+            parts = line.split()
+            if len(parts) >= 2:
+                mem[parts[0].rstrip(":")] = int(parts[1])  # kB
+        total_kb  = mem.get("MemTotal", 0)
+        avail_kb  = mem.get("MemAvailable", 0)
+        free_kb   = mem.get("MemFree", 0)
+        buffers_kb = mem.get("Buffers", 0)
+        cached_kb  = mem.get("Cached", 0) + mem.get("SReclaimable", 0) - mem.get("Shmem", 0)
+        used_kb   = total_kb - free_kb - buffers_kb - max(0, cached_kb)
+        stats["ram"] = {
+            "total_mb":     round(total_kb / 1024),
+            "used_mb":      round(used_kb  / 1024),
+            "available_mb": round(avail_kb / 1024),
+            "cache_mb":     round((buffers_kb + max(0, cached_kb)) / 1024),
+            "percent":      round(used_kb / total_kb * 100, 1) if total_kb else 0.0,
+        }
+        swap_total = mem.get("SwapTotal", 0)
+        swap_free  = mem.get("SwapFree",  0)
+        swap_used  = swap_total - swap_free
+        stats["swap"] = {
+            "total_mb": round(swap_total / 1024),
+            "used_mb":  round(swap_used  / 1024),
+            "percent":  round(swap_used / swap_total * 100, 1) if swap_total else 0.0,
+        }
+    except Exception as e:
+        stats["ram"]  = {"error": str(e)}
+        stats["swap"] = {"error": str(e)}
+
+    # ── CPU (1-second sample) ────────────────────────────────────────────────
+    try:
+        t1, i1 = _read_cpu_times()
+        await __import__("asyncio").sleep(0.5)
+        t2, i2 = _read_cpu_times()
+        dt = t2 - t1
+        di = i2 - i1
+        cpu_pct = round((1.0 - di / dt) * 100, 1) if dt > 0 else 0.0
+        stats["cpu"] = {"percent": cpu_pct}
+    except Exception as e:
+        stats["cpu"] = {"error": str(e)}
+
+    # ── Disk ─────────────────────────────────────────────────────────────────
+    try:
+        sv = _os.statvfs("/")
+        total_b = sv.f_frsize * sv.f_blocks
+        free_b  = sv.f_frsize * sv.f_bavail
+        used_b  = total_b - free_b
+        GB = 1024 ** 3
+        stats["disk"] = {
+            "total_gb": round(total_b / GB, 1),
+            "used_gb":  round(used_b  / GB, 1),
+            "free_gb":  round(free_b  / GB, 1),
+            "percent":  round(used_b / total_b * 100, 1) if total_b else 0.0,
+        }
+    except Exception as e:
+        stats["disk"] = {"error": str(e)}
+
+    # ── Temperature ──────────────────────────────────────────────────────────
+    try:
+        raw = int(open("/sys/class/thermal/thermal_zone0/temp").read().strip())
+        stats["temp"] = {"celsius": round(raw / 1000, 1)}
+    except Exception as e:
+        stats["temp"] = {"error": str(e)}
+
+    return stats

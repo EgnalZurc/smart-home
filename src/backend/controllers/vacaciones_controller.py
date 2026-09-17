@@ -32,6 +32,7 @@ class NucleoFamiliar:
     id: str
     nombre: str
     color: str = "#6366f1"
+    hijo_id: str = ""
     
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
