@@ -577,12 +577,14 @@ async def get_system_mode(request: Request):
             r = await client.get(f"{DOCKER_PROXY}/containers/json?all=true")
             all_containers = r.json()
             running = {c["Names"][0].lstrip("/") for c in all_containers if c.get("State") == "running"}
+            # Include restarting so mode stays "photos" while immich_server is starting up
+            active = {c["Names"][0].lstrip("/") for c in all_containers if c.get("State") in ("running", "restarting")}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Docker proxy unreachable: {e}")
 
     # Determine mode
     valheim_up = "valheim-server" in running
-    immich_up = "immich_server" in running
+    immich_up = "immich_server" in active  # use active: includes restarting state
 
     if valheim_up and not immich_up:
         mode = "gaming"
@@ -641,8 +643,11 @@ async def set_system_mode(mode: str, request: Request):
         # Small delay to let RAM free up
         await __import__("asyncio").sleep(2)
 
-        # Start containers
-        for name in config["start"]:
+        # Start containers — apply same inter-container delays as start_service()
+        mode_delay = CONTAINER_START_DELAYS.get(mode, 0)
+        for i, name in enumerate(config["start"]):
+            if i > 0 and mode_delay > 0:
+                await __import__("asyncio").sleep(mode_delay)
             try:
                 r = await client.post(f"{DOCKER_PROXY}/containers/{name}/start")
                 results["started"][name] = "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
