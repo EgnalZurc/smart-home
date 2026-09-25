@@ -99,22 +99,46 @@ async def get_passwords_health():
 @router.get("/health/valheim")
 async def get_valheim_health():
     """Health check for Valheim dedicated server.
-    Uses docker-socket-proxy:2375 to inspect the container state.
-    Returns online=True when the valheim-server container is running.
-    (Valheim has no HTTP endpoint — container state is the only signal.)
+
+    Two-level check to avoid false positives:
+    1. Container must be in 'running' state (via docker-socket-proxy)
+    2. valheim-admin /api/status must confirm running=true
+
+    This prevents showing "online" during the 3-5 min startup window
+    when the container is running but the game has not loaded yet,
+    and avoids false positives when the container restarts after an OOM.
     """
+    # Level 1: container state
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
             r = await client.get(
                 "http://docker-socket-proxy:2375/v1.41/containers/valheim-server/json"
             )
-            if r.status_code == 200:
-                state = r.json().get("State", {})
-                running = state.get("Status") == "running"
-                return {"online": running}
-            return {"online": False}
+            if r.status_code != 200:
+                return {"online": False}
+            state = r.json().get("State", {})
+            if state.get("Status") != "running":
+                return {"online": False}
     except Exception:
         return {"online": False}
+
+    # Level 2: confirm via valheim-admin that the game itself has loaded
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get("http://valheim-admin:8080/api/status")
+            if r.status_code == 200:
+                data = r.json()
+                # running=True means valheim-admin also confirmed the container is up
+                # join_code present means the game fully initialized and registered with PlayFab
+                running = data.get("running", False)
+                join_code = data.get("join_code")
+                online = running and join_code is not None
+                return {"online": online, "join_code": join_code, "players": data.get("players", 0)}
+    except Exception:
+        pass
+
+    # Container running but game not yet loaded (starting up)
+    return {"online": False}
 
 
 
@@ -284,12 +308,17 @@ CONTROLLABLE_CONTAINERS: dict[str, list[str]] = {
     "ac":         ["ac-service"],
     "vacaciones": ["vacaciones-service"],
     "casita":     ["casita-suenos"],
-    "photos":     ["immich_server", "immich_postgres", "immich_redis"],
+    "photos":     ["immich_postgres", "immich_redis", "immich_server"],
     "passwords":  ["vaultwarden"],
     "valheim":    ["valheim-server"],
 }
 
 DOCKER_PROXY = "http://docker-socket-proxy:2375/v1.41"
+# Seconds to wait before starting each container after the previous one.
+# Needed for services where later containers depend on earlier ones being healthy.
+CONTAINER_START_DELAYS: dict[str, int] = {
+    "photos": 5,  # wait 5s between redis and immich_server (postgres cold-start)
+}
 
 
 def _require_super(request: Request) -> str:
@@ -386,8 +415,11 @@ async def start_service(app_key: str, request: Request):
         raise HTTPException(status_code=404, detail=f"Unknown service: {app_key}")
 
     results = {}
+    delay = CONTAINER_START_DELAYS.get(app_key, 0)
     async with httpx.AsyncClient(timeout=20.0) as client:
-        for name in containers:
+        for i, name in enumerate(containers):
+            if i > 0 and delay > 0:
+                await __import__("asyncio").sleep(delay)
             try:
                 r = await client.post(f"{DOCKER_PROXY}/containers/{name}/start")
                 # 204 = started, 304 = already running — both are OK
@@ -508,3 +540,129 @@ async def get_system_stats(request: Request):
         stats["temp"] = {"error": str(e)}
 
     return stats
+
+
+# ── Pi Mode management (SUPER only) ──────────────────────────────────────────
+# Controls mutually exclusive service groups to optimize RAM usage.
+# Modes: gaming (Valheim), photos (Immich), minimal (core services only)
+
+import subprocess as _subprocess
+
+PI_MODES = {
+    "gaming": {
+        "stop":  ["immich_postgres", "immich_redis", "immich_server", "casita-suenos", "vacaciones-service"],
+        "start": ["valheim-server"],
+    },
+    "photos": {
+        "stop":  ["valheim-server"],
+        "start": ["immich_postgres", "immich_redis", "immich_server", "casita-suenos", "vacaciones-service"],
+    },
+    "minimal": {
+        "stop":  ["valheim-server", "immich_postgres", "immich_redis", "immich_server", "casita-suenos", "vacaciones-service"],
+        "start": [],
+    },
+}
+
+
+@router.get("/system/mode")
+async def get_system_mode(request: Request):
+    """Return current Pi mode based on which heavy services are running.
+
+    Returns: {"mode": "gaming"|"photos"|"minimal", "ram_available_mb": int}
+    """
+    _require_super(request)
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{DOCKER_PROXY}/containers/json?all=true")
+            all_containers = r.json()
+            running = {c["Names"][0].lstrip("/") for c in all_containers if c.get("State") == "running"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Docker proxy unreachable: {e}")
+
+    # Determine mode
+    valheim_up = "valheim-server" in running
+    immich_up = "immich_server" in running
+
+    if valheim_up and not immich_up:
+        mode = "gaming"
+    elif immich_up and not valheim_up:
+        mode = "photos"
+    else:
+        mode = "minimal"
+
+    # Get available RAM
+    try:
+        for line in open("/proc/meminfo"):
+            if line.startswith("MemAvailable:"):
+                avail_kb = int(line.split()[1])
+                break
+        else:
+            avail_kb = 0
+    except Exception:
+        avail_kb = 0
+
+    return {
+        "mode": mode,
+        "ram_available_mb": round(avail_kb / 1024),
+        "valheim_running": valheim_up,
+        "immich_running": immich_up,
+    }
+
+
+@router.post("/system/mode/{mode}")
+async def set_system_mode(mode: str, request: Request):
+    """Switch Pi to specified mode by stopping/starting container groups.
+
+    Modes:
+      - gaming:  Stop Immich/casita/vacaciones, start Valheim
+      - photos:  Stop Valheim, start Immich/casita/vacaciones
+      - minimal: Stop all heavy services (only core remains)
+
+    Only accessible to SUPER profile.
+    """
+    _require_super(request)
+
+    if mode not in PI_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid mode: {mode}. Valid: gaming, photos, minimal")
+
+    config = PI_MODES[mode]
+    results = {"stopped": {}, "started": {}}
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Stop containers first
+        for name in config["stop"]:
+            try:
+                r = await client.post(f"{DOCKER_PROXY}/containers/{name}/stop?t=10")
+                results["stopped"][name] = "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+            except Exception as e:
+                results["stopped"][name] = f"error: {e}"
+
+        # Small delay to let RAM free up
+        await __import__("asyncio").sleep(2)
+
+        # Start containers
+        for name in config["start"]:
+            try:
+                r = await client.post(f"{DOCKER_PROXY}/containers/{name}/start")
+                results["started"][name] = "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+            except Exception as e:
+                results["started"][name] = f"error: {e}"
+
+    # Get final RAM state
+    try:
+        for line in open("/proc/meminfo"):
+            if line.startswith("MemAvailable:"):
+                avail_kb = int(line.split()[1])
+                break
+        else:
+            avail_kb = 0
+    except Exception:
+        avail_kb = 0
+
+    return {
+        "status": "ok",
+        "mode": mode,
+        "ram_available_mb": round(avail_kb / 1024),
+        "results": results,
+    }
