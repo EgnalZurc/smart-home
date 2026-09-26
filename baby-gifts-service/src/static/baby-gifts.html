@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cuchi Regalos Valeria</title>
+    <link rel="icon" href="/static/favicon.ico">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="stylesheet" href="/static/tailwind.css">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .fade-in { animation: fadeIn 0.35s ease; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        #loading-overlay { position:fixed; inset:0; z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#0f172a; transition:opacity .35s ease; }
+        #loading-overlay.done { opacity:0; pointer-events:none; }
+        #app-content { opacity:0; transition:opacity .35s ease; }
+        #app-content.visible { opacity:1; }
+        .spinner { width:32px; height:32px; border:3px solid rgba(255,255,255,.1); border-top-color:rgba(255,255,255,.7); border-radius:50%; animation:spin .8s linear infinite; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        /* Gift cards */
+        
+        /* Category pills */
+        .cat-pill { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 500; background: rgba(99,102,241,0.2); color: #a5b4fc; }
+        /* Priority badges */
+        .priority-badge { font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase; }
+        .priority-1 { background: rgba(239,68,68,0.2); color: #fca5a5; }
+        .priority-2 { background: rgba(245,158,11,0.2); color: #fcd34d; }
+        .priority-3 { background: rgba(34,197,94,0.2); color: #86efac; }
+        /* Price range */
+        .price-tag { font-size: 11px; color: #94a3b8; }
+        /* Buttons */
+        .btn { padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; border: none; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-primary { background: rgba(99,102,241,0.3); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.4); }
+        .btn-primary:hover { background: rgba(99,102,241,0.4); }
+        .btn-success { background: rgba(34,197,94,0.3); color: #86efac; border: 1px solid rgba(34,197,94,0.4); }
+        .btn-success:hover { background: rgba(34,197,94,0.4); }
+        .btn-danger { background: rgba(239,68,68,0.2); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
+        .btn-danger:hover { background: rgba(239,68,68,0.3); }
+        .btn-secondary { background: rgba(51,65,85,0.5); color: #94a3b8; border: 1px solid rgba(51,65,85,0.5); }
+        .btn-secondary:hover { background: rgba(51,65,85,0.7); }
+        .btn-sm { padding: 6px 12px; font-size: 11px; }
+        /* Reserved by name - inline display */
+        .reserved-by { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 500; background: rgba(34,197,94,0.15); color: #86efac; white-space: nowrap; }
+        .reserved-by.by-other { background: rgba(100,116,139,0.2); color: #94a3b8; }
+        .reserved-by.by-me { background: rgba(34,197,94,0.25); color: #86efac; }
+        /* Modal */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 16px; }
+        .modal-overlay.open { display: flex; }
+        .modal { background: #1e293b; border-radius: 16px; width: 100%; max-width: 400px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+        .modal-header { padding: 16px; border-bottom: 1px solid rgba(51,65,85,0.5); display: flex; align-items: center; justify-content: space-between; }
+        .modal-title { font-size: 16px; font-weight: 600; }
+        .modal-close { background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px; font-size: 18px; }
+        .modal-body { padding: 16px; overflow-y: auto; flex: 1; }
+        .modal-footer { padding: 16px; border-top: 1px solid rgba(51,65,85,0.5); display: flex; gap: 8px; justify-content: flex-end; }
+        /* Form */
+        .form-group { margin-bottom: 14px; }
+        .form-group:last-child { margin-bottom: 0; }
+        .form-label { display: block; font-size: 11px; font-weight: 600; color: #94a3b8; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+        .form-input { width: 100%; padding: 10px 12px; background: rgba(15,23,42,0.8); border: 1px solid rgba(51,65,85,0.5); border-radius: 8px; color: white; font-size: 13px; outline: none; transition: border-color 0.2s; }
+        .form-input:focus { border-color: rgba(99,102,241,0.5); }
+        .form-input::placeholder { color: #475569; }
+        .form-select { width: 100%; padding: 10px 12px; background: rgba(15,23,42,0.8); border: 1px solid rgba(51,65,85,0.5); border-radius: 8px; color: white; font-size: 13px; outline: none; }
+        /* Invitation list in popup */
+        .inv-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(30,41,59,0.5); border-radius: 8px; margin-bottom: 8px; }
+        .inv-item:last-child { margin-bottom: 0; }
+        .inv-name { font-size: 13px; font-weight: 500; }
+        .inv-meta { font-size: 10px; color: #64748b; }
+        .inv-actions { display: flex; gap: 6px; }
+        .inv-badge { font-size: 10px; padding: 2px 8px; border-radius: 4px; }
+        .inv-badge.active { background: rgba(34,197,94,0.2); color: #86efac; }
+        .inv-badge.revoked { background: rgba(239,68,68,0.2); color: #fca5a5; }
+        .inv-badge.expired { background: rgba(245,158,11,0.2); color: #fcd34d; }
+        /* Guest welcome */
+        .guest-welcome { background: linear-gradient(145deg, rgba(99,102,241,0.2), rgba(139,92,246,0.1)); border: 1px solid rgba(99,102,241,0.3); border-radius: 12px; padding: 16px; margin-bottom: 16px; text-align: center; }
+        .guest-name { font-size: 18px; font-weight: 700; color: #c7d2fe; }
+        .guest-hint { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+        /* Empty state */
+        .empty-state { text-align: center; padding: 40px 20px; color: #64748b; }
+        .empty-state-icon { font-size: 48px; margin-bottom: 12px; }
+        .empty-state-text { font-size: 14px; }
+        /* Toast */
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(30,41,59,0.95); border: 1px solid rgba(51,65,85,0.5); padding: 12px 20px; border-radius: 10px; font-size: 13px; z-index: 9999; display: none; backdrop-filter: blur(8px); }
+        .toast.show { display: block; animation: fadeIn 0.2s ease; }
+        .toast.success { border-color: rgba(34,197,94,0.5); color: #86efac; }
+        .toast.error { border-color: rgba(239,68,68,0.5); color: #fca5a5; }
+        /* Header buttons group */
+        .header-btns { display: flex; gap: 8px; }
+    
+        /* Gift Cards - Modern Design */
+        .gift-card {
+            background: linear-gradient(145deg, rgba(30,41,59,0.9), rgba(15,23,42,0.95));
+            border: 1px solid rgba(51,65,85,0.5);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .gift-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #6366f1, #8b5cf6);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .gift-card:hover {
+            border-color: rgba(99,102,241,0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+        .gift-card:hover::before { opacity: 1; }
+        .gift-card.reserved {
+            opacity: 0.75;
+            background: linear-gradient(145deg, rgba(30,41,59,0.6), rgba(15,23,42,0.7));
+        }
+        .gift-card.reserved::before {
+            background: linear-gradient(90deg, #64748b, #94a3b8);
+            opacity: 1;
+        }
+        .gift-card.reserved-by-me {
+            opacity: 1;
+            border-color: rgba(34,197,94,0.5);
+        }
+        .gift-card.reserved-by-me::before {
+            background: linear-gradient(90deg, #22c55e, #4ade80);
+            opacity: 1;
+        }
+        .gift-name {
+            font-size: 18px;
+            font-weight: 700;
+            color: #f1f5f9;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .gift-name .gift-icon {
+            font-size: 24px;
+        }
+        .gift-details {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .gift-detail-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+        .gift-detail-icon {
+            width: 32px;
+            height: 32px;
+            background: rgba(99,102,241,0.15);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .gift-detail-content {
+            flex: 1;
+            min-width: 0;
+        }
+        .gift-detail-label {
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+        .gift-detail-value {
+            color: #e2e8f0;
+            font-weight: 500;
+        }
+        .gift-detail-value a {
+            color: #818cf8;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        .gift-detail-value a:hover {
+            color: #a5b4fc;
+            text-decoration: underline;
+        }
+        .gift-price {
+            background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2));
+            color: #a5b4fc;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+            display: inline-block;
+        }
+        .gift-assigned {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(34,197,94,0.15);
+            border-radius: 10px;
+            margin-top: 12px;
+        }
+        .gift-assigned.available {
+            background: rgba(99,102,241,0.1);
+        }
+        .gift-assigned-avatar {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: white;
+            font-weight: 600;
+        }
+        .gift-assigned.available .gift-assigned-avatar {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        }
+        .gift-assigned-text {
+            font-size: 13px;
+            color: #94a3b8;
+        }
+        .gift-assigned-name {
+            font-weight: 600;
+            color: #4ade80;
+        }
+        .gift-assigned.available .gift-assigned-name {
+            color: #818cf8;
+        }
+        .gift-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+    </style>
+</head>
+<body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
+<script>
+    // Guest token injected by server (null for admin/authenticated view)
+    window.GUEST_TOKEN = null;
+    // Authenticated user info injected by server (null for guest view)
+    window.AUTH_USER = null;
+</script>
+<div id="app-content">
+<div class="max-w-lg mx-auto px-4 pt-6 pb-10 fade-in">
+    <!-- Header -->
+    <header class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+            <a href="/smart-home" id="home-btn" class="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-700/40 transition-all flex-shrink-0" aria-label="Dashboard" title="Cuchi Casa">
+                <img src="/static/icono-cuchi-casa.png" class="w-5 h-5 object-contain rounded" alt="Home">
+            </a>
+            <h1 class="text-lg font-semibold tracking-tight">🍼 Cuchi Regalos Valeria</h1>
+        </div>
+        <div id="header-actions" class="header-btns"></div>
+    </header>
+    <!-- Guest welcome (shown only for guests) -->
+    <div id="guest-welcome" class="guest-welcome" style="display:none">
+        <div class="guest-name">¡Hola, <span id="guest-name-display"></span>!</div>
+        <div class="guest-hint">Pulsa en un regalo para reservarlo</div>
+    </div>
+    <!-- Note about orientative links -->
+    <div style="text-align:center; margin-bottom:16px; padding:8px 12px; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); border-radius:8px; font-size:12px; color:#fcd34d;">
+        &#128161; Los enlaces y precios son orientativos - puedes comprar donde prefieras
+    </div>
+    <!-- Gift list -->
+    <div id="gifts-list"></div>
+</div>
+</div>
+<!-- Toast notification -->
+<div id="toast" class="toast"></div>
+<!-- Modal: Add/Edit Gift -->
+<div class="modal-overlay" id="gift-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title" id="gift-modal-title">Añadir Regalo</span>
+            <button class="modal-close" onclick="closeGiftModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="gift-id">
+            <div class="form-group">
+                <label class="form-label">Nombre del regalo *</label>
+                <input type="text" class="form-input" id="gift-name" placeholder="Ej: Carrito de bebé" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">URL orientativa *</label>
+                <input type="url" class="form-input" id="gift-url" placeholder="https://www.amazon.es/..." required>
+                <small style="color:#64748b;font-size:11px;">Enlace donde se puede comprar o ver el producto</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Precio orientativo *</label>
+                <input type="text" class="form-input" id="gift-price" placeholder="Ej: 50€, 100-150€, ~200€" required>
+                <small style="color:#64748b;font-size:11px;">Precio aproximado del regalo</small>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeGiftModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="saveGift()">Guardar</button>
+        </div>
+    </div>
+</div>
+<!-- Modal: Invitations Popup -->
+<div class="modal-overlay" id="inv-popup">
+    <div class="modal" style="max-width:450px;">
+        <div class="modal-header">
+            <span class="modal-title">👥 Gestionar Invitados</span>
+            <button class="modal-close" onclick="closeInvPopup()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <span style="font-size:12px; color:#64748b;">Invitaciones activas</span>
+                <button class="btn btn-success btn-sm" onclick="openNewInvitation()">+ Nueva</button>
+            </div>
+            <div id="invitations-list"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeInvPopup()">Cerrar</button>
+        </div>
+    </div>
+</div>
+<!-- Modal: New Invitation -->
+<div class="modal-overlay" id="inv-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">Nueva Invitación</span>
+            <button class="modal-close" onclick="closeInvModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Nombre del invitado</label>
+                <input type="text" class="form-input" id="inv-name" placeholder="Ej: Tía María">
+            </div>
+            <p style="font-size:11px; color:#64748b; margin-top:12px;">
+                Se generará un enlace único para esta persona con caducidad de 6 meses. Podrá ver la lista y reservar regalos.
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeInvModal()">Cancelar</button>
+            <button class="btn btn-success" onclick="createInvitation()">Crear Invitación</button>
+        </div>
+    </div>
+</div>
+<!-- Modal: Invitation Link -->
+<div class="modal-overlay" id="link-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">✅ Invitación creada</span>
+            <button class="modal-close" onclick="closeLinkModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:13px; margin-bottom:12px;">Envía este enlace a <strong id="link-name"></strong>:</p>
+            <div style="background:rgba(15,23,42,0.8); padding:12px; border-radius:8px; word-break:break-all; font-size:12px; color:#a5b4fc;" id="link-url"></div>
+            <p style="font-size:10px; color:#64748b; margin-top:8px;">⏱️ Válido por 6 meses</p>
+            <button class="btn btn-primary" style="width:100%; margin-top:12px;" onclick="copyLink()">📋 Copiar enlace</button>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeLinkModal()">Cerrar</button>
+        </div>
+    </div>
+</div>
+<div id="loading-overlay"><div class="spinner"></div></div>
+<script>
+var isAdmin = !!window.AUTH_USER;  // Authenticated users are admins
+var isAuthUser = !!window.AUTH_USER;
+var guestToken = window.GUEST_TOKEN;
+var authUser = window.AUTH_USER;
+var guestName = '';
+var categories = [];
+var gifts = [];
+var invitations = [];
+var currentLink = '';
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+    try {
+        if (isAdmin) {
+            // Admin view: can manage gifts and invitations
+            document.getElementById('header-actions').innerHTML = `
+                <button class="btn btn-primary btn-sm" onclick="openInvPopup()">👥 Invitados</button>
+                <button class="btn btn-success btn-sm" onclick="openAddGift()">+ Añadir</button>
+            `;
+            await loadAdminData();
+        } else if (isAuthUser) {
+            // Authenticated user (egnal, virchi, silvanosp): can reserve gifts
+            guestName = authUser.username;
+            document.getElementById('guest-welcome').style.display = 'block';
+            document.getElementById('guest-name-display').textContent = guestName;
+            await loadAuthUserData();
+        } else {
+            // Guest with invitation token
+            document.getElementById('home-btn').style.display = 'none';
+            await loadGuestData();
+        }
+    } catch (e) {
+        console.error('Init error:', e);
+        showToast('Error cargando datos', 'error');
+    }
+    document.getElementById('loading-overlay').classList.add('done');
+    document.getElementById('app-content').classList.add('visible');
+}
+
+// ── Data loading ──────────────────────────────────────────────────────────────
+async function loadAdminData() {
+    const res = await fetch('/api/baby-gifts');
+    const data = await res.json();
+    categories = data.categories || [];
+    gifts = data.gifts || [];
+    renderGifts();
+    await loadInvitations();
+}
+
+async function loadAuthUserData() {
+    const res = await fetch('/api/baby-gifts/user');
+    if (!res.ok) {
+        document.getElementById('gifts-list').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔒</div><div class="empty-state-text">Error cargando datos</div></div>';
+        return;
+    }
+    const data = await res.json();
+    categories = data.categories || [];
+    gifts = data.gifts || [];
+    renderGifts();
+}
+
+async function loadGuestData() {
+    const res = await fetch(`/api/baby-gifts/guest/${guestToken}`);
+    if (!res.ok) {
+        document.getElementById('gifts-list').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔒</div><div class="empty-state-text">Enlace no válido o expirado</div></div>';
+        return;
+    }
+    const data = await res.json();
+    guestName = data.guest_name;
+    categories = data.categories || [];
+    gifts = data.gifts || [];
+    document.getElementById('guest-welcome').style.display = 'block';
+    document.getElementById('guest-name-display').textContent = guestName;
+    renderGifts();
+}
+
+async function loadInvitations() {
+    const res = await fetch('/api/baby-gifts/invitations');
+    const data = await res.json();
+    invitations = data.invitations || [];
+    renderInvitations();
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+function renderGifts() {
+    // Sort: available first, then by name
+    let sorted = [...gifts].sort((a, b) => {
+        if (a.reserved_by && !b.reserved_by) return 1;
+        if (!a.reserved_by && b.reserved_by) return -1;
+        return a.name.localeCompare(b.name);
+    });
+    if (sorted.length === 0) {
+        document.getElementById('gifts-list').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🎁</div><div class="empty-state-text">No hay regalos en la lista</div></div>';
+        return;
+    }
+    document.getElementById('gifts-list').innerHTML = sorted.map(gift => {
+        const reserved = gift.reserved_by;
+        const reservedByMe = gift.reserved_by_me;
+        let cardClass = 'gift-card';
+        if (reserved) cardClass += reservedByMe ? ' reserved-by-me' : ' reserved';
+        
+        // Gift name - clickable if has URL
+        let nameHtml = '';
+        if (gift.url) {
+            nameHtml = `<a href="${gift.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:17px; font-weight:600; color:#f1f5f9; text-decoration:none; display:flex; align-items:center; gap:8px;">
+                <span>🎁</span> ${escapeHtml(gift.name)} <span style="font-size:12px; color:#6366f1;">↗</span>
+            </a>`;
+        } else {
+            nameHtml = `<div style="font-size:17px; font-weight:600; display:flex; align-items:center; gap:8px;">
+                <span>🎁</span> ${escapeHtml(gift.name)}
+            </div>`;
+        }
+        
+        // Price display
+        let priceHtml = '';
+        if (gift.price_range) {
+            priceHtml = `<div style="margin-top:8px; display:flex; align-items:center; gap:8px;">
+                <span style="color:#64748b; font-size:13px;">💰 Precio orientativo:</span>
+                <span style="background:linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2)); color:#a5b4fc; padding:3px 10px; border-radius:12px; font-weight:600; font-size:13px;">${escapeHtml(gift.price_range)}</span>
+            </div>`;
+        }
+        
+        // Assigned person section
+        let assignedHtml = '';
+        if (reserved) {
+            let assignedName = '';
+            if (reservedByMe) {
+                assignedName = 'Tú';
+            } else if (gift.reserved_by_name) {
+                assignedName = gift.reserved_by_name;
+            } else {
+                assignedName = 'Alguien';
+            }
+            const initial = assignedName.charAt(0).toUpperCase();
+            assignedHtml = `
+                <div style="margin-top:12px; display:flex; align-items:center; gap:10px; padding:10px 12px; background:rgba(34,197,94,0.15); border-radius:10px;">
+                    <div style="width:32px; height:32px; background:linear-gradient(135deg, #22c55e, #16a34a); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; color:white; font-weight:600;">${escapeHtml(initial)}</div>
+                    <div>
+                        <div style="font-size:12px; color:#86efac;">Reservado por</div>
+                        <div style="font-size:14px; font-weight:600; color:#4ade80;">${escapeHtml(assignedName)}</div>
+                    </div>
+                </div>
+            `;
+        } else {
+            assignedHtml = `
+                <div style="margin-top:12px; display:flex; align-items:center; gap:10px; padding:10px 12px; background:rgba(99,102,241,0.1); border-radius:10px;">
+                    <div style="width:32px; height:32px; background:linear-gradient(135deg, #6366f1, #8b5cf6); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; color:white;">?</div>
+                    <div>
+                        <div style="font-size:14px; font-weight:600; color:#818cf8;">Disponible</div>
+                        <div style="font-size:12px; color:#64748b;">¡Puedes reservarlo!</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Action buttons - Edit/Delete only for admin (SUPER users)
+        let actions = '';
+        if (isAdmin) {
+            actions = `
+                <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+                    <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); editGift('${gift.id}')">✏️ Editar</button>
+                    ${reserved ? `<button class="btn btn-warning btn-sm" onclick="event.stopPropagation(); adminUnreserve('${gift.id}')">↩️ Liberar</button>` : ''}
+                    <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteGift('${gift.id}')">🗑️</button>
+                </div>
+            `;
+        } else if (!reserved) {
+            actions = `
+                <div style="margin-top:14px;">
+                    <button class="btn btn-success" onclick="event.stopPropagation(); reserveGift('${gift.id}')" style="width:100%;">🎁 Reservar este regalo</button>
+                </div>
+            `;
+        } else if (reservedByMe) {
+            actions = `
+                <div style="margin-top:14px;">
+                    <button class="btn btn-secondary" onclick="event.stopPropagation(); unreserveGift('${gift.id}')" style="width:100%;">↩️ Cancelar mi reserva</button>
+                </div>
+            `;
+        }
+        
+        return `
+            <div class="${cardClass}">
+                ${nameHtml}
+                ${priceHtml}
+                ${assignedHtml}
+                ${actions}
+            </div>
+        `;
+    }).join('');
+}
+function renderInvitations() {
+    if (invitations.length === 0) {
+        document.getElementById('invitations-list').innerHTML = '<div class="empty-state" style="padding:20px;"><div class="empty-state-text">No hay invitaciones. Crea una para compartir la lista.</div></div>';
+        return;
+    }
+    const baseUrl = window.location.origin;
+    document.getElementById('invitations-list').innerHTML = invitations.map(inv => {
+        let statusBadge = '';
+        if (inv.revoked) {
+            statusBadge = '<span class="inv-badge revoked">Revocada</span>';
+        } else if (inv.expired) {
+            statusBadge = '<span class="inv-badge expired">Expirada</span>';
+        } else {
+            statusBadge = '<span class="inv-badge active">Activa</span>';
+        }
+        
+        let expiryInfo = '';
+        if (inv.expires_at && !inv.revoked && !inv.expired) {
+            const expDate = new Date(inv.expires_at);
+            const daysLeft = Math.ceil((expDate - new Date()) / (1000 * 60 * 60 * 24));
+            expiryInfo = daysLeft > 30 ? '' : ` · Expira en ${daysLeft}d`;
+        }
+        
+        const lastAccess = inv.last_access 
+            ? `Último acceso: ${new Date(inv.last_access).toLocaleDateString()}${expiryInfo}`
+            : `Sin acceder aún${expiryInfo}`;
+            
+        return `
+            <div class="inv-item">
+                <div style="flex:1; min-width:0;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span class="inv-name">${escapeHtml(inv.name)}</span>
+                        ${statusBadge}
+                        ${inv.reservations > 0 ? `<span style="font-size:10px; color:#86efac;">🎁 ${inv.reservations}</span>` : ''}
+                    </div>
+                    <div class="inv-meta">${lastAccess}</div>
+                </div>
+                <div class="inv-actions">
+                    <button class="btn btn-primary btn-sm" onclick="copyInvLink('${inv.token}', '${escapeHtml(inv.name)}')" title="Copiar enlace">📋</button>
+                    ${!inv.revoked && !inv.expired ? `<button class="btn btn-danger btn-sm" onclick="revokeInv('${inv.token}')" title="Revocar">🚫</button>` : ''}
+                    <button class="btn btn-danger btn-sm" onclick="deleteInv('${inv.token}')" title="Eliminar">🗑️</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ── Invitations Popup ─────────────────────────────────────────────────────────
+function openInvPopup() {
+    loadInvitations();
+    document.getElementById('inv-popup').classList.add('open');
+}
+
+function closeInvPopup() {
+    document.getElementById('inv-popup').classList.remove('open');
+}
+
+// ── Gift CRUD (Admin) ─────────────────────────────────────────────────────────
+function openAddGift() {
+    document.getElementById('gift-modal-title').textContent = 'Añadir Regalo';
+    document.getElementById('gift-id').value = '';
+    document.getElementById('gift-name').value = '';
+    document.getElementById('gift-url').value = '';
+    document.getElementById('gift-price').value = '';
+    document.getElementById('gift-modal').classList.add('open');
+}
+
+function editGift(giftId) {
+    const gift = gifts.find(g => g.id === giftId);
+    if (!gift) return;
+    document.getElementById('gift-modal-title').textContent = 'Editar Regalo';
+    document.getElementById('gift-id').value = gift.id;
+    document.getElementById('gift-name').value = gift.name || '';
+    document.getElementById('gift-url').value = gift.url || '';
+    document.getElementById('gift-price').value = gift.price_range || '';
+    document.getElementById('gift-modal').classList.add('open');
+}
+
+function closeGiftModal() {
+    document.getElementById('gift-modal').classList.remove('open');
+}
+
+async function saveGift() {
+    const id = document.getElementById('gift-id').value;
+    const name = document.getElementById('gift-name').value.trim();
+    const url = document.getElementById('gift-url').value.trim();
+    const price = document.getElementById('gift-price').value.trim();
+    // Validation - all fields required
+    if (!name) {
+        showToast('El nombre es obligatorio', 'error');
+        document.getElementById('gift-name').focus();
+        return;
+    }
+    if (!url) {
+        showToast('La URL es obligatoria', 'error');
+        document.getElementById('gift-url').focus();
+        return;
+    }
+    if (!price) {
+        showToast('El precio es obligatorio', 'error');
+        document.getElementById('gift-price').focus();
+        return;
+    }
+    const body = { name, url, price_range: price };
+    try {
+        const endpoint = id ? `/api/baby-gifts/${id}` : '/api/baby-gifts';
+        const method = id ? 'PUT' : 'POST';
+        const r = await fetch(endpoint, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!r.ok) throw new Error('Error al guardar');
+        showToast(id ? 'Regalo actualizado' : 'Regalo añadido', 'success');
+        closeGiftModal();
+        await loadAdminData();
+    } catch (e) {
+        showToast('Error al guardar el regalo', 'error');
+    }
+}
+
+async function deleteGift(id) {
+    if (!confirm('¿Eliminar este regalo?')) return;
+    try {
+        const res = await fetch(`/api/baby-gifts/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error();
+        showToast('Regalo eliminado', 'success');
+        await loadAdminData();
+    } catch (e) {
+        showToast('Error eliminando', 'error');
+    }
+}
+
+async function adminUnreserve(id) {
+    if (!confirm('¿Liberar esta reserva?')) return;
+    try {
+        const res = await fetch(`/api/baby-gifts/${id}/unreserve`, { method: 'POST' });
+        if (!res.ok) throw new Error();
+        showToast('Reserva liberada', 'success');
+        await loadAdminData();
+    } catch (e) {
+        showToast('Error liberando reserva', 'error');
+    }
+}
+
+// ── User/Guest actions ────────────────────────────────────────────────────────
+async function reserveGift(id) {
+    try {
+        let res;
+        if (isAuthUser) {
+            res = await fetch(`/api/baby-gifts/user/reserve/${id}`, { method: 'POST' });
+        } else {
+            res = await fetch(`/api/baby-gifts/guest/${guestToken}/reserve/${id}`, { method: 'POST' });
+        }
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Error');
+        }
+        showToast('¡Regalo reservado!', 'success');
+        if (isAuthUser) {
+            await loadAuthUserData();
+        } else {
+            await loadGuestData();
+        }
+    } catch (e) {
+        showToast(e.message || 'Error reservando', 'error');
+    }
+}
+
+async function unreserveGift(id) {
+    if (!confirm('¿Cancelar tu reserva?')) return;
+    try {
+        let res;
+        if (isAuthUser) {
+            res = await fetch(`/api/baby-gifts/user/unreserve/${id}`, { method: 'POST' });
+        } else {
+            res = await fetch(`/api/baby-gifts/guest/${guestToken}/unreserve/${id}`, { method: 'POST' });
+        }
+        if (!res.ok) throw new Error();
+        showToast('Reserva cancelada', 'success');
+        if (isAuthUser) {
+            await loadAuthUserData();
+        } else {
+            await loadGuestData();
+        }
+    } catch (e) {
+        showToast('Error cancelando reserva', 'error');
+    }
+}
+
+// ── Invitations (Admin) ───────────────────────────────────────────────────────
+function openNewInvitation() {
+    document.getElementById('inv-name').value = '';
+    document.getElementById('inv-modal').classList.add('open');
+}
+
+function closeInvModal() {
+    document.getElementById('inv-modal').classList.remove('open');
+}
+
+async function createInvitation() {
+    const name = document.getElementById('inv-name').value.trim();
+    if (!name) {
+        showToast('El nombre es obligatorio', 'error');
+        return;
+    }
+    try {
+        const res = await fetch('/api/baby-gifts/invitations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+        });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        closeInvModal();
+        // Show link modal
+        currentLink = `${window.location.origin}/baby-gifts/i/${data.token}`;
+        document.getElementById('link-name').textContent = name;
+        document.getElementById('link-url').textContent = currentLink;
+        document.getElementById('link-modal').classList.add('open');
+        await loadInvitations();
+    } catch (e) {
+        showToast('Error creando invitación', 'error');
+    }
+}
+
+function closeLinkModal() {
+    document.getElementById('link-modal').classList.remove('open');
+}
+
+async function copyLink() {
+    try {
+        await navigator.clipboard.writeText(currentLink);
+        showToast('Enlace copiado', 'success');
+    } catch (e) {
+        showToast('Error copiando', 'error');
+    }
+}
+
+async function copyInvLink(token, name) {
+    const link = `${window.location.origin}/baby-gifts/i/${token}`;
+    try {
+        await navigator.clipboard.writeText(link);
+        showToast(`Enlace de ${escapeHtml(name)} copiado`, 'success');
+    } catch (e) {
+        showToast('Error copiando', 'error');
+    }
+}
+
+async function revokeInv(token) {
+    if (!confirm('¿Revocar esta invitación? La persona ya no podrá acceder.')) return;
+    try {
+        const res = await fetch(`/api/baby-gifts/invitations/${token}/revoke`, { method: 'POST' });
+        if (!res.ok) throw new Error();
+        showToast('Invitación revocada', 'success');
+        await loadInvitations();
+    } catch (e) {
+        showToast('Error revocando', 'error');
+    }
+}
+
+async function deleteInv(token) {
+    if (!confirm('¿Eliminar esta invitación permanentemente?')) return;
+    try {
+        const res = await fetch(`/api/baby-gifts/invitations/${token}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error();
+        showToast('Invitación eliminada', 'success');
+        await loadInvitations();
+    } catch (e) {
+        showToast('Error eliminando', 'error');
+    }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = `toast show ${type}`;
+    setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+
+// ── Start ─────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

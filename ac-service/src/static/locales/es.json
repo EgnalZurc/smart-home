@@ -1,0 +1,123 @@
+{
+  "header": {
+    "title": "Smart Home",
+    "connected": "Conectado",
+    "disconnected": "Desconectado"
+  },
+  "main": {
+    "avgTemp": "Temperatura media",
+    "outdoor": "Exterior",
+    "sensors": "sensores",
+    "aqiGood": "Bueno",
+    "aqiFair": "Aceptable",
+    "aqiModerate": "Moderado",
+    "aqiPoor": "Elevado",
+    "aqiVeryPoor": "Muy elevado",
+    "aqiHazardous": "Peligroso"
+  },
+  "acState": {
+    "title": "Estado AC",
+    "mode": "Modo",
+    "power": "Fuerza",
+    "setpoint": "Consigna",
+    "thermostat": "Termóst."
+  },
+  "controller": {
+    "title": "Controlador",
+    "objective": "Objetivo",
+    "states": {
+      "cooling_max": "COOLING MAX",
+      "modulating": "MODULANDO",
+      "off": "OFF",
+      "cooldown": "COOLDOWN",
+      "manual": "MANUAL",
+      "system_off": "SISTEMA OFF",
+      "error": "ERROR"
+    },
+    "objectiveManual": "Temp AC"
+  },
+  "manualControl": {
+    "title": "Control manual",
+    "auto": "Auto",
+    "manual": "Manual",
+    "off": "OFF"
+  },
+  "modals": {
+    "forceOn": {
+      "title": "Modo Manual",
+      "mode": "Modo AC",
+      "modes": {
+        "cool": "❄️ Frío",
+        "heat": "🔥 Calor"
+      },
+      "power": "Ventilador",
+      "powerLevels": {
+        "auto": "Auto",
+        "low": "Bajo",
+        "medium": "Medio",
+        "high": "Alto"
+      },
+      "temperature": "Temperatura",
+      "cancel": "Cancelar",
+      "confirm": "Aplicar"
+    },
+    "forceOff": {
+      "title": "¿Apagar el sistema?",
+      "message": "El AC se apagará completamente. Para volver a usar el control automático, pulsa AUTO.",
+      "cancel": "Cancelar",
+      "confirm": "Apagar"
+    },
+    "sensors": {
+      "title": "Sensores",
+      "temperature": "Temperatura",
+      "humidity": "Humedad",
+      "close": "Cerrar",
+      "online": "Online",
+      "offline": "Offline",
+      "battery": "Batería",
+      "lastSeen": "Última medición"
+    }
+  },
+  "chart": {
+    "average": "Media",
+    "temperature": "Temperatura",
+    "humidity": "Humedad",
+    "sources": "Fuentes",
+    "allSources": "Todas",
+    "range": "Rango",
+    "range1h": "1 hora",
+    "range6h": "6 horas",
+    "range12h": "12 horas",
+    "range24h": "24 horas",
+    "range48h": "48 horas",
+    "range7d": "7 días",
+    "noData": "Sin datos en el rango seleccionado",
+    "mean": "Media"
+  },
+  "toast": {
+    "targetSet": "Objetivo: {{value}}°C",
+    "targetError": "Error al actualizar la temperatura objetivo",
+    "modeSet": "Modo cambiado a {{value}}",
+    "modeError": "Error al cambiar el modo",
+    "fanSet": "Velocidad ventilador: {{value}}",
+    "fanError": "Error al cambiar la velocidad del ventilador",
+    "setpointSet": "Consigna AC: {{value}}°C",
+    "setpointError": "Error al cambiar la consigna",
+    "controlModeSet": "Modo de control: {{value}}",
+    "controlModeError": "Error al cambiar el modo de control",
+    "connectionLost": "Conexión perdida",
+    "invalidTemp": "La temperatura debe estar entre 19 y 30°C"
+  },
+  "dashboard": {
+    "title": "Cuchi Casa",
+    "applications": "Aplicaciones",
+    "connected": "Conectado",
+    "offline": "Sin conexión",
+    "apps": {
+      "ac": {
+        "name": "Control AC",
+        "desc": "Control de temperatura, sensores Zigbee, MELCloud"
+      }
+    }
+  }
+}

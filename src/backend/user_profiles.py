@@ -44,23 +44,11 @@ PROFILES: dict[str, dict] = {
         "can_view_level": 1,
         "can_edit_level": 1,
         "show_config_apps": True,
-        "show_gaming_apps": True,
     },
     "FAMILIA_PRINCIPAL": {
         "can_view_level": 1,
         "can_edit_level": 1,
         "show_config_apps": False,
-        "show_gaming_apps": False,
-    },
-    "GAMER": {
-        # Guest / gaming profile.
-        # show_gaming_apps=True so GAMER sees gaming apps (view_level: 99).
-        # can_view_level: 99 means GAMER does NOT see standard apps (view_level: 1).
-        # Only apps with view_level >= 99 are visible — i.e. gaming apps.
-        "can_view_level": 99,
-        "can_edit_level": 1,
-        "show_config_apps": False,
-        "show_gaming_apps": True,
     },
 }
 _DEFAULT_PROFILE = "FAMILIA_PRINCIPAL"
@@ -99,18 +87,26 @@ APP_REGISTRY: list[dict] = [
         "edit_level": 1,
     },
     {
-        # VLH-1: Valheim dedicated server — gaming app, visible to SUPER and GAMER only.
-        # view_level: 99 so GAMER (can_view_level: 99) can see it but not standard apps (level: 1).
-        "key": "valheim",
-        "type": "gaming",
-        "view_level": 99,
-        "edit_level": 99,
-    },
-    {
         # PWD-1: Vaultwarden password manager — config app, SUPER only.
         # show_config_apps=True is required on the profile to see this app.
         # Only the SUPER profile has show_config_apps=True, so only egnal sees it.
         "key": "passwords",
+        "type": "config",
+        "view_level": 1,
+        "edit_level": 1,
+    },
+    {
+        # Baby gift registry — standard app for family gift coordination.
+        # Guests access via invitation tokens (no user account needed).
+        "key": "babygifts",
+        "type": "service",
+        "service_name": "baby-gifts-service",
+        "view_level": 1,
+        "edit_level": 1,
+    },
+    {
+        # Valheim game server — config app, only visible to SUPER users.
+        "key": "valheim",
         "type": "config",
         "view_level": 1,
         "edit_level": 1,
@@ -188,8 +184,6 @@ def app_permissions(username: str) -> list[dict]:
 # Internal helpers
 # ---------------------------------------------------------------------------
 def _can_view(app: dict, profile: dict) -> bool:
-    if app["type"] == "config" and not profile.get("show_config_apps", False):
-        return False
-    if app["type"] == "gaming" and not profile.get("show_gaming_apps", False):
+    if app["type"] == "config" and not profile["show_config_apps"]:
         return False
     return profile["can_view_level"] <= app["view_level"]

@@ -311,6 +311,7 @@ CONTROLLABLE_CONTAINERS: dict[str, list[str]] = {
     "photos":     ["immich_postgres", "immich_redis", "immich_server"],
     "passwords":  ["vaultwarden"],
     "valheim":    ["valheim-server"],
+    "babygifts":  ["baby-gifts-service"],
 }
 
 DOCKER_PROXY = "http://docker-socket-proxy:2375/v1.41"

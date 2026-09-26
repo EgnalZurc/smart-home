@@ -12,7 +12,7 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
 
-        /* ── Service card ────────────────────────────────────────────────── */
+        /* Service card */
         .app-card {
             background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9));
             border: 1px solid rgba(51,65,85,0.5);
@@ -24,7 +24,7 @@
         .app-card:active { transform: scale(0.97); }
         @media (hover:hover) { .app-card:hover { border-color: rgba(99,102,241,0.4); transform: translateY(-1px); } }
 
-        /* ── Stop/start button ───────────────────────────────────────────── */
+        /* Stop/start button */
         .svc-btn {
             display: inline-flex; align-items: center; gap: 4px;
             font-size: 10px; font-weight: 600;
@@ -41,7 +41,7 @@
         .svc-btn.stopped:hover { background:rgba(34,197,94,.15); }
         .svc-btn.loading  { color:#94a3b8; border-color:rgba(148,163,184,.3); background:rgba(148,163,184,.05); }
 
-        /* ── Resources button (SUPER only) ──────────────────────────────── */
+        /* Resources button (SUPER only) */
         .res-btn {
             display: inline-flex; align-items: center; justify-content: center;
             width: 28px; height: 28px; border-radius: 8px;
@@ -52,7 +52,7 @@
         .res-btn:hover { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.4); color: #a5b4fc; }
         .res-btn:active { transform: scale(0.92); }
 
-        /* ── Resources modal ─────────────────────────────────────────────── */
+        /* Resources modal */
         #res-modal {
             position: fixed; inset: 0; z-index: 9000;
             display: flex; align-items: flex-end; justify-content: center;
@@ -99,7 +99,7 @@
         .temp-pill.yellow { background: rgba(245,158,11,.15); color: #fcd34d; }
         .temp-pill.red    { background: rgba(239,68,68,.15);  color: #fca5a5; }
 
-        /* ── Core infrastructure bar ─────────────────────────────────────── */
+        /* Core infrastructure bar */
         .core-bar { background: rgba(15,23,42,0.7); border: 1px solid rgba(51,65,85,0.35); border-radius: 14px; }
         .core-item { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
         .core-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; vertical-align: middle; animation: pulse 2s infinite; }
@@ -112,7 +112,7 @@
         .fade-in { animation: fadeIn 0.35s ease; }
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 
-        /* ── Language selector ───────────────────────────────────────────── */
+        /* Language selector */
         .lang-dropdown { position: relative; }
         .flag-img { width: 24px; height: 16px; object-fit: cover; border-radius: 2px; display: block; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
         .lang-current { padding:4px; border-radius:6px; cursor:pointer; border:2px solid rgba(100,116,139,.3); background:rgba(30,41,59,.4); transition:all .2s; display:flex; align-items:center; justify-content:center; }
@@ -123,7 +123,7 @@
         .lang-option:hover { background:rgba(59,130,246,.2); border-color:rgba(59,130,246,.4); }
         .lang-option.active { background:rgba(59,130,246,.15); border-color:rgba(59,130,246,.5); }
 
-        /* ── Loading overlay ─────────────────────────────────────────────── */
+        /* Loading overlay */
         #loading-overlay { position:fixed; inset:0; z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#0f172a; transition:opacity .35s ease; }
         #loading-overlay.done { opacity:0; pointer-events:none; }
         #dash-content { opacity:0; transition:opacity .35s ease; }
@@ -131,7 +131,7 @@
         .spinner { width:32px; height:32px; border:3px solid rgba(255,255,255,.1); border-top-color:rgba(255,255,255,.7); border-radius:50%; animation:spin .8s linear infinite; }
         @keyframes spin { to { transform:rotate(360deg); } }
 
-        /* ── User dropdown ───────────────────────────────────────────────── */
+        /* User dropdown */
         .user-dropdown { position:relative; }
         .user-chip { display:flex; align-items:center; gap:6px; background:rgba(30,41,59,.6); border:1px solid rgba(51,65,85,.5); border-radius:20px; padding:3px 10px 3px 4px; font-size:0.75rem; color:#94a3b8; line-height:1; cursor:pointer; user-select:none; transition:border-color .2s, background .2s; }
         .user-chip:hover { border-color:rgba(99,102,241,.4); background:rgba(30,41,59,.9); }
@@ -140,11 +140,25 @@
         .user-menu.open { display:block; }
         .user-menu-item { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:7px; font-size:0.8125rem; color:#94a3b8; cursor:pointer; transition:background .15s, color .15s; border:none; background:none; width:100%; text-align:left; }
         .user-menu-item:hover { background:rgba(239,68,68,.1); color:#f87171; }
+
+        /* Mode selector */
+        .mode-bar { background: rgba(15,23,42,0.7); border: 1px solid rgba(51,65,85,0.35); border-radius: 14px; }
+        .mode-btns { display: flex; gap: 6px; }
+        .mode-btn {
+            flex: 1; padding: 8px 12px; border-radius: 10px;
+            font-size: 12px; font-weight: 600; text-align: center;
+            cursor: pointer; transition: all 0.2s ease;
+            border: 1px solid transparent; background: transparent; color: #64748b;
+        }
+        .mode-btn:hover { background: rgba(51,65,85,0.3); color: #94a3b8; }
+        .mode-btn.active { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.4); color: #a5b4fc; }
+        .mode-btn.loading { opacity: 0.5; cursor: wait; }
+        .mode-btn .mode-icon { font-size: 16px; margin-bottom: 2px; display: block; }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
 
-<!-- ── Resources modal (SUPER only) ──────────────────────────────────────── -->
+<!-- Resources modal (SUPER only) -->
 <div id="res-modal" onclick="closeResModal(event)">
   <div id="res-panel">
     <div class="res-handle"></div>
@@ -209,7 +223,7 @@
         </div>
     </header>
 
-    <!-- ── SECTION 1: Core infrastructure (SUPER only) ──────────────────── -->
+    <!-- SECTION 1: Core infrastructure (SUPER only) -->
     <section class="mb-7" id="core-section" style="display:none">
         <p id="core-label" class="section-label mb-2 px-1">Infraestructura</p>
         <div class="core-bar px-4 py-3">
@@ -217,7 +231,28 @@
         </div>
     </section>
 
-    <!-- ── SECTION 2: Services ───────────────────────────────────────────── -->
+    <!-- SECTION 1.5: Mode selector (SUPER only) -->
+    <section class="mb-7" id="mode-section" style="display:none">
+        <p id="mode-label" class="section-label mb-2 px-1">Modo</p>
+        <div class="mode-bar px-3 py-3">
+            <div class="mode-btns">
+                <button class="mode-btn" data-mode="gaming" onclick="setMode('gaming')">
+                    <span class="mode-icon">🎮</span>
+                    <span id="mode-gaming-label">Juego</span>
+                </button>
+                <button class="mode-btn" data-mode="photos" onclick="setMode('photos')">
+                    <span class="mode-icon">📷</span>
+                    <span id="mode-photos-label">Fotos</span>
+                </button>
+                <button class="mode-btn" data-mode="minimal" onclick="setMode('minimal')">
+                    <span class="mode-icon">⚡</span>
+                    <span id="mode-minimal-label">Básico</span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 2: Services -->
     <section id="services-section" style="display:none">
         <p id="apps-label" class="section-label mb-3 px-1">Servicios</p>
         <div id="apps-list" class="space-y-2"></div>
@@ -228,7 +263,7 @@
 <div id="loading-overlay"><div class="spinner"></div></div>
 
 <script>
-// ── Translations ──────────────────────────────────────────────────────────────
+// Translations
 const T = {
     es: {
         title: 'Cuchi Casa', infrastructure: 'Infraestructura', services: 'Servicios',
@@ -238,6 +273,7 @@ const T = {
         res_title: 'Recursos del sistema', res_ram: 'RAM', res_swap: 'Swap',
         res_cpu: 'CPU', res_disk: 'Disco', res_temp: 'Temperatura',
         res_used: 'usados', res_free: 'libres',
+        mode_label: 'Modo', mode_gaming: 'Juego', mode_photos: 'Fotos', mode_minimal: 'Básico',
         ac_name: 'Control AC', ac_desc: 'Temperatura, sensores Zigbee, MELCloud',
         photos_name: 'Fotos', photos_desc: 'Copia de seguridad de fotos y vídeos',
         vacaciones_name: 'Cuchi Vacaciones', vacaciones_desc: 'Planificador de cuchi vacaciones',
@@ -245,6 +281,7 @@ const T = {
         passwords_name: 'Contraseñas', passwords_desc: 'Gestor de contraseñas Vaultwarden',
         zigbee_name: 'Zigbee2MQTT', zigbee_desc: 'Dispositivos Zigbee y sensores',
         valheim_name: 'Valheim', valheim_desc: 'Servidor de Valheim',
+        babygifts_name: 'Lista Regalos Bebé', babygifts_desc: 'Lista de regalos para el bebé',
     },
     en: {
         title: 'Cuchi Casa', infrastructure: 'Infrastructure', services: 'Services',
@@ -254,6 +291,7 @@ const T = {
         res_title: 'System resources', res_ram: 'RAM', res_swap: 'Swap',
         res_cpu: 'CPU', res_disk: 'Disk', res_temp: 'Temperature',
         res_used: 'used', res_free: 'free',
+        mode_label: 'Mode', mode_gaming: 'Gaming', mode_photos: 'Photos', mode_minimal: 'Minimal',
         ac_name: 'AC Control', ac_desc: 'Temperature control, Zigbee sensors, MELCloud',
         photos_name: 'Photos', photos_desc: 'Photo and video backup',
         vacaciones_name: 'Cuchi Holidays', vacaciones_desc: 'Holiday planner',
@@ -261,10 +299,11 @@ const T = {
         passwords_name: 'Passwords', passwords_desc: 'Vaultwarden password manager',
         zigbee_name: 'Zigbee2MQTT', zigbee_desc: 'Zigbee devices and sensors',
         valheim_name: 'Valheim', valheim_desc: 'Valheim server',
+        babygifts_name: 'Baby Gift List', babygifts_desc: 'Baby gift registry',
     },
 };
 
-// ── Core + app catalogues ─────────────────────────────────────────────────────
+// Core + app catalogues
 const CORE_SERVICES = [
     { key: 'core_backend', labelKey: 'core_backend', statusUrl: '/api/health/backend', getStatus: d => d?.online === true, url: null },
     { key: 'core_mqtt',    labelKey: 'core_mqtt',    statusUrl: '/api/health/zigbee',  getStatus: d => d?.mqtt_connected === true, url: null },
@@ -276,13 +315,14 @@ const APP_CATALOGUE = {
     vacaciones:{ url: '/smart-home/vacaciones',                       nameKey: 'vacaciones_name',descKey: 'vacaciones_desc',statusUrl: '/api/health/vacaciones',getStatus: d => d?.online === true },
     casita:    { url: '/smart-home/casita?' + Date.now(),             nameKey: 'casita_name',    descKey: 'casita_desc',    statusUrl: '/api/health/casita',    getStatus: d => d?.online === true },
     passwords: { url: '/passwords/',                                  nameKey: 'passwords_name', descKey: 'passwords_desc', statusUrl: '/api/health/passwords', getStatus: d => d?.online === true },
+    babygifts: { url: '/smart-home/baby-gifts', nameKey: 'babygifts_name', descKey: 'babygifts_desc', statusUrl: '/api/health/baby-gifts', getStatus: d => d?.online === true },
     valheim:   { url: '/valheim-admin/',                                 nameKey: 'valheim_name',   descKey: 'valheim_desc',     statusUrl: '/api/health/valheim',       getStatus: d => d?.online === true },
 };
 let APPS = [];
 let currentProfile = null;
 let containerState = {};
 
-// ── Language ──────────────────────────────────────────────────────────────────
+// Language
 const COOKIE = 'locale';
 function getLang() { const m = document.cookie.match(/(?:^|;\s*)locale=([^;]+)/); return (m && T[m[1]]) ? m[1] : 'es'; }
 function saveLang(l) { const exp = new Date(); exp.setFullYear(exp.getFullYear() + 1); document.cookie = `${COOKIE}=${l};expires=${exp.toUTCString()};path=/;SameSite=Lax`; }
@@ -296,13 +336,17 @@ function applyLang() {
     document.getElementById('core-label').textContent = t('infrastructure');
     document.getElementById('apps-label').textContent = t('services');
     document.getElementById('res-title').textContent  = t('res_title');
+    document.getElementById('mode-label').textContent = t('mode_label');
+    document.getElementById('mode-gaming-label').textContent = t('mode_gaming');
+    document.getElementById('mode-photos-label').textContent = t('mode_photos');
+    document.getElementById('mode-minimal-label').textContent = t('mode_minimal');
     const logoutText = document.getElementById('logout-text');
     if (logoutText) logoutText.textContent = t('logout_label');
     saveLang(currentLang);
 }
 function setLang(l) {
     document.getElementById('lang-menu').classList.remove('open');
-    currentLang = l; applyLang(); renderCore(); renderApps(); loadStatus();
+    currentLang = l; applyLang(); renderCore(); renderMode(); renderApps(); loadStatus();
 }
 function toggleLang() { document.getElementById('lang-menu').classList.toggle('open'); }
 document.addEventListener('click', e => {
@@ -310,7 +354,7 @@ document.addEventListener('click', e => {
     if (dd && !dd.contains(e.target)) document.getElementById('lang-menu').classList.remove('open');
 });
 
-// ── Core bar ──────────────────────────────────────────────────────────────────
+// Core bar
 function renderCore() {
     if (!currentProfile?.show_config_apps) return;
     const container = document.getElementById('core-items');
@@ -323,7 +367,54 @@ function renderCore() {
     document.getElementById('core-section').style.display = 'block';
 }
 
-// ── Service cards ─────────────────────────────────────────────────────────────
+// Mode selector
+let currentMode = null;
+let modeChanging = false;
+
+function renderMode() {
+    if (!currentProfile?.show_config_apps) return;
+    document.getElementById('mode-section').style.display = 'block';
+    loadMode();
+}
+
+async function loadMode() {
+    try {
+        const r = await fetch('/api/system/mode');
+        if (!r.ok) return;
+        const data = await r.json();
+        currentMode = data.mode;
+        updateModeButtons();
+    } catch {}
+}
+
+function updateModeButtons() {
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        const mode = btn.dataset.mode;
+        btn.classList.toggle('active', mode === currentMode);
+        btn.classList.toggle('loading', modeChanging);
+    });
+}
+
+async function setMode(mode) {
+    if (modeChanging || mode === currentMode) return;
+    modeChanging = true;
+    updateModeButtons();
+    try {
+        const r = await fetch(`/api/system/mode/${mode}`, { method: 'POST' });
+        if (r.ok) {
+            currentMode = mode;
+            // Wait for containers to settle, then refresh
+            await new Promise(res => setTimeout(res, 3000));
+            await loadContainerStates();
+            Object.keys(statusCache).forEach(k => delete statusCache[k]);
+            await loadStatus();
+        }
+    } catch {}
+    modeChanging = false;
+    updateModeButtons();
+}
+
+// Service cards
 function isSuper() { return currentProfile?.show_config_apps === true; }
 function renderApps() {
     if (!APPS.length) return;
@@ -357,7 +448,7 @@ function renderApps() {
     if (isSuper()) loadContainerStates();
 }
 
-// ── Container control ─────────────────────────────────────────────────────────
+// Container control
 async function loadContainerStates() {
     try {
         const r = await fetch('/api/containers');
@@ -402,7 +493,7 @@ async function toggleService(event, key) {
     } catch { updateBtn(key, wasRunning); }
 }
 
-// ── Status polling ────────────────────────────────────────────────────────────
+// Status polling
 const statusCache = {};
 async function fetchStatus(url) {
     if (statusCache[url] && (Date.now() - statusCache[url].ts) < 8000) return statusCache[url].data;
@@ -431,7 +522,7 @@ async function loadStatus() {
     }
 }
 
-// ── Resources modal ───────────────────────────────────────────────────────────
+// Resources modal
 let _resInterval = null;
 
 function _barColor(pct) {
@@ -533,7 +624,7 @@ function closeResModal(e) {
 // Close on Escape key
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeResModal(); });
 
-// ── User info ─────────────────────────────────────────────────────────────────
+// User info
 function toggleUserMenu() { document.getElementById('user-menu').classList.toggle('open'); }
 document.addEventListener('click', e => {
     const dd = document.getElementById('user-dropdown');
@@ -558,12 +649,13 @@ async function loadUser() {
             .map(p => ({ key: p.key, ...APP_CATALOGUE[p.key] }))
             .filter(a => a);  // url may be null (e.g. valheim has no web UI)
         renderCore();
+        renderMode();
         renderApps();
         loadStatus();
     } catch {}
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+// Init
 (async function init() {
     applyLang();
     try {

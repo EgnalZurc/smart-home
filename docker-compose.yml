@@ -121,6 +121,24 @@ services:
       - cuchi-casa
 
 
+  # Baby Gifts Service - gift registry for baby
+  baby-gifts-service:
+    build:
+      context: ./baby-gifts-service
+      dockerfile: Dockerfile
+    container_name: baby-gifts-service
+    restart: unless-stopped
+    mem_limit: 64m
+    memswap_limit: 64m
+    expose:
+      - 8004
+    volumes:
+      - ./data/baby-gifts-service:/app/data
+    environment:
+      - TZ=Europe/Madrid
+    networks:
+      - smart-home
+      - cuchi-casa
 
 networks:
   smart-home:
