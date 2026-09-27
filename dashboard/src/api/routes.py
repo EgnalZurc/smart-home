@@ -66,7 +66,7 @@ async def get_immich_health():
     """Health check for Immich photo server."""
     try:
         async with httpx.AsyncClient(timeout=4.0) as client:
-            r = await client.get("http://immich-server:2283/api/server/ping")
+            r = await client.get("http://immich_server:2283/api/server/ping")
             return {"online": r.status_code == 200 and r.json().get("res") == "pong"}
     except Exception:
         return {"online": False}
