@@ -9,7 +9,7 @@
 4. Reestructure el proyecto por servicios para mejor organización
 5. Excluya archivos de steering del repositorio GitHub
 
-**Estado**: 🚧 EN PROGRESO (Fases 0-4 completadas, Fase 5 en curso)
+**Estado**: 🚧 EN PROGRESO (Fases 0-4 y 5A completadas, siguiente: Fase 5B)
 
 ---
 
@@ -134,9 +134,52 @@ docker ps | grep immich
 
 ## Fases del Proyecto
 
+### Diagrama de Dependencias
+
+```
+Fase 0 ─────────────────────────────────────────────────────────────┐
+   │                                                                 │
+   ▼                                                                 │
+Fase 1 ─────────────────────────────────────────────────────────────┤
+   │                                                                 │
+   ├──────────────┬──────────────┐                                  │
+   ▼              ▼              │                                  │
+Fase 2         Fase 4            │ (preparación local)              │
+   │         (Tests CI)          │                                  │
+   ▼              │              │                                  │
+Fase 3            │              │                                  │
+(Docker Hub)      │              │                                  │
+   │              │              │                                  │
+   └──────┬───────┘              │                                  │
+          ▼                      │                                  │
+       Fase 5A ──────────────────┘                                  │
+    (Deploy workflow - LOCAL)                                       │
+          │                                                         │
+          │  ← ← ← CORTE: Aquí termina trabajo LOCAL → → →          │
+          │                                                         │
+          ▼                                                         │
+       Fase 5B ─────────────────────────────────────────────────────┤
+    (Preparar Pi: backup + estructura)                              │
+          │                                                         │
+          ▼                                                         │
+       Fase 6 ──────────────────────────────────────────────────────┤
+    (Deploy inicial + cleanup código)                               │
+          │                                                         │
+          ▼                                                         │
+       Fase 7 ──────────────────────────────────────────────────────┤
+    (Validación)                                                    │
+          │                                                         │
+          ▼                                                         │
+       Fase 8 ──────────────────────────────────────────────────────┘
+    (Documentación + limpieza final)
+```
+
+---
+
 ### Fase 0: Preparación y Backup
 **Estado**: ✅ COMPLETADA
 **Duración estimada**: 30 min
+**Dependencias**: Ninguna
 
 - [x] 0.1 Crear backup completo del estado actual
   - Commit de todo el código actual
@@ -320,79 +363,23 @@ docker push egnal/smart-home-baby-gifts:latest
 **Duración estimada**: 1-2 horas
 **Dependencias**: Fase 1 completada
 
-> **Nota**: El workflow se ejecuta pero algunos tests de integración fallan por paths hardcodeados antiguos (`src/backend/static`). Esto se arreglará más adelante, no bloquea la migración.
+> **Nota**: El workflow se ejecuta pero algunos tests de integración fallan por paths hardcodeados antiguos (`src/backend/static`). Esto se arreglará en Fase 8, no bloquea la migración.
 
-#### 4.1 Crear .github/workflows/test.yml
-
-```yaml
-name: Tests
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-jobs:
-  detect-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      dashboard: ${{ steps.filter.outputs.dashboard }}
-      ac-service: ${{ steps.filter.outputs.ac-service }}
-      baby-gifts: ${{ steps.filter.outputs.baby-gifts }}
-      vacaciones: ${{ steps.filter.outputs.vacaciones }}
-      casita: ${{ steps.filter.outputs.casita }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v2
-        id: filter
-        with:
-          filters: |
-            dashboard:
-              - 'dashboard/**'
-            ac-service:
-              - 'services/ac-service/**'
-            baby-gifts:
-              - 'services/baby-gifts-service/**'
-            vacaciones:
-              - 'services/vacaciones-service/**'
-            casita:
-              - 'services/casita-suenos/**'
-
-  test-dashboard:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.dashboard == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - run: pip install -r dashboard/requirements.txt pytest
-      - run: pytest dashboard/tests/
-
-  # ... similar para otros servicios
-
-  notify-failure:
-    needs: [test-dashboard]
-    if: failure()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Send notification
-        run: echo "Tests failed - notification would be sent here"
-```
-
-#### 4.2 Verificación
-- [ ] Push de prueba dispara tests
-- [ ] Solo se ejecutan tests de servicios modificados
+#### 4.1 Crear .github/workflows/test.yml ✅
+#### 4.2 Verificación ✅
+- [x] Push de prueba dispara tests
+- [x] Workflow detecta cambios por servicio
 
 ---
 
-### Fase 5: GitHub Actions - Deploy Manual
-**Estado**: 🚧 EN CURSO (workflows creados, secrets configurados, pendiente test)
-**Duración estimada**: 2-3 horas
+### Fase 5A: GitHub Actions - Deploy Workflow (LOCAL)
+**Estado**: ✅ COMPLETADA (commit 5ba6095)
+**Duración estimada**: 1-2 horas
 **Dependencias**: Fases 3 y 4 completadas
 
-#### 5.1 Configurar secrets en GitHub ✅
+> **Esta fase es solo preparación local**. El workflow no se puede probar hasta que la Pi esté lista (Fase 5B).
+
+#### 5A.1 Configurar secrets en GitHub ✅
 
 | Secret | Valor | Estado |
 |--------|-------|--------|
@@ -401,216 +388,30 @@ jobs:
 | `PI_SSH_USER` | pi | ✅ Configurado |
 | `PI_SSH_KEY` | Clave privada SSH | ✅ Configurado |
 
-> **Nota**: Se usa `DOCKERHUB_TOKEN` en lugar de `DOCKERHUB_USERNAME` + token separados. El username `egnal` está hardcodeado en el workflow.
+#### 5A.2 Crear .github/workflows/deploy.yml ✅
 
-#### 5.2 Crear .github/workflows/deploy.yml
+El workflow:
+1. Recibe input del servicio a deployar (all, dashboard, ac-service, etc.)
+2. Construye imagen Docker para linux/arm64
+3. Push a Docker Hub con tags `:latest` y `:sha`
+4. SSH a la Pi y ejecuta `docker-compose pull && up -d`
 
-```yaml
-name: Deploy to Raspberry Pi
-on:
-  workflow_dispatch:
-    inputs:
-      service:
-        description: 'Servicio a deployar'
-        required: true
-        type: choice
-        options:
-          - all
-          - dashboard
-          - ac-service
-          - baby-gifts-service
-          - vacaciones-service
-          - casita-suenos
+#### 5A.3 Crear docker-compose.prod.yml ✅
 
-jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build and push
-        run: |
-          # Build según el servicio seleccionado
-          # Push a Docker Hub con tag :latest y :${{ github.sha }}
+Archivo en el repo que usa imágenes de Docker Hub (no builds locales).
 
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: SSH and deploy
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.PI_SSH_HOST }}
-          username: ${{ secrets.PI_SSH_USER }}
-          key: ${{ secrets.PI_SSH_KEY }}
-          script: |
-            cd ~/smart-home-prod
-            docker-compose pull ${{ github.event.inputs.service }}
-            docker-compose up -d ${{ github.event.inputs.service }}
-```
+#### 5A.4 Crear hook de Kiro ✅
 
-#### 5.3 Crear hook de Kiro para deploy desde chat
-
-**Ubicación**: `.kiro/hooks/deploy-service.json`
-
-```json
-{
-  "version": "v1",
-  "hooks": [{
-    "name": "Deploy Service",
-    "trigger": "UserPromptSubmit",
-    "matcher": "^deploy\\s+",
-    "action": {
-      "type": "agent",
-      "prompt": "El usuario quiere deployar un servicio a la Raspberry Pi. Ejecuta: gh workflow run deploy.yml -f service=<nombre>. Servicios: all, dashboard, ac-service, baby-gifts-service, vacaciones-service, casita-suenos. Confirma el resultado del comando."
-    }
-  }]
-}
-```
-
-#### 5.4 Crear docker-compose.prod.yml para la Pi
-
-```yaml
-# docker-compose.prod.yml - Para producción en Raspberry Pi
-# Solo usa imágenes de Docker Hub, no builds locales
-
-services:
-  mosquitto:
-    image: eclipse-mosquitto:2
-    container_name: mosquitto
-    restart: unless-stopped
-    volumes:
-      - ./infrastructure/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
-      - ./data/mosquitto/data:/mosquitto/data
-      - ./data/mosquitto/log:/mosquitto/log
-    networks:
-      - smart-home
-
-  zigbee2mqtt:
-    image: koenkk/zigbee2mqtt:latest
-    container_name: zigbee2mqtt
-    restart: unless-stopped
-    depends_on:
-      - mosquitto
-    volumes:
-      - ./data/zigbee2mqtt:/app/data
-      - /run/udev:/run/udev:ro
-    devices:
-      - /dev/ttyUSB0:/dev/ttyUSB0
-    environment:
-      - TZ=Europe/Madrid
-    networks:
-      - smart-home
-
-  dashboard:
-    image: egnal/smart-home-dashboard:latest
-    container_name: smart-home-backend
-    restart: unless-stopped
-    volumes:
-      - ./data/backend:/app/data
-      - ./infrastructure/nginx/.htpasswd:/etc/nginx/.htpasswd:ro
-    env_file:
-      - .env
-    environment:
-      - TZ=Europe/Madrid
-    networks:
-      - smart-home
-
-  ac-service:
-    image: egnal/smart-home-ac-service:latest
-    container_name: ac-service
-    restart: unless-stopped
-    volumes:
-      - ./data/ac-service:/app/data
-    env_file:
-      - .env
-    environment:
-      - TZ=Europe/Madrid
-      - MQTT_BROKER=mosquitto
-    networks:
-      - smart-home
-
-  baby-gifts-service:
-    image: egnal/smart-home-baby-gifts:latest
-    container_name: baby-gifts-service
-    restart: unless-stopped
-    volumes:
-      - ./data/baby-gifts-service:/app/data
-    environment:
-      - TZ=Europe/Madrid
-    networks:
-      - smart-home
-
-  vacaciones-service:
-    image: egnal/smart-home-vacaciones:latest
-    container_name: vacaciones-service
-    restart: unless-stopped
-    volumes:
-      - ./data/vacaciones-service:/app/data
-    environment:
-      - TZ=Europe/Madrid
-    networks:
-      - smart-home
-
-  casita-suenos:
-    image: egnal/smart-home-casita-suenos:latest
-    container_name: casita-suenos
-    restart: unless-stopped
-    volumes:
-      - ./data/casita-suenos:/app/data
-    env_file:
-      - .env
-    environment:
-      - TZ=Europe/Madrid
-    networks:
-      - smart-home
-
-  nginx:
-    image: nginx:alpine
-    container_name: nginx-reverse-proxy
-    restart: unless-stopped
-    depends_on:
-      - dashboard
-      - zigbee2mqtt
-    ports:
-      - 80:80
-      - 8443:443
-    volumes:
-      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./infrastructure/nginx/.htpasswd:/etc/nginx/.htpasswd:ro
-      - ./infrastructure/nginx/certs:/etc/nginx/certs:ro
-      - ./data/nginx/logs:/var/log/nginx
-    networks:
-      - smart-home
-
-  docker-socket-proxy:
-    image: ghcr.io/tecnativa/docker-socket-proxy:latest
-    container_name: docker-socket-proxy
-    restart: unless-stopped
-    environment:
-      CONTAINERS: 1
-      POST: 1
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - smart-home
-
-networks:
-  smart-home:
-    driver: bridge
-```
+`.kiro/hooks/deploy-service.json` para deployar desde chat.
 
 ---
 
-### Fase 6: Deploy Pi - Backup → Cleanup → Deploy (en este orden exacto)
-**Estado**: ⬜ Pendiente
-**Duración estimada**: 2-3 horas
-**Dependencias**: Fase 5 completada
+### Fase 5B: Preparar Raspberry Pi (backup + estructura)
+**Estado**: ⬜ PENDIENTE
+**Duración estimada**: 1 hora
+**Dependencias**: Fase 5A completada
+
+> **CRÍTICO**: Esta fase prepara la Pi para recibir deploys. El workflow de deploy (5A) espera que exista `~/smart-home-prod`.
 
 #### ⚠️ RECORDATORIO: DATOS QUE NO SE TOCAN
 
@@ -620,17 +421,23 @@ networks:
 | **Vaultwarden** | `~/projects/vaultwarden/` | ❌ NO TOCAR - servicio independiente |
 | **Valheim** | `~/projects/valheim-server/` | ❌ NO TOCAR - servicio independiente |
 
-Estos servicios tienen sus propios docker-compose y seguirán funcionando sin cambios.
-
-#### 6.1 ⚠️ BACKUP DATOS CRÍTICOS
-
-**ANTES DE CUALQUIER CAMBIO**, respaldar datos que Virchu puede estar editando:
+#### 5B.1 Verificar servicios independientes
 
 ```bash
-# En la Pi - Ejecutar PRIMERO
 ssh pi@raspberrypi.local
 
-# 1. Backup del JSON de regalos (CRÍTICO)
+# Verificar Immich en discos externos
+df -h | grep immich
+docker ps | grep immich
+
+# Verificar otros servicios independientes
+docker ps | grep -E "vaultwarden|valheim"
+```
+
+#### 5B.2 Backup de datos críticos
+
+```bash
+# 1. Backup del JSON de regalos (CRÍTICO - Virchu puede estar editando)
 cp ~/projects/smart-home/data/baby-gifts-service/gifts.json ~/backup_gifts_$(date +%Y%m%d_%H%M%S).json
 cp ~/projects/smart-home/data/baby-gifts-service/baby_gifts.db ~/backup_baby_gifts_$(date +%Y%m%d_%H%M%S).db
 
@@ -639,47 +446,18 @@ tar -czvf ~/backup_data_$(date +%Y%m%d_%H%M%S).tar.gz ~/projects/smart-home/data
 
 # 3. Backup de archivos .env
 cp ~/projects/smart-home/.env ~/backup_env_smart_home.env
-cp ~/projects/ac-service/.env ~/backup_env_ac_service.env
-cp ~/projects/casita-suenos/.env ~/backup_env_casita_suenos.env
-
-# 4. Subir gifts.json actualizado al repo (por si Virchu hizo cambios)
-# Esto se hace desde Windows después de copiar el archivo
+cp ~/projects/ac-service/.env ~/backup_env_ac_service.env 2>/dev/null || true
+cp ~/projects/casita-suenos/.env ~/backup_env_casita_suenos.env 2>/dev/null || true
 ```
 
-**Verificar contenido del backup de gifts.json**:
-El archivo contiene:
-- Lista completa de regalos con: id, name, description, url, price_range, category, priority
-- Estado de reservas: reserved_by, reserved_by_name, reserved_at
-- Categorías disponibles
-
-#### 6.2 Subir última versión de datos al repo
-
-```powershell
-# En Windows
-scp pi@raspberrypi.local:~/projects/smart-home/data/baby-gifts-service/gifts.json C:\Users\acmls\Documents\Development\smart-home\services\baby-gifts-service\data\gifts.json
-git add services/baby-gifts-service/data/gifts.json
-git commit -m "chore: backup gifts.json before migration"
-git push origin main
-```
-
-#### 6.3 Cleanup de la Raspberry Pi
+#### 5B.3 Crear estructura de producción (SIN borrar nada todavía)
 
 ```bash
-# ⚠️ IMPORTANTE: Solo borrar proyectos de smart-home
-# NO TOCAR: ~/projects/immich, ~/projects/vaultwarden, ~/projects/valheim-server
-
-# 1. Parar SOLO los contenedores de smart-home
-cd ~/projects/smart-home
-docker-compose down
-cd ~/projects/ac-service && docker-compose down
-cd ~/projects/vacaciones-service && docker-compose down
-cd ~/projects/casita-suenos && docker-compose down
-
-# 2. Crear nueva estructura de producción
+# Crear nueva estructura
 mkdir -p ~/smart-home-prod
 cd ~/smart-home-prod
 
-# 3. Copiar archivos necesarios
+# Crear subdirectorios
 mkdir -p data infrastructure
 
 # Copiar datos persistentes
@@ -692,11 +470,68 @@ cp -r ~/projects/smart-home/infrastructure/mosquitto ./infrastructure/
 # Copiar .env consolidado
 cp ~/projects/smart-home/.env ./.env
 
-# 4. Copiar docker-compose.prod.yml (se habrá deployado desde GitHub)
-# O crearlo manualmente basándose en el template de arriba
+# Copiar docker-compose.prod.yml desde el repo
+# Opción A: Si tienes git en la Pi
+curl -o docker-compose.yml https://raw.githubusercontent.com/EgnalZurc/smart-home/main/docker-compose.prod.yml
 
-# 5. Eliminar código fuente antiguo DE SMART-HOME SOLAMENTE
-# ⚠️ VERIFICAR que son las carpetas correctas antes de ejecutar
+# Opción B: Crear manualmente (copiar contenido del repo)
+```
+
+#### 5B.4 Verificar estructura
+
+```bash
+ls -la ~/smart-home-prod/
+# Debe mostrar: data/, infrastructure/, .env, docker-compose.yml
+```
+
+---
+
+### Fase 6: Deploy inicial + Cleanup código
+**Estado**: ⬜ PENDIENTE
+**Duración estimada**: 1-2 horas
+**Dependencias**: Fase 5B completada
+
+> **Esta fase hace el cambio real**: para servicios antiguos, levanta nuevos desde Docker Hub, y elimina código fuente.
+
+#### 6.1 Parar servicios actuales (smart-home solamente)
+
+```bash
+# ⚠️ NO tocar Immich, Vaultwarden, Valheim
+cd ~/projects/smart-home && docker-compose down
+cd ~/projects/ac-service && docker-compose down 2>/dev/null || true
+cd ~/projects/vacaciones-service && docker-compose down 2>/dev/null || true
+cd ~/projects/casita-suenos && docker-compose down 2>/dev/null || true
+```
+
+#### 6.2 Primer deploy desde Docker Hub
+
+```bash
+cd ~/smart-home-prod
+
+# Pull de todas las imágenes (esto tarda la primera vez)
+docker-compose pull
+
+# Levantar servicios
+docker-compose up -d
+
+# Verificar
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
+```
+
+#### 6.3 Verificación rápida antes de borrar código
+
+```bash
+# Verificar que los servicios responden
+curl -s http://localhost:8080/health || echo "Dashboard no responde"
+curl -s http://localhost:8004/health || echo "Baby-gifts no responde"
+
+# Si todo OK, continuar. Si falla, NO borrar código todavía.
+```
+
+#### 6.4 Cleanup - Eliminar código fuente (solo si 6.3 OK)
+
+```bash
+# ⚠️ VERIFICAR que son las carpetas correctas
 rm -rf ~/projects/smart-home
 rm -rf ~/projects/ac-service
 rm -rf ~/projects/vacaciones-service
@@ -708,37 +543,21 @@ rm -rf ~/repos/smart-home.git
 # rm -rf ~/projects/vaultwarden   # ¡NO! Contraseñas
 # rm -rf ~/projects/valheim-server # ¡NO! Servidor de juego
 
-# 6. Limpiar Docker (solo imágenes no usadas, no volúmenes de otros servicios)
+# Limpiar imágenes Docker antiguas (NO volúmenes)
 docker image prune -a -f
-# NO usar: docker system prune -a --volumes -f (borraría volúmenes de Immich)
-```
-
-#### 6.4 Deploy inicial desde imágenes
-
-```bash
-cd ~/smart-home-prod
-
-# Pull de todas las imágenes
-docker-compose pull
-
-# Levantar servicios
-docker-compose up -d
-
-# Verificar
-docker ps
 ```
 
 #### 6.5 Estructura final en Pi
 
 ```
-~/smart-home-prod/
-├── docker-compose.yml          # Referencias a images de Docker Hub
-├── .env                        # Todas las variables de entorno
-├── data/                       # Volúmenes persistentes
+~/smart-home-prod/           # NUEVA ubicación
+├── docker-compose.yml       # Referencias a images de Docker Hub
+├── .env                     # Variables de entorno
+├── data/                    # Volúmenes persistentes
 │   ├── backend/
 │   ├── baby-gifts-service/
 │   │   ├── baby_gifts.db
-│   │   └── gifts.json          # 🎁 Datos de Virchu preservados
+│   │   └── gifts.json       # 🎁 Datos de Virchu preservados
 │   ├── ac-service/
 │   ├── vacaciones-service/
 │   ├── casita-suenos/
@@ -747,30 +566,20 @@ docker ps
 │   └── nginx/
 └── infrastructure/
     ├── nginx/
-    │   ├── nginx.conf
-    │   ├── conf.d/
-    │   ├── .htpasswd
-    │   └── certs/
     └── mosquitto/
-        └── mosquitto.conf
+
+~/projects/immich/           # INTACTO - servicio independiente
+~/projects/vaultwarden/      # INTACTO - servicio independiente
+~/projects/valheim-server/   # INTACTO - servicio independiente
+
+/mnt/immich/                 # INTACTO - disco externo con fotos
+/mnt/immich-backup/          # INTACTO - disco externo con backup
 ```
-
-**Lo que se ELIMINA**:
-- ❌ Todo el código fuente Python
-- ❌ Repositorios Git
-- ❌ Tests
-- ❌ Archivos de desarrollo
-
-**Lo que PERMANECE**:
-- ✅ Datos persistentes (data/)
-- ✅ Configuración de infra (nginx, mosquitto)
-- ✅ Variables de entorno (.env)
-- ✅ Docker y docker-compose
 
 ---
 
 ### Fase 7: Validación
-**Estado**: ⬜ Pendiente
+**Estado**: ⬜ PENDIENTE
 **Duración estimada**: 1-2 horas
 **Dependencias**: Fase 6 completada
 
@@ -950,23 +759,24 @@ git checkout pre-migration-v1
 
 ## Preguntas Pendientes
 
-- [ ] ¿Usuario de Docker Hub a usar?
-- [ ] ¿Email para notificaciones de CI?
-- [ ] ¿IP fija de la Pi o usar Tailscale hostname?
+- [x] ¿Usuario de Docker Hub a usar? → `egnal`
+- [ ] ¿Email para notificaciones de CI? (opcional)
+- [x] ¿IP fija de la Pi o usar hostname? → `raspberrypi.local`
 
 ---
 
 ## Tiempo Total Estimado
 
-| Fase | Tiempo |
-|------|--------|
-| Fase 0: Preparación | 30 min |
-| Fase 1: Reestructuración | 2-3 horas |
-| Fase 2: Dockerfiles | 1-2 horas |
-| Fase 3: Docker Hub | 30 min |
-| Fase 4: Tests CI | 1-2 horas |
-| Fase 5: Deploy CI | 2-3 horas |
-| Fase 6: Deploy Pi | 2-3 horas |
-| Fase 7: Validación | 1-2 horas |
-| Fase 8: Documentación | 1 hora |
-| **TOTAL** | **11-17 horas** |
+| Fase | Descripción | Tiempo | Estado |
+|------|-------------|--------|--------|
+| Fase 0 | Preparación | 30 min | ✅ |
+| Fase 1 | Reestructuración | 2-3 horas | ✅ |
+| Fase 2 | Dockerfiles | 1-2 horas | ✅ |
+| Fase 3 | Docker Hub | 30 min | ✅ |
+| Fase 4 | Tests CI | 1-2 horas | ✅ |
+| Fase 5A | Deploy workflow (LOCAL) | 1-2 horas | ✅ |
+| Fase 5B | Preparar Pi (backup + estructura) | 1 hora | ⬜ **SIGUIENTE** |
+| Fase 6 | Deploy inicial + cleanup | 1-2 horas | ⬜ |
+| Fase 7 | Validación | 1-2 horas | ⬜ |
+| Fase 8 | Documentación | 1 hora | ⬜ |
+| **TOTAL** | | **10-16 horas** | ~60% completado |
