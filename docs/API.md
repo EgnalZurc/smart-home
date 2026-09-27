@@ -28,22 +28,22 @@ Each FastAPI service exposes auto-generated API documentation:
 
 | Service | Swagger UI | OpenAPI Spec | ReDoc |
 |---------|------------|--------------|-------|
-| Dashboard | `/docs` | `/openapi.json` | `/redoc` |
-| AC Service | `http://ac-service:8002/docs` | `http://ac-service:8002/openapi.json` | `http://ac-service:8002/redoc` |
-| Baby Gifts | `http://baby-gifts-service:8004/docs` | `http://baby-gifts-service:8004/openapi.json` | `http://baby-gifts-service:8004/redoc` |
-| Vacaciones | `http://vacaciones-service:8003/docs` | `http://vacaciones-service:8003/openapi.json` | `http://vacaciones-service:8003/redoc` |
+| Dashboard | `/swagger` | `/openapi.json` | `/redoc` |
+| AC Service | `http://ac-service:8002/swagger` | `http://ac-service:8002/openapi.json` | `http://ac-service:8002/redoc` |
+| Baby Gifts | `http://baby-gifts-service:8004/swagger` | `http://baby-gifts-service:8004/openapi.json` | `http://baby-gifts-service:8004/redoc` |
+| Vacaciones | `http://vacaciones-service:8003/swagger` | `http://vacaciones-service:8003/openapi.json` | `http://vacaciones-service:8003/redoc` |
 | Casita Sueños | ❌ N/A (raw HTTP) | ❌ N/A | ❌ N/A |
 
 ### Accessing Swagger UI
 
 **Via nginx (external):**
-- Dashboard: `https://raspberrypi.tailaa37cd.ts.net/docs`
+- Dashboard: `https://raspberrypi.tailaa37cd.ts.net/swagger`
 
 **Via SSH tunnel (internal services):**
 ```bash
 # Forward AC service docs to localhost
 ssh -L 8002:ac-service:8002 pi@raspberrypi
-# Then open: http://localhost:8002/docs
+# Then open: http://localhost:8002/swagger
 ```
 
 **From Pi directly:**

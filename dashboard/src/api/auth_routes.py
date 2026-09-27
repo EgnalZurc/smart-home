@@ -39,7 +39,7 @@ import user_profiles
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/auth")
+router = APIRouter(prefix="/auth", tags=["🔐 Auth"])
 
 # ---------------------------------------------------------------------------
 # Injected configuration (set by main.py lifespan)

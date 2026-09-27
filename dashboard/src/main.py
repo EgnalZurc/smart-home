@@ -68,7 +68,7 @@ _AUTH_PUBLIC_PREFIXES = (
     "/static/manifest.json",
     "/static/favicon.ico",
     "/favicon.ico",
-    "/docs",          # Swagger UI
+    "/swagger",       # Swagger UI
     "/redoc",         # ReDoc UI
     "/openapi.json",  # OpenAPI spec
 )
@@ -147,10 +147,74 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 
 # --- FastAPI App ---
+# OpenAPI tags for organized documentation
+tags_metadata = [
+    {
+        "name": "🏠 Dashboard",
+        "description": "Main dashboard endpoints (root service)",
+    },
+    {
+        "name": "🔐 Auth",
+        "description": "Authentication and session management",
+    },
+    {
+        "name": "❤️ Health",
+        "description": "Health check endpoints for all services",
+    },
+    {
+        "name": "🏡 Casita Sueños",
+        "description": "Property search and monitoring (services/casita-suenos)",
+    },
+    {
+        "name": "📦 Containers",
+        "description": "Docker container management",
+    },
+    {
+        "name": "⚙️ System",
+        "description": "Raspberry Pi system stats and mode control",
+    },
+    {
+        "name": "🌍 Proxy",
+        "description": "External API proxies (flood risk, fire data)",
+    },
+]
+
 app = FastAPI(
-    title="Smart Home Control",
-    version="0.1.0",
+    title="Smart Home API",
+    description="""
+## Smart Home Control Platform
+
+API documentation for all Smart Home services.
+
+### Services Architecture
+
+```
+smart-home/
+├── dashboard/          ← This service (auth, health proxies, SPA)
+└── services/
+    ├── ac-service/     → /smart-home/ac, /api/status, /api/sensors
+    ├── baby-gifts-service/ → /smart-home/baby-gifts, /api/baby-gifts
+    ├── vacaciones-service/ → /smart-home/vacaciones, /api/vacaciones
+    └── casita-suenos/  → /api/casita/* (proxied through dashboard)
+```
+
+### Authentication
+
+Most endpoints require authentication. Use the login page at `/auth/login` to obtain a session cookie.
+
+### Other Service APIs
+
+Each microservice has its own Swagger UI:
+- **AC Service**: `http://ac-service:8002/swagger`
+- **Baby Gifts**: `http://baby-gifts-service:8004/swagger`
+- **Vacaciones**: `http://vacaciones-service:8003/swagger`
+    """,
+    version="2.0.0",
     lifespan=lifespan,
+    docs_url="/swagger",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    openapi_tags=tags_metadata,
 )
 
 # AUTH middleware (must be added before CORS so unauthenticated requests
@@ -196,13 +260,13 @@ def _serve_html(filename: str):
     )
 
 # DASH-1: Platform dashboard
-@app.get("/smart-home")
+@app.get("/smart-home", tags=["🏠 Dashboard"])
 async def serve_dashboard():
     """Serves the Smart Home platform dashboard."""
     return _serve_html("dashboard.html")
 
 # AUTH-LOGIN: Serve login page via static path too
-@app.get("/auth/login/page")
+@app.get("/auth/login/page", tags=["🔐 Auth"])
 async def serve_login():
     """Serves the login page (also served directly by auth_routes)."""
     return _serve_html("login.html")
@@ -210,7 +274,7 @@ async def serve_login():
 
 
 # CASITA-URL: Casita Sueños detail page
-@app.get("/smart-home/casita")
+@app.get("/smart-home/casita", tags=["🏡 Casita Sueños"])
 async def serve_casita():
     """Serves the Casita Sueños detail page."""
     return _serve_html("casita.html")
@@ -223,7 +287,7 @@ if frontend_path.exists():
 
 # ── Proxies para casita.html (CORS) ──────────────────────────────────────────
 
-@app.get("/api/proxy/flood")
+@app.get("/api/proxy/flood", tags=["🌍 Proxy"])
 async def proxy_flood(lat: float, lon: float):
     """
     Riesgo de inundación multicapa para una coordenada.
@@ -396,7 +460,7 @@ async def proxy_flood(lat: float, lon: float):
     }
 
 
-@app.get("/api/proxy/firms")
+@app.get("/api/proxy/firms", tags=["🌍 Proxy"])
 async def proxy_firms(lat: float, lon: float):
     """
     Proxy para NASA FIRMS — focos de calor VIIRS SNPP últimos 3 años.
@@ -484,7 +548,7 @@ async def proxy_firms(lat: float, lon: float):
         "peticiones": len(windows),
     }
 
-@app.get("/health")
+@app.get("/health", tags=["❤️ Health"])
 def health():
-    """Health check."""
+    """Health check for the dashboard service."""
     return {"status": "ok"}

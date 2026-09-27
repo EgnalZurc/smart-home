@@ -40,7 +40,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Vacaciones Service", version="1.0.0")
+app = FastAPI(
+    title="Vacaciones Service",
+    version="1.0.0",
+    docs_url="/swagger",
+    redoc_url="/redoc",
+)
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────

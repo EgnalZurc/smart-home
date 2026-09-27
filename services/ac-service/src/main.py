@@ -257,7 +257,13 @@ async def lifespan(app: FastAPI):
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="AC Service", version="1.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="AC Service",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/swagger",
+    redoc_url="/redoc",
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,

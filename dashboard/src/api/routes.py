@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api")
 # ── Health checks ────────────────────────────────────────────────────────────
 
 
-@router.get("/health/backend")
+@router.get("/health/backend", tags=["❤️ Health"])
 async def get_backend_health():
     """Health check for the backend itself.
     Returns JSON (unlike nginx /health which returns plain text).
@@ -26,7 +26,7 @@ async def get_backend_health():
     return {"online": True}
 
 
-@router.get("/health/zigbee")
+@router.get("/health/zigbee", tags=["❤️ Health"])
 async def get_zigbee_health():
     """Proxy health check to ac-service (which manages Zigbee/MQTT)."""
     try:
@@ -37,7 +37,7 @@ async def get_zigbee_health():
         return {"online": False, "mqtt_connected": False, "active_sensors": 0}
 
 
-@router.get("/health/ac")
+@router.get("/health/ac", tags=["❤️ Health"])
 async def get_ac_health():
     """Health check for AC service."""
     try:
@@ -49,7 +49,7 @@ async def get_ac_health():
         return {"online": False}
 
 
-@router.get("/health/vacaciones")
+@router.get("/health/vacaciones", tags=["❤️ Health"])
 async def get_vacaciones_health():
     """Health check for Vacaciones service."""
     try:
@@ -61,7 +61,7 @@ async def get_vacaciones_health():
         return {"online": False}
 
 
-@router.get("/health/immich")
+@router.get("/health/immich", tags=["❤️ Health"])
 async def get_immich_health():
     """Health check for Immich photo server."""
     try:
@@ -72,7 +72,7 @@ async def get_immich_health():
         return {"online": False}
 
 
-@router.get("/health/casita")
+@router.get("/health/casita", tags=["❤️ Health"])
 async def get_casita_health():
     """Health check for Casita Sueños service."""
     try:
@@ -84,7 +84,7 @@ async def get_casita_health():
         return {"online": False}
 
 
-@router.get("/health/passwords")
+@router.get("/health/passwords", tags=["❤️ Health"])
 async def get_passwords_health():
     """Health check for Vaultwarden."""
     try:
@@ -96,7 +96,7 @@ async def get_passwords_health():
 
 
 
-@router.get("/health/valheim")
+@router.get("/health/valheim", tags=["❤️ Health"])
 async def get_valheim_health():
     """Health check for Valheim dedicated server.
 
@@ -142,7 +142,7 @@ async def get_valheim_health():
 
 
 
-@router.get("/health/valheim-admin")
+@router.get("/health/valheim-admin", tags=["❤️ Health"])
 async def get_valheim_admin_health():
     """Health check for Valheim Admin web app."""
     try:
@@ -156,8 +156,9 @@ async def get_valheim_admin_health():
 
 # ── Casita Sueños proxy routes ───────────────────────────────────────────────
 
-@router.get("/casita/status")
+@router.get("/casita/status", tags=["🏡 Casita Sueños"])
 async def get_casita_status():
+    """Get full status of Casita Sueños property monitor."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get("http://casita-suenos:8001/status")
@@ -167,8 +168,9 @@ async def get_casita_status():
                 "scraper_errors": [], "top_properties": []}
 
 
-@router.get("/casita/radar")
+@router.get("/casita/radar", tags=["🏡 Casita Sueños"])
 async def get_casita_radar(request: Request):
+    """Get properties above alert threshold (radar view)."""
     qs = str(request.url.query)
     url = "http://casita-suenos:8001/radar"
     if qs:
@@ -181,8 +183,9 @@ async def get_casita_radar(request: Request):
         return {"items": [], "total": 0, "offset": 0, "limit": 20, "has_more": False, "error": str(e)}
 
 
-@router.get("/casita/dismissed")
+@router.get("/casita/dismissed", tags=["🏡 Casita Sueños"])
 async def get_casita_dismissed():
+    """Get list of dismissed properties."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get("http://casita-suenos:8001/dismissed")
@@ -191,8 +194,9 @@ async def get_casita_dismissed():
         return {"properties": [], "error": str(e)}
 
 
-@router.get("/casita/schedule")
+@router.get("/casita/schedule", tags=["🏡 Casita Sueños"])
 async def get_casita_schedule():
+    """Get scraping schedule configuration."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get("http://casita-suenos:8001/schedule")
@@ -201,8 +205,9 @@ async def get_casita_schedule():
         return {"error": str(e)}
 
 
-@router.post("/casita/schedule")
+@router.post("/casita/schedule", tags=["🏡 Casita Sueños"])
 async def save_casita_schedule(request: Request):
+    """Update scraping schedule configuration."""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -212,8 +217,9 @@ async def save_casita_schedule(request: Request):
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.post("/casita/dismiss")
+@router.post("/casita/dismiss", tags=["🏡 Casita Sueños"])
 async def dismiss_casita_property(request: Request):
+    """Dismiss a property from radar."""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -223,8 +229,9 @@ async def dismiss_casita_property(request: Request):
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.post("/casita/undismiss")
+@router.post("/casita/undismiss", tags=["🏡 Casita Sueños"])
 async def undismiss_casita_property(request: Request):
+    """Restore a dismissed property to radar."""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -234,8 +241,9 @@ async def undismiss_casita_property(request: Request):
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.post("/casita/mark-viewed")
+@router.post("/casita/mark-viewed", tags=["🏡 Casita Sueños"])
 async def mark_casita_viewed(request: Request):
+    """Mark a property as viewed."""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -245,8 +253,9 @@ async def mark_casita_viewed(request: Request):
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.post("/casita/save-comment")
+@router.post("/casita/save-comment", tags=["🏡 Casita Sueños"])
 async def save_casita_comment(request: Request):
+    """Save a comment on a property."""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -256,8 +265,9 @@ async def save_casita_comment(request: Request):
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.get("/casita/summary")
+@router.get("/casita/summary", tags=["🏡 Casita Sueños"])
 async def get_casita_summary():
+    """Get AI-generated summary of interesting properties."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get("http://casita-suenos:8001/summary")
@@ -266,8 +276,9 @@ async def get_casita_summary():
         return {"content": None, "sent_at": None, "error": str(e)}
 
 
-@router.post("/casita/run-scraping")
+@router.post("/casita/run-scraping", tags=["🏡 Casita Sueños"])
 async def run_casita_scraping():
+    """Trigger manual property scraping."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post("http://casita-suenos:8001/run-scraping")
@@ -276,8 +287,9 @@ async def run_casita_scraping():
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.post("/casita/run-summary")
+@router.post("/casita/run-summary", tags=["🏡 Casita Sueños"])
 async def run_casita_summary():
+    """Trigger AI summary generation."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post("http://casita-suenos:8001/run-summary")
@@ -339,7 +351,7 @@ def _require_super(request: Request) -> str:
 
 
 
-@router.get("/containers")
+@router.get("/containers", tags=["📦 Containers"])
 async def get_containers(request: Request):
     """Return running state for all controllable services.
 
@@ -378,7 +390,7 @@ async def get_containers(request: Request):
     return result
 
 
-@router.post("/containers/{app_key}/stop")
+@router.post("/containers/{app_key}/stop", tags=["📦 Containers"])
 async def stop_service(app_key: str, request: Request):
     """Stop all containers for the given service app key.
 
@@ -404,7 +416,7 @@ async def stop_service(app_key: str, request: Request):
     return {"status": "ok" if all_ok else "partial", "results": results}
 
 
-@router.post("/containers/{app_key}/start")
+@router.post("/containers/{app_key}/start", tags=["📦 Containers"])
 async def start_service(app_key: str, request: Request):
     """Start all containers for the given service app key.
 
@@ -450,7 +462,7 @@ def _read_cpu_times() -> tuple[float, float]:
         return 0.0, 0.0
 
 
-@router.get("/system/stats")
+@router.get("/system/stats", tags=["⚙️ System"])
 async def get_system_stats(request: Request):
     """Return Raspberry Pi system resource usage.
 
@@ -565,7 +577,7 @@ PI_MODES = {
 }
 
 
-@router.get("/system/mode")
+@router.get("/system/mode", tags=["⚙️ System"])
 async def get_system_mode(request: Request):
     """Return current Pi mode based on which heavy services are running.
 
@@ -613,7 +625,7 @@ async def get_system_mode(request: Request):
     }
 
 
-@router.post("/system/mode/{mode}")
+@router.post("/system/mode/{mode}", tags=["⚙️ System"])
 async def set_system_mode(mode: str, request: Request):
     """Switch Pi to specified mode by stopping/starting container groups.
 
