@@ -133,12 +133,16 @@ jobs:
           platforms: linux/arm64
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Deploy to Raspberry Pi
+  # Deploy to Raspberry Pi (optional - requires network access)
+  # If this step fails, images are still in Docker Hub. Run manually:
+  #   ssh pi@raspberrypi.local "cd ~/smart-home-prod && docker compose pull && docker compose up -d"
+  # Or use: .\scripts\deploy.ps1 [service]
   # ─────────────────────────────────────────────────────────────────────────────
   deploy:
     needs: [build-dashboard, build-ac-service, build-baby-gifts, build-vacaciones, build-casita-suenos]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
+    continue-on-error: true  # Don't fail the workflow if SSH fails
     
     steps:
       - name: Deploy to Pi via SSH
@@ -147,6 +151,7 @@ jobs:
           host: ${{ secrets.PI_SSH_HOST }}
           username: ${{ secrets.PI_SSH_USER }}
           key: ${{ secrets.PI_SSH_KEY }}
+          timeout: 60s
           script: |
             cd ~/smart-home-prod
             
@@ -164,3 +169,15 @@ jobs:
             
             echo "=== Deploy complete ==="
             docker ps --format "table {{.Names}}\t{{.Status}}" | head -15
+      
+      - name: Deploy status
+        if: always()
+        run: |
+          echo "## Deploy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Images have been pushed to Docker Hub." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "If SSH deploy failed, run manually:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo 'ssh pi@raspberrypi.local "cd ~/smart-home-prod && docker compose pull && docker compose up -d"' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
