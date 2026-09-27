@@ -20,6 +20,65 @@ This document describes all the APIs exposed by the Smart Home platform. The ser
 
 Most endpoints require authentication via nginx `auth_request` directive. The dashboard handles authentication and sets session cookies.
 
+### Programmatic Authentication
+
+The auth system uses form-based login that returns session cookies. To authenticate programmatically:
+
+```bash
+# Using curl with cookie jar
+curl -c cookies.txt -X POST "https://raspberrypi.tailaa37cd.ts.net/auth/token" \
+  -d "username=YOUR_USER" \
+  -d "password=YOUR_PASS" \
+  -d "next_url=/smart-home" \
+  -L
+
+# Use the cookies for subsequent requests
+curl -b cookies.txt "https://raspberrypi.tailaa37cd.ts.net/api/containers"
+```
+
+```python
+# Using Python httpx
+import httpx
+
+with httpx.Client(follow_redirects=True) as client:
+    # Login (stores session cookie automatically)
+    client.post(
+        "https://raspberrypi.tailaa37cd.ts.net/auth/token",
+        data={"username": "USER", "password": "PASS", "next_url": "/smart-home"}
+    )
+    
+    # Authenticated requests
+    resp = client.get("https://raspberrypi.tailaa37cd.ts.net/api/containers")
+    print(resp.json())
+```
+
+```powershell
+# Using PowerShell with session
+$session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+Invoke-WebRequest -Uri "https://raspberrypi.tailaa37cd.ts.net/auth/token" `
+  -Method POST -Body @{username="USER"; password="PASS"; next_url="/smart-home"} `
+  -WebSession $session -MaximumRedirection 0 -ErrorAction SilentlyContinue
+
+# Authenticated request
+Invoke-RestMethod -Uri "https://raspberrypi.tailaa37cd.ts.net/api/containers" `
+  -WebSession $session
+```
+
+### Test Script
+
+A test script is provided at `scripts/test_api.py`:
+
+```bash
+# Set credentials
+export SMART_HOME_USER=your_username
+export SMART_HOME_PASS=your_password
+
+# Run tests
+python scripts/test_api.py -v
+```
+
+### Auth Endpoints
+
 ---
 
 ## Interactive API Documentation (Swagger/OpenAPI)
@@ -77,12 +136,37 @@ curl http://ac-service:8002/openapi.json | head -c 500
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
 | GET | `/auth/login` | Serve login page | No |
-| POST | `/auth/token` | Login with username/password | No |
+| POST | `/auth/token` | Login with username/password (form data) | No |
 | POST | `/auth/logout` | Logout and clear session | Yes |
-| GET | `/auth/me` | Get current user info | Yes |
+| GET | `/auth/me` | Get current user info and profile | Yes |
 | GET | `/auth/verify` | nginx auth_request verification | Cookie |
 | GET | `/auth/trust/approve` | Approve device trust (email link) | Signed |
 | GET | `/auth/trust/reject` | Reject device trust (email link) | Signed |
+
+#### POST /auth/token
+
+Form data parameters:
+- `username` (required): User's username
+- `password` (required): User's password  
+- `trusted` (optional): "true" to request device trust
+- `next_url` (optional): Redirect URL after login (default: "/smart-home")
+
+Returns:
+- 303 redirect with `session` cookie on success
+- HTML login page with error message on failure
+
+#### GET /auth/me
+
+Returns current user info:
+```json
+{
+  "username": "egnal",
+  "profile_key": "SUPER",
+  "show_config_apps": true,
+  "can_view_level": 1,
+  "can_edit_level": 1
+}
+```
 
 ### Container Management
 

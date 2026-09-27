@@ -189,7 +189,7 @@ class TestControllableContainersMapping:
 
     def test_all_expected_keys_present(self):
         from api.routes import CONTROLLABLE_CONTAINERS
-        assert set(CONTROLLABLE_CONTAINERS.keys()) == {"ac", "vacaciones", "casita", "photos", "passwords", "valheim"}
+        assert set(CONTROLLABLE_CONTAINERS.keys()) == {"ac", "vacaciones", "casita", "photos", "passwords", "valheim", "babygifts"}
 
     def test_ac_maps_to_ac_service_container(self):
         from api.routes import CONTROLLABLE_CONTAINERS
@@ -218,6 +218,10 @@ class TestControllableContainersMapping:
     def test_valheim_maps_to_valheim_server(self):
         from api.routes import CONTROLLABLE_CONTAINERS
         assert CONTROLLABLE_CONTAINERS["valheim"] == ["valheim-server"]
+
+    def test_babygifts_maps_to_baby_gifts_service(self):
+        from api.routes import CONTROLLABLE_CONTAINERS
+        assert CONTROLLABLE_CONTAINERS["babygifts"] == ["baby-gifts-service"]
 
     def test_no_container_name_in_multiple_keys(self):
         from api.routes import CONTROLLABLE_CONTAINERS

@@ -305,7 +305,10 @@ class TestDashboardSystemStats:
 
     def _html(self):
         from pathlib import Path
-        return Path("/home/pi/projects/smart-home/src/backend/static/dashboard.html").read_text()
+        # Use path relative to this test file
+        tests_dir = Path(__file__).parent  # tests/unit/api/
+        dashboard_root = tests_dir.parent.parent.parent  # dashboard/
+        return (dashboard_root / "src" / "static" / "dashboard.html").read_text()
 
     def test_res_btn_exists_in_html(self):
         assert 'res-btn' in self._html()

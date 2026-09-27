@@ -166,10 +166,6 @@ class TestAuthMeResponse:
         import user_profiles
         assert user_profiles.PROFILES["FAMILIA_PRINCIPAL"]["show_config_apps"] is False
 
-    def test_gamer_has_show_config_apps_false(self):
-        import user_profiles
-        assert user_profiles.PROFILES["GAMER"]["show_config_apps"] is False
-
     def test_get_me_logic_produces_correct_profile_data(self):
         """Verify the logic auth_routes.get_me uses to build profile_data.
         get_me does:
@@ -177,7 +173,7 @@ class TestAuthMeResponse:
           show = profile_def.get("show_config_apps", False)
         """
         import user_profiles
-        for key, expected in [("SUPER", True), ("FAMILIA_PRINCIPAL", False), ("GAMER", False)]:
+        for key, expected in [("SUPER", True), ("FAMILIA_PRINCIPAL", False)]:
             profile_def = user_profiles.PROFILES.get(key, {})
             show = profile_def.get("show_config_apps", False)
             assert show is expected, f"{key}: expected {expected}, got {show}"

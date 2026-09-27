@@ -10,8 +10,11 @@ Updated post-refactoring:
 import pytest
 from pathlib import Path
 
-BACKEND_STATIC = Path("/home/pi/projects/smart-home/src/backend/static")
-BACKEND_SRC    = Path("/home/pi/projects/smart-home/src/backend")
+# Use paths relative to this test file
+_TESTS_DIR = Path(__file__).parent
+_DASHBOARD_ROOT = _TESTS_DIR.parent.parent  # dashboard/
+BACKEND_SRC = _DASHBOARD_ROOT / "src"
+BACKEND_STATIC = BACKEND_SRC / "static"
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
@@ -208,7 +211,7 @@ class TestStopStartButtons:
         assert "preventDefault()" in html
 
     def test_load_container_states_function_exists(self):
-        assert "loadContainerStates" in html()
+        assert "loadContainerStates" in _html()
 
     def test_container_state_polling_interval(self):
         """Container states must be refreshed periodically."""
