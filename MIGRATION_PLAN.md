@@ -9,13 +9,56 @@
 4. Reestructure el proyecto por servicios para mejor organización
 5. Excluya archivos de steering del repositorio GitHub
 
-**Estado**: 📋 EN PLANIFICACIÓN
+**Estado**: 🚧 EN PROGRESO (Fases 0-4 completadas, Fase 5 en curso)
 
 ---
 
 ## Arquitectura Actual (investigada)
 
-### Estructura de datos en la Pi
+### ⚠️ DATOS CRÍTICOS - IMMICH (NO TOCAR)
+
+**Immich es un servicio INDEPENDIENTE** que gestiona las fotos de la familia. Sus datos están en discos duros externos y **NO forman parte de esta migración**.
+
+#### Ubicación de datos de Immich
+
+| Ruta | Disco | Tamaño | Contenido |
+|------|-------|--------|-----------|
+| `/mnt/immich` | HDD externo 1.8TB | ~1.8TB | Fotos y vídeos originales |
+| `/mnt/immich-backup` | HDD externo 458GB | ~458GB | Backup de Immich |
+
+#### Configuración de Immich (referencia)
+
+```
+Proyecto: ~/projects/immich/
+docker-compose.yml: Usa volúmenes montados en /mnt/immich
+```
+
+**¿Por qué Immich NO se toca en esta migración?**
+1. Es un proyecto completamente separado (`~/projects/immich/`)
+2. Sus datos están en discos duros externos montados, no en `~/projects/smart-home/`
+3. No tiene relación con el código de smart-home
+4. Seguirá funcionando con su docker-compose propio
+
+**Verificación antes de la migración:**
+```bash
+# Confirmar que los discos están montados correctamente
+df -h | grep immich
+# Debería mostrar:
+# /dev/sda1  1.8T  xxxG  xxxG  xx% /mnt/immich
+# /dev/sdb1  458G  xxxG  xxxG  xx% /mnt/immich-backup
+
+# Confirmar que Immich está corriendo
+docker ps | grep immich
+```
+
+**REGLA: Durante la Fase 6, NUNCA ejecutar comandos que afecten a:**
+- `/mnt/immich`
+- `/mnt/immich-backup`
+- `~/projects/immich/`
+
+---
+
+### Estructura de datos en la Pi (smart-home)
 
 ```
 ~/projects/smart-home/data/          # DATOS PERSISTENTES (CRÍTICO - NO BORRAR)
@@ -92,26 +135,26 @@
 ## Fases del Proyecto
 
 ### Fase 0: Preparación y Backup
-**Estado**: ⬜ Pendiente
+**Estado**: ✅ COMPLETADA
 **Duración estimada**: 30 min
 
-- [ ] 0.1 Crear backup completo del estado actual
+- [x] 0.1 Crear backup completo del estado actual
   - Commit de todo el código actual
-  - Tag de versión `pre-migration-v1`
-  - Push a GitHub como respaldo
+  - Tag de versión `pre-migration-v1` ✅
+  - Push a GitHub como respaldo ✅
   
-- [ ] 0.2 Documentar estructura actual
+- [x] 0.2 Documentar estructura actual
   - ✅ Ya documentado arriba
   
-- [ ] 0.3 Verificar acceso a servicios externos
-  - Crear cuenta en Docker Hub (si no existe)
-  - Verificar GitHub Actions está habilitado
-  - Verificar GitHub CLI (`gh`) instalado en Windows
+- [x] 0.3 Verificar acceso a servicios externos
+  - Docker Hub: usuario `egnal` ✅
+  - GitHub Actions habilitado ✅
+  - GitHub CLI (`gh`) instalado y autenticado (HTTPS) ✅
 
 ---
 
 ### Fase 1: Reestructuración de Carpetas
-**Estado**: ⬜ Pendiente
+**Estado**: ✅ COMPLETADA (commit 9ec70e9)
 **Duración estimada**: 2-3 horas
 **Dependencias**: Fase 0 completada
 
@@ -214,7 +257,7 @@ smart-home/
 ---
 
 ### Fase 2: Optimización de Dockerfiles
-**Estado**: ⬜ Pendiente
+**Estado**: ✅ COMPLETADA (commit b7464d2)
 **Duración estimada**: 1-2 horas
 **Dependencias**: Fase 1 completada
 
@@ -254,29 +297,30 @@ __pycache__/
 ---
 
 ### Fase 3: Configuración de Docker Hub
-**Estado**: ⬜ Pendiente
+**Estado**: ✅ COMPLETADA
 **Duración estimada**: 30 min
 **Dependencias**: Fase 2 completada
 
-#### 3.1 Crear repositorios
-- [ ] `egnal/smart-home-dashboard`
-- [ ] `egnal/smart-home-ac-service`
-- [ ] `egnal/smart-home-baby-gifts`
-- [ ] `egnal/smart-home-vacaciones`
-- [ ] `egnal/smart-home-casita-suenos`
+#### 3.1 Repositorios creados (automáticamente al hacer push)
+- [x] `egnal/smart-home-baby-gifts` (199MB - test exitoso)
+- [ ] Resto se crearán al deployar cada servicio
 
-#### 3.2 Test manual de push
+#### 3.2 Test manual de push ✅
 ```bash
-docker build -t <usuario>/smart-home-dashboard:test ./dashboard
-docker push <usuario>/smart-home-dashboard:test
+# Probado con baby-gifts-service
+docker build -t egnal/smart-home-baby-gifts:latest ./services/baby-gifts-service
+docker push egnal/smart-home-baby-gifts:latest
+# Resultado: 199MB imagen subida correctamente
 ```
 
 ---
 
 ### Fase 4: GitHub Actions - Tests Automáticos
-**Estado**: ⬜ Pendiente
+**Estado**: ✅ COMPLETADA (commit e6e0881)
 **Duración estimada**: 1-2 horas
 **Dependencias**: Fase 1 completada
+
+> **Nota**: El workflow se ejecuta pero algunos tests de integración fallan por paths hardcodeados antiguos (`src/backend/static`). Esto se arreglará más adelante, no bloquea la migración.
 
 #### 4.1 Crear .github/workflows/test.yml
 
@@ -344,19 +388,20 @@ jobs:
 ---
 
 ### Fase 5: GitHub Actions - Deploy Manual
-**Estado**: ⬜ Pendiente
+**Estado**: 🚧 EN CURSO (workflows creados, secrets configurados, pendiente test)
 **Duración estimada**: 2-3 horas
 **Dependencias**: Fases 3 y 4 completadas
 
-#### 5.1 Configurar secrets en GitHub
+#### 5.1 Configurar secrets en GitHub ✅
 
-| Secret | Valor |
-|--------|-------|
-| `DOCKERHUB_USERNAME` | Usuario de Docker Hub |
-| `DOCKERHUB_TOKEN` | Token de acceso |
-| `PI_SSH_HOST` | IP o hostname de la Pi |
-| `PI_SSH_USER` | pi |
-| `PI_SSH_KEY` | Clave privada SSH |
+| Secret | Valor | Estado |
+|--------|-------|--------|
+| `DOCKERHUB_TOKEN` | Token de acceso Docker Hub | ✅ Configurado |
+| `PI_SSH_HOST` | raspberrypi.local | ✅ Configurado |
+| `PI_SSH_USER` | pi | ✅ Configurado |
+| `PI_SSH_KEY` | Clave privada SSH | ✅ Configurado |
+
+> **Nota**: Se usa `DOCKERHUB_TOKEN` en lugar de `DOCKERHUB_USERNAME` + token separados. El username `egnal` está hardcodeado en el workflow.
 
 #### 5.2 Crear .github/workflows/deploy.yml
 
@@ -567,6 +612,16 @@ networks:
 **Duración estimada**: 2-3 horas
 **Dependencias**: Fase 5 completada
 
+#### ⚠️ RECORDATORIO: DATOS QUE NO SE TOCAN
+
+| Servicio | Ubicación | Acción |
+|----------|-----------|--------|
+| **Immich** | `/mnt/immich`, `/mnt/immich-backup`, `~/projects/immich/` | ❌ NO TOCAR - disco externo independiente |
+| **Vaultwarden** | `~/projects/vaultwarden/` | ❌ NO TOCAR - servicio independiente |
+| **Valheim** | `~/projects/valheim-server/` | ❌ NO TOCAR - servicio independiente |
+
+Estos servicios tienen sus propios docker-compose y seguirán funcionando sin cambios.
+
 #### 6.1 ⚠️ BACKUP DATOS CRÍTICOS
 
 **ANTES DE CUALQUIER CAMBIO**, respaldar datos que Virchu puede estar editando:
@@ -610,7 +665,10 @@ git push origin main
 #### 6.3 Cleanup de la Raspberry Pi
 
 ```bash
-# 1. Parar TODOS los contenedores
+# ⚠️ IMPORTANTE: Solo borrar proyectos de smart-home
+# NO TOCAR: ~/projects/immich, ~/projects/vaultwarden, ~/projects/valheim-server
+
+# 1. Parar SOLO los contenedores de smart-home
 cd ~/projects/smart-home
 docker-compose down
 cd ~/projects/ac-service && docker-compose down
@@ -637,15 +695,22 @@ cp ~/projects/smart-home/.env ./.env
 # 4. Copiar docker-compose.prod.yml (se habrá deployado desde GitHub)
 # O crearlo manualmente basándose en el template de arriba
 
-# 5. Eliminar código fuente antiguo
+# 5. Eliminar código fuente antiguo DE SMART-HOME SOLAMENTE
+# ⚠️ VERIFICAR que son las carpetas correctas antes de ejecutar
 rm -rf ~/projects/smart-home
 rm -rf ~/projects/ac-service
 rm -rf ~/projects/vacaciones-service
 rm -rf ~/projects/casita-suenos
 rm -rf ~/repos/smart-home.git
 
-# 6. Limpiar Docker
-docker system prune -a --volumes -f
+# ❌ NO EJECUTAR - Estos proyectos son independientes:
+# rm -rf ~/projects/immich        # ¡NO! Fotos en disco externo
+# rm -rf ~/projects/vaultwarden   # ¡NO! Contraseñas
+# rm -rf ~/projects/valheim-server # ¡NO! Servidor de juego
+
+# 6. Limpiar Docker (solo imágenes no usadas, no volúmenes de otros servicios)
+docker image prune -a -f
+# NO usar: docker system prune -a --volumes -f (borraría volúmenes de Immich)
 ```
 
 #### 6.4 Deploy inicial desde imágenes
