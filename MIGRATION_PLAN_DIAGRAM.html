@@ -18,6 +18,18 @@
             text-align: center;
             color: #00d9ff;
         }
+        .status-bar {
+            background: linear-gradient(90deg, #4caf50 60%, #333 60%);
+            height: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .status-text {
+            text-align: center;
+            color: #4caf50;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
         .diagram-container {
             background: #fff;
             border-radius: 12px;
@@ -27,7 +39,7 @@
         }
         .legend {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 15px;
             margin-top: 30px;
         }
@@ -35,6 +47,33 @@
             padding: 15px;
             border-radius: 8px;
             background: #16213e;
+            position: relative;
+        }
+        .legend-item.completed {
+            opacity: 0.7;
+        }
+        .legend-item.completed::after {
+            content: '✅';
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 20px;
+        }
+        .legend-item.current {
+            border: 2px solid #00d9ff;
+            box-shadow: 0 0 15px rgba(0, 217, 255, 0.3);
+        }
+        .legend-item.current::after {
+            content: '👉 SIGUIENTE';
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 12px;
+            background: #00d9ff;
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: bold;
         }
         .legend-item h3 {
             margin: 0 0 10px 0;
@@ -58,120 +97,166 @@
         .phase2 { border-left: 4px solid #4caf50; }
         .phase3 { border-left: 4px solid #9c27b0; }
         .phase4 { border-left: 4px solid #ffeb3b; }
-        .phase5 { border-left: 4px solid #e91e63; }
-        .phase6 { border-left: 4px solid #3f51b5; }
-        .phase7 { border-left: 4px solid #009688; }
+        .phase5a { border-left: 4px solid #e91e63; }
+        .phase5b { border-left: 4px solid #ff5722; }
+        .phase6 { border-left: 4px solid #f44336; }
+        .phase7 { border-left: 4px solid #3f51b5; }
+        .phase8 { border-left: 4px solid #009688; }
+        
+        .separator {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 15px;
+            background: linear-gradient(90deg, transparent, #00d9ff, transparent);
+            margin: 10px 0;
+            font-weight: bold;
+            color: #000;
+            border-radius: 4px;
+        }
+        
+        .warning-box {
+            background: #ff5722;
+            color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .warning-box h3 {
+            margin: 0 0 10px 0;
+        }
     </style>
 </head>
 <body>
     <h1>🚀 Plan de Migración CI/CD - Smart Home</h1>
     
+    <div class="status-text">Progreso: ~60% completado (Fases 0-4 y 5A ✅)</div>
+    <div class="status-bar"></div>
+    
     <div class="diagram-container">
         <pre class="mermaid">
 flowchart TB
-    subgraph FASE0["📋 Fase 0: Preparación (30 min)"]
+    subgraph FASE0["✅ Fase 0: Preparación (30 min)"]
         A1["Backup completo"]
         A2["Tag pre-migration-v1"]
-        A3["Crear cuenta Docker Hub"]
+        A3["Cuenta Docker Hub: egnal"]
     end
     
-    subgraph FASE1["📁 Fase 1: Reestructuración (2-3h)"]
+    subgraph FASE1["✅ Fase 1: Reestructuración (2-3h)"]
         B1["Crear estructura carpetas"]
         B2["Mover src/backend → dashboard/"]
         B3["Mover servicios → services/"]
-        B4["Actualizar .gitignore"]
-        B5["Verificar build local"]
     end
     
-    subgraph FASE2["🐳 Fase 2: Dockerfiles (1-2h)"]
+    subgraph FASE2["✅ Fase 2: Dockerfiles (1-2h)"]
         C1["Multi-stage builds"]
         C2[".dockerignore optimizados"]
         C3["Verificar tamaño < 150MB"]
     end
     
-    subgraph FASE3["☁️ Fase 3: Docker Hub (30 min)"]
-        D1["Crear repositorios"]
-        D2["Test push manual"]
+    subgraph FASE3["✅ Fase 3: Docker Hub (30 min)"]
+        D1["Repositorio egnal/smart-home-*"]
+        D2["Test push: baby-gifts ✅"]
     end
     
-    subgraph FASE4["🧪 Fase 4: Tests CI (1-2h)"]
+    subgraph FASE4["✅ Fase 4: Tests CI (1-2h)"]
         E1["Workflow test.yml"]
         E2["Detección cambios por servicio"]
-        E3["Notificaciones"]
     end
     
-    subgraph FASE5["🚀 Fase 5: Deploy CI (2-3h)"]
-        F1["Configurar secrets GitHub"]
+    subgraph FASE5A["✅ Fase 5A: Deploy Workflow LOCAL (1-2h)"]
+        F1["Secrets GitHub configurados"]
         F2["Workflow deploy.yml"]
         F3["docker-compose.prod.yml"]
-        F4["⭐ Hook Kiro para deploy"]
+        F4["Hook Kiro deploy"]
     end
     
-    subgraph FASE6["🔄 Fase 6: Deploy Pi (2-3h)"]
-        G1["1️⃣ Backup gifts.json + datos"]
-        G2["2️⃣ Cleanup código fuente Pi"]
-        G3["3️⃣ Deploy desde Docker Hub"]
+    subgraph CORTE["═══════ CORTE: LOCAL → PI ═══════"]
+        X["Aquí termina trabajo en Windows"]
     end
     
-    subgraph FASE7["✅ Fase 7: Validación (1-2h)"]
-        H1["Tests integración"]
-        H2["Tests manuales"]
-        H3["Verificar datos Virchu"]
+    subgraph FASE5B["⏳ Fase 5B: Preparar Pi (1h)"]
+        G0["Verificar Immich en discos externos"]
+        G1["Backup gifts.json + datos"]
+        G2["Crear ~/smart-home-prod"]
+        G3["Copiar data/ e infrastructure/"]
     end
     
-    subgraph FASE8["📚 Fase 8: Documentación (1h)"]
-        I1["Actualizar READMEs"]
-        I2["Actualizar steering"]
-        I3["Limpiar steering de GitHub"]
-        I4["Tag post-migration-v1"]
+    subgraph FASE6["⬜ Fase 6: Deploy + Cleanup (1-2h)"]
+        H1["Parar servicios antiguos"]
+        H2["docker-compose up -d"]
+        H3["Verificar funcionamiento"]
+        H4["Eliminar código fuente"]
+    end
+    
+    subgraph FASE7["⬜ Fase 7: Validación (1-2h)"]
+        I1["Tests integración"]
+        I2["Tests manuales"]
+        I3["Verificar datos Virchu"]
+    end
+    
+    subgraph FASE8["⬜ Fase 8: Documentación (1h)"]
+        J1["Actualizar READMEs"]
+        J2["Limpiar steering de GitHub"]
+        J3["Tag post-migration-v1"]
     end
     
     FASE0 --> FASE1
     FASE1 --> FASE2
-    FASE2 --> FASE3
-    FASE3 --> FASE5
     FASE1 --> FASE4
-    FASE4 --> FASE5
-    FASE5 --> FASE6
+    FASE2 --> FASE3
+    FASE3 --> FASE5A
+    FASE4 --> FASE5A
+    FASE5A --> CORTE
+    CORTE --> FASE5B
+    FASE5B --> FASE6
     FASE6 --> FASE7
     FASE7 --> FASE8
     
-    style FASE0 fill:#e1f5fe,color:#000
-    style FASE1 fill:#fff3e0,color:#000
-    style FASE2 fill:#e8f5e9,color:#000
-    style FASE3 fill:#f3e5f5,color:#000
-    style FASE4 fill:#fff8e1,color:#000
-    style FASE5 fill:#fce4ec,color:#000
-    style FASE6 fill:#ffcdd2,color:#000
+    style FASE0 fill:#c8e6c9,color:#000
+    style FASE1 fill:#c8e6c9,color:#000
+    style FASE2 fill:#c8e6c9,color:#000
+    style FASE3 fill:#c8e6c9,color:#000
+    style FASE4 fill:#c8e6c9,color:#000
+    style FASE5A fill:#c8e6c9,color:#000
+    style CORTE fill:#00d9ff,color:#000
+    style FASE5B fill:#fff3e0,color:#000,stroke:#ff9800,stroke-width:3px
+    style FASE6 fill:#ffebee,color:#000
     style FASE7 fill:#e8eaf6,color:#000
     style FASE8 fill:#e0f2f1,color:#000
         </pre>
     </div>
 
+    <div class="warning-box">
+        <h3>⚠️ DATOS QUE NO SE TOCAN</h3>
+        <ul>
+            <li><strong>Immich</strong>: /mnt/immich (1.8TB HDD), /mnt/immich-backup (458GB HDD), ~/projects/immich/</li>
+            <li><strong>Vaultwarden</strong>: ~/projects/vaultwarden/</li>
+            <li><strong>Valheim</strong>: ~/projects/valheim-server/</li>
+        </ul>
+    </div>
+
     <div class="legend">
-        <div class="legend-item phase0">
+        <div class="legend-item phase0 completed">
             <h3>📋 Fase 0: Preparación</h3>
             <ul>
                 <li>Backup completo del código</li>
                 <li>Crear tag Git de respaldo</li>
-                <li>Configurar cuenta Docker Hub</li>
+                <li>Cuenta Docker Hub: <code>egnal</code></li>
             </ul>
             <p class="time">⏱️ 30 min</p>
         </div>
         
-        <div class="legend-item phase1">
+        <div class="legend-item phase1 completed">
             <h3>📁 Fase 1: Reestructuración</h3>
             <ul>
                 <li>Crear carpeta dashboard/</li>
                 <li>Mover src/backend → dashboard/src/</li>
-                <li>Mover tests → dashboard/tests/</li>
                 <li>Mover servicios → services/</li>
-                <li>Actualizar docker-compose.yml</li>
             </ul>
             <p class="time">⏱️ 2-3 horas</p>
         </div>
         
-        <div class="legend-item phase2">
+        <div class="legend-item phase2 completed">
             <h3>🐳 Fase 2: Dockerfiles</h3>
             <ul>
                 <li>Crear multi-stage builds</li>
@@ -181,45 +266,61 @@ flowchart TB
             <p class="time">⏱️ 1-2 horas</p>
         </div>
         
-        <div class="legend-item phase3">
+        <div class="legend-item phase3 completed">
             <h3>☁️ Fase 3: Docker Hub</h3>
             <ul>
-                <li>Crear repositorios por servicio</li>
-                <li>Test de push manual</li>
+                <li>Repositorios: egnal/smart-home-*</li>
+                <li>Test push baby-gifts: 199MB ✅</li>
             </ul>
             <p class="time">⏱️ 30 min</p>
         </div>
         
-        <div class="legend-item phase4">
+        <div class="legend-item phase4 completed">
             <h3>🧪 Fase 4: Tests CI</h3>
             <ul>
-                <li>Crear workflow test.yml</li>
-                <li>Detectar servicios modificados</li>
-                <li>Configurar notificaciones</li>
+                <li>Workflow test.yml creado</li>
+                <li>Detecta cambios por servicio</li>
+                <li>⚠️ Tests fallan por paths antiguos (fix en Fase 8)</li>
             </ul>
             <p class="time">⏱️ 1-2 horas</p>
         </div>
         
-        <div class="legend-item phase5">
-            <h3>🚀 Fase 5: Deploy CI</h3>
+        <div class="legend-item phase5a completed">
+            <h3>🚀 Fase 5A: Deploy Workflow (LOCAL)</h3>
             <ul>
-                <li>Configurar secrets en GitHub</li>
-                <li>Crear workflow deploy.yml</li>
-                <li>Crear docker-compose.prod.yml</li>
-                <li>⭐ <strong>Hook Kiro para deploy desde chat</strong></li>
+                <li>Secrets GitHub configurados ✅</li>
+                <li>Workflow deploy.yml creado ✅</li>
+                <li>docker-compose.prod.yml ✅</li>
+                <li>Hook Kiro para deploy ✅</li>
             </ul>
-            <p class="time">⏱️ 2-3 horas</p>
+            <p class="time">⏱️ 1-2 horas</p>
+        </div>
+        
+        <div class="separator">═══════ CORTE: Aquí termina trabajo LOCAL (Windows) ═══════</div>
+        
+        <div class="legend-item phase5b current">
+            <h3>🔧 Fase 5B: Preparar Pi</h3>
+            <ul>
+                <li>Verificar Immich en discos externos</li>
+                <li>Backup gifts.json (Virchu)</li>
+                <li>Backup toda la carpeta data/</li>
+                <li>Crear ~/smart-home-prod</li>
+                <li>Copiar data/ e infrastructure/</li>
+                <li><strong>NO se borra nada todavía</strong></li>
+            </ul>
+            <p class="time">⏱️ 1 hora</p>
         </div>
         
         <div class="legend-item phase6">
-            <h3>🔄 Fase 6: Deploy Pi</h3>
+            <h3>🔄 Fase 6: Deploy + Cleanup</h3>
             <ul>
-                <li>⚠️ <strong>Backup gifts.json (Virchu)</strong></li>
-                <li>Backup todos los datos</li>
-                <li>Cleanup código fuente Pi</li>
-                <li>Deploy desde Docker Hub</li>
+                <li>Parar servicios antiguos</li>
+                <li>docker-compose pull && up -d</li>
+                <li>Verificar que todo funciona</li>
+                <li><strong>Solo si OK:</strong> eliminar código fuente</li>
+                <li>docker image prune (NO volumes)</li>
             </ul>
-            <p class="time">⏱️ 2-3 horas</p>
+            <p class="time">⏱️ 1-2 horas</p>
         </div>
         
         <div class="legend-item phase7">
@@ -228,17 +329,17 @@ flowchart TB
                 <li>Tests de integración</li>
                 <li>Tests manuales por servicio</li>
                 <li>Verificar datos de Virchu preservados</li>
+                <li>Test deploy desde Kiro</li>
             </ul>
             <p class="time">⏱️ 1-2 horas</p>
         </div>
         
-        <div class="legend-item" style="border-left: 4px solid #009688;">
+        <div class="legend-item phase8">
             <h3>📚 Fase 8: Documentación</h3>
             <ul>
                 <li>Actualizar READMEs</li>
-                <li>Actualizar steering files locales</li>
+                <li>Arreglar tests con paths antiguos</li>
                 <li><strong>Limpiar steering de GitHub</strong></li>
-                <li>Añadir .kiro/ a .gitignore</li>
                 <li>Tag post-migration-v1</li>
             </ul>
             <p class="time">⏱️ 1 hora</p>
@@ -247,8 +348,20 @@ flowchart TB
 
     <div style="margin-top: 40px; padding: 20px; background: #16213e; border-radius: 8px;">
         <h2>📊 Resumen</h2>
-        <p><strong>Tiempo total estimado:</strong> 11-17 horas</p>
-        <p><strong>Resultado:</strong> CI/CD completo con tests automáticos, deploy manual desde GitHub UI o desde Kiro</p>
+        <p><strong>Tiempo total estimado:</strong> 10-16 horas</p>
+        <p><strong>Progreso:</strong> ~60% completado</p>
+        <p><strong>Siguiente paso:</strong> Fase 5B - Conectar a la Pi y preparar estructura</p>
+        <p><strong>Resultado final:</strong> CI/CD completo con tests automáticos, deploy manual desde GitHub UI o desde Kiro</p>
+    </div>
+
+    <div style="margin-top: 20px; padding: 20px; background: #1b5e20; border-radius: 8px;">
+        <h2>🛡️ Seguridad de Datos</h2>
+        <p>Los siguientes datos están <strong>100% seguros</strong> y NO se tocan durante la migración:</p>
+        <ul>
+            <li><strong>Fotos Immich:</strong> /mnt/immich (HDD externo 1.8TB)</li>
+            <li><strong>Backup Immich:</strong> /mnt/immich-backup (HDD externo 458GB)</li>
+            <li><strong>Proyecto Immich:</strong> ~/projects/immich/ (docker-compose independiente)</li>
+        </ul>
     </div>
 
     <script>
