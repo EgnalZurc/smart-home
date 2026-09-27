@@ -8,8 +8,8 @@ Modular and expandable home automation system developed in phases. Intelligent a
 
 **🚀 Demo:** _Coming soon_  
 **⚡ Quick Start:** [QUICKSTART.md](QUICKSTART.md)  
-**📖 Deployment Guide:** [DEPLOY.md](DEPLOY.md)  
-**📋 Requirements:** [.kiro/docs/REQUIREMENTS.md](.kiro/docs/REQUIREMENTS.md)
+**📖 Deployment Guide:** [docs/API.md](docs/API.md)  
+**📋 CI/CD:** GitHub Actions with Docker Hub
 
 ---
 

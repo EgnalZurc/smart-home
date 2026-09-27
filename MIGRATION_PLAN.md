@@ -9,7 +9,7 @@
 4. Reestructure el proyecto por servicios para mejor organización
 5. Excluya archivos de steering del repositorio GitHub
 
-**Estado**: 🚧 EN PROGRESO (Fases 0-4 y 5A completadas, siguiente: Fase 5B)
+**Estado**: ✅ COMPLETADA
 
 ---
 
@@ -407,7 +407,7 @@ Archivo en el repo que usa imágenes de Docker Hub (no builds locales).
 ---
 
 ### Fase 5B: Preparar Raspberry Pi (backup + estructura)
-**Estado**: ⬜ PENDIENTE
+**Estado**: ✅ COMPLETADA
 **Duración estimada**: 1 hora
 **Dependencias**: Fase 5A completada
 
@@ -487,7 +487,7 @@ ls -la ~/smart-home-prod/
 ---
 
 ### Fase 6: Deploy inicial + Cleanup código
-**Estado**: ⬜ PENDIENTE
+**Estado**: ✅ COMPLETADA
 **Duración estimada**: 1-2 horas
 **Dependencias**: Fase 5B completada
 
@@ -579,7 +579,7 @@ docker image prune -a -f
 ---
 
 ### Fase 7: Validación
-**Estado**: ⬜ PENDIENTE
+**Estado**: ✅ COMPLETADA
 **Duración estimada**: 1-2 horas
 **Dependencias**: Fase 6 completada
 
@@ -636,7 +636,7 @@ Verificar que:
 ---
 
 ### Fase 8: Documentación
-**Estado**: ⬜ Pendiente
+**Estado**: ✅ COMPLETADA
 **Duración estimada**: 1 hora
 **Dependencias**: Fase 7 completada
 
