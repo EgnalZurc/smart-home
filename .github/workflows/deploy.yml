@@ -1,0 +1,117 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Smart Home - Deploy to Raspberry Pi
+# Manual deployment workflow - builds, pushes to Docker Hub, deploys to Pi
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy'
+        required: true
+        type: choice
+        options:
+          - all
+          - dashboard
+          - ac-service
+          - baby-gifts-service
+          - vacaciones-service
+          - casita-suenos
+
+env:
+  DOCKERHUB_USERNAME: egnal
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Build and Push to Docker Hub
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - service: dashboard
+            context: ./dashboard
+            image: egnal/smart-home-dashboard
+          - service: ac-service
+            context: ./services/ac-service
+            image: egnal/smart-home-ac-service
+          - service: baby-gifts-service
+            context: ./services/baby-gifts-service
+            image: egnal/smart-home-baby-gifts
+          - service: vacaciones-service
+            context: ./services/vacaciones-service
+            image: egnal/smart-home-vacaciones
+          - service: casita-suenos
+            context: ./services/casita-suenos/fase3-app
+            image: egnal/smart-home-casita-suenos
+    
+    # Only build the selected service (or all)
+    if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == matrix.service }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: |
+            ${{ matrix.image }}:latest
+            ${{ matrix.image }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/arm64
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Deploy to Raspberry Pi
+  # ─────────────────────────────────────────────────────────────────────────────
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Deploy to Pi via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PI_SSH_HOST }}
+          username: ${{ secrets.PI_SSH_USER }}
+          key: ${{ secrets.PI_SSH_KEY }}
+          script: |
+            cd ~/smart-home-prod
+            
+            SERVICE="${{ github.event.inputs.service }}"
+            
+            echo "=== Deploying $SERVICE ==="
+            
+            if [ "$SERVICE" = "all" ]; then
+              docker-compose pull
+              docker-compose up -d
+            else
+              # Map service names to container names
+              case $SERVICE in
+                dashboard) CONTAINER="smart-home-backend" ;;
+                ac-service) CONTAINER="ac-service" ;;
+                baby-gifts-service) CONTAINER="baby-gifts-service" ;;
+                vacaciones-service) CONTAINER="vacaciones-service" ;;
+                casita-suenos) CONTAINER="casita-suenos" ;;
+              esac
+              
+              docker-compose pull $SERVICE 2>/dev/null || docker pull egnal/smart-home-${SERVICE}:latest
+              docker-compose up -d $SERVICE 2>/dev/null || docker-compose up -d
+            fi
+            
+            echo "=== Deploy complete ==="
+            docker ps --format "table {{.Names}}\t{{.Status}}" | head -10
