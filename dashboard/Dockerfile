@@ -5,7 +5,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Copy source code to /app (maintains import structure)
+COPY src/ .
 
 EXPOSE 8080
 

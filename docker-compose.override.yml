@@ -10,7 +10,7 @@ services:
   backend:
     # Mount source code for hot-reload in development
     volumes:
-      - ./src/backend:/app
+      - ./dashboard/src:/app
     # Development-specific environment variables (can override .env)
     environment:
       - DEBUG=true

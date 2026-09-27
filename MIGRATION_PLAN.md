@@ -259,11 +259,11 @@ __pycache__/
 **Dependencias**: Fase 2 completada
 
 #### 3.1 Crear repositorios
-- [ ] `<usuario>/smart-home-dashboard`
-- [ ] `<usuario>/smart-home-ac-service`
-- [ ] `<usuario>/smart-home-baby-gifts`
-- [ ] `<usuario>/smart-home-vacaciones`
-- [ ] `<usuario>/smart-home-casita-suenos`
+- [ ] `egnal/smart-home-dashboard`
+- [ ] `egnal/smart-home-ac-service`
+- [ ] `egnal/smart-home-baby-gifts`
+- [ ] `egnal/smart-home-vacaciones`
+- [ ] `egnal/smart-home-casita-suenos`
 
 #### 3.2 Test manual de push
 ```bash
@@ -462,7 +462,7 @@ services:
       - smart-home
 
   dashboard:
-    image: <usuario>/smart-home-dashboard:latest
+    image: egnal/smart-home-dashboard:latest
     container_name: smart-home-backend
     restart: unless-stopped
     volumes:
@@ -476,7 +476,7 @@ services:
       - smart-home
 
   ac-service:
-    image: <usuario>/smart-home-ac-service:latest
+    image: egnal/smart-home-ac-service:latest
     container_name: ac-service
     restart: unless-stopped
     volumes:
@@ -490,7 +490,7 @@ services:
       - smart-home
 
   baby-gifts-service:
-    image: <usuario>/smart-home-baby-gifts:latest
+    image: egnal/smart-home-baby-gifts:latest
     container_name: baby-gifts-service
     restart: unless-stopped
     volumes:
@@ -501,7 +501,7 @@ services:
       - smart-home
 
   vacaciones-service:
-    image: <usuario>/smart-home-vacaciones:latest
+    image: egnal/smart-home-vacaciones:latest
     container_name: vacaciones-service
     restart: unless-stopped
     volumes:
@@ -512,7 +512,7 @@ services:
       - smart-home
 
   casita-suenos:
-    image: <usuario>/smart-home-casita-suenos:latest
+    image: egnal/smart-home-casita-suenos:latest
     container_name: casita-suenos
     restart: unless-stopped
     volumes:

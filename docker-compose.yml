@@ -38,7 +38,7 @@ services:
 
   backend:
     build:
-      context: ./src/backend
+      context: ./dashboard
       dockerfile: Dockerfile
     container_name: smart-home-backend
     restart: unless-stopped
@@ -124,7 +124,7 @@ services:
   # Baby Gifts Service - gift registry for baby
   baby-gifts-service:
     build:
-      context: ./baby-gifts-service
+      context: ./services/baby-gifts-service
       dockerfile: Dockerfile
     container_name: baby-gifts-service
     restart: unless-stopped
