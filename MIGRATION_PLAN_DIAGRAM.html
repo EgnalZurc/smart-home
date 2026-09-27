@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plan de Migración CI/CD - Smart Home</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 {
+            text-align: center;
+            color: #00d9ff;
+        }
+        .diagram-container {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 30px;
+        }
+        .legend-item {
+            padding: 15px;
+            border-radius: 8px;
+            background: #16213e;
+        }
+        .legend-item h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+        }
+        .legend-item ul {
+            margin: 0;
+            padding-left: 20px;
+            font-size: 13px;
+            color: #aaa;
+        }
+        .legend-item li {
+            margin: 5px 0;
+        }
+        .time {
+            color: #00d9ff;
+            font-weight: bold;
+        }
+        .phase0 { border-left: 4px solid #e1f5fe; }
+        .phase1 { border-left: 4px solid #ff9800; }
+        .phase2 { border-left: 4px solid #4caf50; }
+        .phase3 { border-left: 4px solid #9c27b0; }
+        .phase4 { border-left: 4px solid #ffeb3b; }
+        .phase5 { border-left: 4px solid #e91e63; }
+        .phase6 { border-left: 4px solid #3f51b5; }
+        .phase7 { border-left: 4px solid #009688; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Plan de Migración CI/CD - Smart Home</h1>
+    
+    <div class="diagram-container">
+        <pre class="mermaid">
+flowchart TB
+    subgraph FASE0["📋 Fase 0: Preparación (30 min)"]
+        A1["Backup completo"]
+        A2["Tag pre-migration-v1"]
+        A3["Crear cuenta Docker Hub"]
+    end
+    
+    subgraph FASE1["📁 Fase 1: Reestructuración (2-3h)"]
+        B1["Crear estructura carpetas"]
+        B2["Mover src/backend → dashboard/"]
+        B3["Mover servicios → services/"]
+        B4["Actualizar .gitignore"]
+        B5["Verificar build local"]
+    end
+    
+    subgraph FASE2["🐳 Fase 2: Dockerfiles (1-2h)"]
+        C1["Multi-stage builds"]
+        C2[".dockerignore optimizados"]
+        C3["Verificar tamaño < 150MB"]
+    end
+    
+    subgraph FASE3["☁️ Fase 3: Docker Hub (30 min)"]
+        D1["Crear repositorios"]
+        D2["Test push manual"]
+    end
+    
+    subgraph FASE4["🧪 Fase 4: Tests CI (1-2h)"]
+        E1["Workflow test.yml"]
+        E2["Detección cambios por servicio"]
+        E3["Notificaciones"]
+    end
+    
+    subgraph FASE5["🚀 Fase 5: Deploy CI (2-3h)"]
+        F1["Configurar secrets GitHub"]
+        F2["Workflow deploy.yml"]
+        F3["docker-compose.prod.yml"]
+        F4["⭐ Hook Kiro para deploy"]
+    end
+    
+    subgraph FASE6["🔄 Fase 6: Deploy Pi (2-3h)"]
+        G1["1️⃣ Backup gifts.json + datos"]
+        G2["2️⃣ Cleanup código fuente Pi"]
+        G3["3️⃣ Deploy desde Docker Hub"]
+    end
+    
+    subgraph FASE7["✅ Fase 7: Validación (1-2h)"]
+        H1["Tests integración"]
+        H2["Tests manuales"]
+        H3["Verificar datos Virchu"]
+    end
+    
+    subgraph FASE8["📚 Fase 8: Documentación (1h)"]
+        I1["Actualizar READMEs"]
+        I2["Actualizar steering"]
+        I3["Limpiar steering de GitHub"]
+        I4["Tag post-migration-v1"]
+    end
+    
+    FASE0 --> FASE1
+    FASE1 --> FASE2
+    FASE2 --> FASE3
+    FASE3 --> FASE5
+    FASE1 --> FASE4
+    FASE4 --> FASE5
+    FASE5 --> FASE6
+    FASE6 --> FASE7
+    FASE7 --> FASE8
+    
+    style FASE0 fill:#e1f5fe,color:#000
+    style FASE1 fill:#fff3e0,color:#000
+    style FASE2 fill:#e8f5e9,color:#000
+    style FASE3 fill:#f3e5f5,color:#000
+    style FASE4 fill:#fff8e1,color:#000
+    style FASE5 fill:#fce4ec,color:#000
+    style FASE6 fill:#ffcdd2,color:#000
+    style FASE7 fill:#e8eaf6,color:#000
+    style FASE8 fill:#e0f2f1,color:#000
+        </pre>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item phase0">
+            <h3>📋 Fase 0: Preparación</h3>
+            <ul>
+                <li>Backup completo del código</li>
+                <li>Crear tag Git de respaldo</li>
+                <li>Configurar cuenta Docker Hub</li>
+            </ul>
+            <p class="time">⏱️ 30 min</p>
+        </div>
+        
+        <div class="legend-item phase1">
+            <h3>📁 Fase 1: Reestructuración</h3>
+            <ul>
+                <li>Crear carpeta dashboard/</li>
+                <li>Mover src/backend → dashboard/src/</li>
+                <li>Mover tests → dashboard/tests/</li>
+                <li>Mover servicios → services/</li>
+                <li>Actualizar docker-compose.yml</li>
+            </ul>
+            <p class="time">⏱️ 2-3 horas</p>
+        </div>
+        
+        <div class="legend-item phase2">
+            <h3>🐳 Fase 2: Dockerfiles</h3>
+            <ul>
+                <li>Crear multi-stage builds</li>
+                <li>Optimizar .dockerignore</li>
+                <li>Objetivo: < 150MB por imagen</li>
+            </ul>
+            <p class="time">⏱️ 1-2 horas</p>
+        </div>
+        
+        <div class="legend-item phase3">
+            <h3>☁️ Fase 3: Docker Hub</h3>
+            <ul>
+                <li>Crear repositorios por servicio</li>
+                <li>Test de push manual</li>
+            </ul>
+            <p class="time">⏱️ 30 min</p>
+        </div>
+        
+        <div class="legend-item phase4">
+            <h3>🧪 Fase 4: Tests CI</h3>
+            <ul>
+                <li>Crear workflow test.yml</li>
+                <li>Detectar servicios modificados</li>
+                <li>Configurar notificaciones</li>
+            </ul>
+            <p class="time">⏱️ 1-2 horas</p>
+        </div>
+        
+        <div class="legend-item phase5">
+            <h3>🚀 Fase 5: Deploy CI</h3>
+            <ul>
+                <li>Configurar secrets en GitHub</li>
+                <li>Crear workflow deploy.yml</li>
+                <li>Crear docker-compose.prod.yml</li>
+                <li>⭐ <strong>Hook Kiro para deploy desde chat</strong></li>
+            </ul>
+            <p class="time">⏱️ 2-3 horas</p>
+        </div>
+        
+        <div class="legend-item phase6">
+            <h3>🔄 Fase 6: Deploy Pi</h3>
+            <ul>
+                <li>⚠️ <strong>Backup gifts.json (Virchu)</strong></li>
+                <li>Backup todos los datos</li>
+                <li>Cleanup código fuente Pi</li>
+                <li>Deploy desde Docker Hub</li>
+            </ul>
+            <p class="time">⏱️ 2-3 horas</p>
+        </div>
+        
+        <div class="legend-item phase7">
+            <h3>✅ Fase 7: Validación</h3>
+            <ul>
+                <li>Tests de integración</li>
+                <li>Tests manuales por servicio</li>
+                <li>Verificar datos de Virchu preservados</li>
+            </ul>
+            <p class="time">⏱️ 1-2 horas</p>
+        </div>
+        
+        <div class="legend-item" style="border-left: 4px solid #009688;">
+            <h3>📚 Fase 8: Documentación</h3>
+            <ul>
+                <li>Actualizar READMEs</li>
+                <li>Actualizar steering files locales</li>
+                <li><strong>Limpiar steering de GitHub</strong></li>
+                <li>Añadir .kiro/ a .gitignore</li>
+                <li>Tag post-migration-v1</li>
+            </ul>
+            <p class="time">⏱️ 1 hora</p>
+        </div>
+    </div>
+
+    <div style="margin-top: 40px; padding: 20px; background: #16213e; border-radius: 8px;">
+        <h2>📊 Resumen</h2>
+        <p><strong>Tiempo total estimado:</strong> 11-17 horas</p>
+        <p><strong>Resultado:</strong> CI/CD completo con tests automáticos, deploy manual desde GitHub UI o desde Kiro</p>
+    </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+    </script>
+</body>
+</html>
