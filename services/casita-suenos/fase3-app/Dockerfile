@@ -1,13 +1,17 @@
-FROM python:3.12-slim
+# ═══════════════════════════════════════════════════════════════════════════════
+# Casita Sueños Service - Production Dockerfile
+# Multi-stage build for minimal image size
+# ═══════════════════════════════════════════════════════════════════════════════
 
-WORKDIR /app
-
+FROM python:3.12-slim AS builder
+WORKDIR /build
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --user --no-cache-dir -r requirements.txt
 
+FROM python:3.12-slim
+WORKDIR /app
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
 COPY src/ .
-
-# El volumen /app/data se monta desde docker-compose para persistencia
 VOLUME ["/app/data"]
-
 CMD ["python", "main.py"]

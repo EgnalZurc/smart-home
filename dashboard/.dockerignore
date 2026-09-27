@@ -1,0 +1,24 @@
+# Tests (not needed in production)
+tests/
+*_test.py
+test_*.py
+conftest.py
+pytest.ini
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Development
+.env
+.env.*
+*.md
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Kiro workspace
+.kiro/
