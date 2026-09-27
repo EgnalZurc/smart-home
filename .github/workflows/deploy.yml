@@ -27,59 +27,117 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   # Build and Push to Docker Hub
   # ─────────────────────────────────────────────────────────────────────────────
-  build-and-push:
+  build-dashboard:
+    if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == 'dashboard' }}
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - service: dashboard
-            context: ./dashboard
-            image: egnal/smart-home-dashboard
-          - service: ac-service
-            context: ./services/ac-service
-            image: egnal/smart-home-ac-service
-          - service: baby-gifts-service
-            context: ./services/baby-gifts-service
-            image: egnal/smart-home-baby-gifts
-          - service: vacaciones-service
-            context: ./services/vacaciones-service
-            image: egnal/smart-home-vacaciones
-          - service: casita-suenos
-            context: ./services/casita-suenos/fase3-app
-            image: egnal/smart-home-casita-suenos
-    
-    # Only build the selected service (or all)
-    if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == matrix.service }}
-    
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
+          username: egnal
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      
-      - name: Build and push ${{ matrix.service }}
+      - name: Build and push dashboard
         uses: docker/build-push-action@v5
         with:
-          context: ${{ matrix.context }}
+          context: ./dashboard
           push: true
           tags: |
-            ${{ matrix.image }}:latest
-            ${{ matrix.image }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            egnal/smart-home-dashboard:latest
+            egnal/smart-home-dashboard:${{ github.sha }}
+          platforms: linux/arm64
+
+  build-ac-service:
+    if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == 'ac-service' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: egnal
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push ac-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/ac-service
+          push: true
+          tags: |
+            egnal/smart-home-ac-service:latest
+            egnal/smart-home-ac-service:${{ github.sha }}
+          platforms: linux/arm64
+
+  build-baby-gifts:
+    if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == 'baby-gifts-service' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: egnal
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push baby-gifts
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/baby-gifts-service
+          push: true
+          tags: |
+            egnal/smart-home-baby-gifts:latest
+            egnal/smart-home-baby-gifts:${{ github.sha }}
+          platforms: linux/arm64
+
+  build-vacaciones:
+    if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == 'vacaciones-service' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: egnal
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push vacaciones
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/vacaciones-service
+          push: true
+          tags: |
+            egnal/smart-home-vacaciones:latest
+            egnal/smart-home-vacaciones:${{ github.sha }}
+          platforms: linux/arm64
+
+  build-casita-suenos:
+    if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == 'casita-suenos' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: egnal
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push casita-suenos
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/casita-suenos/fase3-app
+          push: true
+          tags: |
+            egnal/smart-home-casita-suenos:latest
+            egnal/smart-home-casita-suenos:${{ github.sha }}
           platforms: linux/arm64
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Deploy to Raspberry Pi
   # ─────────────────────────────────────────────────────────────────────────────
   deploy:
-    needs: build-and-push
+    needs: [build-dashboard, build-ac-service, build-baby-gifts, build-vacaciones, build-casita-suenos]
+    if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     
     steps:
@@ -97,21 +155,12 @@ jobs:
             echo "=== Deploying $SERVICE ==="
             
             if [ "$SERVICE" = "all" ]; then
-              docker-compose pull
-              docker-compose up -d
+              docker compose pull
+              docker compose up -d
             else
-              # Map service names to container names
-              case $SERVICE in
-                dashboard) CONTAINER="smart-home-backend" ;;
-                ac-service) CONTAINER="ac-service" ;;
-                baby-gifts-service) CONTAINER="baby-gifts-service" ;;
-                vacaciones-service) CONTAINER="vacaciones-service" ;;
-                casita-suenos) CONTAINER="casita-suenos" ;;
-              esac
-              
-              docker-compose pull $SERVICE 2>/dev/null || docker pull egnal/smart-home-${SERVICE}:latest
-              docker-compose up -d $SERVICE 2>/dev/null || docker-compose up -d
+              docker compose pull $SERVICE 2>/dev/null || docker pull egnal/smart-home-${SERVICE}:latest
+              docker compose up -d
             fi
             
             echo "=== Deploy complete ==="
-            docker ps --format "table {{.Names}}\t{{.Status}}" | head -10
+            docker ps --format "table {{.Names}}\t{{.Status}}" | head -15
