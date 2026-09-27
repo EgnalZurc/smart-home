@@ -127,16 +127,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 new_jwt = auth_core.create_token(result.username)
                 response = await call_next(request)
                 auth_core.set_session_cookie(response, new_jwt)
-                # Set rotated device cookie
-                response.set_cookie(
-                    key=auth_devices.DEVICE_COOKIE_NAME,
-                    value=result.new_cookie_value,
-                    max_age=auth_devices.DEVICE_TOKEN_TTL,
-                    httponly=True,
-                    secure=True,
-                    samesite="strict",
-                    path="/",
-                )
+                # Set rotated device cookie (unless grace window hit → empty string)
+                if result.new_cookie_value:
+                    response.set_cookie(
+                        key=auth_devices.DEVICE_COOKIE_NAME,
+                        value=result.new_cookie_value,
+                        max_age=auth_devices.DEVICE_TOKEN_TTL,
+                        httponly=True,
+                        secure=True,
+                        samesite="strict",
+                        path="/",
+                    )
                 logger.debug("Session silently refreshed for user %r", result.username)
                 return response
 

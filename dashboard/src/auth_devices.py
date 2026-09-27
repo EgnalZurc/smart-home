@@ -6,6 +6,8 @@ Cookie format (stored client-side, HttpOnly):
 Database table (device_tokens):
     series      TEXT  — stable identifier for one device/browser (never changes)
     token_hash  TEXT  — SHA-256 of current one-time token (rotates on every use)
+    prev_hash   TEXT  — SHA-256 of previous token (grace window for race conditions)
+    prev_until  REAL  — unix timestamp until prev_hash is still valid
     username    TEXT  — owner
     user_agent  TEXT  — for display in future device management UI
     ip_address  TEXT  — for display / logging
@@ -16,11 +18,10 @@ Database table (device_tokens):
 Security properties:
     - Token rotates on every use → stolen cookie window = until victim next accesses
     - Only hash is stored → DB leak does not directly yield valid cookie values
-    - Series mismatch (valid series + wrong token) → theft assumed →
+    - Series mismatch (valid series + wrong token outside grace window) → theft assumed →
       ALL device tokens for that user are deleted immediately
-    - Race condition safe: device cookie is ONLY used on session refresh
-      (when JWT has expired), never on parallel API requests → no token
-      rotation race condition possible
+    - Race condition handled: previous token valid for 30 seconds after rotation
+      to handle parallel requests when JWT expires
 """
 import hashlib
 import logging
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 AUTH_DB_PATH: str = "/app/data/auth.db"
 DEVICE_TOKEN_TTL: int = 365 * 24 * 3600   # 1 year in seconds
+GRACE_WINDOW_SECONDS: int = 30            # Previous token valid for 30s after rotation
 
 DEVICE_COOKIE_NAME = "smh_device"
 _SEPARATOR = ":"
@@ -57,6 +59,8 @@ def _db() -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS device_tokens (
             series      TEXT PRIMARY KEY,
             token_hash  TEXT NOT NULL,
+            prev_hash   TEXT DEFAULT NULL,
+            prev_until  REAL DEFAULT NULL,
             username    TEXT NOT NULL,
             user_agent  TEXT NOT NULL DEFAULT '',
             ip_address  TEXT NOT NULL DEFAULT '',
@@ -65,6 +69,15 @@ def _db() -> sqlite3.Connection:
             expires_at  REAL NOT NULL
         )
     """)
+    # Migration: add prev_hash and prev_until columns if they don't exist
+    try:
+        conn.execute("ALTER TABLE device_tokens ADD COLUMN prev_hash TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    try:
+        conn.execute("ALTER TABLE device_tokens ADD COLUMN prev_until REAL DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     conn.commit()
     return conn
 
@@ -146,16 +159,19 @@ class VerifyResult:
 
 
 def verify_and_rotate(cookie_value: str) -> VerifyResult:
-    """Verify a device cookie and rotate the token (Jaspan pattern).
+    """Verify a device cookie and rotate the token (Jaspan pattern with grace window).
 
     Cases:
         1. Cookie malformed / series not found → VerifyResult(ok=False)
-        2. Series found, token hash matches, not expired
-           → rotate token, return VerifyResult(ok=True, new_cookie_value=...)
-        3. Series found, token hash DOES NOT match
+        2. Series found, current token hash matches, not expired
+           → rotate token (keep old as prev_hash for grace window),
+             return VerifyResult(ok=True, new_cookie_value=...)
+        3. Series found, previous token hash matches AND within grace window
+           → return VerifyResult(ok=True) with CURRENT cookie (no re-rotation)
+        4. Series found, token hash DOES NOT match (neither current nor prev in grace)
            → theft assumed, delete ALL device tokens for that user,
              return VerifyResult(ok=False, theft_detected=True)
-        4. Series found, token matches, but expired
+        5. Series found, token matches, but expired
            → delete row, return VerifyResult(ok=False)
     """
     parsed = _decode_cookie(cookie_value)
@@ -164,6 +180,7 @@ def verify_and_rotate(cookie_value: str) -> VerifyResult:
 
     series, token = parsed
     incoming_hash = _hash(token)
+    now = time.time()
 
     with _db() as conn:
         row = conn.execute(
@@ -176,38 +193,54 @@ def verify_and_rotate(cookie_value: str) -> VerifyResult:
 
         username = row["username"]
 
-        # Check for theft: series exists but token hash does not match
-        if row["token_hash"] != incoming_hash:
-            logger.warning(
-                "THEFT DETECTED: series %s for user %r — "
-                "deleting ALL device tokens for this user",
-                series[:8], username,
-            )
-            conn.execute(
-                "DELETE FROM device_tokens WHERE username = ?", (username,)
-            )
-            return VerifyResult(ok=False, theft_detected=True, username=username)
-
-        # Check expiry
-        if time.time() > row["expires_at"]:
+        # Check expiry first
+        if now > row["expires_at"]:
             logger.info(
                 "Expired device token for user %r (series %s)", username, series[:8]
             )
             conn.execute("DELETE FROM device_tokens WHERE series = ?", (series,))
             return VerifyResult(ok=False)
 
-        # Valid — rotate token
-        new_token = _generate()
-        conn.execute(
-            "UPDATE device_tokens SET token_hash = ?, last_used = ? WHERE series = ?",
-            (_hash(new_token), time.time(), series),
-        )
+        # Case 2: Current token matches → rotate
+        if row["token_hash"] == incoming_hash:
+            new_token = _generate()
+            # Store current as prev with grace window
+            conn.execute(
+                """UPDATE device_tokens 
+                   SET token_hash = ?, prev_hash = ?, prev_until = ?, last_used = ? 
+                   WHERE series = ?""",
+                (_hash(new_token), row["token_hash"], now + GRACE_WINDOW_SECONDS, now, series),
+            )
+            new_cookie = _encode_cookie(series, new_token)
+            logger.debug(
+                "Device token rotated for user %r (series prefix: %s)", username, series[:8]
+            )
+            return VerifyResult(ok=True, username=username, new_cookie_value=new_cookie)
 
-    new_cookie = _encode_cookie(series, new_token)
-    logger.debug(
-        "Device token rotated for user %r (series prefix: %s)", username, series[:8]
-    )
-    return VerifyResult(ok=True, username=username, new_cookie_value=new_cookie)
+        # Case 3: Previous token within grace window → accept but don't rotate again
+        prev_hash = row["prev_hash"]
+        prev_until = row["prev_until"]
+        if prev_hash and prev_until and incoming_hash == prev_hash and now <= prev_until:
+            logger.debug(
+                "Device token validated via grace window for user %r (series %s)",
+                username, series[:8]
+            )
+            # Return the CURRENT token (client should update to this)
+            # We need to get the current token... but we only have the hash.
+            # Solution: return empty new_cookie_value to signal "use existing JWT, don't update cookie"
+            # The middleware will still issue a fresh JWT but won't overwrite the device cookie
+            return VerifyResult(ok=True, username=username, new_cookie_value="")
+
+        # Case 4: Token mismatch — theft detected
+        logger.warning(
+            "THEFT DETECTED: series %s for user %r — "
+            "deleting ALL device tokens for this user",
+            series[:8], username,
+        )
+        conn.execute(
+            "DELETE FROM device_tokens WHERE username = ?", (username,)
+        )
+        return VerifyResult(ok=False, theft_detected=True, username=username)
 
 
 def revoke_all_devices(username: str) -> int:
