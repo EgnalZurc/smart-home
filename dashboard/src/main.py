@@ -68,6 +68,9 @@ _AUTH_PUBLIC_PREFIXES = (
     "/static/manifest.json",
     "/static/favicon.ico",
     "/favicon.ico",
+    "/docs",          # Swagger UI
+    "/redoc",         # ReDoc UI
+    "/openapi.json",  # OpenAPI spec
 )
 
 class AuthMiddleware(BaseHTTPMiddleware):

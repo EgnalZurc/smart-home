@@ -7,7 +7,7 @@
 # On Raspberry Pi (production), this file is ignored (use only docker-compose.yml)
 
 services:
-  backend:
+  smart-home-backend:
     # Mount source code for hot-reload in development
     volumes:
       - ./dashboard/src:/app

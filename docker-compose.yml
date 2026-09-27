@@ -36,7 +36,7 @@ services:
       - smart-home
       - cuchi-casa
 
-  backend:
+  smart-home-backend:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
@@ -64,7 +64,7 @@ services:
     mem_limit: 64m
     memswap_limit: 64m
     depends_on:
-      - backend
+      - smart-home-backend
       - zigbee2mqtt
     ports:
       - 80:80

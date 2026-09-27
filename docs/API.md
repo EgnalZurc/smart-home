@@ -4,6 +4,8 @@
 
 This document describes all the APIs exposed by the Smart Home platform. The services are deployed as Docker containers and communicate through an internal Docker network. External access is provided through an nginx reverse proxy.
 
+> ⚠️ **Important:** Before modifying service configurations, read [NAMING_CONVENTIONS.md](NAMING_CONVENTIONS.md) to understand the critical naming rules that prevent 502 errors.
+
 ## Base URLs
 
 | Service | Internal URL | External URL (via nginx) |
@@ -17,6 +19,39 @@ This document describes all the APIs exposed by the Smart Home platform. The ser
 ## Authentication
 
 Most endpoints require authentication via nginx `auth_request` directive. The dashboard handles authentication and sets session cookies.
+
+---
+
+## Interactive API Documentation (Swagger/OpenAPI)
+
+Each FastAPI service exposes auto-generated API documentation:
+
+| Service | Swagger UI | OpenAPI Spec | ReDoc |
+|---------|------------|--------------|-------|
+| Dashboard | `/docs` | `/openapi.json` | `/redoc` |
+| AC Service | `http://ac-service:8002/docs` | `http://ac-service:8002/openapi.json` | `http://ac-service:8002/redoc` |
+| Baby Gifts | `http://baby-gifts-service:8004/docs` | `http://baby-gifts-service:8004/openapi.json` | `http://baby-gifts-service:8004/redoc` |
+| Vacaciones | `http://vacaciones-service:8003/docs` | `http://vacaciones-service:8003/openapi.json` | `http://vacaciones-service:8003/redoc` |
+| Casita Sueños | ❌ N/A (raw HTTP) | ❌ N/A | ❌ N/A |
+
+### Accessing Swagger UI
+
+**Via nginx (external):**
+- Dashboard: `https://raspberrypi.tailaa37cd.ts.net/docs`
+
+**Via SSH tunnel (internal services):**
+```bash
+# Forward AC service docs to localhost
+ssh -L 8002:ac-service:8002 pi@raspberrypi
+# Then open: http://localhost:8002/docs
+```
+
+**From Pi directly:**
+```bash
+# Test OpenAPI spec
+curl http://smart-home-backend:8080/openapi.json | head -c 500
+curl http://ac-service:8002/openapi.json | head -c 500
+```
 
 ---
 
@@ -206,17 +241,30 @@ Most endpoints require authentication via nginx `auth_request` directive. The da
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
 | GET | `/health` | Service health | No |
+| GET | `/api/health/vacaciones` | Health alias for dashboard | No |
+
+### SPA
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/smart-home/vacaciones` | Vacaciones SPA page | Yes |
 
 ### Vacaciones API
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| GET | `/api/vacaciones` | Get vacation data | Yes |
-| POST | `/api/vacaciones` | Update vacation data | Yes |
+| GET | `/api/vacaciones` | Get all vacation data (nucleos, personas, years) | Yes |
+| GET | `/api/vacaciones/config` | Get configuration (nucleos + personas) | Yes |
+| POST | `/api/vacaciones/config` | Save configuration | Yes |
+| POST | `/api/vacaciones/year` | Add a new year | Yes |
+| POST | `/api/vacaciones/year/{year}` | Save a year's planning | Yes |
+| DELETE | `/api/vacaciones/year/{year}` | Delete a year | Yes |
 
 ---
 
 ## Casita Sueños Service (Port 8001)
+
+> ⚠️ **Note:** This service uses a raw HTTP server, not FastAPI. No OpenAPI/Swagger available.
 
 ### Health
 
@@ -224,42 +272,63 @@ Most endpoints require authentication via nginx `auth_request` directive. The da
 |--------|----------|-------------|------|
 | GET | `/health` | Service health | No |
 
-### Properties API
+### Status & Properties API
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| GET | `/api/properties` | List properties | Yes |
-| GET | `/api/properties/{id}` | Get property details | Yes |
-| POST | `/api/properties/{id}/dismiss` | Dismiss property | Yes |
-| POST | `/api/properties/{id}/undismiss` | Undismiss property | Yes |
-| POST | `/api/properties/{id}/view` | Mark as viewed | Yes |
-| POST | `/api/properties/{id}/comment` | Save comment | Yes |
+| GET | `/status` | Full system status (properties, schedule, stats) | Yes |
+| GET | `/radar` | Properties above alert threshold | Yes |
+| GET | `/dismissed` | Dismissed properties list | Yes |
 
-### Scraping
+### Property Actions
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| POST | `/api/scrape` | Trigger manual scrape | Yes |
-| GET | `/api/schedule` | Get schedule | Yes |
-| POST | `/api/schedule` | Update schedule | Yes |
+| POST | `/dismiss` | Dismiss a property (body: `{"uid": "..."}`) | Yes |
+| POST | `/undismiss` | Restore a dismissed property | Yes |
+| POST | `/mark_viewed` | Mark property as viewed | Yes |
+| POST | `/save_comment` | Save comment on property | Yes |
+
+### Scraping Control
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/schedule` | Get current scraping schedule | Yes |
+| POST | `/schedule` | Update scraping schedule | Yes |
+| POST | `/run_scraping` | Trigger manual scraping | Yes |
+| POST | `/run_summary` | Trigger AI summary generation | Yes |
 
 ---
 
-## Validation Results (2026-09-27)
+## Validation Results (2026-09-27 21:05 UTC+2)
 
-All services validated successfully:
+All services validated successfully via `docker exec nginx-reverse-proxy wget`:
 
 | Service | Health Check | Sample Endpoint | Status |
 |---------|--------------|-----------------|--------|
 | Dashboard | ✅ `{"status":"ok"}` | `/api/health/backend` → `{"online":true}` | OK |
 | Baby Gifts | ✅ `{"online":true,"service":"baby-gifts"}` | `/api/baby-gifts` → gifts array | OK |
 | AC Service | ✅ `{"online":true,"service":"ac"}` | `/api/status` → full status | OK |
-| Vacaciones | ✅ `{"online":true,"service":"vacaciones"}` | N/A | OK |
-| Casita Sueños | ✅ `{"online":true}` | N/A | OK |
+| Vacaciones | ✅ `{"online":true,"service":"vacaciones"}` | `/api/vacaciones/config` → config | OK |
+| Casita Sueños | ✅ `{"online":true}` | `/status` → full status with 978 properties | OK |
 
 ---
 
 ## Deployment
+
+> 📖 **Read First:** [NAMING_CONVENTIONS.md](NAMING_CONVENTIONS.md) - Critical rules for service naming
+
+### Service Naming Rules
+
+**Docker DNS uses the service name (not container_name) for internal communication.**
+
+| Service | docker-compose name | nginx upstream |
+|---------|---------------------|----------------|
+| Dashboard | `smart-home-backend` | `http://smart-home-backend:8080` |
+| AC Service | `ac-service` | `http://ac-service:8002` |
+| Baby Gifts | `baby-gifts-service` | `http://baby-gifts-service:8004` |
+| Vacaciones | `vacaciones-service` | `http://vacaciones-service:8003` |
+| Casita Sueños | `casita-suenos` | `http://casita-suenos:8001` |
 
 ### From GitHub Actions
 
