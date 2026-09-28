@@ -384,10 +384,33 @@ jobs:
         run: cd services/vaultwarden && python -m pytest tests/test_dockerfile.py -v --tb=short
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Test Valheim Admin
+  # ─────────────────────────────────────────────────────────────────────────────
+  test-valheim-admin:
+    needs: build
+    if: ${{ needs.build.outputs.valheim-admin == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: 'services/valheim-admin/requirements.txt'
+      - name: Install dependencies
+        run: |
+          pip install -r services/valheim-admin/requirements.txt
+          pip install pytest pytest-asyncio
+      - name: Run tests
+        run: cd services/valheim-admin && python -m pytest tests/ -v --tb=short
+        env:
+          PYTHONPATH: src
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Test Summary - gate for deploy
   # ─────────────────────────────────────────────────────────────────────────────
   test-summary:
-    needs: [build, test-dashboard, test-ac-service, test-baby-gifts, test-vacaciones, test-casita, test-vaultwarden]
+    needs: [build, test-dashboard, test-ac-service, test-baby-gifts, test-vacaciones, test-casita, test-vaultwarden, test-valheim-admin]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -397,7 +420,8 @@ jobs:
           FAILED=false
           for result in "${{ needs.test-dashboard.result }}" "${{ needs.test-ac-service.result }}" \
                         "${{ needs.test-baby-gifts.result }}" "${{ needs.test-vacaciones.result }}" \
-                        "${{ needs.test-casita.result }}" "${{ needs.test-vaultwarden.result }}"; do
+                        "${{ needs.test-casita.result }}" "${{ needs.test-vaultwarden.result }}" \
+                        "${{ needs.test-valheim-admin.result }}"; do
             [[ "$result" == "failure" ]] && FAILED=true
           done
           
