@@ -95,6 +95,18 @@ async def get_casita_health():
         return {"online": False}
 
 
+@router.get("/health/baby-gifts", tags=["Health"])
+async def get_baby_gifts_health():
+    """Health check for Baby Gifts service."""
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get("http://baby-gifts-service:8004/health")
+            data = resp.json()
+            return {"online": data.get("online", False)}
+    except Exception:
+        return {"online": False}
+
+
 @router.get("/health/passwords", tags=["Health"])
 async def get_passwords_health():
     """Health check for Vaultwarden."""

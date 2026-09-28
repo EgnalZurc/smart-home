@@ -54,8 +54,19 @@ nginx config lives in `infrastructure/nginx/conf.d/smart-home.conf`.
 When nginx config changes:
 1. Edit the file locally
 2. Commit and push
-3. Deploy: `gh workflow run deploy.yml -f service=all --repo EgnalZurc/smart-home`
+3. Deploy: `gh workflow run ci.yml -f service=all --repo EgnalZurc/smart-home`
 
 The deploy workflow copies the nginx config and reloads nginx automatically.
 
 **If nginx config isn't deploying correctly**, the fix is to update the deployment workflow, NOT to scp the file manually.
+
+## docker-compose.yml
+
+Production compose file is `docker-compose.prod.yml` in the repo.
+
+When docker-compose.prod.yml changes:
+1. Edit the file locally
+2. Commit and push
+3. The deploy workflow automatically syncs it to Pi as `docker-compose.yml`
+
+**Never edit docker-compose.yml directly on the Pi** — those changes will be overwritten on next deploy.

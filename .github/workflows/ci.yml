@@ -59,6 +59,7 @@ jobs:
       vacaciones: ${{ steps.changes.outputs.vacaciones }}
       casita: ${{ steps.changes.outputs.casita }}
       nginx: ${{ steps.changes.outputs.nginx }}
+      compose: ${{ steps.changes.outputs.compose }}
       any-service: ${{ steps.changes.outputs.any-service }}
       services-matrix: ${{ steps.matrix.outputs.services }}
     steps:
@@ -82,6 +83,8 @@ jobs:
               - 'services/casita-suenos/**'
             nginx:
               - 'infrastructure/nginx/**'
+            compose:
+              - 'docker-compose.prod.yml'
             infrastructure:
               - 'infrastructure/**'
               - 'docker-compose*.yml'
@@ -92,12 +95,12 @@ jobs:
           SERVICE="${{ github.event.inputs.service }}"
           FORCE_DEPLOY="${{ github.event.inputs.force_deploy }}"
           
-          DASHBOARD=false; AC_SERVICE=false; BABY_GIFTS=false; VACACIONES=false; CASITA=false; NGINX=false
+          DASHBOARD=false; AC_SERVICE=false; BABY_GIFTS=false; VACACIONES=false; CASITA=false; NGINX=false; COMPOSE=false
           
           case "$SERVICE" in
             all)
               echo "🔄 Building ALL services"
-              DASHBOARD=true; AC_SERVICE=true; BABY_GIFTS=true; VACACIONES=true; CASITA=true; NGINX=true
+              DASHBOARD=true; AC_SERVICE=true; BABY_GIFTS=true; VACACIONES=true; CASITA=true; NGINX=true; COMPOSE=true
               ;;
             dashboard)   echo "🎯 Building: dashboard";   DASHBOARD=true ;;
             ac-service)  echo "🎯 Building: ac-service";  AC_SERVICE=true ;;
@@ -112,6 +115,7 @@ jobs:
               VACACIONES=${{ steps.filter.outputs.vacaciones }}
               CASITA=${{ steps.filter.outputs.casita }}
               NGINX=${{ steps.filter.outputs.nginx }}
+              COMPOSE=${{ steps.filter.outputs.compose }}
               ;;
           esac
           
@@ -121,10 +125,12 @@ jobs:
           echo "vacaciones=$VACACIONES" >> $GITHUB_OUTPUT
           echo "casita=$CASITA" >> $GITHUB_OUTPUT
           echo "nginx=$NGINX" >> $GITHUB_OUTPUT
+          echo "compose=$COMPOSE" >> $GITHUB_OUTPUT
           
           if [[ "$DASHBOARD" == "true" ]] || [[ "$AC_SERVICE" == "true" ]] || \
              [[ "$BABY_GIFTS" == "true" ]] || [[ "$VACACIONES" == "true" ]] || \
              [[ "$CASITA" == "true" ]] || [[ "$NGINX" == "true" ]] || \
+             [[ "$COMPOSE" == "true" ]] || \
              [[ "${{ steps.filter.outputs.infrastructure }}" == "true" ]] || \
              [[ "$FORCE_DEPLOY" == "true" ]]; then
             echo "any-service=true" >> $GITHUB_OUTPUT
@@ -222,6 +228,7 @@ jobs:
           echo "| Vacaciones | ${{ steps.changes.outputs.vacaciones }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Casita | ${{ steps.changes.outputs.casita }} |" >> $GITHUB_STEP_SUMMARY
           echo "| nginx | ${{ steps.changes.outputs.nginx }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| compose | ${{ steps.changes.outputs.compose }} |" >> $GITHUB_STEP_SUMMARY
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Test Dashboard
@@ -490,11 +497,60 @@ jobs:
             echo "✅ nginx config deployed and reloaded"
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Deploy docker-compose.prod.yml to Pi
+  # ─────────────────────────────────────────────────────────────────────────────
+  deploy-compose:
+    needs: [build, test-summary]
+    if: |
+      always() &&
+      needs.test-summary.result == 'success' &&
+      needs.build.outputs.compose == 'true' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Sync docker-compose.prod.yml to Pi
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PI_SSH_HOST }}
+          username: ${{ secrets.PI_SSH_USER }}
+          key: ${{ secrets.PI_SSH_KEY }}
+          source: "docker-compose.prod.yml"
+          target: "~/smart-home-prod/"
+          strip_components: 0
+
+      - name: Rename to docker-compose.yml on Pi
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PI_SSH_HOST }}
+          username: ${{ secrets.PI_SSH_USER }}
+          key: ${{ secrets.PI_SSH_KEY }}
+          timeout: 30s
+          script: |
+            cd ~/smart-home-prod
+            echo "=== Updating docker-compose.yml ==="
+            mv docker-compose.prod.yml docker-compose.yml
+            echo "✅ docker-compose.yml updated"
+            
+            # Validate the new compose file
+            docker compose config --quiet && echo "✅ Compose file valid" || echo "⚠️ Compose file has warnings"
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Verify - check all deployed services are healthy
   # ─────────────────────────────────────────────────────────────────────────────
   verify:
-    needs: [build, deploy, deploy-nginx]
-    if: always() && (needs.deploy.result == 'success' || needs.deploy-nginx.result == 'success')
+    needs: [build, deploy, deploy-nginx, deploy-compose]
+    if: always() && (needs.deploy.result == 'success' || needs.deploy-nginx.result == 'success' || needs.deploy-compose.result == 'success')
     runs-on: ubuntu-24.04
     steps:
       - name: Connect to Tailscale
@@ -545,11 +601,12 @@ jobs:
           }
           
           echo "=== Health Check Results ==="
+          # All health checks go through dashboard proxy at /api/health/*
           check_health "Dashboard" "/api/health" "${{ needs.build.outputs.dashboard }}"
-          check_health "AC Service" "/api/ac/status" "${{ needs.build.outputs.ac-service }}"
-          check_health "Baby Gifts" "/api/baby-gifts/health" "${{ needs.build.outputs.baby-gifts }}"
-          check_health "Vacaciones" "/api/vacaciones/health" "${{ needs.build.outputs.vacaciones }}"
-          check_health "Casita" "/api/casita/status" "${{ needs.build.outputs.casita }}"
+          check_health "AC Service" "/api/health/ac" "${{ needs.build.outputs.ac-service }}"
+          check_health "Baby Gifts" "/api/health/baby-gifts" "${{ needs.build.outputs.baby-gifts }}"
+          check_health "Vacaciones" "/api/health/vacaciones" "${{ needs.build.outputs.vacaciones }}"
+          check_health "Casita" "/api/health/casita" "${{ needs.build.outputs.casita }}"
           echo "============================"
           
           if [[ "$FAILED" == "true" ]]; then
@@ -571,3 +628,4 @@ jobs:
           echo "| Vacaciones | ${{ needs.build.outputs.vacaciones }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Casita | ${{ needs.build.outputs.casita }} |" >> $GITHUB_STEP_SUMMARY
           echo "| nginx | ${{ needs.build.outputs.nginx }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| compose | ${{ needs.build.outputs.compose }} |" >> $GITHUB_STEP_SUMMARY
