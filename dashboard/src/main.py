@@ -191,6 +191,10 @@ tags_metadata = [
         "name": "Proxy",
         "description": "External API proxies (flood risk, fire data)",
     },
+    {
+        "name": "Portfolio",
+        "description": "Investment portfolio monitoring (ETFs, crypto)",
+    },
 ]
 
 app = FastAPI(
@@ -213,6 +217,7 @@ Most endpoints require authentication. Use `POST /api/auth/token` to obtain a se
 | **Vacaciones** | `/api/vacaciones/*` | Christmas vacation planning |
 | **Baby Gifts** | `/api/baby-gifts/*` | Gift registry with guest access |
 | **Casita** | `/api/casita/*` | Property search and monitoring |
+| **Portfolio** | `/api/portfolio/*` | Investment portfolio monitoring |
 | **System** | `/api/system/*` | Pi stats, containers, modes |
 | **Proxy** | `/api/proxy/*` | External APIs (flood, fire risk) |
     """,

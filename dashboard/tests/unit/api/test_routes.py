@@ -211,6 +211,7 @@ class TestControllableContainersMapping:
             "passwords",
             "valheim",
             "babygifts",
+            "portfolio",
         }
 
     def test_ac_maps_to_ac_service_container(self):
@@ -251,6 +252,11 @@ class TestControllableContainersMapping:
         from api.routes import CONTROLLABLE_CONTAINERS
 
         assert CONTROLLABLE_CONTAINERS["babygifts"] == ["baby-gifts-service"]
+
+    def test_portfolio_maps_to_portfolio_monitor(self):
+        from api.routes import CONTROLLABLE_CONTAINERS
+
+        assert CONTROLLABLE_CONTAINERS["portfolio"] == ["portfolio-monitor"]
 
     def test_no_container_name_in_multiple_keys(self):
         from api.routes import CONTROLLABLE_CONTAINERS

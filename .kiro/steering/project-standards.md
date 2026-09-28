@@ -37,6 +37,12 @@ inclusion: auto
 - **Project root on Pi**: `~/smart-home-prod` (only docker-compose.yml and data)
 - **Local repo**: `C:\Users\acmls\Documents\Development\smart-home`
 
+### Local Development Environment (Windows)
+- **Python**: Use `py` command (not `python` or `python3`)
+- **Pytest**: `py -m pytest tests/ -v`
+- **PowerShell**: Use `;` instead of `&&` for command chaining
+- **Always run tests locally before committing**
+
 ---
 
 ## Creating a New Service (CHECKLIST)
