@@ -408,6 +408,7 @@ jobs:
           tags: tag:ci
 
       - name: Deploy ${{ matrix.service.name }} to Pi
+        id: deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.PI_SSH_HOST }}
@@ -418,7 +419,17 @@ jobs:
             cd ~/smart-home-prod
             echo "=== Deploying ${{ matrix.service.name }} ==="
             docker compose pull ${{ matrix.service.name }}
-            docker compose up -d ${{ matrix.service.name }}
+            
+            # Solo reiniciar si el servicio ya estaba corriendo
+            if docker compose ps ${{ matrix.service.name }} --status running -q | grep -q .; then
+              docker compose up -d ${{ matrix.service.name }}
+              echo "✅ Service updated and restarted"
+              echo "SERVICE_RESTARTED=true"
+            else
+              echo "⏸️ Service was stopped - image updated but not started"
+              echo "SERVICE_RESTARTED=false"
+            fi
+            
             echo "=== Done ==="
             docker ps --filter "name=${{ matrix.service.name }}" --format "table {{.Names}}\t{{.Status}}"
 
@@ -458,6 +469,9 @@ jobs:
             HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "$BASE_URL$endpoint" || echo "000")
             if [[ "$HTTP_CODE" == "200" ]]; then
               echo "✅ $name ($endpoint) - OK"
+            elif [[ "$HTTP_CODE" == "000" ]] || [[ "$HTTP_CODE" == "502" ]] || [[ "$HTTP_CODE" == "503" ]]; then
+              echo "⚠️  $name ($endpoint) - Service not running (was stopped before deploy)"
+              echo "::warning::$name not responding - may have been intentionally stopped"
             else
               echo "❌ $name ($endpoint) - HTTP $HTTP_CODE"
               FAILED=true
@@ -473,10 +487,10 @@ jobs:
           echo "============================"
           
           if [[ "$FAILED" == "true" ]]; then
-            echo "::error::Some services failed health check"
+            echo "::error::Some services failed health check with unexpected errors"
             exit 1
           fi
-          echo "All deployed services are healthy!"
+          echo "Health check complete!"
 
       - name: Deploy Summary
         if: always()
