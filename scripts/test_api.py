@@ -27,7 +27,7 @@ BASE_URL = os.environ.get("SMART_HOME_URL", "https://raspberrypi.tailaa37cd.ts.n
 def authenticate(client: httpx.Client, username: str, password: str) -> bool:
     """Authenticate and store session cookie in client."""
     resp = client.post(
-        urljoin(BASE_URL, "/auth/token"),
+        urljoin(BASE_URL, "/api/auth/token"),
         data={"username": username, "password": password, "next_url": "/smart-home"},
         follow_redirects=False,
     )
@@ -105,8 +105,8 @@ def main():
 
     # Endpoints requiring auth
     protected_endpoints = [
-        ("GET", "/auth/me", 200),
-        ("GET", "/api/containers", 200),
+        ("GET", "/api/auth/me", 200),
+        ("GET", "/api/system/containers", 200),
         ("GET", "/api/casita/status", 200),
         ("GET", "/api/casita/radar", 200),
         ("GET", "/api/system/stats", 200),

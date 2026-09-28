@@ -38,7 +38,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/auth", tags=["🔐 Auth"])
+router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 # ---------------------------------------------------------------------------
 # Injected configuration (set by main.py lifespan)
@@ -165,7 +165,7 @@ def _send_trust_email(username: str, user_agent: str, ip: str, token: str) -> No
 # ---------------------------------------------------------------------------
 
 
-@router.get("/login", response_class=HTMLResponse)
+@router.get("/login", include_in_schema=False, response_class=HTMLResponse)
 async def get_login(request: Request):
     """Serve the login page. Redirect to /smart-home if already authenticated."""
     if auth_core.get_current_user(request):
@@ -260,7 +260,7 @@ async def post_logout(request: Request):
                     "Device token revoked on logout (series prefix: %s)", series[:8]
                 )
 
-    response = RedirectResponse(url="/auth/login", status_code=303)
+    response = RedirectResponse(url="/api/auth/login", status_code=303)
     auth_core.clear_session_cookie(response)
     _clear_device_cookie(response)
     return response
@@ -299,7 +299,7 @@ async def get_me(request: Request):
 # ---------------------------------------------------------------------------
 
 
-@router.get("/trust/approve")
+@router.get("/trust/approve", include_in_schema=False)
 async def trust_approve(token: str, sig: str):
     """Admin approves a trust request via signed email link."""
     if not auth_users.verify_action_sig(token, "approve", sig):
@@ -328,7 +328,7 @@ async def trust_approve(token: str, sig: str):
     )
 
 
-@router.get("/trust/reject")
+@router.get("/trust/reject", include_in_schema=False)
 async def trust_reject(token: str, sig: str):
     """Admin rejects a trust request via signed email link."""
     if not auth_users.verify_action_sig(token, "reject", sig):

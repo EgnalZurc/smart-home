@@ -3,9 +3,10 @@
 This module contains only:
   - Health check proxies for all external services
   - Casita Sueños proxy routes
-  - Proxy routes for external APIs (flood, firms - kept here for auth)
+  - Proxy routes for external APIs (flood, firms)
+  - Container and system management
 
-AC endpoints (/api/status, /api/sensors, etc.) → proxied by nginx to ac-service:8002
+AC endpoints (/api/ac/*) → proxied by nginx to ac-service:8002
 Vacaciones endpoints (/api/vacaciones/*) → proxied by nginx to vacaciones-service:8003
 """
 
@@ -14,11 +15,20 @@ from fastapi import APIRouter, HTTPException, Request
 
 router = APIRouter(prefix="/api")
 
+# Injected by main.py lifespan
+FIRMS_MAP_KEY: str = ""
+
 
 # ── Health checks ────────────────────────────────────────────────────────────
 
 
-@router.get("/health/backend", tags=["❤️ Health"])
+@router.get("/health", tags=["Health"])
+async def get_health():
+    """Health check for the dashboard API."""
+    return {"status": "ok", "service": "dashboard"}
+
+
+@router.get("/health/backend", tags=["Health"])
 async def get_backend_health():
     """Health check for the backend itself.
     Returns JSON (unlike nginx /health which returns plain text).
@@ -27,7 +37,7 @@ async def get_backend_health():
     return {"online": True}
 
 
-@router.get("/health/zigbee", tags=["❤️ Health"])
+@router.get("/health/zigbee", tags=["Health"])
 async def get_zigbee_health():
     """Proxy health check to ac-service (which manages Zigbee/MQTT)."""
     try:
@@ -38,7 +48,7 @@ async def get_zigbee_health():
         return {"online": False, "mqtt_connected": False, "active_sensors": 0}
 
 
-@router.get("/health/ac", tags=["❤️ Health"])
+@router.get("/health/ac", tags=["Health"])
 async def get_ac_health():
     """Health check for AC service."""
     try:
@@ -50,7 +60,7 @@ async def get_ac_health():
         return {"online": False}
 
 
-@router.get("/health/vacaciones", tags=["❤️ Health"])
+@router.get("/health/vacaciones", tags=["Health"])
 async def get_vacaciones_health():
     """Health check for Vacaciones service."""
     try:
@@ -62,7 +72,7 @@ async def get_vacaciones_health():
         return {"online": False}
 
 
-@router.get("/health/immich", tags=["❤️ Health"])
+@router.get("/health/immich", tags=["Health"])
 async def get_immich_health():
     """Health check for Immich photo server."""
     try:
@@ -73,7 +83,7 @@ async def get_immich_health():
         return {"online": False}
 
 
-@router.get("/health/casita", tags=["❤️ Health"])
+@router.get("/health/casita", tags=["Health"])
 async def get_casita_health():
     """Health check for Casita Sueños service."""
     try:
@@ -85,7 +95,7 @@ async def get_casita_health():
         return {"online": False}
 
 
-@router.get("/health/passwords", tags=["❤️ Health"])
+@router.get("/health/passwords", tags=["Health"])
 async def get_passwords_health():
     """Health check for Vaultwarden."""
     try:
@@ -96,7 +106,7 @@ async def get_passwords_health():
         return {"online": False}
 
 
-@router.get("/health/valheim", tags=["❤️ Health"])
+@router.get("/health/valheim", tags=["Health"])
 async def get_valheim_health():
     """Health check for Valheim dedicated server.
 
@@ -145,7 +155,7 @@ async def get_valheim_health():
     return {"online": False}
 
 
-@router.get("/health/valheim-admin", tags=["❤️ Health"])
+@router.get("/health/valheim-admin", tags=["Health"])
 async def get_valheim_admin_health():
     """Health check for Valheim Admin web app."""
     try:
@@ -160,7 +170,7 @@ async def get_valheim_admin_health():
 # ── Casita Sueños proxy routes ───────────────────────────────────────────────
 
 
-@router.get("/casita/status", tags=["🏡 Casita Sueños"])
+@router.get("/casita/status", tags=["Casita"])
 async def get_casita_status():
     """Get full status of Casita Sueños property monitor."""
     try:
@@ -177,7 +187,7 @@ async def get_casita_status():
         }
 
 
-@router.get("/casita/radar", tags=["🏡 Casita Sueños"])
+@router.get("/casita/radar", tags=["Casita"])
 async def get_casita_radar(request: Request):
     """Get properties above alert threshold (radar view)."""
     qs = str(request.url.query)
@@ -199,7 +209,7 @@ async def get_casita_radar(request: Request):
         }
 
 
-@router.get("/casita/dismissed", tags=["🏡 Casita Sueños"])
+@router.get("/casita/dismissed", tags=["Casita"])
 async def get_casita_dismissed():
     """Get list of dismissed properties."""
     try:
@@ -210,7 +220,7 @@ async def get_casita_dismissed():
         return {"properties": [], "error": str(e)}
 
 
-@router.get("/casita/schedule", tags=["🏡 Casita Sueños"])
+@router.get("/casita/schedule", tags=["Casita"])
 async def get_casita_schedule():
     """Get scraping schedule configuration."""
     try:
@@ -221,7 +231,7 @@ async def get_casita_schedule():
         return {"error": str(e)}
 
 
-@router.post("/casita/schedule", tags=["🏡 Casita Sueños"])
+@router.post("/casita/schedule", tags=["Casita"])
 async def save_casita_schedule(request: Request):
     """Update scraping schedule configuration."""
     try:
@@ -233,7 +243,7 @@ async def save_casita_schedule(request: Request):
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.post("/casita/dismiss", tags=["🏡 Casita Sueños"])
+@router.post("/casita/dismiss", tags=["Casita"])
 async def dismiss_casita_property(request: Request):
     """Dismiss a property from radar."""
     try:
@@ -245,7 +255,7 @@ async def dismiss_casita_property(request: Request):
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.post("/casita/undismiss", tags=["🏡 Casita Sueños"])
+@router.post("/casita/undismiss", tags=["Casita"])
 async def undismiss_casita_property(request: Request):
     """Restore a dismissed property to radar."""
     try:
@@ -257,7 +267,7 @@ async def undismiss_casita_property(request: Request):
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.post("/casita/mark-viewed", tags=["🏡 Casita Sueños"])
+@router.post("/casita/mark-viewed", tags=["Casita"])
 async def mark_casita_viewed(request: Request):
     """Mark a property as viewed."""
     try:
@@ -269,7 +279,7 @@ async def mark_casita_viewed(request: Request):
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.post("/casita/save-comment", tags=["🏡 Casita Sueños"])
+@router.post("/casita/save-comment", tags=["Casita"])
 async def save_casita_comment(request: Request):
     """Save a comment on a property."""
     try:
@@ -283,7 +293,7 @@ async def save_casita_comment(request: Request):
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.get("/casita/summary", tags=["🏡 Casita Sueños"])
+@router.get("/casita/summary", tags=["Casita"])
 async def get_casita_summary():
     """Get AI-generated summary of interesting properties."""
     try:
@@ -294,7 +304,7 @@ async def get_casita_summary():
         return {"content": None, "sent_at": None, "error": str(e)}
 
 
-@router.post("/casita/run-scraping", tags=["🏡 Casita Sueños"])
+@router.post("/casita/run-scraping", tags=["Casita"])
 async def run_casita_scraping():
     """Trigger manual property scraping."""
     try:
@@ -305,7 +315,7 @@ async def run_casita_scraping():
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.post("/casita/run-summary", tags=["🏡 Casita Sueños"])
+@router.post("/casita/run-summary", tags=["Casita"])
 async def run_casita_summary():
     """Trigger AI summary generation."""
     try:
@@ -367,7 +377,7 @@ def _require_super(request: Request) -> str:
     return user
 
 
-@router.get("/system/containers", tags=["📦 Containers"])
+@router.get("/system/containers", tags=["Containers"])
 async def get_containers(request: Request):
     """Return running state for all controllable services.
 
@@ -406,7 +416,7 @@ async def get_containers(request: Request):
     return result
 
 
-@router.post("/system/containers/{app_key}/stop", tags=["📦 Containers"])
+@router.post("/system/containers/{app_key}/stop", tags=["Containers"])
 async def stop_service(app_key: str, request: Request):
     """Stop all containers for the given service app key.
 
@@ -434,7 +444,7 @@ async def stop_service(app_key: str, request: Request):
     return {"status": "ok" if all_ok else "partial", "results": results}
 
 
-@router.post("/system/containers/{app_key}/start", tags=["📦 Containers"])
+@router.post("/system/containers/{app_key}/start", tags=["Containers"])
 async def start_service(app_key: str, request: Request):
     """Start all containers for the given service app key.
 
@@ -481,7 +491,7 @@ def _read_cpu_times() -> tuple[float, float]:
         return 0.0, 0.0
 
 
-@router.get("/system/stats", tags=["⚙️ System"])
+@router.get("/system/stats", tags=["System"])
 async def get_system_stats(request: Request):
     """Return Raspberry Pi system resource usage.
 
@@ -616,7 +626,7 @@ PI_MODES = {
 }
 
 
-@router.get("/system/mode", tags=["⚙️ System"])
+@router.get("/system/mode", tags=["System"])
 async def get_system_mode(request: Request):
     """Return current Pi mode based on which heavy services are running.
 
@@ -672,7 +682,7 @@ async def get_system_mode(request: Request):
     }
 
 
-@router.post("/system/mode/{mode}", tags=["⚙️ System"])
+@router.post("/system/mode/{mode}", tags=["System"])
 async def set_system_mode(mode: str, request: Request):
     """Switch Pi to specified mode by stopping/starting container groups.
 
@@ -738,3 +748,197 @@ async def set_system_mode(mode: str, request: Request):
         "ram_available_mb": round(avail_kb / 1024),
         "results": results,
     }
+
+
+# ── External API Proxies ─────────────────────────────────────────────────────
+
+
+@router.get("/proxy/flood", tags=["Proxy"])
+async def proxy_flood(lat: float, lon: float):
+    """
+    Riesgo de inundación multicapa para una coordenada.
+
+    Fuente 1: SNCZI MITECO (oficial España) — peligrosidad fluvial T=10/100/500 años.
+    Fuente 2: GloFAS via Open-Meteo Flood API — caudal diario del río más cercano.
+
+    Respuesta:
+      {
+        snczi: { t10, t100, t500 } | null,
+        glofas: { mean_m3s, max_hist_m3s, p95_m3s, p99_m3s } | null,
+        risk_level: "muy_alto"|"alto"|"moderado"|"bajo"|"sin_datos",
+        risk_source: "snczi"|"glofas"|"sin_datos",
+        calado_m: float | null,
+      }
+    """
+    import asyncio
+    import re
+    import statistics
+    from datetime import date
+
+    WMS_BASE = "https://servicios.idee.es/wms-inspire/riesgos-naturales/inundaciones"
+    LAYERS = ["NZ.Flood.FluvialT10", "NZ.Flood.FluvialT100", "NZ.Flood.FluvialT500"]
+    DELTAS = [0.0005, 0.001, 0.002, 0.005, 0.01, 0.02]
+    FILL_VALS = {-9999.0, -3.0}
+
+    def _is_fill(v: float) -> bool:
+        if v is None:
+            return True
+        if v in FILL_VALS or v < -2:
+            return True
+        return abs(v - 3.4) < 0.1
+
+    async def _wms_query(layer: str, delta: float) -> float | None:
+        bbox = f"{lon - delta:.5f},{lat - delta:.5f},{lon + delta:.5f},{lat + delta:.5f}"
+        url = (
+            f"{WMS_BASE}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo"
+            f"&BBOX={bbox}&WIDTH=10&HEIGHT=10"
+            f"&LAYERS={layer}&QUERY_LAYERS={layer}"
+            f"&INFO_FORMAT=text/plain&X=5&Y=5&SRS=EPSG:4326"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=8) as c:
+                r = await c.get(url)
+            m = re.search(r"GRAY_INDEX\s*=\s*([-\d.]+)", r.text)
+            return float(m.group(1)) if m else None
+        except Exception:
+            return None
+
+    async def _snczi_with_progressive_bbox() -> dict | None:
+        for delta in DELTAS:
+            results = await asyncio.gather(*[_wms_query(l, delta) for l in LAYERS])
+            t10_raw, t100_raw, t500_raw = results
+            t10 = None if _is_fill(t10_raw) else round(t10_raw, 2)
+            t100 = None if _is_fill(t100_raw) else round(t100_raw, 2)
+            t500 = None if _is_fill(t500_raw) else round(t500_raw, 2)
+            if t10 is not None and t100 is not None and t500 is not None and t10 == t100 == t500:
+                t10 = t100 = t500 = None
+            if any(v is not None for v in (t10, t100, t500)):
+                return {"t10": t10, "t100": t100, "t500": t500, "bbox_delta_deg": delta, "bbox_radius_m": int(delta * 111000)}
+        return None
+
+    async def _glofas() -> dict | None:
+        end_date = date.today().isoformat()
+        start_date = f"{date.today().year - 30}-01-01"
+        url = f"https://flood-api.open-meteo.com/v1/flood?latitude={lat}&longitude={lon}&daily=river_discharge&start_date={start_date}&end_date={end_date}&cell_selection=nearest"
+        try:
+            async with httpx.AsyncClient(timeout=15) as c:
+                r = await c.get(url)
+            d = r.json()
+            if not d.get("daily"):
+                return None
+            vals = [v for v in d["daily"]["river_discharge"] if v is not None]
+            if len(vals) < 30:
+                return None
+            vals_sorted = sorted(vals)
+            n = len(vals_sorted)
+            return {
+                "mean_m3s": round(statistics.mean(vals), 1),
+                "max_hist_m3s": round(max(vals), 1),
+                "p95_m3s": round(vals_sorted[int(n * 0.95)], 1),
+                "p99_m3s": round(vals_sorted[int(n * 0.99)], 1),
+                "lat_grid": d.get("latitude"),
+                "lon_grid": d.get("longitude"),
+                "years": 30,
+            }
+        except Exception:
+            return None
+
+    snczi_data, glofas_data = await asyncio.gather(_snczi_with_progressive_bbox(), _glofas())
+
+    risk_level = "sin_datos"
+    risk_source = "sin_datos"
+    calado_m = None
+
+    if snczi_data:
+        t10, t100, t500 = snczi_data["t10"], snczi_data["t100"], snczi_data["t500"]
+        if t10 is not None and t10 >= 0:
+            risk_level, calado_m = "muy_alto", t10
+        elif t100 is not None and t100 >= 0:
+            risk_level, calado_m = "alto", t100
+        elif t500 is not None and t500 >= 0:
+            risk_level, calado_m = "moderado", t500
+        else:
+            risk_level = "bajo"
+        risk_source = "snczi"
+    elif glofas_data:
+        p99, mx = glofas_data["p99_m3s"], glofas_data["max_hist_m3s"]
+        if mx > 1500 or p99 > 500:
+            risk_level = "muy_alto"
+        elif mx > 500 or p99 > 150:
+            risk_level = "alto"
+        elif mx > 50 or p99 > 15:
+            risk_level = "moderado"
+        else:
+            risk_level = "bajo"
+        risk_source = "glofas"
+
+    return {"snczi": snczi_data, "glofas": glofas_data, "risk_level": risk_level, "risk_source": risk_source, "calado_m": calado_m}
+
+
+@router.get("/proxy/firms", tags=["Proxy"])
+async def proxy_firms(lat: float, lon: float):
+    """
+    Proxy para NASA FIRMS — focos de calor VIIRS SNPP últimos 3 años.
+    Consulta meses de riesgo alto (junio-octubre) en bloques de 5 días.
+    """
+    import asyncio
+    from datetime import date
+
+    if not FIRMS_MAP_KEY:
+        return {"status": "no_key", "focos": None}
+
+    delta = 0.27
+    bbox = f"{lon - delta:.4f},{lat - delta:.4f},{lon + delta:.4f},{lat + delta:.4f}"
+    base = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
+    source = "VIIRS_SNPP_SP"
+
+    today = date.today()
+    windows: list[str] = []
+
+    for years_back in range(1, 4):
+        year = today.year - years_back
+        for month in (6, 7, 8, 9, 10):
+            for day_start in range(1, 29, 5):
+                try:
+                    d = date(year, month, day_start)
+                    if d < date(2012, 1, 19) or d >= today:
+                        continue
+                    windows.append(d.strftime("%Y-%m-%d"))
+                except ValueError:
+                    pass
+
+    if not windows:
+        return {"status": "error", "focos": None, "error": "Sin ventanas disponibles"}
+
+    async def _fetch_window(start_date: str) -> int:
+        url = f"{base}/{FIRMS_MAP_KEY}/{source}/{bbox}/5/{start_date}"
+        try:
+            async with httpx.AsyncClient(timeout=12) as client:
+                r = await client.get(url)
+            if r.status_code != 200:
+                return 0
+            raw_lines = r.text.strip().split("\n")
+            if not raw_lines or len(raw_lines) < 2:
+                return 0
+            header = raw_lines[0].split(",")
+            try:
+                ci = header.index("confidence")
+            except ValueError:
+                ci = None
+            count = 0
+            for line in raw_lines[1:]:
+                if not line.strip():
+                    continue
+                if ci is not None:
+                    parts = line.split(",")
+                    if len(parts) > ci and parts[ci].strip().lower() == "l":
+                        continue
+                count += 1
+            return count
+        except Exception:
+            return 0
+
+    results = await asyncio.gather(*[_fetch_window(w) for w in windows])
+    total_focos = sum(results)
+
+    return {"status": "ok", "focos": total_focos, "radio_km": 30, "periodo": "jun-oct ultimos 3 anos", "peticiones": len(windows)}
