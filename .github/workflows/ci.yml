@@ -449,7 +449,7 @@ jobs:
           tags: tag:ci
 
       - name: Wait for services to start
-        run: sleep 15
+        run: sleep 20
 
       - name: Verify deployed services
         run: |
@@ -466,16 +466,26 @@ jobs:
               return
             fi
             
-            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "$BASE_URL$endpoint" || echo "000")
-            if [[ "$HTTP_CODE" == "200" ]]; then
-              echo "✅ $name ($endpoint) - OK"
-            elif [[ "$HTTP_CODE" =~ ^0+$ ]] || [[ "$HTTP_CODE" == "502" ]] || [[ "$HTTP_CODE" == "503" ]]; then
-              echo "⚠️  $name ($endpoint) - Service not running (was stopped before deploy)"
-              echo "::warning::$name not responding - may have been intentionally stopped"
-            else
-              echo "❌ $name ($endpoint) - HTTP $HTTP_CODE"
-              FAILED=true
-            fi
+            # Retry up to 3 times with 5s delay for transient failures
+            for attempt in 1 2 3; do
+              HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "$BASE_URL$endpoint" || echo "000")
+              if [[ "$HTTP_CODE" == "200" ]]; then
+                echo "✅ $name ($endpoint) - OK"
+                return
+              elif [[ "$HTTP_CODE" =~ ^0+$ ]] || [[ "$HTTP_CODE" == "502" ]] || [[ "$HTTP_CODE" == "503" ]]; then
+                if [[ $attempt -lt 3 ]]; then
+                  echo "⏳ $name ($endpoint) - HTTP $HTTP_CODE, retrying in 5s..."
+                  sleep 5
+                else
+                  echo "⚠️  $name ($endpoint) - Service not responding after 3 attempts"
+                  echo "::warning::$name not responding - may still be starting or intentionally stopped"
+                fi
+              else
+                echo "❌ $name ($endpoint) - HTTP $HTTP_CODE"
+                FAILED=true
+                return
+              fi
+            done
           }
           
           echo "=== Health Check Results ==="
