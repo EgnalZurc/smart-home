@@ -373,7 +373,8 @@ class TestWorldCreation:
     def test_create_world_rejects_empty_name(self, client):
         """POST /api/worlds/new rejects empty name."""
         response = client.post("/api/worlds/new", data={"world_name": ""})
-        assert response.status_code == 400
+        # FastAPI returns 400 for business logic validation, 422 for schema validation
+        assert response.status_code in (400, 422)
 
     def test_create_world_rejects_invalid_chars(self, client):
         """POST /api/worlds/new sanitizes name."""

@@ -156,6 +156,11 @@ async def get_my_service_endpoint():
 
 See existing proxies for: AC (`/api/ac/*`), Vacaciones (`/api/vacaciones/*`), Baby Gifts (`/api/baby-gifts/*`), Casita (`/api/casita/*`).
 
+## Local Development
+- Python: `C:\Users\acmls\AppData\Local\Python\bin\python3.14.exe` (Python 3.14.4)
+- Run tests locally: `C:\Users\acmls\AppData\Local\Python\bin\python3.14.exe -m pytest tests/ -v`
+- Install dependencies: `C:\Users\acmls\AppData\Local\Python\bin\python3.14.exe -m pip install -r requirements.txt`
+
 ## Debugging
 - Check health: curl https://raspberrypi.tailaa37cd.ts.net/api/health/SERVICE
 - View logs: ssh pi@raspberrypi "docker logs CONTAINER --tail 50"
