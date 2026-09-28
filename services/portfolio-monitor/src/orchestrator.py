@@ -248,6 +248,14 @@ class Orchestrator:
         self._running = True
         await self._init_monitors()
         
+        # Run all monitors immediately on startup if no previous data
+        if not self._summary.etf_analysis and not self._summary.crypto_analysis:
+            logger.info("No previous data — running initial monitor refresh...")
+            try:
+                await self.run_all_monitors()
+            except Exception as e:
+                logger.error(f"Initial monitor run failed: {e}")
+        
         # Start scheduler in background
         self._scheduler_task = asyncio.create_task(self._schedule_loop())
         

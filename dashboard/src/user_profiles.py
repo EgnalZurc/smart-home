@@ -114,8 +114,9 @@ APP_REGISTRY: list[dict] = [
     },
     {
         # Portfolio Monitor — ETF and crypto portfolio tracking.
+        # Only SUPER users can see financial data.
         "key": "portfolio",
-        "type": "standard",
+        "type": "config",
         "view_level": 1,
         "edit_level": 1,
     },
