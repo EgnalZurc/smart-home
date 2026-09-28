@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any
 
-from models import AlertLevel, PortfolioSummary
+from models import AlertLevel
 
 
 class BaseMonitor(ABC):

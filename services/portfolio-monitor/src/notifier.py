@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 if TYPE_CHECKING:
-    from models import AlertLevel, CryptoAnalysis, ETFAnalysis, Signal
+    from models import AlertLevel, CryptoAnalysis, ETFAnalysis
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,6 @@ import asyncio
 import json
 import logging
 from datetime import datetime, time, timezone
-from pathlib import Path
 from typing import Any
 
 from config import DATA_DIR, SCHEDULE, reload_config

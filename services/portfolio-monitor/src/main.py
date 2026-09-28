@@ -19,12 +19,11 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from api import router as api_router
+from config import LOG_LEVEL
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-
-from api import router as api_router
-from config import LOG_LEVEL
 from orchestrator import get_orchestrator
 
 # ─────────────────────────────────────────────────────────────────────────────

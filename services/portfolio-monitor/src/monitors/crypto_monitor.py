@@ -9,7 +9,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import requests
-
 from config import CRYPTO_POSITIONS, CRYPTO_THRESHOLDS
 from i18n import t
 from models import AlertLevel, CryptoAnalysis, Signal

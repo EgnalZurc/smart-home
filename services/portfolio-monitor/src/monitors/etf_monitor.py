@@ -10,7 +10,6 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import yfinance as yf
-
 from config import ETF_FUND_IDS, ETF_PLAN, ETF_PORTFOLIO, ETF_THRESHOLDS
 from i18n import t
 from models import AlertLevel, ETFAnalysis, Signal

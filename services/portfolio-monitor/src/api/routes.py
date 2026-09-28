@@ -2,12 +2,10 @@
 Portfolio Monitor — API Routes.
 """
 
-from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from models import AlertLevel
 from orchestrator import get_orchestrator
 
@@ -186,7 +184,7 @@ async def test_notification():
 @router.get("/notifications/status")
 async def notification_status():
     """Get the notification system status."""
-    from notifier import TelegramNotifier, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    from notifier import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TelegramNotifier
     
     notifier = TelegramNotifier()
     
