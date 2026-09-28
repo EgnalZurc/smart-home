@@ -107,6 +107,18 @@ async def get_baby_gifts_health():
         return {"online": False}
 
 
+@router.get("/health/portfolio", tags=["Health"])
+async def get_portfolio_health():
+    """Health check for Portfolio Monitor service."""
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get("http://portfolio-monitor:8010/health")
+            data = resp.json()
+            return {"online": data.get("online", False)}
+    except Exception:
+        return {"online": False}
+
+
 @router.get("/health/passwords", tags=["Health"])
 async def get_passwords_health():
     """Health check for Vaultwarden."""
@@ -365,6 +377,7 @@ CONTROLLABLE_CONTAINERS: dict[str, list[str]] = {
     "passwords": ["vaultwarden"],
     "valheim": ["valheim-server"],
     "babygifts": ["baby-gifts-service"],
+    "portfolio": ["portfolio-monitor"],
 }
 
 DOCKER_PROXY = "http://docker-socket-proxy:2375/v1.41"

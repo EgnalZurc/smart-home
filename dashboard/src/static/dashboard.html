@@ -246,6 +246,7 @@ const T = {
         zigbee_name: 'Zigbee2MQTT', zigbee_desc: 'Dispositivos Zigbee y sensores',
         valheim_name: 'Valheim', valheim_desc: 'Servidor de Valheim',
         babygifts_name: 'Lista Regalos Bebé', babygifts_desc: 'Lista de regalos para el bebé',
+        portfolio_name: 'Monitor Cartera', portfolio_desc: 'Monitorización de ETFs y crypto',
     },
     en: {
         title: 'Cuchi Casa', infrastructure: 'Infrastructure', services: 'Services',
@@ -263,6 +264,7 @@ const T = {
         zigbee_name: 'Zigbee2MQTT', zigbee_desc: 'Zigbee devices and sensors',
         valheim_name: 'Valheim', valheim_desc: 'Valheim server',
         babygifts_name: 'Baby Gift List', babygifts_desc: 'Baby gift registry',
+        portfolio_name: 'Portfolio Monitor', portfolio_desc: 'ETF and crypto monitoring',
     },
 };
 
@@ -280,6 +282,7 @@ const APP_CATALOGUE = {
     passwords: { url: '/passwords/',                                  nameKey: 'passwords_name', descKey: 'passwords_desc', statusUrl: '/api/health/passwords', getStatus: d => d?.online === true },
     babygifts: { url: '/smart-home/baby-gifts', nameKey: 'babygifts_name', descKey: 'babygifts_desc', statusUrl: '/api/health/baby-gifts', getStatus: d => d?.online === true },
     valheim:   { url: '/valheim-admin/',                                 nameKey: 'valheim_name',   descKey: 'valheim_desc',     statusUrl: '/api/health/valheim',       getStatus: d => d?.online === true },
+    portfolio: { url: '/smart-home/portfolio',                            nameKey: 'portfolio_name', descKey: 'portfolio_desc',   statusUrl: '/api/health/portfolio',     getStatus: d => d?.online === true },
 };
 let APPS = [];
 let currentProfile = null;

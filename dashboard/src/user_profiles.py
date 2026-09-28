@@ -112,6 +112,13 @@ APP_REGISTRY: list[dict] = [
         "view_level": 1,
         "edit_level": 1,
     },
+    {
+        # Portfolio Monitor — ETF and crypto portfolio tracking.
+        "key": "portfolio",
+        "type": "standard",
+        "view_level": 1,
+        "edit_level": 1,
+    },
 ]
 
 
