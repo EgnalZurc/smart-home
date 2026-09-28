@@ -1,22 +1,21 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-# Smart Home - Test and Deploy Pipeline
+# Smart Home - Build, Test and Deploy Pipeline
 # 
 # Flow:
-#   1. Tests run automatically on push/PR to main (only changed services)
-#   2. If tests pass → deploy job becomes available (requires manual approval)
-#   3. Approve via GitHub UI or CLI: gh run review --approve
+#   1. Build: detect changes, lint, build Docker images
+#   2. Test: run unit tests for changed services
+#   3. Deploy: manual approval, then deploy changed services to Pi
 #
 # Manual trigger:
-#   gh workflow run ci.yml --repo EgnalZurc/smart-home                           # normal (detect changes)
-#   gh workflow run ci.yml -f force_all_tests=true --repo EgnalZurc/smart-home   # run ALL tests
-#   gh workflow run ci.yml -f service=dashboard --repo EgnalZurc/smart-home      # test ONE service
+#   gh workflow run ci.yml --repo EgnalZurc/smart-home                        # auto-detect changes
+#   gh workflow run ci.yml -f service=all --repo EgnalZurc/smart-home         # all services
+#   gh workflow run ci.yml -f service=dashboard --repo EgnalZurc/smart-home   # single service
 #
-# To deploy from CLI after tests pass:
-#   gh run view <run-id> --repo EgnalZurc/smart-home
+# Deploy approval:
 #   gh run review <run-id> --approve --repo EgnalZurc/smart-home
 # ═══════════════════════════════════════════════════════════════════════════════
 
-name: Test and Deploy
+name: Build, Test and Deploy
 
 on:
   push:
@@ -26,7 +25,7 @@ on:
   workflow_dispatch:
     inputs:
       service:
-        description: 'Service to test (or "all" to test everything)'
+        description: 'Service to build/test'
         required: false
         default: 'auto'
         type: choice
@@ -49,20 +48,22 @@ env:
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
-  # Detect which services changed (or force all if manual trigger)
+  # Build: detect changes, lint, build Docker images
   # ─────────────────────────────────────────────────────────────────────────────
-  detect-changes:
+  build:
     runs-on: ubuntu-24.04
     outputs:
-      dashboard: ${{ steps.result.outputs.dashboard }}
-      ac-service: ${{ steps.result.outputs.ac-service }}
-      baby-gifts: ${{ steps.result.outputs.baby-gifts }}
-      vacaciones: ${{ steps.result.outputs.vacaciones }}
-      casita: ${{ steps.result.outputs.casita }}
-      any-service: ${{ steps.result.outputs.any-service }}
+      dashboard: ${{ steps.changes.outputs.dashboard }}
+      ac-service: ${{ steps.changes.outputs.ac-service }}
+      baby-gifts: ${{ steps.changes.outputs.baby-gifts }}
+      vacaciones: ${{ steps.changes.outputs.vacaciones }}
+      casita: ${{ steps.changes.outputs.casita }}
+      any-service: ${{ steps.changes.outputs.any-service }}
+      services-matrix: ${{ steps.matrix.outputs.services }}
     steps:
       - uses: actions/checkout@v4
-      
+
+      # ── Detect changes ──
       - uses: dorny/paths-filter@v3
         id: filter
         if: ${{ github.event.inputs.service == 'auto' || github.event.inputs.service == '' }}
@@ -82,50 +83,33 @@ jobs:
               - 'infrastructure/**'
               - 'docker-compose*.yml'
 
-      - name: Determine what to test
-        id: result
+      - name: Determine services to build
+        id: changes
         run: |
           SERVICE="${{ github.event.inputs.service }}"
           FORCE_DEPLOY="${{ github.event.inputs.force_deploy }}"
           
-          # Initialize all to false
-          DASHBOARD=false
-          AC_SERVICE=false
-          BABY_GIFTS=false
-          VACACIONES=false
-          CASITA=false
+          DASHBOARD=false; AC_SERVICE=false; BABY_GIFTS=false; VACACIONES=false; CASITA=false
           
-          if [[ "$SERVICE" == "all" ]]; then
-            echo "🔄 Testing ALL services"
-            DASHBOARD=true
-            AC_SERVICE=true
-            BABY_GIFTS=true
-            VACACIONES=true
-            CASITA=true
-          elif [[ "$SERVICE" == "dashboard" ]]; then
-            echo "🎯 Testing only: dashboard"
-            DASHBOARD=true
-          elif [[ "$SERVICE" == "ac-service" ]]; then
-            echo "🎯 Testing only: ac-service"
-            AC_SERVICE=true
-          elif [[ "$SERVICE" == "baby-gifts" ]]; then
-            echo "🎯 Testing only: baby-gifts"
-            BABY_GIFTS=true
-          elif [[ "$SERVICE" == "vacaciones" ]]; then
-            echo "🎯 Testing only: vacaciones"
-            VACACIONES=true
-          elif [[ "$SERVICE" == "casita" ]]; then
-            echo "🎯 Testing only: casita"
-            CASITA=true
-          else
-            # Auto mode: use paths-filter results
-            echo "🔍 Auto-detecting changed services"
-            DASHBOARD=${{ steps.filter.outputs.dashboard }}
-            AC_SERVICE=${{ steps.filter.outputs.ac-service }}
-            BABY_GIFTS=${{ steps.filter.outputs.baby-gifts }}
-            VACACIONES=${{ steps.filter.outputs.vacaciones }}
-            CASITA=${{ steps.filter.outputs.casita }}
-          fi
+          case "$SERVICE" in
+            all)
+              echo "🔄 Building ALL services"
+              DASHBOARD=true; AC_SERVICE=true; BABY_GIFTS=true; VACACIONES=true; CASITA=true
+              ;;
+            dashboard)   echo "🎯 Building: dashboard";   DASHBOARD=true ;;
+            ac-service)  echo "🎯 Building: ac-service";  AC_SERVICE=true ;;
+            baby-gifts)  echo "🎯 Building: baby-gifts";  BABY_GIFTS=true ;;
+            vacaciones)  echo "🎯 Building: vacaciones";  VACACIONES=true ;;
+            casita)      echo "🎯 Building: casita";      CASITA=true ;;
+            *)
+              echo "🔍 Auto-detecting changed services"
+              DASHBOARD=${{ steps.filter.outputs.dashboard }}
+              AC_SERVICE=${{ steps.filter.outputs.ac-service }}
+              BABY_GIFTS=${{ steps.filter.outputs.baby-gifts }}
+              VACACIONES=${{ steps.filter.outputs.vacaciones }}
+              CASITA=${{ steps.filter.outputs.casita }}
+              ;;
+          esac
           
           echo "dashboard=$DASHBOARD" >> $GITHUB_OUTPUT
           echo "ac-service=$AC_SERVICE" >> $GITHUB_OUTPUT
@@ -133,29 +117,115 @@ jobs:
           echo "vacaciones=$VACACIONES" >> $GITHUB_OUTPUT
           echo "casita=$CASITA" >> $GITHUB_OUTPUT
           
-          if [[ "$DASHBOARD" == "true" ]] || \
-             [[ "$AC_SERVICE" == "true" ]] || \
-             [[ "$BABY_GIFTS" == "true" ]] || \
-             [[ "$VACACIONES" == "true" ]] || \
-             [[ "$CASITA" == "true" ]] || \
-             [[ "${{ steps.filter.outputs.infrastructure }}" == "true" ]] || \
+          if [[ "$DASHBOARD" == "true" ]] || [[ "$AC_SERVICE" == "true" ]] || \
+             [[ "$BABY_GIFTS" == "true" ]] || [[ "$VACACIONES" == "true" ]] || \
+             [[ "$CASITA" == "true" ]] || [[ "${{ steps.filter.outputs.infrastructure }}" == "true" ]] || \
              [[ "$FORCE_DEPLOY" == "true" ]]; then
             echo "any-service=true" >> $GITHUB_OUTPUT
           else
             echo "any-service=false" >> $GITHUB_OUTPUT
           fi
 
+      # ── Build matrix for deploy ──
+      - name: Build deploy matrix
+        id: matrix
+        run: |
+          SERVICES="["
+          FIRST=true
+          
+          add_service() {
+            if [[ "$FIRST" == "true" ]]; then FIRST=false; else SERVICES="$SERVICES,"; fi
+            SERVICES="$SERVICES{\"name\":\"$1\",\"image\":\"$2\",\"context\":\"$3\"}"
+          }
+          
+          [[ "${{ steps.changes.outputs.dashboard }}" == "true" ]] && \
+            add_service "dashboard" "egnal/smart-home-dashboard" "./dashboard"
+          [[ "${{ steps.changes.outputs.ac-service }}" == "true" ]] && \
+            add_service "ac-service" "egnal/smart-home-ac-service" "./services/ac-service"
+          [[ "${{ steps.changes.outputs.baby-gifts }}" == "true" ]] && \
+            add_service "baby-gifts-service" "egnal/smart-home-baby-gifts" "./services/baby-gifts-service"
+          [[ "${{ steps.changes.outputs.vacaciones }}" == "true" ]] && \
+            add_service "vacaciones-service" "egnal/smart-home-vacaciones" "./services/vacaciones-service"
+          [[ "${{ steps.changes.outputs.casita }}" == "true" ]] && \
+            add_service "casita-suenos" "egnal/smart-home-casita-suenos" "./services/casita-suenos/fase3-app"
+          
+          SERVICES="$SERVICES]"
+          echo "services=$SERVICES" >> $GITHUB_OUTPUT
+          echo "Deploy matrix: $SERVICES"
+
+      # ── Setup Python for linting ──
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ruff
+        run: pip install ruff
+
+      # ── Lint changed services ──
+      - name: Lint dashboard
+        if: ${{ steps.changes.outputs.dashboard == 'true' }}
+        run: |
+          echo "::group::Lint dashboard"
+          ruff check dashboard/src --output-format=github || true
+          ruff format dashboard/src --check --diff || true
+          echo "::endgroup::"
+
+      - name: Lint ac-service
+        if: ${{ steps.changes.outputs.ac-service == 'true' }}
+        run: |
+          echo "::group::Lint ac-service"
+          ruff check services/ac-service/src --output-format=github || true
+          ruff format services/ac-service/src --check --diff || true
+          echo "::endgroup::"
+
+      - name: Lint baby-gifts-service
+        if: ${{ steps.changes.outputs.baby-gifts == 'true' }}
+        run: |
+          echo "::group::Lint baby-gifts-service"
+          ruff check services/baby-gifts-service/src --output-format=github || true
+          ruff format services/baby-gifts-service/src --check --diff || true
+          echo "::endgroup::"
+
+      - name: Lint vacaciones-service
+        if: ${{ steps.changes.outputs.vacaciones == 'true' }}
+        run: |
+          echo "::group::Lint vacaciones-service"
+          ruff check services/vacaciones-service/src --output-format=github || true
+          ruff format services/vacaciones-service/src --check --diff || true
+          echo "::endgroup::"
+
+      - name: Lint casita-suenos
+        if: ${{ steps.changes.outputs.casita == 'true' }}
+        run: |
+          echo "::group::Lint casita-suenos"
+          ruff check services/casita-suenos/fase3-app/src --output-format=github || true
+          ruff format services/casita-suenos/fase3-app/src --check --diff || true
+          echo "::endgroup::"
+
+      # ── Build summary ──
+      - name: Build Summary
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Changed |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Dashboard | ${{ steps.changes.outputs.dashboard }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| AC Service | ${{ steps.changes.outputs.ac-service }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Baby Gifts | ${{ steps.changes.outputs.baby-gifts }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Vacaciones | ${{ steps.changes.outputs.vacaciones }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Casita | ${{ steps.changes.outputs.casita }} |" >> $GITHUB_STEP_SUMMARY
+
   # ─────────────────────────────────────────────────────────────────────────────
   # Test Dashboard
   # ─────────────────────────────────────────────────────────────────────────────
   test-dashboard:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.dashboard == 'true' }}
+    needs: build
+    if: ${{ needs.build.outputs.dashboard == 'true' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -165,9 +235,7 @@ jobs:
           pip install -r dashboard/requirements.txt
           pip install pytest pytest-asyncio
       - name: Run tests
-        run: |
-          cd dashboard
-          python -m pytest tests/ -v --tb=short
+        run: cd dashboard && python -m pytest tests/ -v --tb=short
         env:
           PYTHONPATH: src
 
@@ -175,13 +243,12 @@ jobs:
   # Test AC Service
   # ─────────────────────────────────────────────────────────────────────────────
   test-ac-service:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.ac-service == 'true' }}
+    needs: build
+    if: ${{ needs.build.outputs.ac-service == 'true' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -191,9 +258,7 @@ jobs:
           pip install -r services/ac-service/requirements.txt
           pip install pytest pytest-asyncio
       - name: Run tests
-        run: |
-          cd services/ac-service
-          python -m pytest tests/ -v --tb=short || echo "No tests found or tests skipped"
+        run: cd services/ac-service && python -m pytest tests/ -v --tb=short || echo "No tests found"
         env:
           PYTHONPATH: src
 
@@ -201,13 +266,12 @@ jobs:
   # Test Baby Gifts Service
   # ─────────────────────────────────────────────────────────────────────────────
   test-baby-gifts:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.baby-gifts == 'true' }}
+    needs: build
+    if: ${{ needs.build.outputs.baby-gifts == 'true' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -217,9 +281,7 @@ jobs:
           pip install -r services/baby-gifts-service/requirements.txt
           pip install pytest pytest-asyncio
       - name: Run tests
-        run: |
-          cd services/baby-gifts-service
-          python -m pytest tests/ -v --tb=short || echo "No tests found or tests skipped"
+        run: cd services/baby-gifts-service && python -m pytest tests/ -v --tb=short || echo "No tests found"
         env:
           PYTHONPATH: src
 
@@ -227,13 +289,12 @@ jobs:
   # Test Vacaciones Service
   # ─────────────────────────────────────────────────────────────────────────────
   test-vacaciones:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.vacaciones == 'true' }}
+    needs: build
+    if: ${{ needs.build.outputs.vacaciones == 'true' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -243,9 +304,7 @@ jobs:
           pip install -r services/vacaciones-service/requirements.txt
           pip install pytest pytest-asyncio
       - name: Run tests
-        run: |
-          cd services/vacaciones-service
-          python -m pytest tests/ -v --tb=short || echo "No tests found or tests skipped"
+        run: cd services/vacaciones-service && python -m pytest tests/ -v --tb=short || echo "No tests found"
         env:
           PYTHONPATH: src
 
@@ -253,13 +312,12 @@ jobs:
   # Test Casita Sueños
   # ─────────────────────────────────────────────────────────────────────────────
   test-casita:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.casita == 'true' }}
+    needs: build
+    if: ${{ needs.build.outputs.casita == 'true' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -269,9 +327,7 @@ jobs:
           pip install -r services/casita-suenos/fase3-app/requirements.txt
           pip install pytest pytest-asyncio
       - name: Run tests
-        run: |
-          cd services/casita-suenos/fase3-app
-          python -m pytest tests/ -v --tb=short || echo "No tests found or tests skipped"
+        run: cd services/casita-suenos/fase3-app && python -m pytest tests/ -v --tb=short || echo "No tests found"
         env:
           PYTHONPATH: src
 
@@ -279,59 +335,45 @@ jobs:
   # Test Summary - gate for deploy
   # ─────────────────────────────────────────────────────────────────────────────
   test-summary:
-    needs: [detect-changes, test-dashboard, test-ac-service, test-baby-gifts, test-vacaciones, test-casita]
+    needs: [build, test-dashboard, test-ac-service, test-baby-gifts, test-vacaciones, test-casita]
     if: always()
     runs-on: ubuntu-24.04
-    outputs:
-      tests-passed: ${{ steps.result.outputs.passed }}
     steps:
       - name: Check test results
-        id: result
         run: |
           echo "=== Test Summary ==="
-          echo "Dashboard: ${{ needs.test-dashboard.result }}"
-          echo "AC Service: ${{ needs.test-ac-service.result }}"
-          echo "Baby Gifts: ${{ needs.test-baby-gifts.result }}"
-          echo "Vacaciones: ${{ needs.test-vacaciones.result }}"
-          echo "Casita: ${{ needs.test-casita.result }}"
-          
-          # A test is considered passed if it succeeded OR was skipped (no changes)
-          DASHBOARD="${{ needs.test-dashboard.result }}"
-          AC="${{ needs.test-ac-service.result }}"
-          BABYGIFTS="${{ needs.test-baby-gifts.result }}"
-          VACACIONES="${{ needs.test-vacaciones.result }}"
-          CASITA="${{ needs.test-casita.result }}"
-          
           FAILED=false
-          for result in "$DASHBOARD" "$AC" "$BABYGIFTS" "$VACACIONES" "$CASITA"; do
-            if [[ "$result" == "failure" ]]; then
-              FAILED=true
-              break
-            fi
+          for result in "${{ needs.test-dashboard.result }}" "${{ needs.test-ac-service.result }}" \
+                        "${{ needs.test-baby-gifts.result }}" "${{ needs.test-vacaciones.result }}" \
+                        "${{ needs.test-casita.result }}"; do
+            [[ "$result" == "failure" ]] && FAILED=true
           done
           
           if [[ "$FAILED" == "true" ]]; then
-            echo "passed=false" >> $GITHUB_OUTPUT
             echo "❌ Some tests failed"
             exit 1
           else
-            echo "passed=true" >> $GITHUB_OUTPUT
             echo "✅ All tests passed (or skipped)"
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Deploy - requires manual approval via environment protection
+  # Deploy - matrix strategy with single approval
   # ─────────────────────────────────────────────────────────────────────────────
   deploy:
-    needs: [detect-changes, test-summary]
+    needs: [build, test-summary]
     if: |
       always() &&
       needs.test-summary.result == 'success' &&
-      needs.detect-changes.outputs.any-service == 'true' &&
+      needs.build.outputs.any-service == 'true' &&
+      needs.build.outputs.services-matrix != '[]' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    environment: production  # ← Requires manual approval in GitHub settings
+    environment: production
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.build.outputs.services-matrix) }}
+      fail-fast: false
     
     steps:
       - uses: actions/checkout@v4
@@ -348,66 +390,18 @@ jobs:
           username: egnal
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Build changed services in parallel
-      - name: Build and push Dashboard
-        if: ${{ needs.detect-changes.outputs.dashboard == 'true' }}
+      - name: Build and push ${{ matrix.service.name }}
         uses: docker/build-push-action@v5
         with:
-          context: ./dashboard
+          context: ${{ matrix.service.context }}
           push: true
           tags: |
-            egnal/smart-home-dashboard:latest
-            egnal/smart-home-dashboard:${{ github.sha }}
+            ${{ matrix.service.image }}:latest
+            ${{ matrix.service.image }}:${{ github.sha }}
           platforms: linux/arm64
 
-      - name: Build and push AC Service
-        if: ${{ needs.detect-changes.outputs.ac-service == 'true' }}
-        uses: docker/build-push-action@v5
-        with:
-          context: ./services/ac-service
-          push: true
-          tags: |
-            egnal/smart-home-ac-service:latest
-            egnal/smart-home-ac-service:${{ github.sha }}
-          platforms: linux/arm64
-
-      - name: Build and push Baby Gifts
-        if: ${{ needs.detect-changes.outputs.baby-gifts == 'true' }}
-        uses: docker/build-push-action@v5
-        with:
-          context: ./services/baby-gifts-service
-          push: true
-          tags: |
-            egnal/smart-home-baby-gifts:latest
-            egnal/smart-home-baby-gifts:${{ github.sha }}
-          platforms: linux/arm64
-
-      - name: Build and push Vacaciones
-        if: ${{ needs.detect-changes.outputs.vacaciones == 'true' }}
-        uses: docker/build-push-action@v5
-        with:
-          context: ./services/vacaciones-service
-          push: true
-          tags: |
-            egnal/smart-home-vacaciones:latest
-            egnal/smart-home-vacaciones:${{ github.sha }}
-          platforms: linux/arm64
-
-      - name: Build and push Casita Sueños
-        if: ${{ needs.detect-changes.outputs.casita == 'true' }}
-        uses: docker/build-push-action@v5
-        with:
-          context: ./services/casita-suenos/fase3-app
-          push: true
-          tags: |
-            egnal/smart-home-casita-suenos:latest
-            egnal/smart-home-casita-suenos:${{ github.sha }}
-          platforms: linux/arm64
-
-      # Deploy to Pi
-      - name: Deploy to Raspberry Pi
+      - name: Deploy ${{ matrix.service.name }} to Pi
         uses: appleboy/ssh-action@v1.0.3
-        continue-on-error: true
         with:
           host: ${{ secrets.PI_SSH_HOST }}
           username: ${{ secrets.PI_SSH_USER }}
@@ -415,34 +409,8 @@ jobs:
           timeout: 120s
           script: |
             cd ~/smart-home-prod
-            
-            # Build list of services to update
-            SERVICES=""
-            [ "${{ needs.detect-changes.outputs.dashboard }}" == "true" ] && SERVICES="$SERVICES dashboard"
-            [ "${{ needs.detect-changes.outputs.ac-service }}" == "true" ] && SERVICES="$SERVICES ac-service"
-            [ "${{ needs.detect-changes.outputs.baby-gifts }}" == "true" ] && SERVICES="$SERVICES baby-gifts-service"
-            [ "${{ needs.detect-changes.outputs.vacaciones }}" == "true" ] && SERVICES="$SERVICES vacaciones-service"
-            [ "${{ needs.detect-changes.outputs.casita }}" == "true" ] && SERVICES="$SERVICES casita-suenos"
-            
-            if [ -n "$SERVICES" ]; then
-              echo "=== Updating services:$SERVICES ==="
-              docker compose pull $SERVICES
-              docker compose up -d $SERVICES
-            else
-              echo "=== No services to update ==="
-            fi
-            
-            echo "=== Deploy complete ==="
-            docker ps --format "table {{.Names}}\t{{.Status}}" | head -15
-
-      - name: Deploy Summary
-        if: always()
-        run: |
-          echo "## Deploy Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Services deployed:" >> $GITHUB_STEP_SUMMARY
-          echo "- Dashboard: ${{ needs.detect-changes.outputs.dashboard }}" >> $GITHUB_STEP_SUMMARY
-          echo "- AC Service: ${{ needs.detect-changes.outputs.ac-service }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Baby Gifts: ${{ needs.detect-changes.outputs.baby-gifts }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Vacaciones: ${{ needs.detect-changes.outputs.vacaciones }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Casita: ${{ needs.detect-changes.outputs.casita }}" >> $GITHUB_STEP_SUMMARY
+            echo "=== Deploying ${{ matrix.service.name }} ==="
+            docker compose pull ${{ matrix.service.name }}
+            docker compose up -d ${{ matrix.service.name }}
+            echo "=== Done ==="
+            docker ps --filter "name=${{ matrix.service.name }}" --format "table {{.Names}}\t{{.Status}}"
