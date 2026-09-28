@@ -412,7 +412,7 @@ class TestStopService:
     def test_stop_non_super_returns_403(self):
         c = _make_client()
         with _patch_require_super('virchi', 'FAMILIA_PRINCIPAL'):
-            r = c.post("/api/containers/ac/stop")
+            r = c.post("/api/system/containers/ac/stop")
         assert r.status_code == 403
 
     def test_stop_photos_stops_all_three_containers(self):
@@ -471,5 +471,5 @@ class TestStartService:
     def test_start_non_super_returns_403(self):
         c = _make_client()
         with _patch_require_super('virchi', 'FAMILIA_PRINCIPAL'):
-            r = c.post("/api/containers/ac/start")
+            r = c.post("/api/system/containers/ac/start")
         assert r.status_code == 403
