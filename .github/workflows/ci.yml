@@ -58,6 +58,7 @@ jobs:
       baby-gifts: ${{ steps.changes.outputs.baby-gifts }}
       vacaciones: ${{ steps.changes.outputs.vacaciones }}
       casita: ${{ steps.changes.outputs.casita }}
+      nginx: ${{ steps.changes.outputs.nginx }}
       any-service: ${{ steps.changes.outputs.any-service }}
       services-matrix: ${{ steps.matrix.outputs.services }}
     steps:
@@ -79,6 +80,8 @@ jobs:
               - 'services/vacaciones-service/**'
             casita:
               - 'services/casita-suenos/**'
+            nginx:
+              - 'infrastructure/nginx/**'
             infrastructure:
               - 'infrastructure/**'
               - 'docker-compose*.yml'
@@ -89,12 +92,12 @@ jobs:
           SERVICE="${{ github.event.inputs.service }}"
           FORCE_DEPLOY="${{ github.event.inputs.force_deploy }}"
           
-          DASHBOARD=false; AC_SERVICE=false; BABY_GIFTS=false; VACACIONES=false; CASITA=false
+          DASHBOARD=false; AC_SERVICE=false; BABY_GIFTS=false; VACACIONES=false; CASITA=false; NGINX=false
           
           case "$SERVICE" in
             all)
               echo "🔄 Building ALL services"
-              DASHBOARD=true; AC_SERVICE=true; BABY_GIFTS=true; VACACIONES=true; CASITA=true
+              DASHBOARD=true; AC_SERVICE=true; BABY_GIFTS=true; VACACIONES=true; CASITA=true; NGINX=true
               ;;
             dashboard)   echo "🎯 Building: dashboard";   DASHBOARD=true ;;
             ac-service)  echo "🎯 Building: ac-service";  AC_SERVICE=true ;;
@@ -108,6 +111,7 @@ jobs:
               BABY_GIFTS=${{ steps.filter.outputs.baby-gifts }}
               VACACIONES=${{ steps.filter.outputs.vacaciones }}
               CASITA=${{ steps.filter.outputs.casita }}
+              NGINX=${{ steps.filter.outputs.nginx }}
               ;;
           esac
           
@@ -116,10 +120,12 @@ jobs:
           echo "baby-gifts=$BABY_GIFTS" >> $GITHUB_OUTPUT
           echo "vacaciones=$VACACIONES" >> $GITHUB_OUTPUT
           echo "casita=$CASITA" >> $GITHUB_OUTPUT
+          echo "nginx=$NGINX" >> $GITHUB_OUTPUT
           
           if [[ "$DASHBOARD" == "true" ]] || [[ "$AC_SERVICE" == "true" ]] || \
              [[ "$BABY_GIFTS" == "true" ]] || [[ "$VACACIONES" == "true" ]] || \
-             [[ "$CASITA" == "true" ]] || [[ "${{ steps.filter.outputs.infrastructure }}" == "true" ]] || \
+             [[ "$CASITA" == "true" ]] || [[ "$NGINX" == "true" ]] || \
+             [[ "${{ steps.filter.outputs.infrastructure }}" == "true" ]] || \
              [[ "$FORCE_DEPLOY" == "true" ]]; then
             echo "any-service=true" >> $GITHUB_OUTPUT
           else
@@ -215,6 +221,7 @@ jobs:
           echo "| Baby Gifts | ${{ steps.changes.outputs.baby-gifts }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Vacaciones | ${{ steps.changes.outputs.vacaciones }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Casita | ${{ steps.changes.outputs.casita }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| nginx | ${{ steps.changes.outputs.nginx }} |" >> $GITHUB_STEP_SUMMARY
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Test Dashboard
@@ -434,11 +441,60 @@ jobs:
             docker ps --filter "name=${{ matrix.service.name }}" --format "table {{.Names}}\t{{.Status}}"
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Deploy nginx config - sync infrastructure files to Pi
+  # ─────────────────────────────────────────────────────────────────────────────
+  deploy-nginx:
+    needs: [build, test-summary]
+    if: |
+      always() &&
+      needs.test-summary.result == 'success' &&
+      needs.build.outputs.nginx == 'true' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Sync nginx config to Pi
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PI_SSH_HOST }}
+          username: ${{ secrets.PI_SSH_USER }}
+          key: ${{ secrets.PI_SSH_KEY }}
+          source: "infrastructure/nginx/conf.d/*,infrastructure/nginx/nginx.conf"
+          target: "~/smart-home-prod/"
+          strip_components: 0
+
+      - name: Reload nginx
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PI_SSH_HOST }}
+          username: ${{ secrets.PI_SSH_USER }}
+          key: ${{ secrets.PI_SSH_KEY }}
+          timeout: 30s
+          script: |
+            echo "=== Testing nginx config ==="
+            docker exec nginx-reverse-proxy nginx -t
+            
+            echo "=== Reloading nginx ==="
+            docker exec nginx-reverse-proxy nginx -s reload
+            
+            echo "✅ nginx config deployed and reloaded"
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Verify - check all deployed services are healthy
   # ─────────────────────────────────────────────────────────────────────────────
   verify:
-    needs: [build, deploy]
-    if: always() && needs.deploy.result == 'success'
+    needs: [build, deploy, deploy-nginx]
+    if: always() && (needs.deploy.result == 'success' || needs.deploy-nginx.result == 'success')
     runs-on: ubuntu-24.04
     steps:
       - name: Connect to Tailscale
@@ -514,3 +570,4 @@ jobs:
           echo "| Baby Gifts | ${{ needs.build.outputs.baby-gifts }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Vacaciones | ${{ needs.build.outputs.vacaciones }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Casita | ${{ needs.build.outputs.casita }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| nginx | ${{ needs.build.outputs.nginx }} |" >> $GITHUB_STEP_SUMMARY
