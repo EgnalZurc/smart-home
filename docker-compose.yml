@@ -153,6 +153,8 @@ services:
       - 8010
     volumes:
       - ./data/portfolio-monitor:/app/data
+    env_file:
+      - .env
     environment:
       - TZ=Europe/Madrid
       - MONITOR_LANG=es

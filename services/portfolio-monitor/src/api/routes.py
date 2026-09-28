@@ -160,6 +160,45 @@ async def reload_config():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Notification endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+@router.post("/notifications/test")
+async def test_notification():
+    """Send a test notification to verify Telegram setup."""
+    from notifier import TelegramNotifier
+    
+    notifier = TelegramNotifier()
+    
+    if not notifier.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Notifications disabled — missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID",
+        )
+    
+    result = notifier.send_test()
+    
+    if result.success:
+        return {"status": "sent", "message": result.message}
+    else:
+        raise HTTPException(status_code=500, detail=result.message)
+
+
+@router.get("/notifications/status")
+async def notification_status():
+    """Get the notification system status."""
+    from notifier import TelegramNotifier, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    
+    notifier = TelegramNotifier()
+    
+    return {
+        "enabled": notifier.enabled,
+        "telegram_configured": bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID),
+        "bot_token_set": bool(TELEGRAM_BOT_TOKEN),
+        "chat_id_set": bool(TELEGRAM_CHAT_ID),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Health endpoint
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/health")

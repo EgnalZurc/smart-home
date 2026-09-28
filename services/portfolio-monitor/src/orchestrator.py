@@ -1,6 +1,7 @@
 """
 Portfolio Monitor — Monitor Orchestrator.
 Manages scheduled execution of monitors and maintains state.
+Sends Telegram alerts when WARN or DANGER signals are detected.
 """
 
 import asyncio
@@ -12,6 +13,7 @@ from typing import Any
 
 from config import DATA_DIR, SCHEDULE, reload_config
 from models import AlertLevel, MonitorState, PortfolioSummary
+from notifier import TelegramNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,7 @@ class Orchestrator:
         self._state = MonitorState()
         self._summary = PortfolioSummary()
         self._monitors: dict[str, Any] = {}
+        self._notifier = TelegramNotifier()
         self._running = False
         self._scheduler_task: asyncio.Task | None = None
         self._load_state()
@@ -105,7 +108,7 @@ class Orchestrator:
             raise
     
     async def run_all_monitors(self) -> dict[str, Any]:
-        """Run all registered monitors."""
+        """Run all registered monitors and send alerts if needed."""
         results = {}
         
         for name in self._monitors:
@@ -115,7 +118,36 @@ class Orchestrator:
                 logger.error(f"Failed to run {name}: {e}")
                 results[name] = {"error": str(e)}
         
+        # Send Telegram alert if there are WARN or DANGER signals
+        await self._send_alerts_if_needed()
+        
         return results
+    
+    async def _send_alerts_if_needed(self):
+        """Send Telegram alerts if there are warnings or dangers."""
+        # Calculate overall level
+        overall_level = AlertLevel.OK
+        if self._summary.etf_level:
+            overall_level = overall_level.escalate(self._summary.etf_level)
+        if self._summary.crypto_level:
+            overall_level = overall_level.escalate(self._summary.crypto_level)
+        
+        if overall_level not in (AlertLevel.WARN, AlertLevel.DANGER):
+            logger.info("No alerts to send — portfolio status is OK")
+            return
+        
+        # Send summary alert
+        result = self._notifier.send_summary_alert(
+            etf_results=self._summary.etf_analysis or [],
+            crypto_results=self._summary.crypto_analysis or [],
+            overall_level=overall_level,
+            fear_greed=self._summary.crypto_fear_greed,
+        )
+        
+        if result.success:
+            logger.info(f"Alert sent to Telegram: {result.message}")
+        else:
+            logger.error(f"Failed to send Telegram alert: {result.message}")
     
     def get_summary(self) -> PortfolioSummary:
         """Get the current portfolio summary."""

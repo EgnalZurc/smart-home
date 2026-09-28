@@ -42,6 +42,18 @@ El servicio lee su configuración de `/app/data/settings.toml`. Ver `settings.ex
 | `MONITOR_LANG` | Idioma de los reportes (`es` o `en`) | `es` |
 | `LOG_LEVEL` | Nivel de logging (`DEBUG`, `INFO`, `WARNING`) | `INFO` |
 | `DATA_DIR` | Directorio de datos | `/app/data` |
+| `TELEGRAM_BOT_TOKEN` | Token del bot de Telegram (requerido para alertas) | - |
+| `TELEGRAM_CHAT_ID` | ID del chat de Telegram (requerido para alertas) | - |
+
+### Notificaciones Telegram
+
+El servicio envía alertas a Telegram **solo cuando hay señales WARN o DANGER**. 
+Esto evita spam y te notifica solo cuando necesitas revisar algo.
+
+Para configurar:
+1. Usa el mismo bot que casita-suenos (ya configurado en `.env`)
+2. Las variables `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` se leen del `.env`
+3. Puedes probar con `POST /api/portfolio/notifications/test`
 
 ## API Endpoints
 
@@ -55,6 +67,8 @@ El servicio lee su configuración de `/app/data/settings.toml`. Ver `settings.ex
 | POST | `/api/portfolio/refresh/{name}` | Actualizar monitor específico |
 | GET | `/api/portfolio/schedule` | Ver programación |
 | POST | `/api/portfolio/reload-config` | Recargar configuración |
+| GET | `/api/portfolio/notifications/status` | Estado del notificador |
+| POST | `/api/portfolio/notifications/test` | Enviar notificación de prueba |
 | GET | `/health` | Health check |
 
 ## Desarrollo local
