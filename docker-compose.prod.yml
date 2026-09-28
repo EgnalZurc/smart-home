@@ -223,6 +223,40 @@ services:
     networks:
       - smart-home
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Valheim Admin - Web management UI for Valheim server
+  # ─────────────────────────────────────────────────────────────────────────────
+  valheim-admin:
+    image: egnal/smart-home-valheim-admin:latest
+    container_name: valheim-admin
+    restart: unless-stopped
+    mem_limit: 96m
+    memswap_limit: 96m
+    expose:
+      - 8080
+    environment:
+      - TZ=Europe/Madrid
+      - VALHEIM_ENV_FILE=/config/.env
+      - VALHEIM_WORLDS_DIR=/server_data/worlds_local
+      - VALHEIM_LOGS_DIR=/server_data/logs
+      - VALHEIM_COMPOSE_FILE=/compose/docker-compose.yml
+    volumes:
+      # Valheim server config and data (external to smart-home-prod)
+      - /home/pi/projects/valheim-server/.env:/config/.env
+      - /home/pi/projects/valheim-server/server_data:/server_data
+      - /home/pi/projects/valheim-server/docker-compose.yml:/compose/docker-compose.yml:ro
+      - /home/pi/projects/valheim-server/.env:/compose/.env:ro
+      # Docker socket for server control
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - smart-home
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
 networks:
   smart-home:
     driver: bridge
