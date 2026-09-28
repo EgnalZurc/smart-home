@@ -112,7 +112,8 @@ async def get_passwords_health():
     """Health check for Vaultwarden."""
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get("http://vaultwarden:80/")
+            # Vaultwarden with DOMAIN=/passwords returns 404 on /, must use /passwords/
+            resp = await client.get("http://vaultwarden:80/passwords/")
             return {"online": resp.status_code == 200}
     except Exception:
         return {"online": False}
