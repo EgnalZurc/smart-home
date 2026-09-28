@@ -122,9 +122,37 @@ async def proxy_endpoint():
 > 
 > ¿Quieres que proponga una refactorización para integrarla correctamente, o prefieres una implementación alternativa?"
 
-## Deployment
-Primary: `gh workflow run ci.yml -f service=SERVICE --repo EgnalZurc/smart-home`
-Fallback: `ssh pi@raspberrypi "cd ~/smart-home-prod && docker compose pull SERVICE && docker compose up -d SERVICE"`
+## Deployment (CRITICAL - READ CAREFULLY)
+
+### MANDATORY: Always use CI/CD
+**NEVER modify the Pi directly.** All changes MUST go through GitHub CI/CD:
+
+1. Make changes to source code locally (C:\Users\acmls\Documents\Development\smart-home)
+2. Commit and push to GitHub
+3. CI automatically builds, tests, and deploys
+
+```bash
+# Push triggers CI automatically. For manual deploy:
+gh workflow run ci.yml -f service=SERVICE --repo EgnalZurc/smart-home
+```
+
+### What CI deploys automatically:
+- **Code changes** → builds Docker image → deploys to Pi
+- **docker-compose.prod.yml changes** → syncs to Pi as docker-compose.yml
+- **nginx config changes** → syncs and reloads nginx
+
+### SSH to Pi is ONLY for:
+- **Reading**: logs, stats, debugging (`docker logs`, `docker stats`, `free -h`)
+- **Verification**: checking if deploy succeeded
+- **Emergency**: only if CI is broken AND user explicitly asks
+
+### NEVER do this:
+- ❌ `ssh pi@raspberrypi "docker compose up -d"`
+- ❌ `scp file pi@raspberrypi:~/smart-home-prod/`
+- ❌ Direct edits to files on Pi
+- ❌ `docker restart/stop/start` for deployed services (except for debugging)
+
+If tempted to SSH for changes, STOP and push to GitHub instead.
 
 ## Creating New Services
 1. Create services/my-service/ with src/main.py, Dockerfile, requirements.txt

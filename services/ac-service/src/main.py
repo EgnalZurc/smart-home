@@ -14,8 +14,6 @@ Serves:
   GET  /api/ac_real                → real AC state from MELCloud
   GET  /api/outdoor                → outdoor temperature (cached)
   GET  /api/errors                 → active errors
-  GET  /api/humidity/study         → humidity analysis
-  POST /api/humidity/study/run     → trigger manual analysis
   GET  /api/energy/current         → energy consumption 24h
   GET  /api/energy/hourly          → hourly energy chart data
   GET  /api/energy/monthly         → monthly energy chart data
@@ -43,7 +41,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from humidity_analysis import HumidityAnalysisScheduler
 from melcloud_client import MelCloudClient
 from mqtt_handler import MqttHandler
 from pydantic import BaseModel
@@ -113,7 +110,6 @@ melcloud_client: MelCloudClient | None = None
 ac_controller: ACController | None = None
 subscription_manager: SubscriptionManager | None = None
 error_tracker: ErrorTracker | None = None
-humidity_scheduler: HumidityAnalysisScheduler | None = None
 ac_temp_scheduler: AcTempScheduler | None = None
 
 
@@ -123,7 +119,7 @@ ac_temp_scheduler: AcTempScheduler | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global mqtt_handler, melcloud_client, ac_controller
-    global subscription_manager, error_tracker, humidity_scheduler, ac_temp_scheduler
+    global subscription_manager, error_tracker, ac_temp_scheduler
 
     error_tracker = ErrorTracker()
     logger.info("=== AC Service starting ===")
@@ -251,18 +247,9 @@ async def lifespan(app: FastAPI):
     )
     subscription_manager.start()
 
-    # 5. Schedulers
+    # 5. Scheduler
     ac_temp_scheduler = AcTempScheduler(mqtt_handler, ac_controller)
     ac_temp_scheduler.start()
-
-    humidity_scheduler = HumidityAnalysisScheduler(
-        mqtt_handler=mqtt_handler,
-        sample_interval_seconds=int(
-            os.environ.get("HUMIDITY_ANALYSIS_INTERVAL", str(3600))
-        ),
-        grace_period_seconds=int(os.environ.get("HUMIDITY_GRACE_PERIOD", "300")),
-    )
-    humidity_scheduler.start()
 
     logger.info("=== AC Service ready ===")
     yield
@@ -270,7 +257,6 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("=== AC Service shutting down ===")
     ac_temp_scheduler.stop()
-    humidity_scheduler.stop()
     subscription_manager.stop()
     ac_controller.stop()
     mqtt_handler.stop()
@@ -668,26 +654,6 @@ def get_errors():
         return {"errors": [], "has_errors": False}
     active = error_tracker.get_active()
     return {"errors": active, "has_errors": bool(active)}
-
-
-@app.get("/api/ac/humidity/study", tags=["Humidity"])
-def get_humidity_study():
-    """Get humidity analysis summary."""
-    from humidity_analysis import get_summary
-
-    summary = get_summary()
-    if summary is None:
-        return {"status": "no_data", "message": "Analysis not started yet"}
-    return summary
-
-
-@app.post("/api/ac/humidity/study/run", tags=["Humidity"])
-def trigger_humidity_analysis():
-    """Trigger manual humidity analysis."""
-    if humidity_scheduler is None:
-        return {"status": "error", "message": "Humidity scheduler not initialized"}
-    humidity_scheduler.run_now()
-    return {"status": "ok", "message": "Analysis triggered"}
 
 
 @app.get("/api/ac/energy/current", tags=["Energy"])

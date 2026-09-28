@@ -962,28 +962,6 @@ async def get_ac_errors():
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.get("/ac/humidity/study", tags=["AC"])
-async def get_ac_humidity_study():
-    """Get humidity analysis summary."""
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/humidity/study")
-            return resp.json()
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=str(e))
-
-
-@router.post("/ac/humidity/study/run", tags=["AC"])
-async def trigger_ac_humidity_analysis():
-    """Trigger manual humidity analysis."""
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{AC_SERVICE_URL}/api/ac/humidity/study/run")
-            return resp.json()
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=str(e))
-
-
 @router.get("/ac/energy/current", tags=["AC"])
 async def get_ac_energy_current():
     """Get current energy consumption."""
