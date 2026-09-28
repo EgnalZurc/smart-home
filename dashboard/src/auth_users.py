@@ -182,8 +182,8 @@ def delete_trust_request(token: str) -> bool:
 # HMAC-signed action tokens for email links
 # ---------------------------------------------------------------------------
 # The approval email contains links of the form:
-#   /auth/trust/approve?token=<opaque_token>&sig=<hmac>
-#   /auth/trust/reject?token=<opaque_token>&sig=<hmac>
+#   /api/auth/trust/approve?token=<opaque_token>&sig=<hmac>
+#   /api/auth/trust/reject?token=<opaque_token>&sig=<hmac>
 #
 # The HMAC prevents anyone who guesses a token from approving/rejecting
 # without the AUTH_SECRET.
@@ -198,7 +198,7 @@ def _sign(token: str, action: str) -> str:
 def make_action_url(base_url: str, token: str, action: str) -> str:
     """Build a signed approval/rejection URL for inclusion in the email."""
     sig = _sign(token, action)
-    return f"{base_url}/auth/trust/{action}?token={token}&sig={sig}"
+    return f"{base_url}/api/auth/trust/{action}?token={token}&sig={sig}"
 
 
 def verify_action_sig(token: str, action: str, sig: str) -> bool:

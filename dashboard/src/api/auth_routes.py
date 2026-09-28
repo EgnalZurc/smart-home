@@ -2,12 +2,12 @@
 
 Routes
 ------
-GET  /auth/login          Serve the login page (public)
-POST /auth/token          Verify credentials, issue session cookie (+ device cookie if approved)
-POST /auth/logout         Clear session + device cookies, revoke device token
-GET  /auth/me             Return current user info (requires valid session)
-GET  /auth/trust/approve  Admin approves a trusted-device request (email link)
-GET  /auth/trust/reject   Admin rejects a trusted-device request (email link)
+GET  /api/auth/login          Serve the login page (public)
+POST /api/auth/token          Verify credentials, issue session cookie (+ device cookie if approved)
+POST /api/auth/logout         Clear session + device cookies, revoke device token
+GET  /api/auth/me             Return current user info (requires valid session)
+GET  /api/auth/trust/approve  Admin approves a trusted-device request (email link)
+GET  /api/auth/trust/reject   Admin rejects a trusted-device request (email link)
 
 Device-token flow
 -----------------
