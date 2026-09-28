@@ -131,7 +131,7 @@ if _static_dir.exists():
     <!-- Header with home button -->
     <header class="flex items-center gap-3 mb-6">
         <a href="/smart-home" class="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-700/40 transition-all" title="Cuchi Casa">
-            <img src="/static/<service>/icono-cuchi-casa.png" class="w-5 h-5 object-contain rounded" alt="Home">
+            <img src="/static/icono-cuchi-casa.png" class="w-5 h-5 object-contain rounded" alt="Home">
         </a>
         <h1 class="text-lg font-semibold"><Service Name></h1>
     </header>
