@@ -37,6 +37,7 @@ on:
           - baby-gifts
           - vacaciones
           - casita
+          - vaultwarden
       force_deploy:
         description: 'Enable deploy even without detected changes'
         required: false
@@ -58,6 +59,7 @@ jobs:
       baby-gifts: ${{ steps.changes.outputs.baby-gifts }}
       vacaciones: ${{ steps.changes.outputs.vacaciones }}
       casita: ${{ steps.changes.outputs.casita }}
+      vaultwarden: ${{ steps.changes.outputs.vaultwarden }}
       nginx: ${{ steps.changes.outputs.nginx }}
       compose: ${{ steps.changes.outputs.compose }}
       any-service: ${{ steps.changes.outputs.any-service }}
@@ -81,6 +83,8 @@ jobs:
               - 'services/vacaciones-service/**'
             casita:
               - 'services/casita-suenos/**'
+            vaultwarden:
+              - 'services/vaultwarden/**'
             nginx:
               - 'infrastructure/nginx/**'
             compose:
@@ -95,18 +99,19 @@ jobs:
           SERVICE="${{ github.event.inputs.service }}"
           FORCE_DEPLOY="${{ github.event.inputs.force_deploy }}"
           
-          DASHBOARD=false; AC_SERVICE=false; BABY_GIFTS=false; VACACIONES=false; CASITA=false; NGINX=false; COMPOSE=false
+          DASHBOARD=false; AC_SERVICE=false; BABY_GIFTS=false; VACACIONES=false; CASITA=false; VAULTWARDEN=false; NGINX=false; COMPOSE=false
           
           case "$SERVICE" in
             all)
               echo "🔄 Building ALL services"
-              DASHBOARD=true; AC_SERVICE=true; BABY_GIFTS=true; VACACIONES=true; CASITA=true; NGINX=true; COMPOSE=true
+              DASHBOARD=true; AC_SERVICE=true; BABY_GIFTS=true; VACACIONES=true; CASITA=true; VAULTWARDEN=true; NGINX=true; COMPOSE=true
               ;;
             dashboard)   echo "🎯 Building: dashboard";   DASHBOARD=true ;;
             ac-service)  echo "🎯 Building: ac-service";  AC_SERVICE=true ;;
             baby-gifts)  echo "🎯 Building: baby-gifts";  BABY_GIFTS=true ;;
             vacaciones)  echo "🎯 Building: vacaciones";  VACACIONES=true ;;
             casita)      echo "🎯 Building: casita";      CASITA=true ;;
+            vaultwarden) echo "🎯 Building: vaultwarden"; VAULTWARDEN=true ;;
             *)
               echo "🔍 Auto-detecting changed services"
               DASHBOARD=${{ steps.filter.outputs.dashboard }}
@@ -114,6 +119,7 @@ jobs:
               BABY_GIFTS=${{ steps.filter.outputs.baby-gifts }}
               VACACIONES=${{ steps.filter.outputs.vacaciones }}
               CASITA=${{ steps.filter.outputs.casita }}
+              VAULTWARDEN=${{ steps.filter.outputs.vaultwarden }}
               NGINX=${{ steps.filter.outputs.nginx }}
               COMPOSE=${{ steps.filter.outputs.compose }}
               ;;
@@ -124,13 +130,14 @@ jobs:
           echo "baby-gifts=$BABY_GIFTS" >> $GITHUB_OUTPUT
           echo "vacaciones=$VACACIONES" >> $GITHUB_OUTPUT
           echo "casita=$CASITA" >> $GITHUB_OUTPUT
+          echo "vaultwarden=$VAULTWARDEN" >> $GITHUB_OUTPUT
           echo "nginx=$NGINX" >> $GITHUB_OUTPUT
           echo "compose=$COMPOSE" >> $GITHUB_OUTPUT
           
           if [[ "$DASHBOARD" == "true" ]] || [[ "$AC_SERVICE" == "true" ]] || \
              [[ "$BABY_GIFTS" == "true" ]] || [[ "$VACACIONES" == "true" ]] || \
-             [[ "$CASITA" == "true" ]] || [[ "$NGINX" == "true" ]] || \
-             [[ "$COMPOSE" == "true" ]] || \
+             [[ "$CASITA" == "true" ]] || [[ "$VAULTWARDEN" == "true" ]] || \
+             [[ "$NGINX" == "true" ]] || [[ "$COMPOSE" == "true" ]] || \
              [[ "${{ steps.filter.outputs.infrastructure }}" == "true" ]] || \
              [[ "$FORCE_DEPLOY" == "true" ]]; then
             echo "any-service=true" >> $GITHUB_OUTPUT
@@ -160,6 +167,8 @@ jobs:
             add_service "vacaciones-service" "egnal/smart-home-vacaciones" "./services/vacaciones-service"
           [[ "${{ steps.changes.outputs.casita }}" == "true" ]] && \
             add_service "casita-suenos" "egnal/smart-home-casita-suenos" "./services/casita-suenos/fase3-app"
+          [[ "${{ steps.changes.outputs.vaultwarden }}" == "true" ]] && \
+            add_service "vaultwarden" "egnal/smart-home-vaultwarden" "./services/vaultwarden"
           
           SERVICES="$SERVICES]"
           echo "services=$SERVICES" >> $GITHUB_OUTPUT
@@ -227,6 +236,7 @@ jobs:
           echo "| Baby Gifts | ${{ steps.changes.outputs.baby-gifts }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Vacaciones | ${{ steps.changes.outputs.vacaciones }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Casita | ${{ steps.changes.outputs.casita }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Vaultwarden | ${{ steps.changes.outputs.vaultwarden }} |" >> $GITHUB_STEP_SUMMARY
           echo "| nginx | ${{ steps.changes.outputs.nginx }} |" >> $GITHUB_STEP_SUMMARY
           echo "| compose | ${{ steps.changes.outputs.compose }} |" >> $GITHUB_STEP_SUMMARY
 
@@ -638,5 +648,6 @@ jobs:
           echo "| Baby Gifts | ${{ needs.build.outputs.baby-gifts }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Vacaciones | ${{ needs.build.outputs.vacaciones }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Casita | ${{ needs.build.outputs.casita }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Vaultwarden | ${{ needs.build.outputs.vaultwarden }} |" >> $GITHUB_STEP_SUMMARY
           echo "| nginx | ${{ needs.build.outputs.nginx }} |" >> $GITHUB_STEP_SUMMARY
           echo "| compose | ${{ needs.build.outputs.compose }} |" >> $GITHUB_STEP_SUMMARY

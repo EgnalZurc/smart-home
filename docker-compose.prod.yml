@@ -204,6 +204,25 @@ services:
       retries: 3
       start_period: 30s
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Vaultwarden - Password Manager (wrapper around official image)
+  # ─────────────────────────────────────────────────────────────────────────────
+  vaultwarden:
+    image: egnal/smart-home-vaultwarden:latest
+    container_name: vaultwarden
+    restart: unless-stopped
+    mem_limit: 128m
+    memswap_limit: 128m
+    expose:
+      - 80
+      - 3012
+    volumes:
+      - ./data/vaultwarden:/data
+    environment:
+      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
+    networks:
+      - smart-home
+
 networks:
   smart-home:
     driver: bridge
