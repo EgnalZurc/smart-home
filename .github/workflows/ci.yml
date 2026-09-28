@@ -139,7 +139,7 @@ jobs:
           }
           
           [[ "${{ steps.changes.outputs.dashboard }}" == "true" ]] && \
-            add_service "dashboard" "egnal/smart-home-dashboard" "./dashboard"
+            add_service "smart-home-backend" "egnal/smart-home-dashboard" "./dashboard"
           [[ "${{ steps.changes.outputs.ac-service }}" == "true" ]] && \
             add_service "ac-service" "egnal/smart-home-ac-service" "./services/ac-service"
           [[ "${{ steps.changes.outputs.baby-gifts }}" == "true" ]] && \
