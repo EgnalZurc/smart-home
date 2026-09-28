@@ -16,13 +16,15 @@ class AcTempScheduler:
 
     def __init__(self, mqtt_handler, ac_controller):
         self._mqtt = mqtt_handler
-        self._ac   = ac_controller
+        self._ac = ac_controller
         self._last_recorded_hour: int | None = None
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
 
     def start(self):
-        self._thread = threading.Thread(target=self._run, daemon=True, name="ac-temp-scheduler")
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="ac-temp-scheduler"
+        )
         self._thread.start()
         logger.info("AC temperature hourly scheduler started")
 
@@ -38,7 +40,9 @@ class AcTempScheduler:
                 self._mqtt.record_ac_temp(room_temp)
                 self._last_recorded_hour = now.hour
             else:
-                logger.debug("AC room temp not available yet, skipping hour %d", now.hour)
+                logger.debug(
+                    "AC room temp not available yet, skipping hour %d", now.hour
+                )
 
     def _run(self):
         while not self._stop_event.is_set():

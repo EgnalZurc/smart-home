@@ -30,7 +30,6 @@ NOTAS:
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -40,7 +39,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 SCOPES = ["https://mail.google.com/"]
 
 # Rutas por defecto (relativas al directorio data junto a src/)
-_SRC_DIR  = Path(__file__).parent
+_SRC_DIR = Path(__file__).parent
 _DATA_DIR = _SRC_DIR.parent / "data"
 
 
@@ -104,22 +103,24 @@ def authorize_headless(credentials_path: Path, token_path: Path) -> None:
         print("❌  Formato de credentials.json no reconocido.")
         sys.exit(1)
 
-    client_id     = client_info["client_id"]
+    client_id = client_info["client_id"]
     client_secret = client_info["client_secret"]
-    token_uri     = client_info.get("token_uri", "https://oauth2.googleapis.com/token")
+    token_uri = client_info.get("token_uri", "https://oauth2.googleapis.com/token")
 
     # Paso 1 — Construir la URL de autorización (modo OOB → redirect a urn:ietf:wg:oauth:2.0:oob)
     # Google deprecó OOB en 2022 para clientes web, pero para "app de escritorio" sigue soportado.
     # Si da error "disallowed_useragent", usa el flujo de dispositivo más abajo.
     auth_params = {
-        "client_id":     client_id,
-        "redirect_uri":  "urn:ietf:wg:oauth:2.0:oob",
+        "client_id": client_id,
+        "redirect_uri": "urn:ietf:wg:oauth:2.0:oob",
         "response_type": "code",
-        "scope":         " ".join(SCOPES),
-        "access_type":   "offline",
-        "prompt":        "consent",   # fuerza la emisión del refresh_token
+        "scope": " ".join(SCOPES),
+        "access_type": "offline",
+        "prompt": "consent",  # fuerza la emisión del refresh_token
     }
-    auth_url = "https://accounts.google.com/o/oauth2/auth?" + urllib.parse.urlencode(auth_params)
+    auth_url = "https://accounts.google.com/o/oauth2/auth?" + urllib.parse.urlencode(
+        auth_params
+    )
 
     print("\n" + "─" * 60)
     print("  AUTORIZACIÓN SIN NAVEGADOR")
@@ -137,13 +138,15 @@ def authorize_headless(credentials_path: Path, token_path: Path) -> None:
         sys.exit(1)
 
     # Paso 2 — Intercambiar el código por tokens
-    token_data = urllib.parse.urlencode({
-        "code":          code,
-        "client_id":     client_id,
-        "client_secret": client_secret,
-        "redirect_uri":  "urn:ietf:wg:oauth:2.0:oob",
-        "grant_type":    "authorization_code",
-    }).encode()
+    token_data = urllib.parse.urlencode(
+        {
+            "code": code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": "urn:ietf:wg:oauth:2.0:oob",
+            "grant_type": "authorization_code",
+        }
+    ).encode()
 
     req = urllib.request.Request(
         token_uri,
@@ -172,13 +175,13 @@ def authorize_headless(credentials_path: Path, token_path: Path) -> None:
     )
 
     token_json = {
-        "token":         token_response["access_token"],
+        "token": token_response["access_token"],
         "refresh_token": token_response.get("refresh_token"),
-        "token_uri":     token_uri,
-        "client_id":     client_id,
+        "token_uri": token_uri,
+        "client_id": client_id,
         "client_secret": client_secret,
-        "scopes":        SCOPES,
-        "expiry":        expiry.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z",
+        "scopes": SCOPES,
+        "expiry": expiry.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z",
     }
 
     token_path.parent.mkdir(parents=True, exist_ok=True)
@@ -229,7 +232,7 @@ Ejemplos:
         default=None,
         metavar="PATH",
         help=f"Directorio donde buscar credentials.json y guardar token.json. "
-             f"Por defecto: {_DATA_DIR}",
+        f"Por defecto: {_DATA_DIR}",
     )
     args = parser.parse_args()
 

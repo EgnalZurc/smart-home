@@ -1,21 +1,22 @@
 """Entry point of the Smart Home Backend application.
 Orchestrates all components: MQTT, MELCloud, AC controller, REST API.
 """
+
 import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+import auth as auth_core
+import auth_devices
+import auth_users
+from api import auth_routes, routes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import RedirectResponse as StarletteRedirect
-from api import routes
-from api import auth_routes
-import auth as auth_core
-import auth_users
-import auth_devices
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -38,6 +39,7 @@ AUTH_BASE_URL = os.environ.get("AUTH_BASE_URL", "https://raspberrypi.tailaa37cd.
 if not AUTH_SECRET:
     logger.error("AUTH_SECRET is required")
     raise RuntimeError("AUTH_SECRET not configured")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -63,15 +65,16 @@ async def lifespan(app: FastAPI):
 _AUTH_PUBLIC_PREFIXES = (
     "/auth/",
     "/health",
-    "/api/health/",   # Health check endpoints — must be public so dashboard status works
+    "/api/health/",  # Health check endpoints — must be public so dashboard status works
     "/api/proxy/",
     "/static/manifest.json",
     "/static/favicon.ico",
     "/favicon.ico",
-    "/swagger",       # Swagger UI
-    "/redoc",         # ReDoc UI
+    "/swagger",  # Swagger UI
+    "/redoc",  # ReDoc UI
     "/openapi.json",  # OpenAPI spec
 )
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """Central authentication gate for all requests.
@@ -236,17 +239,22 @@ app.include_router(auth_routes.router)
 # API routes
 app.include_router(routes.router)
 
+
 # DASH-2: Root redirects to /smart-home
 @app.get("/")
 async def serve_root():
     """Redirect / to /smart-home dashboard."""
     from fastapi.responses import RedirectResponse
+
     return RedirectResponse(url="/smart-home", status_code=301)
+
 
 def _serve_html(filename: str):
     """Serve an HTML file with no-cache headers."""
     import time
+
     from fastapi.responses import HTMLResponse
+
     frontend_path = Path(__file__).parent / "static" / filename
     content = frontend_path.read_text(encoding="utf-8")
     content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")
@@ -256,14 +264,16 @@ def _serve_html(filename: str):
             "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
             "Pragma": "no-cache",
             "Expires": "0",
-        }
+        },
     )
+
 
 # DASH-1: Platform dashboard
 @app.get("/smart-home", tags=["🏠 Dashboard"])
 async def serve_dashboard():
     """Serves the Smart Home platform dashboard."""
     return _serve_html("dashboard.html")
+
 
 # AUTH-LOGIN: Serve login page via static path too
 @app.get("/auth/login/page", tags=["🔐 Auth"])
@@ -272,12 +282,12 @@ async def serve_login():
     return _serve_html("login.html")
 
 
-
 # CASITA-URL: Casita Sueños detail page
 @app.get("/smart-home/casita", tags=["🏡 Casita Sueños"])
 async def serve_casita():
     """Serves the Casita Sueños detail page."""
     return _serve_html("casita.html")
+
 
 # Serve other static files normally
 frontend_path = Path(__file__).parent / "static"
@@ -286,6 +296,7 @@ if frontend_path.exists():
 
 
 # ── Proxies para casita.html (CORS) ──────────────────────────────────────────
+
 
 @app.get("/api/proxy/flood", tags=["🌍 Proxy"])
 async def proxy_flood(lat: float, lon: float):
@@ -309,15 +320,18 @@ async def proxy_flood(lat: float, lon: float):
         calado_m: float | null,
       }
     """
-    import re, asyncio, statistics
-    import httpx
+    import asyncio
+    import re
+    import statistics
     from datetime import date
 
+    import httpx
+
     # ── FUENTE 1: SNCZI con bbox progresivo ─────────────────────────────────
-    WMS_BASE  = "https://servicios.idee.es/wms-inspire/riesgos-naturales/inundaciones"
-    LAYERS    = ["NZ.Flood.FluvialT10", "NZ.Flood.FluvialT100", "NZ.Flood.FluvialT500"]
+    WMS_BASE = "https://servicios.idee.es/wms-inspire/riesgos-naturales/inundaciones"
+    LAYERS = ["NZ.Flood.FluvialT10", "NZ.Flood.FluvialT100", "NZ.Flood.FluvialT500"]
     # Deltas en grados: ~50m, 100m, 200m, 500m, 1km, 2km
-    DELTAS    = [0.0005, 0.001, 0.002, 0.005, 0.01, 0.02]
+    DELTAS = [0.0005, 0.001, 0.002, 0.005, 0.01, 0.02]
     FILL_VALS = {-9999.0, -3.0}  # nodata conocidos
 
     def _is_fill(v: float) -> bool:
@@ -326,13 +340,13 @@ async def proxy_flood(lat: float, lon: float):
             return True
         if v in FILL_VALS or v < -2:
             return True
-        if abs(v - 3.4) < 0.1:   # fill value ~3.4 dentro de demarcación
-            return True
-        return False
+        return abs(v - 3.4) < 0.1  # fill value ~3.4 dentro de demarcación
 
     async def _wms_query(layer: str, delta: float) -> float | None:
-        bbox = f"{lon-delta:.5f},{lat-delta:.5f},{lon+delta:.5f},{lat+delta:.5f}"
-        url  = (
+        bbox = (
+            f"{lon - delta:.5f},{lat - delta:.5f},{lon + delta:.5f},{lat + delta:.5f}"
+        )
+        url = (
             f"{WMS_BASE}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo"
             f"&BBOX={bbox}&WIDTH=10&HEIGHT=10"
             f"&LAYERS={layer}&QUERY_LAYERS={layer}"
@@ -354,27 +368,35 @@ async def proxy_flood(lat: float, lon: float):
             t10_raw, t100_raw, t500_raw = results
 
             # Filtrar fill values
-            t10  = None if _is_fill(t10_raw)  else round(t10_raw, 2)
+            t10 = None if _is_fill(t10_raw) else round(t10_raw, 2)
             t100 = None if _is_fill(t100_raw) else round(t100_raw, 2)
             t500 = None if _is_fill(t500_raw) else round(t500_raw, 2)
 
             # Si los tres son idénticos → artefacto uniforme
-            if (t10 is not None and t100 is not None and t500 is not None
-                    and t10 == t100 == t500):
+            if (
+                t10 is not None
+                and t100 is not None
+                and t500 is not None
+                and t10 == t100 == t500
+            ):
                 t10 = t100 = t500 = None
 
             # Si tenemos al menos un valor real → retornar
             if any(v is not None for v in (t10, t100, t500)):
-                return {"t10": t10, "t100": t100, "t500": t500,
-                        "bbox_delta_deg": delta,
-                        "bbox_radius_m": int(delta * 111000)}
+                return {
+                    "t10": t10,
+                    "t100": t100,
+                    "t500": t500,
+                    "bbox_delta_deg": delta,
+                    "bbox_radius_m": int(delta * 111000),
+                }
 
         return None  # Sin datos en ningún bbox
 
     # ── FUENTE 2: GloFAS / Open-Meteo Flood API ──────────────────────────────
     async def _glofas() -> dict | None:
         """Caudal histórico del río más cercano (GloFAS v4, 1984-hoy)."""
-        end_date   = date.today().isoformat()
+        end_date = date.today().isoformat()
         start_date = f"{date.today().year - 30}-01-01"
         url = (
             f"https://flood-api.open-meteo.com/v1/flood"
@@ -395,13 +417,13 @@ async def proxy_flood(lat: float, lon: float):
             vals_sorted = sorted(vals)
             n = len(vals_sorted)
             return {
-                "mean_m3s":     round(statistics.mean(vals), 1),
+                "mean_m3s": round(statistics.mean(vals), 1),
                 "max_hist_m3s": round(max(vals), 1),
-                "p95_m3s":      round(vals_sorted[int(n * 0.95)], 1),
-                "p99_m3s":      round(vals_sorted[int(n * 0.99)], 1),
-                "lat_grid":     d.get("latitude"),
-                "lon_grid":     d.get("longitude"),
-                "years":        30,
+                "p95_m3s": round(vals_sorted[int(n * 0.95)], 1),
+                "p99_m3s": round(vals_sorted[int(n * 0.99)], 1),
+                "lat_grid": d.get("latitude"),
+                "lon_grid": d.get("longitude"),
+                "years": 30,
             }
         except Exception:
             return None
@@ -413,18 +435,21 @@ async def proxy_flood(lat: float, lon: float):
     )
 
     # ── Algoritmo de clasificación combinado ─────────────────────────────────
-    risk_level  = "sin_datos"
+    risk_level = "sin_datos"
     risk_source = "sin_datos"
-    calado_m    = None
+    calado_m = None
 
     if snczi_data:
         t10, t100, t500 = snczi_data["t10"], snczi_data["t100"], snczi_data["t500"]
         if t10 is not None and t10 >= 0:
-            risk_level = "muy_alto"; calado_m = t10
+            risk_level = "muy_alto"
+            calado_m = t10
         elif t100 is not None and t100 >= 0:
-            risk_level = "alto";     calado_m = t100
+            risk_level = "alto"
+            calado_m = t100
         elif t500 is not None and t500 >= 0:
-            risk_level = "moderado"; calado_m = t500
+            risk_level = "moderado"
+            calado_m = t500
         else:
             # SNCZI tiene datos pero todos son null (zona sin riesgo mapeado)
             risk_level = "bajo"
@@ -438,25 +463,25 @@ async def proxy_flood(lat: float, lon: float):
         #   Burgos:    max=324   → moderado
         #   Tudela:    max=2147  → muy_alto
         p99 = glofas_data["p99_m3s"]
-        mx  = glofas_data["max_hist_m3s"]
+        mx = glofas_data["max_hist_m3s"]
         # Umbrales calibrados: Vicálvaro max=3.7→bajo, Manzanares max=126→moderado,
         # Burgos max=324→moderado, Tudela Ebro max=2147→muy_alto
         if mx > 1500 or p99 > 500:
-            risk_level = "muy_alto"   # Ríos mayores en avenidas (Ebro, Tajo)
+            risk_level = "muy_alto"  # Ríos mayores en avenidas (Ebro, Tajo)
         elif mx > 500 or p99 > 150:
-            risk_level = "alto"       # Ríos grandes con historial
+            risk_level = "alto"  # Ríos grandes con historial
         elif mx > 50 or p99 > 15:
-            risk_level = "moderado"   # Ríos medianos
+            risk_level = "moderado"  # Ríos medianos
         else:
-            risk_level = "bajo"       # Arroyos y ríos pequeños
+            risk_level = "bajo"  # Arroyos y ríos pequeños
         risk_source = "glofas"
 
     return {
-        "snczi":       snczi_data,
-        "glofas":      glofas_data,
-        "risk_level":  risk_level,
+        "snczi": snczi_data,
+        "glofas": glofas_data,
+        "risk_level": risk_level,
         "risk_source": risk_source,
-        "calado_m":    calado_m,
+        "calado_m": calado_m,
     }
 
 
@@ -468,17 +493,19 @@ async def proxy_firms(lat: float, lon: float):
     Estrategia: consultar meses de riesgo alto (junio-octubre) en bloques de 5 días.
     Total aprox: 3 años × 5 meses × 6 bloques = ~90 peticiones — muy por debajo del límite.
     """
-    import os, asyncio
+    import asyncio
+    import os
+    from datetime import date
+
     import httpx
-    from datetime import date, timedelta
 
     key = os.environ.get("FIRMS_MAP_KEY", "")
     if not key:
         return {"status": "no_key", "focos": None}
 
-    delta = 0.27   # ~30 km en España — captura el entorno forestal de la ubicación
-    bbox  = f"{lon-delta:.4f},{lat-delta:.4f},{lon+delta:.4f},{lat+delta:.4f}"
-    base  = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
+    delta = 0.27  # ~30 km en España — captura el entorno forestal de la ubicación
+    bbox = f"{lon - delta:.4f},{lat - delta:.4f},{lon + delta:.4f},{lat + delta:.4f}"
+    base = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
     source = "VIIRS_SNPP_SP"  # Standard Processing = histórico completo
 
     # Construir lista de fechas de inicio para ventanas de 5 días
@@ -547,6 +574,7 @@ async def proxy_firms(lat: float, lon: float):
         "periodo": "jun-oct ultimos 3 anos (confidence h+n)",
         "peticiones": len(windows),
     }
+
 
 @app.get("/health", tags=["❤️ Health"])
 def health():

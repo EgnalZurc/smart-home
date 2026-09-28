@@ -111,9 +111,11 @@ Requirements:
     - Dependency 2
 """
 
+
 def main():
     # Your script logic here
     pass
+
 
 if __name__ == "__main__":
     main()

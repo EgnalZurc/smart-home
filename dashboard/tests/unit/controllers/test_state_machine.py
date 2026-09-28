@@ -1,25 +1,38 @@
 """Unit tests for controllers/state_machine.py ? pure function, no mocking needed."""
+
 import pytest
 from controllers.state_machine import (
-    ControllerState, ManualMode, ManualParams,
-    StateMachineConfig, StateMachineInputs, evaluate,
+    ControllerState,
+    ManualMode,
+    ManualParams,
+    StateMachineConfig,
+    StateMachineInputs,
+    evaluate,
 )
 
 
 @pytest.fixture
 def cfg():
     return StateMachineConfig(
-        hysteresis_on=0.5, hysteresis_off=0.3,
-        min_setpoint=19.0, max_setpoint=30.0,
-        cooldown_seconds=180, sensor_alert_seconds=3600,
+        hysteresis_on=0.5,
+        hysteresis_off=0.3,
+        min_setpoint=19.0,
+        max_setpoint=30.0,
+        cooldown_seconds=180,
+        sensor_alert_seconds=3600,
         melcloud_max_failures=100,
     )
 
 
-def make_inputs(avg_temp=25.0, state=ControllerState.OFF,
-                seconds_since_off=9999, manual_mode=ManualMode.AUTO,
-                manual_params=None, melcloud_failures=0,
-                seconds_since_sensor=0):
+def make_inputs(
+    avg_temp=25.0,
+    state=ControllerState.OFF,
+    seconds_since_off=9999,
+    manual_mode=ManualMode.AUTO,
+    manual_params=None,
+    melcloud_failures=0,
+    seconds_since_sensor=0,
+):
     # StateMachineInputs does NOT include current_state (passed separately to evaluate())
     return StateMachineInputs(
         average_temp=avg_temp,
@@ -34,7 +47,9 @@ def make_inputs(avg_temp=25.0, state=ControllerState.OFF,
 
 class TestTransitionsFromOff:
     def test_stays_off_when_cool(self, cfg):
-        inputs = make_inputs(avg_temp=25.5, state=ControllerState.OFF)  # below hot_threshold 26.5
+        inputs = make_inputs(
+            avg_temp=25.5, state=ControllerState.OFF
+        )  # below hot_threshold 26.5
         out = evaluate(ControllerState.OFF, inputs, cfg, 24.0)
         assert out.state == ControllerState.OFF
 
@@ -51,12 +66,16 @@ class TestTransitionsFromOff:
 
 class TestTransitionsFromCoolingMax:
     def test_goes_cooldown_when_cold(self, cfg):
-        inputs = make_inputs(avg_temp=25.5, state=ControllerState.COOLING_MAX)  # below cold 25.7
+        inputs = make_inputs(
+            avg_temp=25.5, state=ControllerState.COOLING_MAX
+        )  # below cold 25.7
         out = evaluate(ControllerState.COOLING_MAX, inputs, cfg, 24.0)
         assert out.state == ControllerState.COOLDOWN
 
     def test_goes_modulating_when_in_range(self, cfg):
-        inputs = make_inputs(avg_temp=26.0, state=ControllerState.COOLING_MAX)  # 25.7 < 26 < 26.5
+        inputs = make_inputs(
+            avg_temp=26.0, state=ControllerState.COOLING_MAX
+        )  # 25.7 < 26 < 26.5
         out = evaluate(ControllerState.COOLING_MAX, inputs, cfg, 24.0)
         assert out.state == ControllerState.MODULATING
 
@@ -104,21 +123,24 @@ class TestTransitionsFromModulating:
 
 class TestTransitionsFromCooldown:
     def test_stays_cooldown_before_time(self, cfg):
-        inputs = make_inputs(avg_temp=25.0, state=ControllerState.COOLDOWN,
-                             seconds_since_off=60)  # 180s not done
+        inputs = make_inputs(
+            avg_temp=25.0, state=ControllerState.COOLDOWN, seconds_since_off=60
+        )  # 180s not done
         out = evaluate(ControllerState.COOLDOWN, inputs, cfg, 24.0)
         assert out.state == ControllerState.COOLDOWN
         assert out.power is False
 
     def test_goes_cooling_max_after_cooldown_if_hot(self, cfg):
-        inputs = make_inputs(avg_temp=27.0, state=ControllerState.COOLDOWN,
-                             seconds_since_off=200)  # cooldown done
+        inputs = make_inputs(
+            avg_temp=27.0, state=ControllerState.COOLDOWN, seconds_since_off=200
+        )  # cooldown done
         out = evaluate(ControllerState.COOLDOWN, inputs, cfg, 24.0)
         assert out.state == ControllerState.COOLING_MAX
 
     def test_goes_off_after_cooldown_if_cool(self, cfg):
-        inputs = make_inputs(avg_temp=25.0, state=ControllerState.COOLDOWN,
-                             seconds_since_off=200)
+        inputs = make_inputs(
+            avg_temp=25.0, state=ControllerState.COOLDOWN, seconds_since_off=200
+        )
         out = evaluate(ControllerState.COOLDOWN, inputs, cfg, 24.0)
         assert out.state == ControllerState.OFF
 
@@ -167,7 +189,9 @@ class TestSensorAlert:
 
     def test_sensor_alert_does_not_change_state(self, cfg):
         # Sensor alert is informational only ? state transitions still work normally
-        inputs = make_inputs(avg_temp=27.0, state=ControllerState.OFF, seconds_since_sensor=9999)
+        inputs = make_inputs(
+            avg_temp=27.0, state=ControllerState.OFF, seconds_since_sensor=9999
+        )
         out = evaluate(ControllerState.OFF, inputs, cfg, 24.0)
         assert out.state == ControllerState.COOLING_MAX
         assert out.sensor_alert is True

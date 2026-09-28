@@ -1,5 +1,7 @@
 """Unit tests for error_tracker.py"""
+
 import time
+
 from error_tracker import ErrorTracker
 
 

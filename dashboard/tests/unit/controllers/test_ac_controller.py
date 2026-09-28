@@ -1,9 +1,11 @@
 """Unit tests for controllers/ac_controller.py"""
+
 import time
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, patch
 from controllers.ac_controller import ACController, ControlConfig
-from controllers.state_machine import ManualMode, ManualParams, ControllerState
+from controllers.state_machine import ControllerState
 
 
 @pytest.fixture
@@ -13,7 +15,8 @@ def config():
         hysteresis_on=0.5,
         hysteresis_off=0.3,
         loop_interval=10,
-        device_id=123, building_id=456,
+        device_id=123,
+        building_id=456,
         melcloud_max_failures=3,
     )
 
@@ -50,7 +53,7 @@ class TestUpdateConfig:
 
 class TestSetControlMode:
     def test_set_mode_does_not_raise(self, ctrl):
-        ctrl.set_control_mode("auto")   # should not raise
+        ctrl.set_control_mode("auto")  # should not raise
 
     def test_set_off_changes_state(self, ctrl):
         ctrl.set_control_mode("off")
@@ -78,35 +81,56 @@ class TestGetHistory:
 
     def test_history_limit_respected(self, ctrl):
         from controllers.ac_controller import HistoryRecord
+
         for i in range(20):
-            ctrl.history.append(HistoryRecord(
-                timestamp=float(i), average_temp=25.0,
-                state="off", setpoint=24.0, active_sensors=5
-            ))
+            ctrl.history.append(
+                HistoryRecord(
+                    timestamp=float(i),
+                    average_temp=25.0,
+                    state="off",
+                    setpoint=24.0,
+                    active_sensors=5,
+                )
+            )
         assert len(ctrl.get_history(5)) == 5
 
 
 class TestUpdateAcRealCache:
     def test_caches_power_on(self, ctrl):
-        ctrl.update_ac_real_cache({
-            "Power": True, "OperationMode": 3, "SetTemperature": 22.0,
-            "SetFanSpeed": 2, "RoomTemperature": 24.0,
-        })
+        ctrl.update_ac_real_cache(
+            {
+                "Power": True,
+                "OperationMode": 3,
+                "SetTemperature": 22.0,
+                "SetFanSpeed": 2,
+                "RoomTemperature": 24.0,
+            }
+        )
         assert ctrl.state.ac_real_power is True
         assert ctrl.state.ac_real_room_temp == 24.0
 
     def test_operation_mode_1_maps_to_heat(self, ctrl):
-        ctrl.update_ac_real_cache({
-            "Power": True, "OperationMode": 1, "SetTemperature": 22.0,
-            "SetFanSpeed": 0, "RoomTemperature": 24.0,
-        })
+        ctrl.update_ac_real_cache(
+            {
+                "Power": True,
+                "OperationMode": 1,
+                "SetTemperature": 22.0,
+                "SetFanSpeed": 0,
+                "RoomTemperature": 24.0,
+            }
+        )
         assert ctrl.state.ac_real_mode == "heat"
 
     def test_operation_mode_3_maps_to_cool(self, ctrl):
-        ctrl.update_ac_real_cache({
-            "Power": True, "OperationMode": 3, "SetTemperature": 22.0,
-            "SetFanSpeed": 0, "RoomTemperature": 24.0,
-        })
+        ctrl.update_ac_real_cache(
+            {
+                "Power": True,
+                "OperationMode": 3,
+                "SetTemperature": 22.0,
+                "SetFanSpeed": 0,
+                "RoomTemperature": 24.0,
+            }
+        )
         assert ctrl.state.ac_real_mode == "cool"
 
 
@@ -142,13 +166,16 @@ class TestReadSensors:
     """_read_sensors must use ONLY active sensors for avg ? not stale ones (bug fix)."""
 
     def _make_ctrl(self, sensor_timeout=3600):
-        from unittest.mock import patch as _patch, MagicMock as _MM
+        from unittest.mock import MagicMock as _MM
+        from unittest.mock import patch as _patch
+
         from mqtt_handler import MqttHandler, SensorReading
-        import threading
 
         with _patch("mqtt_handler.mqtt"):
             with _patch.object(MqttHandler, "_load_from_disk"):
-                mqtt = MqttHandler("localhost", 1883, ["s1", "s2", "s3"], max_history=200)
+                mqtt = MqttHandler(
+                    "localhost", 1883, ["s1", "s2", "s3"], max_history=200
+                )
                 mqtt._error_tracker = None
                 mqtt._connected = True
 
@@ -161,12 +188,20 @@ class TestReadSensors:
 
         melcloud = _MM()
         config = ControlConfig(
-            target_temperature=25.0, hysteresis_on=0.5, hysteresis_off=0.3,
-            min_setpoint=19.0, max_setpoint=30.0, cooldown_seconds=180,
-            loop_interval=10, sensor_timeout=sensor_timeout, fan_speed_max=3,
-            device_id=1, building_id=1,
+            target_temperature=25.0,
+            hysteresis_on=0.5,
+            hysteresis_off=0.3,
+            min_setpoint=19.0,
+            max_setpoint=30.0,
+            cooldown_seconds=180,
+            loop_interval=10,
+            sensor_timeout=sensor_timeout,
+            fan_speed_max=3,
+            device_id=1,
+            building_id=1,
         )
         from error_tracker import ErrorTracker
+
         ctrl = ACController(mqtt, melcloud, config)
         ctrl.set_error_tracker(ErrorTracker())
         return ctrl
@@ -174,7 +209,7 @@ class TestReadSensors:
     def test_avg_excludes_stale_sensor(self):
         """Stale s2=20.0 must be excluded; avg should be (28+26)/2=27.0, not (28+20+26)/3=24.7."""
         ctrl = self._make_ctrl(sensor_timeout=3600)
-        avg_temp, avg_hum, active_count, _ = ctrl._read_sensors()
+        avg_temp, _avg_hum, active_count, _ = ctrl._read_sensors()
         assert active_count == 2
         assert avg_temp == pytest.approx(27.0, abs=0.1)
 

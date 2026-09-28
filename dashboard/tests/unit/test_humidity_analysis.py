@@ -1,56 +1,85 @@
 """Unit tests for humidity_analysis.py (HUM-0) - seasonal analysis."""
-import json
+
 import os
 import tempfile
-import time
 import threading
+import time
 from unittest.mock import MagicMock
-import pytest
+
 from humidity_analysis import (
-    _collect_sample, _build_daily_snapshot, append_snapshot,
-    get_summary, get_season, _load_json, _season_summary,
     SEASON_ORDER,
+    _build_daily_snapshot,
+    _collect_sample,
+    _load_json,
+    _season_summary,
+    append_snapshot,
+    get_season,
+    get_summary,
 )
 
 
 def _make_mqtt(humidity_values):
     from mqtt_handler import SensorReading
+
     now = time.time()
     m = MagicMock()
     m._lock = threading.Lock()
     m.history = {
-        "sensor1": [SensorReading(25.0, h, 80, now - i * 60)
-                    for i, h in enumerate(humidity_values)],
+        "sensor1": [
+            SensorReading(25.0, h, 80, now - i * 60)
+            for i, h in enumerate(humidity_values)
+        ],
     }
     return m
 
 
 def _make_sample(date, hour, mean, n=50):
     return {
-        "timestamp": time.time(), "date": date, "hour": hour,
-        "mean": mean, "min": mean - 2, "max": mean + 2,
-        "sample_n": n, "sensors": ["s1"],
+        "timestamp": time.time(),
+        "date": date,
+        "hour": hour,
+        "mean": mean,
+        "min": mean - 2,
+        "max": mean + 2,
+        "sample_n": n,
+        "sensors": ["s1"],
     }
 
 
 def _snap(date, mean=39.0, frac=0.6, signal=False):
     return {
-        "date": date, "season": get_season(date),
-        "mean": mean, "min": 35.0, "max": 45.0,
-        "p25": 37.0, "p75": 41.0,
-        "fraction_below_40": frac, "fraction_above_55": 0.0,
+        "date": date,
+        "season": get_season(date),
+        "mean": mean,
+        "min": 35.0,
+        "max": 45.0,
+        "p25": 37.0,
+        "p75": 41.0,
+        "fraction_below_40": frac,
+        "fraction_above_55": 0.0,
         "humidifier_needed_signal": signal,
-        "timestamp": time.time(), "hours_sampled": 12,
-        "sensors": [], "hourly_pattern": {},
+        "timestamp": time.time(),
+        "hours_sampled": 12,
+        "sensors": [],
+        "hourly_pattern": {},
     }
 
 
 class TestGetSeason:
-    def test_july_is_summer(self):      assert get_season("2026-07-15") == "summer"
-    def test_january_is_winter(self):   assert get_season("2026-01-10") == "winter"
-    def test_december_is_winter(self):  assert get_season("2026-12-25") == "winter"
-    def test_april_is_spring(self):     assert get_season("2026-04-20") == "spring"
-    def test_october_is_autumn(self):   assert get_season("2026-10-05") == "autumn"
+    def test_july_is_summer(self):
+        assert get_season("2026-07-15") == "summer"
+
+    def test_january_is_winter(self):
+        assert get_season("2026-01-10") == "winter"
+
+    def test_december_is_winter(self):
+        assert get_season("2026-12-25") == "winter"
+
+    def test_april_is_spring(self):
+        assert get_season("2026-04-20") == "spring"
+
+    def test_october_is_autumn(self):
+        assert get_season("2026-10-05") == "autumn"
 
 
 class TestCollectSample:
@@ -67,12 +96,13 @@ class TestCollectSample:
 
     def test_excludes_ac_virtual_sensor(self):
         from mqtt_handler import SensorReading
+
         now = time.time()
         m = MagicMock()
         m._lock = threading.Lock()
         m.history = {
             "sensor1": [SensorReading(25.0, 40, 80, now)],
-            "AC":       [SensorReading(20.0, None, None, now)],
+            "AC": [SensorReading(20.0, None, None, now)],
         }
         result = _collect_sample(m)
         assert result is not None
@@ -99,11 +129,17 @@ class TestBuildDailySnapshot:
 
     def test_signal_true_when_mean_low(self):
         samples = [_make_sample("2026-07-01", h, 35.0) for h in range(8)]
-        assert _build_daily_snapshot("2026-07-01", samples)["humidifier_needed_signal"] is True
+        assert (
+            _build_daily_snapshot("2026-07-01", samples)["humidifier_needed_signal"]
+            is True
+        )
 
     def test_signal_false_when_ok(self):
         samples = [_make_sample("2026-07-01", h, 45.0) for h in range(8)]
-        assert _build_daily_snapshot("2026-07-01", samples)["humidifier_needed_signal"] is False
+        assert (
+            _build_daily_snapshot("2026-07-01", samples)["humidifier_needed_signal"]
+            is False
+        )
 
     def test_returns_none_for_missing_date(self):
         samples = [_make_sample("2026-07-01", h, 39.0) for h in range(5)]
@@ -136,7 +172,7 @@ class TestAppendSnapshot:
         with tempfile.TemporaryDirectory() as tmp:
             f = os.path.join(tmp, "t.json")
             for i in range(30):
-                append_snapshot(_snap(f"2026-07-{i+1:02d}"), f)
+                append_snapshot(_snap(f"2026-07-{i + 1:02d}"), f)
             assert len(_load_json(f)) == 30
 
     def test_sorted_by_date(self):
@@ -155,12 +191,18 @@ class TestSeasonSummary:
             assert result[key]["recommendation"] == "no_data"
 
     def test_summer_recommended_with_many_signals(self):
-        snaps = [_snap(f"2026-07-{i+1:02d}", mean=35.0, frac=0.8, signal=True) for i in range(10)]
+        snaps = [
+            _snap(f"2026-07-{i + 1:02d}", mean=35.0, frac=0.8, signal=True)
+            for i in range(10)
+        ]
         result = _season_summary(snaps)
         assert result["summer"]["recommendation"] == "recommended"
 
     def test_summer_not_needed_with_no_signals(self):
-        snaps = [_snap(f"2026-07-{i+1:02d}", mean=48.0, frac=0.1, signal=False) for i in range(10)]
+        snaps = [
+            _snap(f"2026-07-{i + 1:02d}", mean=48.0, frac=0.1, signal=False)
+            for i in range(10)
+        ]
         result = _season_summary(snaps)
         assert result["summer"]["recommendation"] == "not_needed"
 
@@ -170,10 +212,9 @@ class TestSeasonSummary:
         assert result["summer"]["recommendation"] == "insufficient_data"
 
     def test_season_counts(self):
-        snaps = (
-            [_snap(f"2026-07-{i+1:02d}") for i in range(5)] +
-            [_snap(f"2026-01-{i+1:02d}") for i in range(3)]
-        )
+        snaps = [_snap(f"2026-07-{i + 1:02d}") for i in range(5)] + [
+            _snap(f"2026-01-{i + 1:02d}") for i in range(3)
+        ]
         result = _season_summary(snaps)
         assert result["summer"]["days"] == 5
         assert result["winter"]["days"] == 3
@@ -192,7 +233,7 @@ class TestGetSummary:
         with tempfile.TemporaryDirectory() as tmp:
             f = os.path.join(tmp, "t.json")
             for i in range(3):
-                append_snapshot(_snap(f"2026-07-{i+1:02d}", signal=False), f)
+                append_snapshot(_snap(f"2026-07-{i + 1:02d}", signal=False), f)
             summary = get_summary(f)
             assert "seasons" in summary
             assert "total_days" in summary
@@ -200,12 +241,23 @@ class TestGetSummary:
     def test_migration_adds_season_to_old_snapshots(self):
         with tempfile.TemporaryDirectory() as tmp:
             f = os.path.join(tmp, "t.json")
-            old_snap = {"date": "2026-07-01", "mean": 38.0, "fraction_below_40": 0.5,
-                        "humidifier_needed_signal": False, "timestamp": time.time(),
-                        "hours_sampled": 12, "sensors": [], "min": 35.0, "max": 45.0,
-                        "p25": 37.0, "p75": 41.0, "fraction_above_55": 0.0, "hourly_pattern": {}}
+            old_snap = {
+                "date": "2026-07-01",
+                "mean": 38.0,
+                "fraction_below_40": 0.5,
+                "humidifier_needed_signal": False,
+                "timestamp": time.time(),
+                "hours_sampled": 12,
+                "sensors": [],
+                "min": 35.0,
+                "max": 45.0,
+                "p25": 37.0,
+                "p75": 41.0,
+                "fraction_above_55": 0.0,
+                "hourly_pattern": {},
+            }
             import json as _json
+
             open(f, "w").write(_json.dumps([old_snap]))
             summary = get_summary(f)
             assert summary["seasons"]["summer"]["days"] == 1
-

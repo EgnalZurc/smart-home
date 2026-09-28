@@ -1,7 +1,8 @@
 """Unit tests for AcTempScheduler (AC-CHART.10)."""
+
 import datetime
 from unittest.mock import MagicMock, patch
-import pytest
+
 from ac_temp_scheduler import AcTempScheduler
 
 
@@ -10,7 +11,7 @@ class TestAcTempScheduler:
 
     def _make_scheduler(self, mqtt=None, ac=None):
         mqtt = mqtt or MagicMock()
-        ac   = ac   or MagicMock()
+        ac = ac or MagicMock()
         ac.state.ac_real_room_temp = 23.5
         return AcTempScheduler(mqtt, ac)
 
@@ -19,7 +20,7 @@ class TestAcTempScheduler:
 
     def test_records_when_minute_zero(self):
         mqtt = MagicMock()
-        ac   = MagicMock()
+        ac = MagicMock()
         ac.state.ac_real_room_temp = 23.5
         sched = AcTempScheduler(mqtt, ac)
 
@@ -31,7 +32,7 @@ class TestAcTempScheduler:
 
     def test_skips_when_minute_not_zero(self):
         mqtt = MagicMock()
-        ac   = MagicMock()
+        ac = MagicMock()
         ac.state.ac_real_room_temp = 23.5
         sched = AcTempScheduler(mqtt, ac)
 
@@ -43,7 +44,7 @@ class TestAcTempScheduler:
 
     def test_skips_same_hour_twice(self):
         mqtt = MagicMock()
-        ac   = MagicMock()
+        ac = MagicMock()
         ac.state.ac_real_room_temp = 22.0
         sched = AcTempScheduler(mqtt, ac)
 
@@ -56,7 +57,7 @@ class TestAcTempScheduler:
 
     def test_records_next_hour(self):
         mqtt = MagicMock()
-        ac   = MagicMock()
+        ac = MagicMock()
         ac.state.ac_real_room_temp = 22.0
         sched = AcTempScheduler(mqtt, ac)
 
@@ -70,7 +71,7 @@ class TestAcTempScheduler:
 
     def test_skips_when_room_temp_none(self):
         mqtt = MagicMock()
-        ac   = MagicMock()
+        ac = MagicMock()
         ac.state.ac_real_room_temp = None
         sched = AcTempScheduler(mqtt, ac)
 

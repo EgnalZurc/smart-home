@@ -14,6 +14,7 @@ Siguiendo state_persistence.py del backend existente: fichero en /app/data/.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import sqlite3
@@ -111,12 +112,12 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
 # Configuración de schedule por defecto
 _DEFAULT_SCHEDULE = {
     "scraping_enabled": True,
-    "scraping_days": [0, 3],       # lunes=0, jueves=3
+    "scraping_days": [0, 3],  # lunes=0, jueves=3
     "scraping_hour": 7,
     "gmail_check_enabled": True,
     "gmail_interval_min": 30,
     "summary_enabled": True,
-    "summary_day": 6,              # domingo
+    "summary_day": 6,  # domingo
     "summary_hour": 9,
 }
 
@@ -138,14 +139,14 @@ class Database:
     def _migrate(self) -> None:
         """Migraciones no destructivas para añadir columnas nuevas a tablas existentes."""
         migrations = [
-            ("scored_properties", "score_p11",    "REAL NOT NULL DEFAULT 0"),
-            ("scored_properties", "score_p12",    "REAL NOT NULL DEFAULT 0"),
-            ("scored_properties", "score_p13",    "REAL NOT NULL DEFAULT 0"),
-            ("scored_properties", "dismissed",     "INTEGER NOT NULL DEFAULT 0"),
-            ("scored_properties", "dismissed_at",  "TEXT"),
-            ("scored_properties", "viewed",        "INTEGER NOT NULL DEFAULT 0"),
-            ("scored_properties", "viewed_at",     "TEXT"),
-            ("scored_properties", "comment",       "TEXT NOT NULL DEFAULT ''"),
+            ("scored_properties", "score_p11", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_p12", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_p13", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "dismissed", "INTEGER NOT NULL DEFAULT 0"),
+            ("scored_properties", "dismissed_at", "TEXT"),
+            ("scored_properties", "viewed", "INTEGER NOT NULL DEFAULT 0"),
+            ("scored_properties", "viewed_at", "TEXT"),
+            ("scored_properties", "comment", "TEXT NOT NULL DEFAULT ''"),
         ]
         for table, col, definition in migrations:
             try:
@@ -161,17 +162,19 @@ class Database:
             pass  # ya existe
         # Migracion: has_ac en properties
         try:
-            self._conn.execute("ALTER TABLE properties ADD COLUMN has_ac INTEGER NOT NULL DEFAULT 0")
+            self._conn.execute(
+                "ALTER TABLE properties ADD COLUMN has_ac INTEGER NOT NULL DEFAULT 0"
+            )
             logger.info("[db] Migracion: has_ac en properties")
         except sqlite3.OperationalError:
             pass  # ya existe
 
         # Rework R1-R18: nuevas columnas en properties
         new_cols_props = [
-            ("properties", "terrain_m2",    "REAL"),
-            ("properties", "garage_type",   "TEXT NOT NULL DEFAULT 'ninguno'"),
-            ("properties", "habitability",  "TEXT NOT NULL DEFAULT 'desconocido'"),
-            ("properties", "internet",      "TEXT NOT NULL DEFAULT 'ninguno'"),
+            ("properties", "terrain_m2", "REAL"),
+            ("properties", "garage_type", "TEXT NOT NULL DEFAULT 'ninguno'"),
+            ("properties", "habitability", "TEXT NOT NULL DEFAULT 'desconocido'"),
+            ("properties", "internet", "TEXT NOT NULL DEFAULT 'ninguno'"),
             ("properties", "has_ac_preinstalled", "INTEGER NOT NULL DEFAULT 0"),
         ]
         for table, col, defn in new_cols_props:
@@ -182,15 +185,15 @@ class Database:
                 pass  # ya existe
         # Rework: nuevas columnas en scored_properties (r8-r18)
         new_cols_score = [
-            ("scored_properties", "score_r1",  "REAL NOT NULL DEFAULT 0"),
-            ("scored_properties", "score_r2",  "REAL NOT NULL DEFAULT 0"),
-            ("scored_properties", "score_r3",  "REAL NOT NULL DEFAULT 0"),
-            ("scored_properties", "score_r4",  "REAL NOT NULL DEFAULT 0"),
-            ("scored_properties", "score_r5",  "REAL NOT NULL DEFAULT 0"),
-            ("scored_properties", "score_r6",  "REAL NOT NULL DEFAULT 0"),
-            ("scored_properties", "score_r7",  "REAL NOT NULL DEFAULT 0"),
-            ("scored_properties", "score_r8",  "REAL NOT NULL DEFAULT 0"),
-            ("scored_properties", "score_r9",  "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r1", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r2", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r3", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r4", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r5", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r6", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r7", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r8", "REAL NOT NULL DEFAULT 0"),
+            ("scored_properties", "score_r9", "REAL NOT NULL DEFAULT 0"),
             ("scored_properties", "score_r10", "REAL NOT NULL DEFAULT 0"),
             ("scored_properties", "score_r11", "REAL NOT NULL DEFAULT 0"),
             ("scored_properties", "score_r12", "REAL NOT NULL DEFAULT 0"),
@@ -208,14 +211,12 @@ class Database:
             except sqlite3.OperationalError:
                 pass  # ya existe
         # Asegurar que tabla telegram_chats existe (por si la BD era antigua)
-        try:
+        with contextlib.suppress(Exception):
             self._conn.execute(
                 "CREATE TABLE IF NOT EXISTS telegram_chats "
                 "(chat_id TEXT PRIMARY KEY, username TEXT NOT NULL DEFAULT '', "
                 "registered_at TEXT NOT NULL)"
             )
-        except Exception:
-            pass
 
     # ------------------------------------------------------------------
     # Propiedades
@@ -241,7 +242,10 @@ class Database:
                 )
                 logger.info(
                     "[db] Cambio de precio en %s: %d€ → %d€ (%.1f%%)",
-                    uid, old_price, prop.price, price_event.delta_pct,
+                    uid,
+                    old_price,
+                    prop.price,
+                    price_event.delta_pct,
                 )
                 self._conn.execute(
                     "INSERT INTO price_history "
@@ -263,25 +267,35 @@ class Database:
                     terrain_m2, garage_type, habitability, internet, has_ac_preinstalled)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    uid, prop.portal.value, prop.portal_id, prop.zone_id,
-                    prop.url, prop.title, prop.price,
-                    prop.rooms, prop.size_m2,
-                    int(prop.has_garage), int(prop.has_garden_or_plot),
-                    int(getattr(prop, 'has_ac', False)),
-                    prop.piscina.value, int(prop.habitable),
+                    uid,
+                    prop.portal.value,
+                    prop.portal_id,
+                    prop.zone_id,
+                    prop.url,
+                    prop.title,
+                    prop.price,
+                    prop.rooms,
+                    prop.size_m2,
+                    int(prop.has_garage),
+                    int(prop.has_garden_or_plot),
+                    int(getattr(prop, "has_ac", False)),
+                    prop.piscina.value,
+                    int(prop.habitable),
                     prop.description,
-                    prop.first_seen.isoformat(), now, prop.source,
+                    prop.first_seen.isoformat(),
+                    now,
+                    prop.source,
                     getattr(prop, "published_at", None),
                     getattr(prop, "terrain_m2", None),
                     getattr(prop, "garage_type", "ninguno").value
-                        if hasattr(getattr(prop, "garage_type", None), "value")
-                        else str(getattr(prop, "garage_type", "ninguno")),
+                    if hasattr(getattr(prop, "garage_type", None), "value")
+                    else str(getattr(prop, "garage_type", "ninguno")),
                     getattr(prop, "habitability", "desconocido").value
-                        if hasattr(getattr(prop, "habitability", None), "value")
-                        else str(getattr(prop, "habitability", "desconocido")),
+                    if hasattr(getattr(prop, "habitability", None), "value")
+                    else str(getattr(prop, "habitability", "desconocido")),
                     getattr(prop, "internet", "ninguno").value
-                        if hasattr(getattr(prop, "internet", None), "value")
-                        else str(getattr(prop, "internet", "ninguno")),
+                    if hasattr(getattr(prop, "internet", None), "value")
+                    else str(getattr(prop, "internet", "ninguno")),
                     int(getattr(prop, "has_ac_preinstalled", False)),
                 ),
             )
@@ -310,12 +324,12 @@ class Database:
             (uid,),
         ).fetchone()
 
-        alerted    = existing["alerted"]     if existing else 0
-        dismissed  = existing["dismissed"]   if existing else 0
-        dism_at    = existing["dismissed_at"] if existing else None
-        viewed     = existing["viewed"]      if existing else 0
-        viewed_at  = existing["viewed_at"]   if existing else None
-        comment    = existing["comment"]     if existing else ""
+        alerted = existing["alerted"] if existing else 0
+        dismissed = existing["dismissed"] if existing else 0
+        dism_at = existing["dismissed_at"] if existing else None
+        viewed = existing["viewed"] if existing else 0
+        viewed_at = existing["viewed_at"] if existing else None
+        comment = existing["comment"] if existing else ""
 
         self._conn.execute(
             """INSERT OR REPLACE INTO scored_properties
@@ -334,32 +348,49 @@ class Database:
                        ?, ?, ?, ?, ?, ?,
                        ?, ?, ?, ?, ?, ?, ?)""",
             (
-                uid, scored.zone.id, s.total,
+                uid,
+                scored.zone.id,
+                s.total,
                 # legado p1-p13 (0 si nuevo sistema)
-                getattr(s, "p1_rooms",       getattr(s, "r1_rooms",      0.0)),
-                getattr(s, "p2_piscina",     getattr(s, "r5_piscina",    0.0)),
-                getattr(s, "p3_distance",    getattr(s, "r12_madrid",    0.0)),
-                getattr(s, "p4_beach",       getattr(s, "r13_beach",     0.0)),
-                getattr(s, "p5_pools",       getattr(s, "r14_pools",     0.0)),
-                getattr(s, "p6_supermarket", getattr(s, "r8_supermarket",0.0)),
-                getattr(s, "p7_health",      getattr(s, "r9_health",     0.0)),
-                getattr(s, "p8_hospital",    getattr(s, "r10_hospital",  0.0)),
-                getattr(s, "p9_price",       getattr(s, "r7_price",      0.0)),
-                getattr(s, "p10_fire",       getattr(s, "r15_fire",      0.0)),
+                getattr(s, "p1_rooms", getattr(s, "r1_rooms", 0.0)),
+                getattr(s, "p2_piscina", getattr(s, "r5_piscina", 0.0)),
+                getattr(s, "p3_distance", getattr(s, "r12_madrid", 0.0)),
+                getattr(s, "p4_beach", getattr(s, "r13_beach", 0.0)),
+                getattr(s, "p5_pools", getattr(s, "r14_pools", 0.0)),
+                getattr(s, "p6_supermarket", getattr(s, "r8_supermarket", 0.0)),
+                getattr(s, "p7_health", getattr(s, "r9_health", 0.0)),
+                getattr(s, "p8_hospital", getattr(s, "r10_hospital", 0.0)),
+                getattr(s, "p9_price", getattr(s, "r7_price", 0.0)),
+                getattr(s, "p10_fire", getattr(s, "r15_fire", 0.0)),
                 getattr(s, "p11_preference", 0.0),
-                getattr(s, "p12_flood",      getattr(s, "r16_flood",     0.0)),
-                getattr(s, "p13_ac",         getattr(s, "r6_ac",         0.0)),
+                getattr(s, "p12_flood", getattr(s, "r16_flood", 0.0)),
+                getattr(s, "p13_ac", getattr(s, "r6_ac", 0.0)),
                 # R1-R18
-                getattr(s, "r1_rooms",       0.0), getattr(s, "r2_terrain",    0.0),
-                getattr(s, "r3_garage",      0.0), getattr(s, "r4_habitability",0.0),
-                getattr(s, "r5_piscina",     0.0), getattr(s, "r6_ac",          0.0),
-                getattr(s, "r7_price",       0.0), getattr(s, "r8_supermarket", 0.0),
-                getattr(s, "r9_health",      0.0), getattr(s, "r10_hospital",   0.0),
-                getattr(s, "r11_internet",   0.0), getattr(s, "r12_madrid",     0.0),
-                getattr(s, "r13_beach",      0.0), getattr(s, "r14_pools",      0.0),
-                getattr(s, "r15_fire",       0.0), getattr(s, "r16_flood",      0.0),
-                getattr(s, "r17_coast",      0.0), getattr(s, "r18_beach_plot", 0.0),
-                now, alerted, dismissed, dism_at, viewed, viewed_at, comment,
+                getattr(s, "r1_rooms", 0.0),
+                getattr(s, "r2_terrain", 0.0),
+                getattr(s, "r3_garage", 0.0),
+                getattr(s, "r4_habitability", 0.0),
+                getattr(s, "r5_piscina", 0.0),
+                getattr(s, "r6_ac", 0.0),
+                getattr(s, "r7_price", 0.0),
+                getattr(s, "r8_supermarket", 0.0),
+                getattr(s, "r9_health", 0.0),
+                getattr(s, "r10_hospital", 0.0),
+                getattr(s, "r11_internet", 0.0),
+                getattr(s, "r12_madrid", 0.0),
+                getattr(s, "r13_beach", 0.0),
+                getattr(s, "r14_pools", 0.0),
+                getattr(s, "r15_fire", 0.0),
+                getattr(s, "r16_flood", 0.0),
+                getattr(s, "r17_coast", 0.0),
+                getattr(s, "r18_beach_plot", 0.0),
+                now,
+                alerted,
+                dismissed,
+                dism_at,
+                viewed,
+                viewed_at,
+                comment,
             ),
         )
         self._conn.commit()
@@ -446,7 +477,7 @@ class Database:
         min_score: float = 55.0,
         limit: int = 20,
         offset: int = 0,
-        sort_by: str = "score",   # score | price | distance | portal | zone
+        sort_by: str = "score",  # score | price | distance | portal | zone
         sort_dir: str = "desc",
         filter_by: str | None = None,  # viewed | not_viewed | None
         portal_filter: str | None = None,  # pisos | habitaclia | idealista | None
@@ -456,17 +487,21 @@ class Database:
         Retorna: {items: [...], total: int, has_more: bool}
         """
         _SORT_MAP = {
-            "score":    "s.score_total",
-            "price":    "p.price",
+            "score": "s.score_total",
+            "price": "p.price",
             "distance": "p.first_seen",  # distancia no está en BD, fallback a fecha
-            "portal":   "p.portal",
-            "zone":     "p.zone_id",
-            "date":     "p.first_seen",
+            "portal": "p.portal",
+            "zone": "p.zone_id",
+            "date": "p.first_seen",
         }
         order_col = _SORT_MAP.get(sort_by, "s.score_total")
         order_dir = "DESC" if sort_dir.lower() == "desc" else "ASC"
 
-        _fc = "AND s.viewed = 1" if filter_by == "viewed" else ("AND COALESCE(s.viewed,0) = 0" if filter_by == "not_viewed" else "")
+        _fc = (
+            "AND s.viewed = 1"
+            if filter_by == "viewed"
+            else ("AND COALESCE(s.viewed,0) = 0" if filter_by == "not_viewed" else "")
+        )
         _pf = f"AND p.portal = '{portal_filter}'" if portal_filter else ""
         total = self._conn.execute(
             f"SELECT COUNT(*) FROM scored_properties s "

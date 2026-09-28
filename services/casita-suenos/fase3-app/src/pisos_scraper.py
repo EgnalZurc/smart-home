@@ -13,27 +13,32 @@ Workaround L2/L3 (garaje y jardin):
   Si la URL usada contiene estos segmentos, todos los resultados
   estan garantizados por el portal → se marcan has_garden=True, has_garage=True.
 """
+
 from __future__ import annotations
+
 import logging
 import re
 from datetime import datetime
 
 import httpx
-
 from models import Portal, Property
 from scraper_base import (
     get_html,
-    infer_ac, infer_ac_type,
-    infer_habitable, infer_habitability,
-    infer_has_garage, infer_has_garden,
+    infer_ac_type,
     infer_garage_type,
-    infer_internet, infer_no_internet,
+    infer_habitability,
+    infer_habitable,
+    infer_has_garage,
+    infer_has_garden,
+    infer_internet,
+    infer_no_internet,
     infer_piscina,
     infer_terrain_m2,
     make_client,
-    parse_price, parse_rooms, parse_size,
+    parse_price,
+    parse_rooms,
+    parse_size,
 )
-from models import GarageType, Habitability, Internet, Piscina, Portal, Property
 from zones import Zone
 
 logger = logging.getLogger(__name__)
@@ -94,18 +99,28 @@ def _extract_listings(soup, base_url: str, zone: Zone, now: datetime) -> list[Pr
                 continue
 
             # Habitaciones y m2: en p.ad-preview__char
-            chars = [c.get_text(strip=True) for c in container.select("p.ad-preview__char")]
-            rooms_raw = next((c for c in chars if re.search(r"hab", c, re.I)), None)
-            size_raw = next((c for c in chars if re.search(r"m[²2]", c, re.I)), None)
+            chars = [
+                c.get_text(strip=True) for c in container.select("p.ad-preview__char")
+            ]
+            rooms_raw = next(
+                (c for c in chars if re.search(r"hab", c, re.IGNORECASE)), None
+            )
+            size_raw = next(
+                (c for c in chars if re.search(r"m[²2]", c, re.IGNORECASE)), None
+            )
 
             # Descripcion
-            desc_el = container.select_one("p.ad-preview__description, p.ad-preview__subtitle")
+            desc_el = container.select_one(
+                "p.ad-preview__description, p.ad-preview__subtitle"
+            )
             description = desc_el.get_text(" ", strip=True) if desc_el else title
 
             # Extras: textos de badges y tags
             extras = [
                 t.get_text(strip=True)
-                for t in container.select("[class*='tag'], [class*='badge'], [class*='product-top-tag']")
+                for t in container.select(
+                    "[class*='tag'], [class*='badge'], [class*='product-top-tag']"
+                )
                 if t.get_text(strip=True)
             ]
 
@@ -113,31 +128,35 @@ def _extract_listings(soup, base_url: str, zone: Zone, now: datetime) -> list[Pr
             has_garden = guaranteed_garden or infer_has_garden(description, extras)
             has_garage = guaranteed_garage or infer_has_garage(description, extras)
 
-            results.append(Property(
-                portal=Portal.PISOS,
-                portal_id=portal_id,
-                url=href,
-                zone_id=zone.id,
-                title=title,
-                price=price,
-                size_m2=parse_size(size_raw),
-                rooms=parse_rooms(rooms_raw),
-                has_garden_or_plot=has_garden,
-                terrain_m2=infer_terrain_m2(description, extras),
-                garage_type=infer_garage_type(description, extras),
-                habitability=infer_habitability(description, title),
-                internet=infer_internet(description, extras),
-                has_garage=has_garage,
-                has_ac=(lambda t: t[0])(infer_ac_type(description, extras)),
-                has_ac_preinstalled=(lambda t: t[1])(infer_ac_type(description, extras)),
-                piscina=infer_piscina(description, extras),
-                has_internet_mention=not infer_no_internet(description),
-                habitable=infer_habitable(description, title),
-                description=description,
-                first_seen=now,
-                last_seen=now,
-                source="pisos_scraper",
-            ))
+            results.append(
+                Property(
+                    portal=Portal.PISOS,
+                    portal_id=portal_id,
+                    url=href,
+                    zone_id=zone.id,
+                    title=title,
+                    price=price,
+                    size_m2=parse_size(size_raw),
+                    rooms=parse_rooms(rooms_raw),
+                    has_garden_or_plot=has_garden,
+                    terrain_m2=infer_terrain_m2(description, extras),
+                    garage_type=infer_garage_type(description, extras),
+                    habitability=infer_habitability(description, title),
+                    internet=infer_internet(description, extras),
+                    has_garage=has_garage,
+                    has_ac=(lambda t: t[0])(infer_ac_type(description, extras)),
+                    has_ac_preinstalled=(lambda t: t[1])(
+                        infer_ac_type(description, extras)
+                    ),
+                    piscina=infer_piscina(description, extras),
+                    has_internet_mention=not infer_no_internet(description),
+                    habitable=infer_habitable(description, title),
+                    description=description,
+                    first_seen=now,
+                    last_seen=now,
+                    source="pisos_scraper",
+                )
+            )
 
         except Exception as e:
             logger.debug("[pisos] Error parseando anuncio: %s", e)
@@ -185,7 +204,10 @@ def scrape_zone(zone: Zone, client: httpx.Client | None = None) -> list[Property
 
                 logger.info(
                     "[pisos] Zona %s — pagina %d: %d anuncios (%d nuevos)",
-                    zone.id, page, len(page_results), new_count
+                    zone.id,
+                    page,
+                    len(page_results),
+                    new_count,
                 )
                 if new_count == 0:
                     break

@@ -27,10 +27,11 @@ Table ``user_profiles`` in auth.db:
     username TEXT PRIMARY KEY
     profile  TEXT NOT NULL  -- profile key, e.g. "SUPER" or "FAMILIA_PRINCIPAL"
 """
+
 import logging
 import sqlite3
 from pathlib import Path
-from typing import Optional
+
 logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration (injected from main.py lifespan)
@@ -112,6 +113,8 @@ APP_REGISTRY: list[dict] = [
         "edit_level": 1,
     },
 ]
+
+
 # ---------------------------------------------------------------------------
 # Database helpers
 # ---------------------------------------------------------------------------
@@ -129,6 +132,8 @@ def _db() -> sqlite3.Connection:
     """)
     conn.commit()
     return conn
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -140,6 +145,8 @@ def get_profile(username: str) -> dict:
         ).fetchone()
     key = row["profile"] if row else _DEFAULT_PROFILE
     return PROFILES.get(key, PROFILES[_DEFAULT_PROFILE])
+
+
 def get_profile_key(username: str) -> str:
     """Return the profile key string for a user."""
     with _db() as conn:
@@ -147,6 +154,8 @@ def get_profile_key(username: str) -> str:
             "SELECT profile FROM user_profiles WHERE username = ?", (username,)
         ).fetchone()
     return row["profile"] if row else _DEFAULT_PROFILE
+
+
 def set_profile(username: str, profile_key: str) -> None:
     """Assign a profile to a user. Raises ValueError for unknown profiles."""
     if profile_key not in PROFILES:
@@ -157,14 +166,14 @@ def set_profile(username: str, profile_key: str) -> None:
             (username, profile_key),
         )
     logger.info("Profile %r assigned to user %r", profile_key, username)
+
+
 def visible_app_keys(username: str) -> list[str]:
     """Return the list of app keys visible to a user, in registry order."""
     profile = get_profile(username)
-    return [
-        app["key"]
-        for app in APP_REGISTRY
-        if _can_view(app, profile)
-    ]
+    return [app["key"] for app in APP_REGISTRY if _can_view(app, profile)]
+
+
 def app_permissions(username: str) -> list[dict]:
     """Return visible apps with their resolved permissions for the user.
     Each entry: {"key": str, "type": str, "can_edit": bool}
@@ -174,12 +183,16 @@ def app_permissions(username: str) -> list[dict]:
     for app in APP_REGISTRY:
         if not _can_view(app, profile):
             continue
-        result.append({
-            "key": app["key"],
-            "type": app["type"],
-            "can_edit": profile["can_edit_level"] <= app["edit_level"],
-        })
+        result.append(
+            {
+                "key": app["key"],
+                "type": app["type"],
+                "can_edit": profile["can_edit_level"] <= app["edit_level"],
+            }
+        )
     return result
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------

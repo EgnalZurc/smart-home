@@ -16,10 +16,11 @@ Uso:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
-import sys
 import platform
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -51,8 +52,10 @@ def _ensure_singleton_unix(lock_path: str) -> None:
         lock_file.flush()
         # Guardar referencia para que no se cierre (y libere el lock) al GC
         _hold_lock_ref(lock_file)
-        logger.info("[singleton] Bloqueo obtenido en %s (PID %d)", lock_path, os.getpid())
-    except (IOError, OSError):
+        logger.info(
+            "[singleton] Bloqueo obtenido en %s (PID %d)", lock_path, os.getpid()
+        )
+    except OSError:
         logger.error(
             "[singleton] Ya hay otra instancia de casita-suenos corriendo. "
             "Fichero de bloqueo: %s — terminando.",
@@ -73,8 +76,11 @@ def _ensure_singleton_windows(lock_path: str) -> None:
         _hold_lock_ref(handle)
 
         import atexit
+
         atexit.register(_cleanup_lock_windows, lock_path)
-        logger.info("[singleton] Bloqueo obtenido en %s (PID %d)", lock_path, os.getpid())
+        logger.info(
+            "[singleton] Bloqueo obtenido en %s (PID %d)", lock_path, os.getpid()
+        )
     except FileExistsError:
         # Comprobar si el proceso aún existe
         try:
@@ -94,10 +100,8 @@ def _ensure_singleton_windows(lock_path: str) -> None:
 
 
 def _cleanup_lock_windows(lock_path: str) -> None:
-    try:
+    with contextlib.suppress(OSError):
         os.remove(lock_path)
-    except OSError:
-        pass
 
 
 def _pid_alive(pid: int) -> bool:

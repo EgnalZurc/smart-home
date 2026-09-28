@@ -7,23 +7,36 @@ Todos los criterios puntúan, con posibilidad de puntuación negativa.
 Puntuación máxima: 180 pts
 Umbral de alerta: 66% → 119 pts
 """
+
 from __future__ import annotations
+
+import contextlib
 import logging
 import math
+
 from models import (
-    FireRisk, FloodRisk, GarageType, Habitability, Internet,
-    Piscina, Property, ScoreBreakdown, ScoredProperty, Zone,
+    FireRisk,
+    FloodRisk,
+    GarageType,
+    Habitability,
+    Internet,
+    Piscina,
+    Property,
+    ScoreBreakdown,
+    ScoredProperty,
+    Zone,
 )
 
 logger = logging.getLogger(__name__)
 
-ALERT_THRESHOLD = 119.0   # 66% de 180 — umbral radar
-MAX_SCORE       = 180.0
+ALERT_THRESHOLD = 119.0  # 66% de 180 — umbral radar
+MAX_SCORE = 180.0
 
 
 # ---------------------------------------------------------------------------
 # R1 — Habitaciones (máx 10)
 # ---------------------------------------------------------------------------
+
 
 def _r1_rooms(rooms: int | None) -> float:
     if rooms is None or rooms <= 2:
@@ -37,6 +50,7 @@ def _r1_rooms(rooms: int | None) -> float:
 # ---------------------------------------------------------------------------
 # R2 — Terreno (máx 10, mín -5)
 # ---------------------------------------------------------------------------
+
 
 def _r2_terrain(has_garden: bool, terrain_m2: float | None) -> float:
     if not has_garden:
@@ -56,6 +70,7 @@ def _r2_terrain(has_garden: bool, terrain_m2: float | None) -> float:
 # R3 — Garaje (máx 10)
 # ---------------------------------------------------------------------------
 
+
 def _r3_garage(garage_type: GarageType, has_garden: bool) -> float:
     if garage_type == GarageType.EDIFICIO:
         return 10.0
@@ -71,14 +86,15 @@ def _r3_garage(garage_type: GarageType, has_garden: bool) -> float:
 # R4 — Habitabilidad (máx 10, mín -10)
 # ---------------------------------------------------------------------------
 
+
 def _r4_habitability(hab: Habitability) -> float:
     return {
-        Habitability.RUINA:       -10.0,
-        Habitability.REFORMA:     -10.0,
-        Habitability.DESCONOCIDO:   0.0,
-        Habitability.PENDIENTE:     4.0,
-        Habitability.BUENO:         7.0,
-        Habitability.REFORMADO:    10.0,
+        Habitability.RUINA: -10.0,
+        Habitability.REFORMA: -10.0,
+        Habitability.DESCONOCIDO: 0.0,
+        Habitability.PENDIENTE: 4.0,
+        Habitability.BUENO: 7.0,
+        Habitability.REFORMADO: 10.0,
     }[hab]
 
 
@@ -86,18 +102,20 @@ def _r4_habitability(hab: Habitability) -> float:
 # R5 — Piscina (máx 10)
 # ---------------------------------------------------------------------------
 
+
 def _r5_piscina(piscina: Piscina) -> float:
     return {
-        Piscina.PROPIA:      10.0,
-        Piscina.COMUNITARIA:  8.0,
-        Piscina.ESPACIO:      6.0,
-        Piscina.NINGUNA:      0.0,
+        Piscina.PROPIA: 10.0,
+        Piscina.COMUNITARIA: 8.0,
+        Piscina.ESPACIO: 6.0,
+        Piscina.NINGUNA: 0.0,
     }[piscina]
 
 
 # ---------------------------------------------------------------------------
 # R6 — Aire acondicionado (máx 10)
 # ---------------------------------------------------------------------------
+
 
 def _r6_ac(has_ac: bool, has_ac_preinstalled: bool) -> float:
     if has_ac:
@@ -113,6 +131,7 @@ def _r6_ac(has_ac: bool, has_ac_preinstalled: bool) -> float:
 #   100k → 10 (pico) | 100-300k lineal 10→5 | 300k → 5
 #   300-350k lineal 5→0 | ≥350k → 0
 # ---------------------------------------------------------------------------
+
 
 def _r7_price(price: int) -> float:
     if price <= 0:
@@ -133,6 +152,7 @@ def _r7_price(price: int) -> float:
 #   ≤5min → 10 | 5-20min lineal 10→5 | >20min → 0
 # ---------------------------------------------------------------------------
 
+
 def _r8_supermarket(minutes: int) -> float:
     if minutes <= 5:
         return 10.0
@@ -148,6 +168,7 @@ def _r8_supermarket(minutes: int) -> float:
 #   ≤5min → 10 | 5-60min lineal 10→0 | >60min → 0
 # ---------------------------------------------------------------------------
 
+
 def _r9_health(minutes: int) -> float:
     if minutes <= 5:
         return 10.0
@@ -162,6 +183,7 @@ def _r9_health(minutes: int) -> float:
 #   ≤5min → 10 | 5-90min lineal 10→0 | >90min → 0
 # ---------------------------------------------------------------------------
 
+
 def _r10_hospital(minutes: int) -> float:
     if minutes <= 5:
         return 10.0
@@ -175,11 +197,12 @@ def _r10_hospital(minutes: int) -> float:
 # R11 — Internet (máx 10)
 # ---------------------------------------------------------------------------
 
+
 def _r11_internet(internet: Internet) -> float:
     return {
-        Internet.NINGUNO:     4.0,
+        Internet.NINGUNO: 4.0,
         Internet.INSTALACION: 8.0,
-        Internet.FIBRA:       10.0,
+        Internet.FIBRA: 10.0,
     }[internet]
 
 
@@ -187,6 +210,7 @@ def _r11_internet(internet: Internet) -> float:
 # R12 — Distancia Madrid (0 o 10)
 #   ≤270min → 10 | >270min → 0
 # ---------------------------------------------------------------------------
+
 
 def _r12_madrid(minutes: int) -> float:
     return 10.0 if minutes <= 270 else 0.0
@@ -196,6 +220,7 @@ def _r12_madrid(minutes: int) -> float:
 # R13 — Playa (máx 10)
 #   ≤5min → 10 | 5-30min lineal 10→0 | ≥30min → 0
 # ---------------------------------------------------------------------------
+
 
 def _r13_beach(minutes: int | None) -> float:
     if minutes is None:
@@ -213,6 +238,7 @@ def _r13_beach(minutes: int | None) -> float:
 #   ≤5min → 10 | 5-20min lineal 10→0 | ≥20min → 0
 # ---------------------------------------------------------------------------
 
+
 def _r14_pools(minutes: int | None) -> float:
     if minutes is None:
         return 0.0
@@ -228,15 +254,16 @@ def _r14_pools(minutes: int | None) -> float:
 # R15 — Riesgo de incendio (máx 10, mín -10)
 # ---------------------------------------------------------------------------
 
+
 def _r15_fire(risk: FireRisk) -> float:
     return {
-        FireRisk.MUY_ALTO:   -10.0,
-        FireRisk.ALTO:         0.0,
-        FireRisk.MEDIO_ALTO:   3.0,
-        FireRisk.MEDIO:        5.0,
-        FireRisk.MUY_BAJO:     7.0,  # MUY_BAJO usa misma escala que MEDIO_BAJO
-        FireRisk.BAJO:         9.0,
-        FireRisk.NULO:        10.0,
+        FireRisk.MUY_ALTO: -10.0,
+        FireRisk.ALTO: 0.0,
+        FireRisk.MEDIO_ALTO: 3.0,
+        FireRisk.MEDIO: 5.0,
+        FireRisk.MUY_BAJO: 7.0,  # MUY_BAJO usa misma escala que MEDIO_BAJO
+        FireRisk.BAJO: 9.0,
+        FireRisk.NULO: 10.0,
     }[risk]
 
 
@@ -244,16 +271,17 @@ def _r15_fire(risk: FireRisk) -> float:
 # R16 — Riesgo de inundación (máx 10, mín -10)
 # ---------------------------------------------------------------------------
 
+
 def _r16_flood(risk) -> float:
     if risk is None:
         return 4.0  # Sin datos → neutro
     mapping = {
-        FloodRisk.ALTO:        0.0,   # No hay MUY_ALTO en FloodRisk → ALTO = 0
-        FloodRisk.MEDIO_ALTO:  3.0,
-        FloodRisk.MEDIO:       5.0,
-        FloodRisk.BAJO_MEDIO:  7.0,
-        FloodRisk.BAJO:        9.0,
-        FloodRisk.NULO:       10.0,
+        FloodRisk.ALTO: 0.0,  # No hay MUY_ALTO en FloodRisk → ALTO = 0
+        FloodRisk.MEDIO_ALTO: 3.0,
+        FloodRisk.MEDIO: 5.0,
+        FloodRisk.BAJO_MEDIO: 7.0,
+        FloodRisk.BAJO: 9.0,
+        FloodRisk.NULO: 10.0,
     }
     val = mapping.get(risk, 4.0)
     return val
@@ -262,6 +290,7 @@ def _r16_flood(risk) -> float:
 # ---------------------------------------------------------------------------
 # R17 — Provincia con costa (0 o 10)
 # ---------------------------------------------------------------------------
+
 
 def _r17_coast(has_coast: bool) -> float:
     return 10.0 if has_coast else 0.0
@@ -272,6 +301,7 @@ def _r17_coast(has_coast: bool) -> float:
 #   Condición: terreno confirmado (has_garden=True) Y playa a ≤1.5km
 #   Proxy: distance_beach_min <= 2 min en coche ≈ ≤1.5km
 # ---------------------------------------------------------------------------
+
 
 def _r18_beach_plot(has_garden: bool, beach_min: int | None) -> float:
     if not has_garden:
@@ -288,6 +318,7 @@ def _r18_beach_plot(has_garden: bool, beach_min: int | None) -> float:
 # Función principal
 # ---------------------------------------------------------------------------
 
+
 def evaluate(prop: Property, zone: Zone) -> ScoredProperty:
     """
     Evalúa una propiedad y devuelve ScoredProperty con puntuación R1-R18.
@@ -296,54 +327,56 @@ def evaluate(prop: Property, zone: Zone) -> ScoredProperty:
     y no pasará el umbral de alerta.
     """
     supermarket_min = prop.distance_supermarket_min or zone.distance_supermarket_min
-    health_min      = prop.distance_health_center_min or zone.distance_health_center_min
-    hospital_min    = prop.distance_hospital_min or zone.distance_hospital_min
-    beach_min       = zone.distance_beach_min
+    health_min = prop.distance_health_center_min or zone.distance_health_center_min
+    hospital_min = prop.distance_hospital_min or zone.distance_hospital_min
+    beach_min = zone.distance_beach_min
 
     # Habitability desde el nuevo campo; fallback desde bool habitable legado
-    hab = getattr(prop, 'habitability', None)
+    hab = getattr(prop, "habitability", None)
     if hab is None:
         hab = Habitability.BUENO if prop.habitable else Habitability.REFORMA
 
     # Internet desde el nuevo campo; fallback desde has_internet_mention legado
-    internet = getattr(prop, 'internet', None)
+    internet = getattr(prop, "internet", None)
     if internet is None:
-        internet = Internet.INSTALACION if prop.has_internet_mention else Internet.NINGUNO
+        internet = (
+            Internet.INSTALACION if prop.has_internet_mention else Internet.NINGUNO
+        )
 
     # GarageType desde el nuevo campo; fallback desde has_garage legado
-    garage_type = getattr(prop, 'garage_type', None)
+    garage_type = getattr(prop, "garage_type", None)
     if garage_type is None:
         garage_type = GarageType.EXTERIOR if prop.has_garage else GarageType.NINGUNO
 
     # terrain_m2 — puede ser None
-    terrain_m2 = getattr(prop, 'terrain_m2', None)
+    terrain_m2 = getattr(prop, "terrain_m2", None)
 
     # has_ac y has_ac_preinstalled
-    has_ac = getattr(prop, 'has_ac', False)
-    has_ac_pre = getattr(prop, 'has_ac_preinstalled', False)
+    has_ac = getattr(prop, "has_ac", False)
+    has_ac_pre = getattr(prop, "has_ac_preinstalled", False)
 
     # has_coast desde la zona
-    has_coast = getattr(zone, 'has_coast', False)
+    has_coast = getattr(zone, "has_coast", False)
 
     score = ScoreBreakdown(
-        r1_rooms      = _r1_rooms(prop.rooms),
-        r2_terrain    = _r2_terrain(prop.has_garden_or_plot, terrain_m2),
-        r3_garage     = _r3_garage(garage_type, prop.has_garden_or_plot),
-        r4_habitability = _r4_habitability(hab),
-        r5_piscina    = _r5_piscina(prop.piscina),
-        r6_ac         = _r6_ac(has_ac, has_ac_pre),
-        r7_price      = _r7_price(prop.price),
-        r8_supermarket = _r8_supermarket(supermarket_min),
-        r9_health     = _r9_health(health_min),
-        r10_hospital  = _r10_hospital(hospital_min),
-        r11_internet  = _r11_internet(internet),
-        r12_madrid    = _r12_madrid(zone.distance_madrid_min),
-        r13_beach     = _r13_beach(beach_min),
-        r14_pools     = _r14_pools(zone.distance_natural_pools_min),
-        r15_fire      = _r15_fire(zone.fire_risk),
-        r16_flood     = _r16_flood(getattr(zone, 'flood_risk', None)),
-        r17_coast     = _r17_coast(has_coast),
-        r18_beach_plot = _r18_beach_plot(prop.has_garden_or_plot, beach_min),
+        r1_rooms=_r1_rooms(prop.rooms),
+        r2_terrain=_r2_terrain(prop.has_garden_or_plot, terrain_m2),
+        r3_garage=_r3_garage(garage_type, prop.has_garden_or_plot),
+        r4_habitability=_r4_habitability(hab),
+        r5_piscina=_r5_piscina(prop.piscina),
+        r6_ac=_r6_ac(has_ac, has_ac_pre),
+        r7_price=_r7_price(prop.price),
+        r8_supermarket=_r8_supermarket(supermarket_min),
+        r9_health=_r9_health(health_min),
+        r10_hospital=_r10_hospital(hospital_min),
+        r11_internet=_r11_internet(internet),
+        r12_madrid=_r12_madrid(zone.distance_madrid_min),
+        r13_beach=_r13_beach(beach_min),
+        r14_pools=_r14_pools(zone.distance_natural_pools_min),
+        r15_fire=_r15_fire(zone.fire_risk),
+        r16_flood=_r16_flood(getattr(zone, "flood_risk", None)),
+        r17_coast=_r17_coast(has_coast),
+        r18_beach_plot=_r18_beach_plot(prop.has_garden_or_plot, beach_min),
     )
 
     scored = ScoredProperty(prop=prop, zone=zone, score=score)
@@ -362,7 +395,8 @@ def evaluate(prop: Property, zone: Zone) -> ScoredProperty:
 
 EMAIL_BONUS = 8.0  # pts extra por haber pasado los filtros configurados en el portal
 
-def evaluate_from_email(prop: "Property", zone: "Zone") -> "ScoredProperty":
+
+def evaluate_from_email(prop: Property, zone: Zone) -> ScoredProperty:
     """
     Evalúa una propiedad proveniente de email de portal (Idealista, Fotocasa).
     Aplica defaults garantizados por los filtros del portal antes de puntuar,
@@ -378,30 +412,37 @@ def evaluate_from_email(prop: "Property", zone: "Zone") -> "ScoredProperty":
     No modifica el objeto Property original.
     """
     import copy
-    from models import GarageType, Habitability, Internet
+
+    from models import GarageType, Habitability
 
     # Copiar para no mutar el original
     p = copy.copy(prop)
 
     # R1 — habitaciones: si no hay dato, asumir 3 (filtro mínimo del portal)
     if p.rooms is None or p.rooms < 1:
-        object.__setattr__(p, 'rooms', 3) if hasattr(p, '__dataclass_fields__') else setattr(p, 'rooms', 3)
+        object.__setattr__(p, "rooms", 3) if hasattr(
+            p, "__dataclass_fields__"
+        ) else setattr(p, "rooms", 3)
 
     # R2/R3 — terreno y garaje: el portal ya los garantizó
     if not p.has_garden_or_plot:
-        try: object.__setattr__(p, 'has_garden_or_plot', True)
-        except: pass
-    current_gt = getattr(p, 'garage_type', GarageType.NINGUNO)
+        with contextlib.suppress(BaseException):
+            object.__setattr__(p, "has_garden_or_plot", True)
+    current_gt = getattr(p, "garage_type", GarageType.NINGUNO)
     if current_gt == GarageType.NINGUNO and p.has_garage:
         gt_val = GarageType.EXTERIOR
-        try: object.__setattr__(p, 'garage_type', gt_val)
-        except: setattr(p, 'garage_type', gt_val)
+        try:
+            object.__setattr__(p, "garage_type", gt_val)
+        except:
+            p.garage_type = gt_val
 
     # R4 — habitabilidad: si desconocida, el portal no manda ruinas
-    hab = getattr(p, 'habitability', None)
+    hab = getattr(p, "habitability", None)
     if hab is None or hab == Habitability.DESCONOCIDO:
-        try: object.__setattr__(p, 'habitability', Habitability.BUENO)
-        except: setattr(p, 'habitability', Habitability.BUENO)
+        try:
+            object.__setattr__(p, "habitability", Habitability.BUENO)
+        except:
+            p.habitability = Habitability.BUENO
 
     # Calcular score base con el scorer estándar
     base_scored = evaluate(p, zone)
@@ -415,6 +456,7 @@ def evaluate_from_email(prop: "Property", zone: "Zone") -> "ScoredProperty":
     # Añadir el bonus al breakdown — lo incorporamos en r18 si está a 0
     # (r18 solo puntúa con playa+terreno, que pocas casas de email tienen)
     from models import ScoreBreakdown, ScoredProperty
+
     r18_val = base_score.r18_beach_plot + bonus_to_add  # suma al bonus existente
 
     new_score = ScoreBreakdown(
@@ -438,5 +480,9 @@ def evaluate_from_email(prop: "Property", zone: "Zone") -> "ScoredProperty":
         r18_beach_plot=r18_val,  # absorbe el bonus de email
     )
 
-    return ScoredProperty(prop=base_scored.prop, zone=zone, score=new_score,
-                          scored_at=base_scored.scored_at)
+    return ScoredProperty(
+        prop=base_scored.prop,
+        zone=zone,
+        score=new_score,
+        scored_at=base_scored.scored_at,
+    )

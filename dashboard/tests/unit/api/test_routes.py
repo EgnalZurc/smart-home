@@ -9,26 +9,27 @@ Covers:
 NOTE: AC-specific endpoints (/api/status, /api/sensors, etc.) are NOT tested here.
 They live in ac-service and are tested in ~/projects/smart-home/ac-service/tests/.
 """
+
 import sys
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # ── Mock passlib before any auth import ───────────────────────────────────────
 # passlib is installed in the Docker container but not in the Pi test environment.
 _mock_passlib = MagicMock()
 _mock_passlib.hash.apr_md5_crypt.verify.return_value = True
-sys.modules.setdefault('passlib', _mock_passlib)
-sys.modules.setdefault('passlib.hash', _mock_passlib.hash)
+sys.modules.setdefault("passlib", _mock_passlib)
+sys.modules.setdefault("passlib.hash", _mock_passlib.hash)
 
-from fastapi.testclient import TestClient
 from fastapi import FastAPI
-
+from fastapi.testclient import TestClient
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_client():
     """TestClient for routes.py without auth."""
     from api import routes
+
     app = FastAPI()
     app.include_router(routes.router)
     return TestClient(app, raise_server_exceptions=True)
@@ -37,7 +38,6 @@ def _make_client():
 def _make_client_authed(profile_key: str, username: str):
     """TestClient with a fake user injected via _require_super patch."""
     from api import routes
-    import user_profiles
 
     app = FastAPI()
 
@@ -59,13 +59,13 @@ def _make_client_authed(profile_key: str, username: str):
 
 def _super_client():
     """Client authenticated as SUPER."""
-    c, user, profile = _make_client_authed('SUPER', 'egnal')
+    c, user, profile = _make_client_authed("SUPER", "egnal")
     return c, user, profile
 
 
 def _familia_client():
     """Client authenticated as FAMILIA_PRINCIPAL."""
-    c, user, profile = _make_client_authed('FAMILIA_PRINCIPAL', 'virchi')
+    c, user, profile = _make_client_authed("FAMILIA_PRINCIPAL", "virchi")
     return c, user, profile
 
 
@@ -76,15 +76,14 @@ def _patch_require_super(username: str, profile_key: str):
 
     profiles = user_profiles.PROFILES
     profile_def = profiles.get(profile_key, {})
-    is_super = profile_def.get('show_config_apps', False)
+    is_super = profile_def.get("show_config_apps", False)
 
     def fake_require_super(request):
         if not is_super:
-            raise HTTPException(status_code=403, detail='SUPER profile required')
+            raise HTTPException(status_code=403, detail="SUPER profile required")
         return username
 
-    return patch('api.routes._require_super', side_effect=fake_require_super)
-
+    return patch("api.routes._require_super", side_effect=fake_require_super)
 
 
 class TestHealthBackend:
@@ -102,9 +101,15 @@ class TestHealthZigbee:
 
     def test_returns_200_when_ac_service_responds(self):
         mock_resp = MagicMock()
-        mock_resp.json.return_value = {"online": True, "mqtt_connected": True, "active_sensors": 5}
+        mock_resp.json.return_value = {
+            "online": True,
+            "mqtt_connected": True,
+            "active_sensors": 5,
+        }
         with patch("httpx.AsyncClient") as mock_cls:
-            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_resp
+            )
             r = _make_client().get("/api/health/zigbee")
         assert r.status_code == 200
         assert r.json()["online"] is True
@@ -127,7 +132,9 @@ class TestHealthAC:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"online": True, "service": "ac"}
         with patch("httpx.AsyncClient") as mock_cls:
-            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_resp
+            )
             r = _make_client().get("/api/health/ac")
         assert r.status_code == 200
         assert r.json()["online"] is True
@@ -148,7 +155,9 @@ class TestHealthVacaciones:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"online": True, "service": "vacaciones"}
         with patch("httpx.AsyncClient") as mock_cls:
-            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_resp
+            )
             r = _make_client().get("/api/health/vacaciones")
         assert r.json()["online"] is True
 
@@ -169,7 +178,9 @@ class TestHealthImmich:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"res": "pong"}
         with patch("httpx.AsyncClient") as mock_cls:
-            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_resp
+            )
             r = _make_client().get("/api/health/immich")
         assert r.json()["online"] is True
 
@@ -178,33 +189,48 @@ class TestHealthImmich:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"res": "error"}
         with patch("httpx.AsyncClient") as mock_cls:
-            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_resp
+            )
             r = _make_client().get("/api/health/immich")
         assert r.json()["online"] is False
 
 
 # ── Container mapping ─────────────────────────────────────────────────────────
 
-class TestControllableContainersMapping:
 
+class TestControllableContainersMapping:
     def test_all_expected_keys_present(self):
         from api.routes import CONTROLLABLE_CONTAINERS
-        assert set(CONTROLLABLE_CONTAINERS.keys()) == {"ac", "vacaciones", "casita", "photos", "passwords", "valheim", "babygifts"}
+
+        assert set(CONTROLLABLE_CONTAINERS.keys()) == {
+            "ac",
+            "vacaciones",
+            "casita",
+            "photos",
+            "passwords",
+            "valheim",
+            "babygifts",
+        }
 
     def test_ac_maps_to_ac_service_container(self):
         from api.routes import CONTROLLABLE_CONTAINERS
+
         assert CONTROLLABLE_CONTAINERS["ac"] == ["ac-service"]
 
     def test_vacaciones_maps_to_vacaciones_service(self):
         from api.routes import CONTROLLABLE_CONTAINERS
+
         assert CONTROLLABLE_CONTAINERS["vacaciones"] == ["vacaciones-service"]
 
     def test_casita_maps_to_casita_suenos(self):
         from api.routes import CONTROLLABLE_CONTAINERS
+
         assert CONTROLLABLE_CONTAINERS["casita"] == ["casita-suenos"]
 
     def test_photos_maps_to_three_immich_containers(self):
         from api.routes import CONTROLLABLE_CONTAINERS
+
         containers = CONTROLLABLE_CONTAINERS["photos"]
         assert "immich_server" in containers
         assert "immich_postgres" in containers
@@ -213,18 +239,22 @@ class TestControllableContainersMapping:
 
     def test_passwords_maps_to_vaultwarden(self):
         from api.routes import CONTROLLABLE_CONTAINERS
+
         assert CONTROLLABLE_CONTAINERS["passwords"] == ["vaultwarden"]
 
     def test_valheim_maps_to_valheim_server(self):
         from api.routes import CONTROLLABLE_CONTAINERS
+
         assert CONTROLLABLE_CONTAINERS["valheim"] == ["valheim-server"]
 
     def test_babygifts_maps_to_baby_gifts_service(self):
         from api.routes import CONTROLLABLE_CONTAINERS
+
         assert CONTROLLABLE_CONTAINERS["babygifts"] == ["baby-gifts-service"]
 
     def test_no_container_name_in_multiple_keys(self):
         from api.routes import CONTROLLABLE_CONTAINERS
+
         all_containers = [c for cs in CONTROLLABLE_CONTAINERS.values() for c in cs]
         assert len(all_containers) == len(set(all_containers))
 
@@ -232,38 +262,45 @@ class TestControllableContainersMapping:
 # ── _require_super guard ──────────────────────────────────────────────────────
 
 
-
 def _patch_super_inline():
     """Patch inline auth in GET /api/containers to simulate SUPER user."""
+    from unittest.mock import patch as _patch
+
     import auth as auth_core
     import user_profiles
-    from contextlib import contextmanager
-    from unittest.mock import patch as _patch
 
     class CombinedPatch:
         def __init__(self):
             self._patches = [
-                _patch.object(auth_core, 'get_current_user', return_value='egnal'),
-                _patch.object(user_profiles, 'get_profile_key', return_value='SUPER'),
+                _patch.object(auth_core, "get_current_user", return_value="egnal"),
+                _patch.object(user_profiles, "get_profile_key", return_value="SUPER"),
             ]
+
         def __enter__(self):
             for p in self._patches:
                 p.start()
             return self
+
         def __exit__(self, *args):
             for p in self._patches:
                 p.stop()
 
     return CombinedPatch()
 
-class TestRequireSuperGuard:
 
+class TestRequireSuperGuard:
     def test_familia_principal_returns_403(self):
         """FAMILIA_PRINCIPAL (no show_gaming_apps) cannot access /api/system/containers."""
         import auth as auth_core
         import user_profiles
+
         c = _make_client()
-        with patch.object(auth_core, 'get_current_user', return_value='virchi'),              patch.object(user_profiles, 'get_profile_key', return_value='FAMILIA_PRINCIPAL'):
+        with (
+            patch.object(auth_core, "get_current_user", return_value="virchi"),
+            patch.object(
+                user_profiles, "get_profile_key", return_value="FAMILIA_PRINCIPAL"
+            ),
+        ):
             r = c.get("/api/system/containers")
         assert r.status_code == 403
 
@@ -271,6 +308,7 @@ class TestRequireSuperGuard:
         """SUPER can access /api/system/containers and sees all services."""
         import auth as auth_core
         import user_profiles
+
         c = _make_client()
         mock_resp = MagicMock()
         mock_resp.json.return_value = [
@@ -283,38 +321,49 @@ class TestRequireSuperGuard:
             {"Names": ["/vaultwarden"], "State": "running"},
             {"Names": ["/valheim-server"], "State": "running"},
         ]
-        with patch.object(auth_core, 'get_current_user', return_value='egnal'),              patch.object(user_profiles, 'get_profile_key', return_value='SUPER'):
+        with (
+            patch.object(auth_core, "get_current_user", return_value="egnal"),
+            patch.object(user_profiles, "get_profile_key", return_value="SUPER"),
+        ):
             with patch("httpx.AsyncClient") as mock_cls:
-                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                    return_value=mock_resp
+                )
                 r = c.get("/api/system/containers")
         assert r.status_code == 200
 
 
 # ── GET /api/system/containers ────────────────────────────────────────────────
 
-class TestGetContainers:
 
+class TestGetContainers:
     def _docker_resp(self, states: dict):
         mock_resp = MagicMock()
         mock_resp.json.return_value = [
-            {"Names": [f"/{name}"], "State": state}
-            for name, state in states.items()
+            {"Names": [f"/{name}"], "State": state} for name, state in states.items()
         ]
         return mock_resp
 
     def _all_running(self):
-        return self._docker_resp({
-            "ac-service": "running", "vacaciones-service": "running",
-            "casita-suenos": "running", "immich_server": "running",
-            "immich_postgres": "running", "immich_redis": "running",
-            "vaultwarden": "running",
-        })
+        return self._docker_resp(
+            {
+                "ac-service": "running",
+                "vacaciones-service": "running",
+                "casita-suenos": "running",
+                "immich_server": "running",
+                "immich_postgres": "running",
+                "immich_redis": "running",
+                "vaultwarden": "running",
+            }
+        )
 
     def test_all_services_running(self):
         c = _make_client()
         with _patch_super_inline():
             with patch("httpx.AsyncClient") as mock_cls:
-                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=self._all_running())
+                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                    return_value=self._all_running()
+                )
                 r = c.get("/api/system/containers")
         assert r.status_code == 200
         data = r.json()
@@ -323,15 +372,22 @@ class TestGetContainers:
 
     def test_ac_stopped_photos_running(self):
         c = _make_client()
-        mock_resp = self._docker_resp({
-            "ac-service": "exited", "vacaciones-service": "running",
-            "casita-suenos": "running", "immich_server": "running",
-            "immich_postgres": "running", "immich_redis": "running",
-            "vaultwarden": "running",
-        })
+        mock_resp = self._docker_resp(
+            {
+                "ac-service": "exited",
+                "vacaciones-service": "running",
+                "casita-suenos": "running",
+                "immich_server": "running",
+                "immich_postgres": "running",
+                "immich_redis": "running",
+                "vaultwarden": "running",
+            }
+        )
         with _patch_super_inline():
             with patch("httpx.AsyncClient") as mock_cls:
-                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                    return_value=mock_resp
+                )
                 r = c.get("/api/system/containers")
         data = r.json()
         assert data["ac"]["running"] is False
@@ -339,29 +395,43 @@ class TestGetContainers:
 
     def test_photos_partial_stop_means_not_running(self):
         c = _make_client()
-        mock_resp = self._docker_resp({
-            "ac-service": "running", "vacaciones-service": "running",
-            "casita-suenos": "running", "immich_server": "running",
-            "immich_postgres": "exited",   # ← postgres stopped
-            "immich_redis": "running", "vaultwarden": "running",
-        })
+        mock_resp = self._docker_resp(
+            {
+                "ac-service": "running",
+                "vacaciones-service": "running",
+                "casita-suenos": "running",
+                "immich_server": "running",
+                "immich_postgres": "exited",  # ← postgres stopped
+                "immich_redis": "running",
+                "vaultwarden": "running",
+            }
+        )
         with _patch_super_inline():
             with patch("httpx.AsyncClient") as mock_cls:
-                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                    return_value=mock_resp
+                )
                 r = c.get("/api/system/containers")
         assert r.json()["photos"]["running"] is False
 
     def test_response_includes_states_detail(self):
         c = _make_client()
-        mock_resp = self._docker_resp({
-            "ac-service": "running", "vacaciones-service": "exited",
-            "casita-suenos": "running", "immich_server": "running",
-            "immich_postgres": "running", "immich_redis": "running",
-            "vaultwarden": "running",
-        })
+        mock_resp = self._docker_resp(
+            {
+                "ac-service": "running",
+                "vacaciones-service": "exited",
+                "casita-suenos": "running",
+                "immich_server": "running",
+                "immich_postgres": "running",
+                "immich_redis": "running",
+                "vaultwarden": "running",
+            }
+        )
         with _patch_super_inline():
             with patch("httpx.AsyncClient") as mock_cls:
-                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                    return_value=mock_resp
+                )
                 r = c.get("/api/system/containers")
         data = r.json()
         assert data["ac"]["states"]["ac-service"] == "running"
@@ -369,33 +439,34 @@ class TestGetContainers:
 
     def test_docker_proxy_unreachable_returns_503(self):
         c = _make_client()
-        with _patch_super_inline():
-            with patch("httpx.AsyncClient") as mock_cls:
-                mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
-                    side_effect=Exception("connection refused")
-                )
-                r = c.get("/api/system/containers")
+        with _patch_super_inline(), patch("httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
+                side_effect=Exception("connection refused")
+            )
+            r = c.get("/api/system/containers")
         assert r.status_code == 503
 
 
 # ── POST /api/containers/{key}/stop ──────────────────────────────────────────
 
-class TestStopService:
 
+class TestStopService:
     def test_stop_known_service_returns_200(self):
         c = _make_client()
         mock_resp = MagicMock()
         mock_resp.status_code = 204
-        with _patch_require_super('egnal', 'SUPER'):
+        with _patch_require_super("egnal", "SUPER"):
             with patch("httpx.AsyncClient") as mock_cls:
-                mock_cls.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_resp)
+                mock_cls.return_value.__aenter__.return_value.post = AsyncMock(
+                    return_value=mock_resp
+                )
                 r = c.post("/api/system/containers/ac/stop")
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
 
     def test_stop_unknown_service_returns_404(self):
         c = _make_client()
-        with _patch_require_super('egnal', 'SUPER'):
+        with _patch_require_super("egnal", "SUPER"):
             r = c.post("/api/system/containers/nonexistent/stop")
         assert r.status_code == 404
 
@@ -403,15 +474,17 @@ class TestStopService:
         c = _make_client()
         mock_resp = MagicMock()
         mock_resp.status_code = 304
-        with _patch_require_super('egnal', 'SUPER'):
+        with _patch_require_super("egnal", "SUPER"):
             with patch("httpx.AsyncClient") as mock_cls:
-                mock_cls.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_resp)
+                mock_cls.return_value.__aenter__.return_value.post = AsyncMock(
+                    return_value=mock_resp
+                )
                 r = c.post("/api/system/containers/ac/stop")
         assert r.json()["status"] == "ok"
 
     def test_stop_non_super_returns_403(self):
         c = _make_client()
-        with _patch_require_super('virchi', 'FAMILIA_PRINCIPAL'):
+        with _patch_require_super("virchi", "FAMILIA_PRINCIPAL"):
             r = c.post("/api/system/containers/ac/stop")
         assert r.status_code == 403
 
@@ -425,7 +498,7 @@ class TestStopService:
             call_urls.append(url)
             return mock_resp
 
-        with _patch_require_super('egnal', 'SUPER'):
+        with _patch_require_super("egnal", "SUPER"):
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_cls.return_value.__aenter__.return_value.post = fake_post
                 r = c.post("/api/system/containers/photos/stop")
@@ -439,22 +512,24 @@ class TestStopService:
 
 # ── POST /api/containers/{key}/start ─────────────────────────────────────────
 
-class TestStartService:
 
+class TestStartService:
     def test_start_known_service_returns_200(self):
         c = _make_client()
         mock_resp = MagicMock()
         mock_resp.status_code = 204
-        with _patch_require_super('egnal', 'SUPER'):
+        with _patch_require_super("egnal", "SUPER"):
             with patch("httpx.AsyncClient") as mock_cls:
-                mock_cls.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_resp)
+                mock_cls.return_value.__aenter__.return_value.post = AsyncMock(
+                    return_value=mock_resp
+                )
                 r = c.post("/api/system/containers/ac/start")
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
 
     def test_start_unknown_service_returns_404(self):
         c = _make_client()
-        with _patch_require_super('egnal', 'SUPER'):
+        with _patch_require_super("egnal", "SUPER"):
             r = c.post("/api/system/containers/unknown/start")
         assert r.status_code == 404
 
@@ -462,14 +537,16 @@ class TestStartService:
         c = _make_client()
         mock_resp = MagicMock()
         mock_resp.status_code = 304
-        with _patch_require_super('egnal', 'SUPER'):
+        with _patch_require_super("egnal", "SUPER"):
             with patch("httpx.AsyncClient") as mock_cls:
-                mock_cls.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_resp)
+                mock_cls.return_value.__aenter__.return_value.post = AsyncMock(
+                    return_value=mock_resp
+                )
                 r = c.post("/api/system/containers/vacaciones/start")
         assert r.json()["status"] == "ok"
 
     def test_start_non_super_returns_403(self):
         c = _make_client()
-        with _patch_require_super('virchi', 'FAMILIA_PRINCIPAL'):
+        with _patch_require_super("virchi", "FAMILIA_PRINCIPAL"):
             r = c.post("/api/system/containers/ac/start")
         assert r.status_code == 403

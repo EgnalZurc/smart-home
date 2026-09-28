@@ -27,29 +27,33 @@ Política de errores:
   - Si un email falla al procesarse → NO se elimina del buzón → se notifica por Telegram
   - Solo se eliminan los emails procesados con éxito
 """
+
 from __future__ import annotations
+
+import contextlib
 import email
 import email.header
 import imaplib
 import logging
 import re
-from datetime import datetime, timedelta
 from dataclasses import dataclass
 from enum import Enum
 
 logger = logging.getLogger(__name__)
 
 _IDEALISTA_SENDER = "noresponder@idealista.com"
-_IMAP_HOST  = "imap.gmail.com"
-_IMAP_PORT  = 993
+_IMAP_HOST = "imap.gmail.com"
+_IMAP_PORT = 993
 _SEARCH_FOLDERS = ["INBOX", "[Gmail]/Todos", "[Gmail]/Papelera", "[Gmail]/Spam"]
 
-_URL_PATTERN = re.compile(r"https://www\.idealista\.com/inmueble/(\d+)/?", re.IGNORECASE)
+_URL_PATTERN = re.compile(
+    r"https://www\.idealista\.com/inmueble/(\d+)/?", re.IGNORECASE
+)
 
 _ZONE_FROM_SUBJECT = re.compile(
-    r'(?:chalets?|casas?|pisos?|apartamentos?)\s+en\s+'
-    r'([\w\s\-\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1\u00c1\u00c9\u00cd\u00d3\u00da\u00d1]+?)'
-    r'(?:\s*[!,?.]|$)',
+    r"(?:chalets?|casas?|pisos?|apartamentos?)\s+en\s+"
+    r"([\w\s\-\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1\u00c1\u00c9\u00cd\u00d3\u00da\u00d1]+?)"
+    r"(?:\s*[!,?.]|$)",
     re.IGNORECASE,
 )
 
@@ -67,17 +71,17 @@ _PRICE_DROP_CURRENT = re.compile(
 )
 
 _ROOMS_PATTERN = re.compile(r"(\d+)\s+hab", re.IGNORECASE)
-_SIZE_PATTERN  = re.compile(r"([\d]+[,.]?\d*)\s*m[\u00b22]", re.IGNORECASE)
+_SIZE_PATTERN = re.compile(r"([\d]+[,.]?\d*)\s*m[\u00b22]", re.IGNORECASE)
 
 
 class EmailType(str, Enum):
-    NUEVO_ANUNCIO   = "nuevo_anuncio"
-    BAJADA_PRECIO   = "bajada_precio"
+    NUEVO_ANUNCIO = "nuevo_anuncio"
+    BAJADA_PRECIO = "bajada_precio"
     PRECIO_REDUCIDO = "precio_reducido"
-    VISITA_3D       = "visita_3d"
-    RECOMENDADO     = "recomendado"
-    RESUMEN_DIARIO  = "resumen_diario"
-    OTRO            = "otro"
+    VISITA_3D = "visita_3d"
+    RECOMENDADO = "recomendado"
+    RESUMEN_DIARIO = "resumen_diario"
+    OTRO = "otro"
 
 
 @dataclass
@@ -120,10 +124,10 @@ def _get_body(msg: email.message.Message) -> str:
     if msg.is_multipart():
         for part in msg.walk():
             if part.get_content_type() in ("text/plain", "text/html"):
-                try:
-                    parts.append(part.get_payload(decode=True).decode("utf-8", errors="ignore"))
-                except Exception:
-                    pass
+                with contextlib.suppress(Exception):
+                    parts.append(
+                        part.get_payload(decode=True).decode("utf-8", errors="ignore")
+                    )
     else:
         try:
             parts.append(msg.get_payload(decode=True).decode("utf-8", errors="ignore"))
@@ -135,9 +139,12 @@ def _get_body(msg: email.message.Message) -> str:
 def _classify_email(subject: str) -> EmailType:
     """Clasifica el tipo de email de Idealista por su subject."""
     sl = subject.lower()
-    if ("resumen diario" in sl or
-            "novedades" in sl and ("busqueda" in sl or "guardada" in sl or "b" in sl) or
-            "anuncios recomendados" in sl):
+    if (
+        "resumen diario" in sl
+        or "novedades" in sl
+        and ("busqueda" in sl or "guardada" in sl or "b" in sl)
+        or "anuncios recomendados" in sl
+    ):
         return EmailType.RESUMEN_DIARIO
     if "bajada de precio" in sl or "precio ha bajado" in sl:
         return EmailType.BAJADA_PRECIO
@@ -147,16 +154,20 @@ def _classify_email(subject: str) -> EmailType:
         return EmailType.VISITA_3D
     if "recomendado" in sl and ("nuevo" in sl or "anuncio" in sl):
         return EmailType.RECOMENDADO
-    if "nuevo" in sl and any(t in sl for t in ["chalet", "casa", "piso", "apartamento", "finca", "vivienda"]):
+    if "nuevo" in sl and any(
+        t in sl for t in ["chalet", "casa", "piso", "apartamento", "finca", "vivienda"]
+    ):
         return EmailType.NUEVO_ANUNCIO
     if "busqueda" in sl or "b" in sl:
         return EmailType.NUEVO_ANUNCIO
     return EmailType.OTRO
+
+
 def _parse_price(text: str) -> int | None:
     """Extrae precio. Para bajadas intenta capturar el precio ACTUAL (no el anterior)."""
     # Intentar patrón específico de precio actual en bajada
     m_current = _PRICE_DROP_CURRENT.search(text)
-    m_std     = _PRICE_PATTERN.search(text)
+    m_std = _PRICE_PATTERN.search(text)
 
     match, group = None, 1
     if m_current and m_std:
@@ -170,7 +181,13 @@ def _parse_price(text: str) -> int | None:
     if not match:
         return None
 
-    raw = match.group(group).replace(".", "").replace(" ", "").replace("\xa0", "").replace(",", "")
+    raw = (
+        match.group(group)
+        .replace(".", "")
+        .replace(" ", "")
+        .replace("\xa0", "")
+        .replace(",", "")
+    )
     try:
         val = int(raw)
         return val if 10_000 <= val <= 10_000_000 else None
@@ -178,7 +195,9 @@ def _parse_price(text: str) -> int | None:
         return None
 
 
-def _extract_price_from_body(body: str, pid: str) -> tuple[int | None, int | None, float | None]:
+def _extract_price_from_body(
+    body: str, pid: str
+) -> tuple[int | None, int | None, float | None]:
     """
     Extrae precio, habitaciones y m² del body del email.
     1. Contexto ±600 chars alrededor de la URL del anuncio
@@ -188,20 +207,24 @@ def _extract_price_from_body(body: str, pid: str) -> tuple[int | None, int | Non
 
     if url_match:
         start = max(0, url_match.start() - 600)
-        end   = min(len(body), url_match.end() + 600)
-        ctx   = body[start:end]
+        end = min(len(body), url_match.end() + 600)
+        ctx = body[start:end]
     else:
         ctx = body[:2000]  # fallback: primeros 2000 chars
 
-    price   = _parse_price(ctx)
+    price = _parse_price(ctx)
     rooms_m = _ROOMS_PATTERN.search(ctx)
-    size_m  = _SIZE_PATTERN.search(ctx)
+    size_m = _SIZE_PATTERN.search(ctx)
 
     # Fallback: si no hay precio cerca de la URL, buscar en todo el body
     if not price:
         price = _parse_price(body)
         if price:
-            logger.debug("[gmail] Precio no en contexto de %s, hallado en body completo: %s", pid, price)
+            logger.debug(
+                "[gmail] Precio no en contexto de %s, hallado en body completo: %s",
+                pid,
+                price,
+            )
 
     return (
         price,
@@ -226,9 +249,12 @@ def _extract_alerts_from_email(
         body = _get_body(msg)
         email_type = _classify_email(subject)
 
-        subject_lower = subject.lower()
+        subject.lower()
         is_summary = email_type == EmailType.RESUMEN_DIARIO
-        is_price_drop = email_type in (EmailType.BAJADA_PRECIO, EmailType.PRECIO_REDUCIDO)
+        is_price_drop = email_type in (
+            EmailType.BAJADA_PRECIO,
+            EmailType.PRECIO_REDUCIDO,
+        )
 
         if is_summary:
             logger.info("[gmail] Email %s: %s", msg_id, email_type.value)
@@ -248,23 +274,29 @@ def _extract_alerts_from_email(
 
             price, rooms, size_m2 = _extract_price_from_body(body, pid)
 
-            alerts.append(IdealistaAlert(
-                url=f"https://www.idealista.com/inmueble/{pid}/",
-                property_id=pid,
-                email_id=msg_id,
-                folder=folder,
-                location_hint=location_hint,
-                email_type=email_type,
-                price=price,
-                rooms=rooms,
-                size_m2=size_m2,
-                is_price_drop=is_price_drop,
-            ))
+            alerts.append(
+                IdealistaAlert(
+                    url=f"https://www.idealista.com/inmueble/{pid}/",
+                    property_id=pid,
+                    email_id=msg_id,
+                    folder=folder,
+                    location_hint=location_hint,
+                    email_type=email_type,
+                    price=price,
+                    rooms=rooms,
+                    size_m2=size_m2,
+                    is_price_drop=is_price_drop,
+                )
+            )
 
         if not alerts:
             # Email sin URLs — puede ser informativo, no es error
-            logger.info("[gmail] Email %s sin URLs de anuncios (tipo: %s, subject: %s)",
-                        msg_id, email_type.value, subject[:60])
+            logger.info(
+                "[gmail] Email %s sin URLs de anuncios (tipo: %s, subject: %s)",
+                msg_id,
+                email_type.value,
+                subject[:60],
+            )
 
         return alerts, None
 
@@ -305,8 +337,12 @@ def fetch_new_alerts(
             if status != "OK":
                 continue
             # Para Papelera/Spam: solo emails no leídos (evita reprocesar)
-            trash_folders = {"[Gmail]/Papelera", "[Gmail]/Spam",
-                             "[Gmail]/Trash", "[Gmail]/Junk"}
+            trash_folders = {
+                "[Gmail]/Papelera",
+                "[Gmail]/Spam",
+                "[Gmail]/Trash",
+                "[Gmail]/Junk",
+            }
             if folder in trash_folders:
                 criteria_folder = f"(UNSEEN {search_criteria[1:-1]})"
             else:
@@ -334,10 +370,13 @@ def fetch_new_alerts(
     # Individuales primero (tienen zona en subject)
     def _is_summary(m: email.message.Message) -> bool:
         subj = _decode_subject(m.get("Subject", "")).lower()
-        return ("resumen diario" in subj or "novedades de tus b" in subj or
-                "anuncios recomendados" in subj)
+        return (
+            "resumen diario" in subj
+            or "novedades de tus b" in subj
+            or "anuncios recomendados" in subj
+        )
 
-    collected.sort(key=lambda x: (1 if _is_summary(x[0]) else 0))
+    collected.sort(key=lambda x: 1 if _is_summary(x[0]) else 0)
 
     for msg, msg_id, folder in collected:
         alerts, error = _extract_alerts_from_email(msg, msg_id, folder)
@@ -345,9 +384,13 @@ def fetch_new_alerts(
             all_errors.append(error)
             failed_email_ids.add(msg_id)
             # Marcar estas alertas con el error para que no se elimine el email
-            alert_with_error = IdealistaAlert(
-                url="", property_id="", email_id=msg_id, folder=folder,
-                location_hint="", parse_error=error,
+            IdealistaAlert(
+                url="",
+                property_id="",
+                email_id=msg_id,
+                folder=folder,
+                location_hint="",
+                parse_error=error,
             )
             # No añadir al procesado — el email se conservará
             continue
@@ -361,9 +404,17 @@ def fetch_new_alerts(
 
         if alerts:
             subj = _decode_subject(msg.get("Subject", ""))[:60]
-            logger.info("[gmail] %s | %s -> %d (%d nuevos)", folder, subj, len(alerts), new_count)
+            logger.info(
+                "[gmail] %s | %s -> %d (%d nuevos)",
+                folder,
+                subj,
+                len(alerts),
+                new_count,
+            )
 
-    logger.info("[gmail] Total: %d anuncios, %d errores", len(all_alerts), len(all_errors))
+    logger.info(
+        "[gmail] Total: %d anuncios, %d errores", len(all_alerts), len(all_errors)
+    )
     return all_alerts, all_errors, imap
 
 
@@ -390,8 +441,12 @@ def delete_processed_emails(
             continue
         # No eliminar emails de Papelera/Spam — ya están descartados.
         # Los marcamos como leídos (\Seen) para no reprocesarlos.
-        if a.folder in ("[Gmail]/Papelera", "[Gmail]/Spam",
-                        "[Gmail]/Trash", "[Gmail]/Junk"):
+        if a.folder in (
+            "[Gmail]/Papelera",
+            "[Gmail]/Spam",
+            "[Gmail]/Trash",
+            "[Gmail]/Junk",
+        ):
             seen_folder.setdefault(a.folder, set()).add(a.email_id)
             continue
         by_folder.setdefault(a.folder, set()).add(a.email_id)
@@ -410,7 +465,9 @@ def delete_processed_emails(
             imap.select(folder)
             for msg_id in ids:
                 imap.store(msg_id.encode(), "+FLAGS", "\\Seen")
-            logger.info("[gmail] %d emails marcados como leídos en %s", len(ids), folder)
+            logger.info(
+                "[gmail] %d emails marcados como leídos en %s", len(ids), folder
+            )
         except Exception as e:
             logger.warning("[gmail] Error marcando como leídos en %s: %s", folder, e)
 
@@ -424,8 +481,11 @@ def delete_processed_emails(
 # Compatibilidad legacy
 def fetch_new_alert_urls(email_address, app_password, lookback_minutes=35, **kwargs):
     lookback_days = max(1, lookback_minutes // 60 + 1)
-    alerts, errors, imap = fetch_new_alerts(email_address, app_password, lookback_days)
+    alerts, _errors, imap = fetch_new_alerts(email_address, app_password, lookback_days)
     if imap:
-        try: imap.close(); imap.logout()
-        except Exception: pass
+        try:
+            imap.close()
+            imap.logout()
+        except Exception:
+            pass
     return [a.url for a in alerts if a.property_id]

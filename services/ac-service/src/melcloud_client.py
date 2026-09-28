@@ -5,7 +5,6 @@ The base URL is configured via the MELCLOUD_URL environment variable.
 """
 
 import logging
-import time
 
 import httpx
 
@@ -30,13 +29,13 @@ class MelCloudClient:
     """HTTP client for the MELCloud API."""
 
     def __init__(
-        self, 
-        base_url: str, 
-        email: str, 
-        password: str, 
+        self,
+        base_url: str,
+        email: str,
+        password: str,
         building_id: int = 0,
         timeout: float = 30.0,
-        app_version: str = "1.32.1.0"
+        app_version: str = "1.32.1.0",
     ):
         # Normalize: if the URL already includes the base path, use it as is.
         # Otherwise, add it.
@@ -87,10 +86,10 @@ class MelCloudClient:
                 return False
 
             logger.info("Successful login to MELCloud")
-            
+
             # Security: Delete password from memory after successful login
             del self.password
-            
+
             return True
 
         except httpx.HTTPError as e:
@@ -168,12 +167,16 @@ class MelCloudClient:
                 logger.warning(
                     "SetAta responded with SetTemp=%.1f (expected %.1f). "
                     "May be temporarily offline.",
-                    applied_temp or 0, setpoint,
+                    applied_temp or 0,
+                    setpoint,
                 )
 
             logger.info(
                 "AC configured: power=%s, mode=%s, setpoint=%.1f°C, fan=%d",
-                power, mode, setpoint, fan_speed,
+                power,
+                mode,
+                setpoint,
+                fan_speed,
             )
             return True
 

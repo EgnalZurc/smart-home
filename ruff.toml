@@ -1,0 +1,38 @@
+# Ruff configuration for smart-home project
+# https://docs.astral.sh/ruff/configuration/
+
+[lint]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+    "G",      # flake8-logging-format
+]
+
+ignore = [
+    # Allow bare except for service/network error handling
+    "BLE001",
+    # Allow datetime.now() without tz (we use local time intentionally)
+    "DTZ005",
+    # These are stylistic preferences, not errors
+    "E501",   # line too long
+    "E701",   # multiple statements on one line (colon) - used for compact conditionals
+    "E702",   # multiple statements on one line (semicolon) - used for compact cleanup
+    "E722",   # bare except - sometimes intentional for catch-all
+    "E741",   # ambiguous variable name (l, O, I)
+    "E402",   # module import not at top - sometimes needed for conditional imports
+    "SIM102", # collapsible if - sometimes readability is better expanded
+    "SIM105", # suppressible exception - contextlib.suppress not always clearer
+    "SIM115", # open file with context handler - not always applicable (locks, etc)
+    "G004",   # logging f-string - performance cost is negligible for our use
+]
+
+[lint.per-file-ignores]
+# Tests can have more relaxed rules
+"**/tests/**" = ["SIM", "UP", "F821"]
+
+[format]
+# Use double quotes for strings
+quote-style = "double"

@@ -1,4 +1,4 @@
-﻿"""Translation module for API responses and error messages."""
+"""Translation module for API responses and error messages."""
 
 TRANSLATIONS = {
     "en": {
@@ -14,13 +14,15 @@ TRANSLATIONS = {
         "error.invalid_param": "Parámetro inválido",
         "success.mode_changed": "Modo de control cambiado exitosamente",
         "success.params_updated": "Parámetros actualizados exitosamente",
-    }
+    },
 }
+
 
 def get_translation(key: str, locale: str = "en") -> str:
     if locale not in TRANSLATIONS:
         locale = "en"
     return TRANSLATIONS[locale].get(key, key)
+
 
 def detect_locale(accept_language: str | None) -> str:
     if not accept_language:

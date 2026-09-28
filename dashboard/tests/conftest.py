@@ -2,21 +2,25 @@
 
 pytest.ini sets pythonpath = src/backend so all imports work directly.
 """
-import pytest
+
 from unittest.mock import MagicMock
 
+import pytest
 
 # ── Backend component fixtures ────────────────────────────────────────────────
+
 
 @pytest.fixture
 def error_tracker():
     from error_tracker import ErrorTracker
+
     return ErrorTracker()
 
 
 @pytest.fixture
 def sm_config():
     from controllers.state_machine import StateMachineConfig
+
     return StateMachineConfig(
         hysteresis_on=0.5,
         hysteresis_off=0.3,
@@ -59,6 +63,7 @@ def mock_melcloud():
 def ac_controller(mock_mqtt, mock_melcloud, error_tracker):
     """ACController wired with mocks, error tracker injected."""
     from controllers.ac_controller import ACController, ControlConfig
+
     config = ControlConfig(
         target_temperature=26.0,
         hysteresis_on=0.5,
@@ -75,10 +80,10 @@ def ac_controller(mock_mqtt, mock_melcloud, error_tracker):
 @pytest.fixture
 def fastapi_client(ac_controller, mock_mqtt, mock_melcloud, error_tracker):
     """FastAPI TestClient with all route dependencies injected."""
-    from fastapi.testclient import TestClient
-    from fastapi import FastAPI
     from api import routes
-    from subscription_manager import SubscriptionManager, SubscriptionConfig
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from subscription_manager import SubscriptionConfig, SubscriptionManager
 
     sub = SubscriptionManager(SubscriptionConfig())
 

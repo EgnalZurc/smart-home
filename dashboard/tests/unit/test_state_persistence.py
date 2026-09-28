@@ -1,18 +1,29 @@
 """Unit tests for state_persistence.py"""
-import os, tempfile
+
+import os
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
-from state_persistence import PersistedState, save_state, load_state
+
+from state_persistence import PersistedState, load_state, save_state
 
 
 def _make_state(**kwargs):
-    defaults = dict(
-        target_temperature=26.0, hysteresis_on=0.5, hysteresis_off=0.3,
-        min_setpoint=19.0, max_setpoint=30.0, cooldown_seconds=180,
-        sensor_timeout=3600, override="auto", force_on_temperature=24.0,
-        force_on_fan_speed=0, current_sm_state="off",
-        last_off_timestamp=0.0, last_modulating_setpoint=24.0,
-    )
+    defaults = {
+        "target_temperature": 26.0,
+        "hysteresis_on": 0.5,
+        "hysteresis_off": 0.3,
+        "min_setpoint": 19.0,
+        "max_setpoint": 30.0,
+        "cooldown_seconds": 180,
+        "sensor_timeout": 3600,
+        "override": "auto",
+        "force_on_temperature": 24.0,
+        "force_on_fan_speed": 0,
+        "current_sm_state": "off",
+        "last_off_timestamp": 0.0,
+        "last_modulating_setpoint": 24.0,
+    }
     defaults.update(kwargs)
     return PersistedState(**defaults)
 

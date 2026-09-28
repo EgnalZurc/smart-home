@@ -4,15 +4,14 @@ Users are loaded from the nginx .htpasswd file (apr_md5_crypt format).
 Trusted device requests are persisted in a small SQLite table so the
 admin can approve or reject them via signed email links.
 """
+
 import hashlib
 import hmac
 import logging
-import os
 import secrets
 import sqlite3
 import time
 from pathlib import Path
-from typing import Optional
 
 from auth import verify_password
 
@@ -22,12 +21,13 @@ logger = logging.getLogger(__name__)
 # Configuration (injected from main.py lifespan)
 # ---------------------------------------------------------------------------
 HTPASSWD_PATH: str = "/etc/nginx/.htpasswd"  # default — override via env
-AUTH_DB_PATH: str = "/app/data/auth.db"       # default — override via env
-TRUST_SECRET: str = ""                         # REQUIRED — same as AUTH_SECRET
+AUTH_DB_PATH: str = "/app/data/auth.db"  # default — override via env
+TRUST_SECRET: str = ""  # REQUIRED — same as AUTH_SECRET
 
 # ---------------------------------------------------------------------------
 # .htpasswd user store
 # ---------------------------------------------------------------------------
+
 
 def _load_htpasswd(path: str) -> dict[str, str]:
     """Parse an .htpasswd file into {username: hash} dict.
@@ -72,6 +72,7 @@ def user_exists(username: str) -> bool:
 # Trusted-device SQLite store
 # ---------------------------------------------------------------------------
 
+
 def _get_db() -> sqlite3.Connection:
     """Open the auth SQLite database, creating schema on first use."""
     db_path = Path(AUTH_DB_PATH)
@@ -109,7 +110,7 @@ def create_trust_request(username: str, user_agent: str, ip_address: str) -> str
     return token
 
 
-def resolve_trust_request(token: str, action: str) -> Optional[dict]:
+def resolve_trust_request(token: str, action: str) -> dict | None:
     """Approve or reject a pending trust request by its token.
 
     Args:
@@ -135,7 +136,7 @@ def resolve_trust_request(token: str, action: str) -> Optional[dict]:
         return dict(row)
 
 
-def get_trust_status(token: str) -> Optional[str]:
+def get_trust_status(token: str) -> str | None:
     """Return the status of a trust request token, or None if not found."""
     with _get_db() as conn:
         row = conn.execute(
@@ -157,7 +158,7 @@ def has_active_trust_request(username: str) -> bool:
     return row is not None
 
 
-def get_approved_trust_request(username: str) -> Optional[dict]:
+def get_approved_trust_request(username: str) -> dict | None:
     """Return the first approved (not yet consumed) trust request for a user, or None."""
     with _get_db() as conn:
         row = conn.execute(
@@ -173,9 +174,7 @@ def delete_trust_request(token: str) -> bool:
     Returns True if the row was found and deleted.
     """
     with _get_db() as conn:
-        cur = conn.execute(
-            "DELETE FROM trusted_devices WHERE token = ?", (token,)
-        )
+        cur = conn.execute("DELETE FROM trusted_devices WHERE token = ?", (token,))
     return cur.rowcount > 0
 
 
@@ -188,6 +187,7 @@ def delete_trust_request(token: str) -> bool:
 #
 # The HMAC prevents anyone who guesses a token from approving/rejecting
 # without the AUTH_SECRET.
+
 
 def _sign(token: str, action: str) -> str:
     """Return a URL-safe HMAC signature for (token, action)."""

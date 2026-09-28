@@ -44,9 +44,9 @@ with httpx.Client(follow_redirects=True) as client:
     # Login (stores session cookie automatically)
     client.post(
         "https://raspberrypi.tailaa37cd.ts.net/auth/token",
-        data={"username": "USER", "password": "PASS", "next_url": "/smart-home"}
+        data={"username": "USER", "password": "PASS", "next_url": "/smart-home"},
     )
-    
+
     # Authenticated requests
     resp = client.get("https://raspberrypi.tailaa37cd.ts.net/api/containers")
     print(resp.json())

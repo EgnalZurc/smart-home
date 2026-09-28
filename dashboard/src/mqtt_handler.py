@@ -23,7 +23,13 @@ PERSIST_FILE = os.environ.get("SENSOR_PERSIST_FILE", "/app/data/sensor_readings.
 class SensorReading:
     """Reading from a sensor."""
 
-    def __init__(self, temperature: float, humidity: float | None, battery: int | None, timestamp: float):
+    def __init__(
+        self,
+        temperature: float,
+        humidity: float | None,
+        battery: int | None,
+        timestamp: float,
+    ):
         self.temperature = temperature
         self.humidity = humidity
         self.battery = battery
@@ -51,14 +57,14 @@ class MqttHandler:
     """Manages MQTT connection and sensor readings."""
 
     def __init__(
-        self, 
-        broker: str, 
-        port: int, 
+        self,
+        broker: str,
+        port: int,
         sensor_names: list[str],
         connect_retries: int = 30,
         retry_delay: int = 2,
         keepalive: int = 60,
-        max_history: int = 200
+        max_history: int = 200,
     ):
         self.broker = broker
         self.port = port
@@ -88,8 +94,10 @@ class MqttHandler:
                         continue
                     # New format: list of readings
                     if isinstance(sensor_data, list):
-                        readings_list = [SensorReading.from_dict(d) for d in sensor_data]
-                        self.history[name] = readings_list[-self.max_history:]
+                        readings_list = [
+                            SensorReading.from_dict(d) for d in sensor_data
+                        ]
+                        self.history[name] = readings_list[-self.max_history :]
                         if readings_list:
                             self.readings[name] = readings_list[-1]
                     else:
@@ -97,7 +105,9 @@ class MqttHandler:
                         reading = SensorReading.from_dict(sensor_data)
                         self.readings[name] = reading
                         self.history[name] = [reading]
-                logger.info("Loaded %d sensors from disk (%s)", len(self.readings), PERSIST_FILE)
+                logger.info(
+                    "Loaded %d sensors from disk (%s)", len(self.readings), PERSIST_FILE
+                )
             else:
                 logger.info("No persisted data at %s (first boot)", PERSIST_FILE)
         except Exception as e:
@@ -105,7 +115,7 @@ class MqttHandler:
 
     def _save_to_disk(self):
         """Saves reading history for each sensor to disk.
-        
+
         IMPORTANT: Must be called WITH active lock or with data copy.
         """
         try:
@@ -164,7 +174,9 @@ class MqttHandler:
         logger.warning("Disconnected from MQTT (rc=%s)", reason_code)
         self._connected = False
         if self._error_tracker:
-            self._error_tracker.register("mqtt_disconnected", "error", "Disconnected from MQTT broker", "mqtt")
+            self._error_tracker.register(
+                "mqtt_disconnected", "error", "Disconnected from MQTT broker", "mqtt"
+            )
 
     def _on_message(self, client, userdata, msg):
         """Processes an MQTT message from a sensor."""
@@ -200,18 +212,22 @@ class MqttHandler:
                     self.history[sensor_name] = []
                 self.history[sensor_name].append(reading)
                 if len(self.history[sensor_name]) > self.max_history:
-                    self.history[sensor_name] = self.history[sensor_name][-self.max_history:]
-                
+                    self.history[sensor_name] = self.history[sensor_name][
+                        -self.max_history :
+                    ]
+
                 # Make copy of data to persist
                 data_to_save = {}
                 for name, readings_list in self.history.items():
                     data_to_save[name] = [r.to_dict() for r in readings_list]
-            
+
             # Persist to disk OUTSIDE lock to not block
             try:
                 path = Path(PERSIST_FILE)
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(json.dumps(data_to_save, ensure_ascii=False), encoding="utf-8")
+                path.write_text(
+                    json.dumps(data_to_save, ensure_ascii=False), encoding="utf-8"
+                )
             except Exception as e:
                 logger.warning("Error saving data to disk: %s", e)
 
@@ -235,7 +251,7 @@ class MqttHandler:
                 self.history["AC"] = []
             self.history["AC"].append(reading)
             if len(self.history["AC"]) > self.max_history:
-                self.history["AC"] = self.history["AC"][-self.max_history:]
+                self.history["AC"] = self.history["AC"][-self.max_history :]
             data_to_save = {}
             for name, readings_list in self.history.items():
                 data_to_save[name] = [r.to_dict() for r in readings_list]
@@ -243,12 +259,16 @@ class MqttHandler:
         try:
             path = Path(PERSIST_FILE)
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(data_to_save, ensure_ascii=False), encoding="utf-8")
+            path.write_text(
+                json.dumps(data_to_save, ensure_ascii=False), encoding="utf-8"
+            )
             logger.info("AC room temp recorded: %.1f°C", room_temp)
         except Exception as e:
             logger.warning("Error saving AC temp to disk: %s", e)
 
-    def get_active_readings(self, max_age_seconds: int = 600) -> dict[str, SensorReading]:
+    def get_active_readings(
+        self, max_age_seconds: int = 600
+    ) -> dict[str, SensorReading]:
         """Returns sensors with recent data (< max_age)."""
         now = time.time()
         active = {}

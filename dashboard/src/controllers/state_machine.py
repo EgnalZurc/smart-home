@@ -11,6 +11,7 @@ from enum import Enum
 
 class ControllerState(str, Enum):
     """Possible controller states."""
+
     OFF = "off"
     COOLDOWN = "cooldown"
     COOLING_MAX = "cooling_max"
@@ -22,14 +23,16 @@ class ControllerState(str, Enum):
 
 class ManualMode(str, Enum):
     """Control modes."""
-    AUTO = "auto"      # Automatic temperature-based control
+
+    AUTO = "auto"  # Automatic temperature-based control
     MANUAL = "manual"  # Manual control with user-specified settings
-    OFF = "off"        # System off (AC disabled)
+    OFF = "off"  # System off (AC disabled)
 
 
 @dataclass(frozen=True)
 class ManualParams:
     """Manual mode parameters."""
+
     temperature: float = 23.0
     fan_speed: int = 0  # 0=auto, 1=low, 2=mid, 3=high
     mode: str = "cool"  # "cool" or "heat"
@@ -38,6 +41,7 @@ class ManualParams:
 @dataclass(frozen=True)
 class StateMachineInputs:
     """Inputs of a state machine tick."""
+
     average_temp: float | None
     target_temp: float
     manual_mode: ManualMode
@@ -50,6 +54,7 @@ class StateMachineInputs:
 @dataclass(frozen=True)
 class StateMachineOutputs:
     """Outputs produced by the state machine."""
+
     state: ControllerState
     power: bool
     mode: str  # Siempre "cool"
@@ -73,6 +78,7 @@ DEFAULT_MAX_SETPOINT = 30.0
 @dataclass(frozen=True)
 class StateMachineConfig:
     """Configurable state machine parameters."""
+
     hysteresis_on: float = DEFAULT_HYSTERESIS_ON
     hysteresis_off: float = DEFAULT_HYSTERESIS_OFF
     min_setpoint: float = DEFAULT_MIN_SETPOINT
@@ -131,7 +137,9 @@ def _cooldown_outputs(sensor_alert: bool, melcloud_error: bool) -> StateMachineO
     )
 
 
-def _cooling_max_outputs(sensor_alert: bool, melcloud_error: bool, config: StateMachineConfig) -> StateMachineOutputs:
+def _cooling_max_outputs(
+    sensor_alert: bool, melcloud_error: bool, config: StateMachineConfig
+) -> StateMachineOutputs:
     """Standard outputs for COOLING_MAX."""
     return StateMachineOutputs(
         state=ControllerState.COOLING_MAX,
@@ -180,8 +188,12 @@ def evaluate(
         StateMachineOutputs with new state and outputs for MELCloud.
     """
     # Cross-cutting flags
-    sensor_alert = inputs.seconds_since_last_sensor_update >= config.sensor_alert_seconds
-    melcloud_error = inputs.consecutive_melcloud_failures >= config.melcloud_max_failures
+    sensor_alert = (
+        inputs.seconds_since_last_sensor_update >= config.sensor_alert_seconds
+    )
+    melcloud_error = (
+        inputs.consecutive_melcloud_failures >= config.melcloud_max_failures
+    )
 
     # --- Priority 1: MELCloud error (100 consecutive failures) ---
     if melcloud_error:
@@ -233,34 +245,56 @@ def evaluate(
 
             case ControllerState.COOLDOWN:
                 return _evaluate_cooldown(
-                    avg, hot_threshold, cold_threshold, cooldown_done,
-                    target, config, sensor_alert,
+                    avg,
+                    hot_threshold,
+                    cold_threshold,
+                    cooldown_done,
+                    target,
+                    config,
+                    sensor_alert,
                 )
 
             case ControllerState.COOLING_MAX:
                 return _evaluate_cooling_max(
-                    avg, hot_threshold, cold_threshold,
-                    target, config, sensor_alert,
+                    avg,
+                    hot_threshold,
+                    cold_threshold,
+                    target,
+                    config,
+                    sensor_alert,
                 )
 
             case ControllerState.MODULATING:
                 return _evaluate_modulating(
-                    avg, hot_threshold, cold_threshold,
-                    target, config, sensor_alert, last_modulating_setpoint,
+                    avg,
+                    hot_threshold,
+                    cold_threshold,
+                    target,
+                    config,
+                    sensor_alert,
+                    last_modulating_setpoint,
                 )
 
             case ControllerState.SYSTEM_OFF | ControllerState.MANUAL:
                 # Returning to auto from override: re-evaluate without cooldown
                 return _evaluate_from_override(
-                    avg, hot_threshold, cold_threshold,
-                    target, config, sensor_alert,
+                    avg,
+                    hot_threshold,
+                    cold_threshold,
+                    target,
+                    config,
+                    sensor_alert,
                 )
 
             case ControllerState.ERROR:
                 # Recovered from error: re-evaluate
                 return _evaluate_from_override(
-                    avg, hot_threshold, cold_threshold,
-                    target, config, sensor_alert,
+                    avg,
+                    hot_threshold,
+                    cold_threshold,
+                    target,
+                    config,
+                    sensor_alert,
                 )
 
             case _:
@@ -271,7 +305,10 @@ def evaluate(
 
 
 def _evaluate_off(
-    avg: float | None, hot_threshold: float, sensor_alert: bool, config: StateMachineConfig
+    avg: float | None,
+    hot_threshold: float,
+    sensor_alert: bool,
+    config: StateMachineConfig,
 ) -> StateMachineOutputs:
     """Transitions from OFF."""
     if avg is None:

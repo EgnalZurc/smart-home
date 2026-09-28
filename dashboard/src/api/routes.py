@@ -8,6 +8,7 @@ This module contains only:
 AC endpoints (/api/status, /api/sensors, etc.) → proxied by nginx to ac-service:8002
 Vacaciones endpoints (/api/vacaciones/*) → proxied by nginx to vacaciones-service:8003
 """
+
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 
@@ -95,7 +96,6 @@ async def get_passwords_health():
         return {"online": False}
 
 
-
 @router.get("/health/valheim", tags=["❤️ Health"])
 async def get_valheim_health():
     """Health check for Valheim dedicated server.
@@ -133,13 +133,16 @@ async def get_valheim_health():
                 running = data.get("running", False)
                 join_code = data.get("join_code")
                 online = running and join_code is not None
-                return {"online": online, "join_code": join_code, "players": data.get("players", 0)}
+                return {
+                    "online": online,
+                    "join_code": join_code,
+                    "players": data.get("players", 0),
+                }
     except Exception:
         pass
 
     # Container running but game not yet loaded (starting up)
     return {"online": False}
-
 
 
 @router.get("/health/valheim-admin", tags=["❤️ Health"])
@@ -156,6 +159,7 @@ async def get_valheim_admin_health():
 
 # ── Casita Sueños proxy routes ───────────────────────────────────────────────
 
+
 @router.get("/casita/status", tags=["🏡 Casita Sueños"])
 async def get_casita_status():
     """Get full status of Casita Sueños property monitor."""
@@ -164,8 +168,13 @@ async def get_casita_status():
             resp = await client.get("http://casita-suenos:8001/status")
             return resp.json()
     except Exception as e:
-        return {"online": False, "error": str(e), "total_properties": 0,
-                "scraper_errors": [], "top_properties": []}
+        return {
+            "online": False,
+            "error": str(e),
+            "total_properties": 0,
+            "scraper_errors": [],
+            "top_properties": [],
+        }
 
 
 @router.get("/casita/radar", tags=["🏡 Casita Sueños"])
@@ -180,7 +189,14 @@ async def get_casita_radar(request: Request):
             resp = await client.get(url)
             return resp.json()
     except Exception as e:
-        return {"items": [], "total": 0, "offset": 0, "limit": 20, "has_more": False, "error": str(e)}
+        return {
+            "items": [],
+            "total": 0,
+            "offset": 0,
+            "limit": 20,
+            "has_more": False,
+            "error": str(e),
+        }
 
 
 @router.get("/casita/dismissed", tags=["🏡 Casita Sueños"])
@@ -259,7 +275,9 @@ async def save_casita_comment(request: Request):
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post("http://casita-suenos:8001/save-comment", json=body)
+            resp = await client.post(
+                "http://casita-suenos:8001/save-comment", json=body
+            )
             return resp.json()
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -317,13 +335,13 @@ Auth: verified via /auth/me profile check on every call.
 # Mapping: app key → list of container names to stop/start together.
 # Immich requires stopping all 3 (server + db + redis) as a group.
 CONTROLLABLE_CONTAINERS: dict[str, list[str]] = {
-    "ac":         ["ac-service"],
+    "ac": ["ac-service"],
     "vacaciones": ["vacaciones-service"],
-    "casita":     ["casita-suenos"],
-    "photos":     ["immich_postgres", "immich_redis", "immich_server"],
-    "passwords":  ["vaultwarden"],
-    "valheim":    ["valheim-server"],
-    "babygifts":  ["baby-gifts-service"],
+    "casita": ["casita-suenos"],
+    "photos": ["immich_postgres", "immich_redis", "immich_server"],
+    "passwords": ["vaultwarden"],
+    "valheim": ["valheim-server"],
+    "babygifts": ["baby-gifts-service"],
 }
 
 DOCKER_PROXY = "http://docker-socket-proxy:2375/v1.41"
@@ -336,8 +354,9 @@ CONTAINER_START_DELAYS: dict[str, int] = {
 
 def _require_super(request: Request) -> str:
     """Return username if caller is SUPER, raise 403 otherwise."""
-    import user_profiles
     import auth as auth_core
+    import user_profiles
+
     user = auth_core.get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -346,9 +365,6 @@ def _require_super(request: Request) -> str:
     if not profile.get("show_config_apps", False):
         raise HTTPException(status_code=403, detail="SUPER profile required")
     return user
-
-
-
 
 
 @router.get("/system/containers", tags=["📦 Containers"])
@@ -408,7 +424,9 @@ async def stop_service(app_key: str, request: Request):
             try:
                 r = await client.post(f"{DOCKER_PROXY}/containers/{name}/stop?t=10")
                 # 204 = stopped, 304 = already stopped — both are OK
-                results[name] = "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+                results[name] = (
+                    "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+                )
             except Exception as e:
                 results[name] = f"error: {e}"
 
@@ -436,7 +454,9 @@ async def start_service(app_key: str, request: Request):
             try:
                 r = await client.post(f"{DOCKER_PROXY}/containers/{name}/start")
                 # 204 = started, 304 = already running — both are OK
-                results[name] = "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+                results[name] = (
+                    "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+                )
             except Exception as e:
                 results[name] = f"error: {e}"
 
@@ -447,7 +467,6 @@ async def start_service(app_key: str, request: Request):
 # ── System resource stats (SUPER only) ───────────────────────────────────────
 
 import os as _os
-import time as _time
 
 
 def _read_cpu_times() -> tuple[float, float]:
@@ -492,29 +511,31 @@ async def get_system_stats(request: Request):
             parts = line.split()
             if len(parts) >= 2:
                 mem[parts[0].rstrip(":")] = int(parts[1])  # kB
-        total_kb  = mem.get("MemTotal", 0)
-        avail_kb  = mem.get("MemAvailable", 0)
-        free_kb   = mem.get("MemFree", 0)
+        total_kb = mem.get("MemTotal", 0)
+        avail_kb = mem.get("MemAvailable", 0)
+        free_kb = mem.get("MemFree", 0)
         buffers_kb = mem.get("Buffers", 0)
-        cached_kb  = mem.get("Cached", 0) + mem.get("SReclaimable", 0) - mem.get("Shmem", 0)
-        used_kb   = total_kb - free_kb - buffers_kb - max(0, cached_kb)
+        cached_kb = (
+            mem.get("Cached", 0) + mem.get("SReclaimable", 0) - mem.get("Shmem", 0)
+        )
+        used_kb = total_kb - free_kb - buffers_kb - max(0, cached_kb)
         stats["ram"] = {
-            "total_mb":     round(total_kb / 1024),
-            "used_mb":      round(used_kb  / 1024),
+            "total_mb": round(total_kb / 1024),
+            "used_mb": round(used_kb / 1024),
             "available_mb": round(avail_kb / 1024),
-            "cache_mb":     round((buffers_kb + max(0, cached_kb)) / 1024),
-            "percent":      round(used_kb / total_kb * 100, 1) if total_kb else 0.0,
+            "cache_mb": round((buffers_kb + max(0, cached_kb)) / 1024),
+            "percent": round(used_kb / total_kb * 100, 1) if total_kb else 0.0,
         }
         swap_total = mem.get("SwapTotal", 0)
-        swap_free  = mem.get("SwapFree",  0)
-        swap_used  = swap_total - swap_free
+        swap_free = mem.get("SwapFree", 0)
+        swap_used = swap_total - swap_free
         stats["swap"] = {
             "total_mb": round(swap_total / 1024),
-            "used_mb":  round(swap_used  / 1024),
-            "percent":  round(swap_used / swap_total * 100, 1) if swap_total else 0.0,
+            "used_mb": round(swap_used / 1024),
+            "percent": round(swap_used / swap_total * 100, 1) if swap_total else 0.0,
         }
     except Exception as e:
-        stats["ram"]  = {"error": str(e)}
+        stats["ram"] = {"error": str(e)}
         stats["swap"] = {"error": str(e)}
 
     # ── CPU (1-second sample) ────────────────────────────────────────────────
@@ -533,14 +554,14 @@ async def get_system_stats(request: Request):
     try:
         sv = _os.statvfs("/")
         total_b = sv.f_frsize * sv.f_blocks
-        free_b  = sv.f_frsize * sv.f_bavail
-        used_b  = total_b - free_b
-        GB = 1024 ** 3
+        free_b = sv.f_frsize * sv.f_bavail
+        used_b = total_b - free_b
+        GB = 1024**3
         stats["disk"] = {
             "total_gb": round(total_b / GB, 1),
-            "used_gb":  round(used_b  / GB, 1),
-            "free_gb":  round(free_b  / GB, 1),
-            "percent":  round(used_b / total_b * 100, 1) if total_b else 0.0,
+            "used_gb": round(used_b / GB, 1),
+            "free_gb": round(free_b / GB, 1),
+            "percent": round(used_b / total_b * 100, 1) if total_b else 0.0,
         }
     except Exception as e:
         stats["disk"] = {"error": str(e)}
@@ -559,19 +580,37 @@ async def get_system_stats(request: Request):
 # Controls mutually exclusive service groups to optimize RAM usage.
 # Modes: gaming (Valheim), photos (Immich), minimal (core services only)
 
-import subprocess as _subprocess
 
 PI_MODES = {
     "gaming": {
-        "stop":  ["immich_postgres", "immich_redis", "immich_server", "casita-suenos", "vacaciones-service"],
+        "stop": [
+            "immich_postgres",
+            "immich_redis",
+            "immich_server",
+            "casita-suenos",
+            "vacaciones-service",
+        ],
         "start": ["valheim-server"],
     },
     "photos": {
-        "stop":  ["valheim-server"],
-        "start": ["immich_postgres", "immich_redis", "immich_server", "casita-suenos", "vacaciones-service"],
+        "stop": ["valheim-server"],
+        "start": [
+            "immich_postgres",
+            "immich_redis",
+            "immich_server",
+            "casita-suenos",
+            "vacaciones-service",
+        ],
     },
     "minimal": {
-        "stop":  ["valheim-server", "immich_postgres", "immich_redis", "immich_server", "casita-suenos", "vacaciones-service"],
+        "stop": [
+            "valheim-server",
+            "immich_postgres",
+            "immich_redis",
+            "immich_server",
+            "casita-suenos",
+            "vacaciones-service",
+        ],
         "start": [],
     },
 }
@@ -589,9 +628,17 @@ async def get_system_mode(request: Request):
         async with httpx.AsyncClient(timeout=5.0) as client:
             r = await client.get(f"{DOCKER_PROXY}/containers/json?all=true")
             all_containers = r.json()
-            running = {c["Names"][0].lstrip("/") for c in all_containers if c.get("State") == "running"}
+            running = {
+                c["Names"][0].lstrip("/")
+                for c in all_containers
+                if c.get("State") == "running"
+            }
             # Include restarting so mode stays "photos" while immich_server is starting up
-            active = {c["Names"][0].lstrip("/") for c in all_containers if c.get("State") in ("running", "restarting")}
+            active = {
+                c["Names"][0].lstrip("/")
+                for c in all_containers
+                if c.get("State") in ("running", "restarting")
+            }
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Docker proxy unreachable: {e}")
 
@@ -639,7 +686,10 @@ async def set_system_mode(mode: str, request: Request):
     _require_super(request)
 
     if mode not in PI_MODES:
-        raise HTTPException(status_code=400, detail=f"Invalid mode: {mode}. Valid: gaming, photos, minimal")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid mode: {mode}. Valid: gaming, photos, minimal",
+        )
 
     config = PI_MODES[mode]
     results = {"stopped": {}, "started": {}}
@@ -649,7 +699,9 @@ async def set_system_mode(mode: str, request: Request):
         for name in config["stop"]:
             try:
                 r = await client.post(f"{DOCKER_PROXY}/containers/{name}/stop?t=10")
-                results["stopped"][name] = "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+                results["stopped"][name] = (
+                    "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+                )
             except Exception as e:
                 results["stopped"][name] = f"error: {e}"
 
@@ -663,7 +715,9 @@ async def set_system_mode(mode: str, request: Request):
                 await __import__("asyncio").sleep(mode_delay)
             try:
                 r = await client.post(f"{DOCKER_PROXY}/containers/{name}/start")
-                results["started"][name] = "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+                results["started"][name] = (
+                    "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+                )
             except Exception as e:
                 results["started"][name] = f"error: {e}"
 

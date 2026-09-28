@@ -61,7 +61,7 @@ jobs:
       any-service: ${{ steps.changes.outputs.any-service }}
       services-matrix: ${{ steps.matrix.outputs.services }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
       # ── Detect changes ──
       - uses: dorny/paths-filter@v3
@@ -155,7 +155,7 @@ jobs:
 
       # ── Setup Python for linting ──
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
 
@@ -224,8 +224,8 @@ jobs:
     if: ${{ needs.build.outputs.dashboard == 'true' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -247,8 +247,8 @@ jobs:
     if: ${{ needs.build.outputs.ac-service == 'true' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -270,8 +270,8 @@ jobs:
     if: ${{ needs.build.outputs.baby-gifts == 'true' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -293,8 +293,8 @@ jobs:
     if: ${{ needs.build.outputs.vacaciones == 'true' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -316,8 +316,8 @@ jobs:
     if: ${{ needs.build.outputs.casita == 'true' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -376,7 +376,7 @@ jobs:
       fail-fast: false
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

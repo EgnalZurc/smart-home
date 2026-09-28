@@ -6,15 +6,22 @@ Usa una DB en memoria (:memory:) para no tocar el disco.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from datetime import datetime
-from unittest.mock import patch
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import pytest
-from models import FireRisk, Piscina, Portal, Property, Zone, ScoreBreakdown, ScoredProperty
-from database import Database, _DEFAULT_SCHEDULE
+from database import Database
+from models import (
+    FireRisk,
+    Piscina,
+    Portal,
+    Property,
+    ScoreBreakdown,
+    ScoredProperty,
+    Zone,
+)
 
 
 @pytest.fixture
@@ -48,21 +55,35 @@ def sample_property() -> Property:
 @pytest.fixture
 def sample_zone() -> Zone:
     return Zone(
-        id="zamora_meseta", name="Zamora meseta",
-        distance_madrid_min=150, distance_beach_min=None,
-        distance_natural_pools_min=30, distance_supermarket_min=10,
-        distance_health_center_min=10, distance_hospital_min=20,
-        fire_risk=FireRisk.NULO, zone_preference=5.0,
-        price_min=50_000, price_max=260_000,
+        id="zamora_meseta",
+        name="Zamora meseta",
+        distance_madrid_min=150,
+        distance_beach_min=None,
+        distance_natural_pools_min=30,
+        distance_supermarket_min=10,
+        distance_health_center_min=10,
+        distance_hospital_min=20,
+        fire_risk=FireRisk.NULO,
+        zone_preference=5.0,
+        price_min=50_000,
+        price_max=260_000,
     )
 
 
 def _make_scored(prop: Property, zone: Zone, score: float = 55.0) -> ScoredProperty:
     """Helper: crea un ScoredProperty con puntuación fija para tests."""
     breakdown = ScoreBreakdown(
-        p1_rooms=3.5, p2_piscina=5.0, p3_distance=4.0, p4_beach=0.5,
-        p5_pools=3.0, p6_supermarket=6.0, p7_health=9.0, p8_hospital=9.0,
-        p9_price=6.5, p10_fire=9.0, p11_preference=5.0,
+        p1_rooms=3.5,
+        p2_piscina=5.0,
+        p3_distance=4.0,
+        p4_beach=0.5,
+        p5_pools=3.0,
+        p6_supermarket=6.0,
+        p7_health=9.0,
+        p8_hospital=9.0,
+        p9_price=6.5,
+        p10_fire=9.0,
+        p11_preference=5.0,
     )
     # Ajustar p1 para aproximar el total al valor pedido (no crítico en tests)
     return ScoredProperty(prop=prop, zone=zone, score=breakdown)
@@ -70,8 +91,8 @@ def _make_scored(prop: Property, zone: Zone, score: float = 55.0) -> ScoredPrope
 
 # ── Tests existentes (propiedades básicas) ────────────────────────────────────
 
-class TestDatabase:
 
+class TestDatabase:
     def test_insert_new_property(self, db, sample_property):
         assert db.is_new(sample_property) is True
         db.upsert_property(sample_property)
@@ -131,8 +152,8 @@ class TestDatabase:
 
 # ── Tests de descarte ─────────────────────────────────────────────────────────
 
-class TestDismiss:
 
+class TestDismiss:
     def _insert_scored(self, db, prop, zone):
         db.upsert_property(prop)
         scored = _make_scored(prop, zone)
@@ -159,7 +180,9 @@ class TestDismiss:
         radar = db.get_radar_properties(min_score=0.0)
         assert not any(p["uid"] == uid for p in radar)
 
-    def test_dismissed_property_in_get_dismissed(self, db, sample_property, sample_zone):
+    def test_dismissed_property_in_get_dismissed(
+        self, db, sample_property, sample_zone
+    ):
         self._insert_scored(db, sample_property, sample_zone)
         uid = sample_property.unique_id
         db.dismiss(uid)
@@ -198,7 +221,8 @@ class TestDismiss:
 
         # Comprobamos directamente en la DB que dismissed_at se limpió
         row = db._conn.execute(
-            "SELECT dismissed, dismissed_at FROM scored_properties WHERE property_uid=?", (uid,)
+            "SELECT dismissed, dismissed_at FROM scored_properties WHERE property_uid=?",
+            (uid,),
         ).fetchone()
         assert row["dismissed"] == 0
         assert row["dismissed_at"] is None
@@ -213,16 +237,34 @@ class TestDismiss:
     def test_dismiss_does_not_affect_other_properties(self, db, sample_zone):
         # Insertar dos propiedades
         prop1 = Property(
-            portal=Portal.PISOS, portal_id="p1", url="https://x.com/1",
-            zone_id="zamora_meseta", title="Casa 1", price=150_000,
-            size_m2=100.0, rooms=4, has_garage=True, has_garden_or_plot=True,
-            piscina=Piscina.NINGUNA, has_internet_mention=True, habitable=True,
+            portal=Portal.PISOS,
+            portal_id="p1",
+            url="https://x.com/1",
+            zone_id="zamora_meseta",
+            title="Casa 1",
+            price=150_000,
+            size_m2=100.0,
+            rooms=4,
+            has_garage=True,
+            has_garden_or_plot=True,
+            piscina=Piscina.NINGUNA,
+            has_internet_mention=True,
+            habitable=True,
         )
         prop2 = Property(
-            portal=Portal.PISOS, portal_id="p2", url="https://x.com/2",
-            zone_id="zamora_meseta", title="Casa 2", price=200_000,
-            size_m2=120.0, rooms=4, has_garage=True, has_garden_or_plot=True,
-            piscina=Piscina.NINGUNA, has_internet_mention=True, habitable=True,
+            portal=Portal.PISOS,
+            portal_id="p2",
+            url="https://x.com/2",
+            zone_id="zamora_meseta",
+            title="Casa 2",
+            price=200_000,
+            size_m2=120.0,
+            rooms=4,
+            has_garage=True,
+            has_garden_or_plot=True,
+            piscina=Piscina.NINGUNA,
+            has_internet_mention=True,
+            habitable=True,
         )
         for p in (prop1, prop2):
             db.upsert_property(p)
@@ -238,8 +280,8 @@ class TestDismiss:
 
 # ── Tests del radar ───────────────────────────────────────────────────────────
 
-class TestRadar:
 
+class TestRadar:
     def _insert(self, db, prop, zone, score_total=55.0):
         db.upsert_property(prop)
         db.upsert_score(_make_scored(prop, zone, score_total))
@@ -261,17 +303,35 @@ class TestRadar:
         from datetime import datetime, timedelta
 
         older = Property(
-            portal=Portal.PISOS, portal_id="old", url="https://x.com/old",
-            zone_id="zamora_meseta", title="Antigua", price=150_000,
-            size_m2=100.0, rooms=4, has_garage=True, has_garden_or_plot=True,
-            piscina=Piscina.NINGUNA, has_internet_mention=True, habitable=True,
+            portal=Portal.PISOS,
+            portal_id="old",
+            url="https://x.com/old",
+            zone_id="zamora_meseta",
+            title="Antigua",
+            price=150_000,
+            size_m2=100.0,
+            rooms=4,
+            has_garage=True,
+            has_garden_or_plot=True,
+            piscina=Piscina.NINGUNA,
+            has_internet_mention=True,
+            habitable=True,
             first_seen=datetime.now() - timedelta(days=10),
         )
         newer = Property(
-            portal=Portal.PISOS, portal_id="new", url="https://x.com/new",
-            zone_id="zamora_meseta", title="Nueva", price=180_000,
-            size_m2=120.0, rooms=4, has_garage=True, has_garden_or_plot=True,
-            piscina=Piscina.NINGUNA, has_internet_mention=True, habitable=True,
+            portal=Portal.PISOS,
+            portal_id="new",
+            url="https://x.com/new",
+            zone_id="zamora_meseta",
+            title="Nueva",
+            price=180_000,
+            size_m2=120.0,
+            rooms=4,
+            has_garage=True,
+            has_garden_or_plot=True,
+            piscina=Piscina.NINGUNA,
+            has_internet_mention=True,
+            habitable=True,
             first_seen=datetime.now(),
         )
         for p in (older, newer):
@@ -287,8 +347,18 @@ class TestRadar:
         assert len(props) == 1
         p = props[0]
         # Campos de propiedad
-        for field in ("uid", "title", "price", "url", "zone_id", "rooms",
-                      "size_m2", "piscina", "first_seen", "last_seen"):
+        for field in (
+            "uid",
+            "title",
+            "price",
+            "url",
+            "zone_id",
+            "rooms",
+            "size_m2",
+            "piscina",
+            "first_seen",
+            "last_seen",
+        ):
             assert field in p, f"Campo '{field}' no encontrado"
         # Campos de scoring
         assert "score_total" in p
@@ -301,10 +371,19 @@ class TestRadar:
     def test_radar_limit_is_respected(self, db, sample_zone):
         for i in range(5):
             p = Property(
-                portal=Portal.PISOS, portal_id=str(i), url=f"https://x.com/{i}",
-                zone_id="zamora_meseta", title=f"Casa {i}", price=150_000 + i * 1000,
-                size_m2=100.0, rooms=4, has_garage=True, has_garden_or_plot=True,
-                piscina=Piscina.NINGUNA, has_internet_mention=True, habitable=True,
+                portal=Portal.PISOS,
+                portal_id=str(i),
+                url=f"https://x.com/{i}",
+                zone_id="zamora_meseta",
+                title=f"Casa {i}",
+                price=150_000 + i * 1000,
+                size_m2=100.0,
+                rooms=4,
+                has_garage=True,
+                has_garden_or_plot=True,
+                piscina=Piscina.NINGUNA,
+                has_internet_mention=True,
+                habitable=True,
             )
             self._insert(db, p, sample_zone)
 
@@ -313,8 +392,8 @@ class TestRadar:
 
 # ── Tests del resumen semanal ─────────────────────────────────────────────────
 
-class TestWeeklySummary:
 
+class TestWeeklySummary:
     def test_no_summary_returns_none(self, db):
         assert db.get_last_weekly_summary() is None
 
@@ -334,15 +413,17 @@ class TestWeeklySummary:
         assert result["content"] == "Tercer resumen"
 
     def test_summary_content_preserved_exactly(self, db):
-        content = "🏠 Casa 1\n  La Rioja — 250.000€ — 62.5 pts\n  https://idealista.com/123"
+        content = (
+            "🏠 Casa 1\n  La Rioja — 250.000€ — 62.5 pts\n  https://idealista.com/123"
+        )
         db.save_weekly_summary(content)
         assert db.get_last_weekly_summary()["content"] == content
 
 
 # ── Tests de configuración de schedule ───────────────────────────────────────
 
-class TestScheduleConfig:
 
+class TestScheduleConfig:
     def test_defaults_returned_if_empty(self, db):
         config = db.get_schedule_config()
         assert config["scraping_enabled"] is True
@@ -382,14 +463,14 @@ class TestScheduleConfig:
 
     def test_full_config_roundtrip(self, db):
         new_config = {
-            "scraping_enabled":    False,
-            "scraping_days":       [2, 5],
-            "scraping_hour":       8,
+            "scraping_enabled": False,
+            "scraping_days": [2, 5],
+            "scraping_hour": 8,
             "gmail_check_enabled": False,
-            "gmail_interval_min":  45,
-            "summary_enabled":     False,
-            "summary_day":         0,
-            "summary_hour":        7,
+            "gmail_interval_min": 45,
+            "summary_enabled": False,
+            "summary_day": 0,
+            "summary_hour": 7,
         }
         db.save_schedule_config(new_config)
         config = db.get_schedule_config()
@@ -399,8 +480,8 @@ class TestScheduleConfig:
 
 # ── Tests de upsert_score con P11 ─────────────────────────────────────────────
 
-class TestUpsertScoreP11:
 
+class TestUpsertScoreP11:
     def test_p11_persisted_in_scored_properties(self, db, sample_property, sample_zone):
         """p11_preference debe guardarse en score_p11 en la tabla."""
         db.upsert_property(sample_property)
@@ -414,7 +495,9 @@ class TestUpsertScoreP11:
         assert row is not None
         assert row["score_p11"] == pytest.approx(5.0)  # zone_preference del fixture
 
-    def test_dismiss_preserved_after_upsert_score(self, db, sample_property, sample_zone):
+    def test_dismiss_preserved_after_upsert_score(
+        self, db, sample_property, sample_zone
+    ):
         """Actualizar el score de una propiedad descartada no debe restaurarla."""
         db.upsert_property(sample_property)
         scored = _make_scored(sample_property, sample_zone)
@@ -431,7 +514,9 @@ class TestUpsertScoreP11:
         ).fetchone()
         assert row["dismissed"] == 1
 
-    def test_alerted_preserved_after_upsert_score(self, db, sample_property, sample_zone):
+    def test_alerted_preserved_after_upsert_score(
+        self, db, sample_property, sample_zone
+    ):
         """Actualizar el score de una propiedad alertada no debe perder el flag alerted."""
         db.upsert_property(sample_property)
         scored = _make_scored(sample_property, sample_zone)

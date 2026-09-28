@@ -16,36 +16,42 @@ Workaround L2/L3:
   Si no hay garantia por URL, has_garden/has_garage quedan como inferencia
   de descripcion. El scorer usa L2/L3 como soft-limiters (ver scorer.py).
 """
+
 from __future__ import annotations
+
 import logging
 import re
 from datetime import datetime
 
 import httpx
 from bs4 import BeautifulSoup
-
 from models import Portal, Property
 from scraper_base import (
     get_html,
-    infer_ac, infer_ac_type,
-    infer_habitable, infer_habitability,
-    infer_has_garage, infer_has_garden,
+    infer_ac_type,
     infer_garage_type,
-    infer_internet, infer_no_internet,
+    infer_habitability,
+    infer_habitable,
+    infer_has_garage,
+    infer_has_garden,
+    infer_internet,
+    infer_no_internet,
     infer_piscina,
     infer_terrain_m2,
     make_client,
-    parse_price, parse_rooms, parse_size,
+    parse_price,
+    parse_rooms,
+    parse_size,
 )
-from models import GarageType, Habitability, Internet, Piscina, Portal, Property
 from zones import Zone
 
 logger = logging.getLogger(__name__)
 _BASE_URL = "https://www.habitaclia.com"
 
 
-def _parse_listing_page(soup: BeautifulSoup, zone: Zone, now: datetime,
-                         url_used: str = "") -> list[Property]:
+def _parse_listing_page(
+    soup: BeautifulSoup, zone: Zone, now: datetime, url_used: str = ""
+) -> list[Property]:
     """
     Parsea una pagina de resultados de Habitaclia.
     Selector verificado agosto 2026: article.list-item-container
@@ -84,7 +90,9 @@ def _parse_listing_page(soup: BeautifulSoup, zone: Zone, now: datetime,
                 portal_id = m.group(1) if m else href_clean
 
             # Titulo
-            title_el = article.select_one("h3.list-item-title a, h3 a, a[itemprop='name']")
+            title_el = article.select_one(
+                "h3.list-item-title a, h3 a, a[itemprop='name']"
+            )
             title = title_el.get_text(strip=True) if title_el else ""
 
             # Precio: puede estar en varias clases
@@ -101,6 +109,7 @@ def _parse_listing_page(soup: BeautifulSoup, zone: Zone, now: datetime,
                 text = article.get_text(" ")
                 # Buscar solo precios con ".000 EUR" (precios totales reales)
                 import re as _re
+
                 m2 = _re.search(r"([\d][\d\.]+\.000)\s*€(?!\s*/\s*m)", text)
                 if m2:
                     price = parse_price(m2.group(0))
@@ -117,13 +126,15 @@ def _parse_listing_page(soup: BeautifulSoup, zone: Zone, now: datetime,
             feature_el = article.select_one("p.list-item-feature")
             feature_text = feature_el.get_text(" ", strip=True) if feature_el else ""
 
-            rooms_m = re.search(r"(\d+)\s*hab", feature_text, re.I)
-            size_m = re.search(r"(\d+)\s*m[²2]", feature_text, re.I)
+            rooms_m = re.search(r"(\d+)\s*hab", feature_text, _re.IGNORECASE)
+            size_m = re.search(r"(\d+)\s*m[²2]", feature_text, _re.IGNORECASE)
             rooms_raw = rooms_m.group(0) if rooms_m else None
             size_raw = size_m.group(0) if size_m else None
 
             # Descripcion
-            desc_el = article.select_one("p.list-item-description, [itemprop='description']")
+            desc_el = article.select_one(
+                "p.list-item-description, [itemprop='description']"
+            )
             description = desc_el.get_text(" ", strip=True) if desc_el else title
 
             # Extras: tags de equipamiento en el listado (si existen)
@@ -138,31 +149,36 @@ def _parse_listing_page(soup: BeautifulSoup, zone: Zone, now: datetime,
             has_garden = infer_has_garden(description + " " + feature_text, extras)
             has_garage = infer_has_garage(description + " " + feature_text, extras)
 
-            results.append(Property(
-                portal=Portal.HABITACLIA,
-                portal_id=portal_id,
-                url=href_clean,
-                zone_id=zone.id,
-                title=title,
-                price=price,
-                size_m2=parse_size(size_raw),
-                rooms=parse_rooms(rooms_raw) or (int(rooms_m.group(1)) if rooms_m else None),
-                has_garden_or_plot=has_garden,
-                terrain_m2=infer_terrain_m2(description, extras),
-                garage_type=infer_garage_type(description, extras),
-                habitability=infer_habitability(description, title),
-                internet=infer_internet(description, extras),
-                has_garage=has_garage,
-                has_ac=(lambda t: t[0])(infer_ac_type(description, extras)),
-                has_ac_preinstalled=(lambda t: t[1])(infer_ac_type(description, extras)),
-                piscina=infer_piscina(description, extras),
-                has_internet_mention=not infer_no_internet(description),
-                habitable=infer_habitable(description, title),
-                description=description,
-                first_seen=now,
-                last_seen=now,
-                source="habitaclia_scraper",
-            ))
+            results.append(
+                Property(
+                    portal=Portal.HABITACLIA,
+                    portal_id=portal_id,
+                    url=href_clean,
+                    zone_id=zone.id,
+                    title=title,
+                    price=price,
+                    size_m2=parse_size(size_raw),
+                    rooms=parse_rooms(rooms_raw)
+                    or (int(rooms_m.group(1)) if rooms_m else None),
+                    has_garden_or_plot=has_garden,
+                    terrain_m2=infer_terrain_m2(description, extras),
+                    garage_type=infer_garage_type(description, extras),
+                    habitability=infer_habitability(description, title),
+                    internet=infer_internet(description, extras),
+                    has_garage=has_garage,
+                    has_ac=(lambda t: t[0])(infer_ac_type(description, extras)),
+                    has_ac_preinstalled=(lambda t: t[1])(
+                        infer_ac_type(description, extras)
+                    ),
+                    piscina=infer_piscina(description, extras),
+                    has_internet_mention=not infer_no_internet(description),
+                    habitable=infer_habitable(description, title),
+                    description=description,
+                    first_seen=now,
+                    last_seen=now,
+                    source="habitaclia_scraper",
+                )
+            )
 
         except Exception as e:
             logger.debug("[habitaclia] Error en articulo: %s", e)
@@ -207,7 +223,8 @@ def scrape_zone(zone: Zone, client: httpx.Client | None = None) -> list[Property
                 if not page_results:
                     logger.info(
                         "[habitaclia] Zona %s — sin resultados en pagina %d, parando.",
-                        zone.id, page
+                        zone.id,
+                        page,
                     )
                     break
 
@@ -220,7 +237,10 @@ def scrape_zone(zone: Zone, client: httpx.Client | None = None) -> list[Property
 
                 logger.info(
                     "[habitaclia] Zona %s — pagina %d: %d anuncios (%d nuevos)",
-                    zone.id, page, len(page_results), new_count
+                    zone.id,
+                    page,
+                    len(page_results),
+                    new_count,
                 )
 
                 if new_count == 0:

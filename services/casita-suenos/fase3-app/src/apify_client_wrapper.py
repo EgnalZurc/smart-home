@@ -39,8 +39,11 @@ Decision: deshabilitar hasta tener proxy residencial o ScrapFly de pago.
 El free tier de ScrapFly (1000 creditos) es insuficiente para uso regular
 (13 zonas x 3 paginas x ~25 creditos = ~975 creditos, agota en 1 run).
 """
+
 from __future__ import annotations
+
 import logging
+
 from models import Property
 from zones import Zone
 
@@ -52,6 +55,7 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 class ApifyUsageTracker:
     """Stub conservado por compatibilidad. No hace nada mientras Apify esta deshabilitado."""
+
     def __init__(self, data_path: str) -> None:
         self._path = data_path
 

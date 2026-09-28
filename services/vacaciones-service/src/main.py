@@ -16,6 +16,7 @@ Auth: nginx handles auth_request before requests reach this service.
 
 Port: 8003
 """
+
 import logging
 from pathlib import Path
 
@@ -23,7 +24,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-
 from vacaciones_controller import (
     add_year,
     delete_year,
@@ -50,6 +50,7 @@ app = FastAPI(
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
+
 class VacacionesConfigRequest(BaseModel):
     nucleos: list = []
     personas: list = []
@@ -62,6 +63,7 @@ class VacacionesYearRequest(BaseModel):
 
 # ── Health ────────────────────────────────────────────────────────────────────
 
+
 @app.get("/health")
 def health():
     """Health check — used by nginx and the dashboard."""
@@ -70,9 +72,11 @@ def health():
 
 # ── SPA ───────────────────────────────────────────────────────────────────────
 
+
 def _serve_html(filename: str) -> HTMLResponse:
     """Serve an HTML file with no-cache headers."""
     import time
+
     path = Path(__file__).parent / "static" / filename
     content = path.read_text(encoding="utf-8")
     content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")
@@ -93,6 +97,7 @@ async def serve_vacaciones():
 
 
 # ── API ───────────────────────────────────────────────────────────────────────
+
 
 @app.get("/api/vacaciones")
 def get_vacaciones():

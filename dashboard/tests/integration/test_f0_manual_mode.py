@@ -9,9 +9,13 @@ The actual tests now live at:
 
 This stub ensures pytest does not error on the old file paths.
 """
+
 import pytest
 
-@pytest.mark.skip(reason="AC tests moved to ac-service — see ~/projects/smart-home/ac-service/tests/")
+
+@pytest.mark.skip(
+    reason="AC tests moved to ac-service — see ~/projects/smart-home/ac-service/tests/"
+)
 class TestMovedToAcService:
     def test_placeholder(self):
         pass

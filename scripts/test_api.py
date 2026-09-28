@@ -13,6 +13,7 @@ This script:
 2. Tests various endpoints with the session cookie
 3. Reports results
 """
+
 import argparse
 import os
 import sys
@@ -38,7 +39,9 @@ def authenticate(client: httpx.Client, username: str, password: str) -> bool:
     return False
 
 
-def test_endpoint(client: httpx.Client, method: str, path: str, expected_status: int = 200) -> dict:
+def test_endpoint(
+    client: httpx.Client, method: str, path: str, expected_status: int = 200
+) -> dict:
     """Test an endpoint and return result."""
     url = urljoin(BASE_URL, path)
     try:
@@ -47,8 +50,12 @@ def test_endpoint(client: httpx.Client, method: str, path: str, expected_status:
         elif method.upper() == "POST":
             resp = client.post(url)
         else:
-            return {"path": path, "status": "error", "message": f"Unknown method: {method}"}
-        
+            return {
+                "path": path,
+                "status": "error",
+                "message": f"Unknown method: {method}",
+            }
+
         success = resp.status_code == expected_status
         result = {
             "path": path,
@@ -56,13 +63,13 @@ def test_endpoint(client: httpx.Client, method: str, path: str, expected_status:
             "code": resp.status_code,
             "expected": expected_status,
         }
-        
+
         # Try to parse JSON response
         try:
             result["data"] = resp.json()
         except Exception:
             result["data"] = resp.text[:200] if len(resp.text) > 200 else resp.text
-        
+
         return result
     except Exception as e:
         return {"path": path, "status": "error", "message": str(e)}
@@ -70,8 +77,12 @@ def test_endpoint(client: httpx.Client, method: str, path: str, expected_status:
 
 def main():
     parser = argparse.ArgumentParser(description="Test Smart Home API endpoints")
-    parser.add_argument("--username", "-u", default=os.environ.get("SMART_HOME_USER", ""))
-    parser.add_argument("--password", "-p", default=os.environ.get("SMART_HOME_PASS", ""))
+    parser.add_argument(
+        "--username", "-u", default=os.environ.get("SMART_HOME_USER", "")
+    )
+    parser.add_argument(
+        "--password", "-p", default=os.environ.get("SMART_HOME_PASS", "")
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
 
@@ -101,9 +112,9 @@ def main():
         ("GET", "/api/system/stats", 200),
     ]
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Smart Home API Test - {BASE_URL}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     with httpx.Client(timeout=30.0, follow_redirects=True) as client:
         # Test public endpoints first (no auth)
@@ -116,13 +127,13 @@ def main():
                 print(f"      {result['data']}")
 
         # Authenticate
-        print(f"\n{'─'*60}")
+        print(f"\n{'─' * 60}")
         print("🔐 Authenticating...\n")
         if not authenticate(client, args.username, args.password):
             sys.exit(1)
 
         # Test protected endpoints
-        print(f"\n📡 Testing PROTECTED endpoints (with auth):\n")
+        print("\n📡 Testing PROTECTED endpoints (with auth):\n")
         for method, path, expected in protected_endpoints:
             result = test_endpoint(client, method, path, expected)
             icon = "✅" if result["status"] == "ok" else "❌"
@@ -136,7 +147,7 @@ def main():
                 else:
                     print(f"      {data}")
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("Done!")
 
 

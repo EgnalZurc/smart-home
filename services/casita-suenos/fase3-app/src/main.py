@@ -14,17 +14,19 @@ Responsabilidades:
 """
 
 from __future__ import annotations
-from scorer import ALERT_THRESHOLD as _ALERT_THRESHOLD, MAX_SCORE as _MAX_SCORE
 
+import contextlib
 import json
 import logging
 import os
 import signal
 import sys
-import time
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+
+from scorer import ALERT_THRESHOLD as _ALERT_THRESHOLD
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -51,11 +53,10 @@ GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 DB_PATH = os.environ.get("CASITA_DB_PATH", f"{DATA_DIR}/casita.db")
 
 # Apify usage tracker
-APIFY_USAGE_PATH = os.environ.get(
-    "APIFY_USAGE_PATH", f"{DATA_DIR}/apify_usage.json"
-)
+APIFY_USAGE_PATH = os.environ.get("APIFY_USAGE_PATH", f"{DATA_DIR}/apify_usage.json")
 
 # ── Validación ────────────────────────────────────────────────────────────────
+
 
 def _validate_config() -> None:
     """Valida que las variables críticas tengan valor."""
@@ -93,8 +94,10 @@ def _set_process_name() -> None:
     Intenta setproctitle si está disponible; si no, modifica argv[0].
     """
     import sys
+
     try:
         import setproctitle  # opcional: pip install setproctitle
+
         setproctitle.setproctitle(PROCESS_NAME)
     except ImportError:
         # Fallback: cambiar argv[0] (visible en ps en la mayoría de sistemas)
@@ -102,6 +105,7 @@ def _set_process_name() -> None:
             sys.argv[0] = PROCESS_NAME
     # También nombramos el thread principal
     import threading
+
     threading.current_thread().name = PROCESS_NAME
 
 
@@ -109,6 +113,7 @@ _scheduler_instance = None  # referencia global para el servidor HTTP
 
 
 # ── Servidor HTTP de estado ────────────────────────────────────────────────────
+
 
 class _StatusHandler(BaseHTTPRequestHandler):
     """Handler HTTP minimalista para los endpoints /health y /status."""
@@ -136,76 +141,109 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 return
             status = _scheduler_instance.get_status()
             scraper_errors = [
-                {"portal": e.portal, "zone_id": e.zone_id,
-                 "error": e.error, "detected_at": e.detected_at.isoformat()}
+                {
+                    "portal": e.portal,
+                    "zone_id": e.zone_id,
+                    "error": e.error,
+                    "detected_at": e.detected_at.isoformat(),
+                }
                 for e in status.scraper_errors
             ]
             cfg = _scheduler_instance.get_schedule_config()
-            self._send_json(200, {
-                "online": True,
-                "running": status.running,
-                "last_scraping": status.last_scraping.isoformat() if status.last_scraping else None,
-                "last_gmail_check": status.last_gmail_check.isoformat() if status.last_gmail_check else None,
-                "last_summary": status.last_summary.isoformat() if status.last_summary else None,
-                "last_scraping_result": status.last_scraping_result,
-                "total_properties": status.total_properties,
-                "radar_count": status.radar_count,
-                "dismissed_count": status.dismissed_count,
-                "scraper_errors": scraper_errors,
-                "scraper_errors_count": len(scraper_errors),
-                "score_max": __import__("scorer").MAX_SCORE,
-                "alert_threshold": __import__("scorer").ALERT_THRESHOLD,
-                "alert_threshold_pct": round(__import__("scorer").ALERT_THRESHOLD / __import__("scorer").MAX_SCORE * 100),
-                "schedule": cfg,
-                "top_properties": [
-                    {"uid": p.get("uid",""), "title": p.get("title",""),
-                     "price": p.get("price",0), "score": round(p.get("score_total",0),1),
-                     "zone_id": p.get("zone_id",""), "url": p.get("url",""),
-                     "rooms": p.get("rooms"), "size_m2": p.get("size_m2"),
-                     "first_seen": p.get("first_seen","")}
-                    for p in status.top_properties
-                ],
-            })
+            self._send_json(
+                200,
+                {
+                    "online": True,
+                    "running": status.running,
+                    "last_scraping": status.last_scraping.isoformat()
+                    if status.last_scraping
+                    else None,
+                    "last_gmail_check": status.last_gmail_check.isoformat()
+                    if status.last_gmail_check
+                    else None,
+                    "last_summary": status.last_summary.isoformat()
+                    if status.last_summary
+                    else None,
+                    "last_scraping_result": status.last_scraping_result,
+                    "total_properties": status.total_properties,
+                    "radar_count": status.radar_count,
+                    "dismissed_count": status.dismissed_count,
+                    "scraper_errors": scraper_errors,
+                    "scraper_errors_count": len(scraper_errors),
+                    "score_max": __import__("scorer").MAX_SCORE,
+                    "alert_threshold": __import__("scorer").ALERT_THRESHOLD,
+                    "alert_threshold_pct": round(
+                        __import__("scorer").ALERT_THRESHOLD
+                        / __import__("scorer").MAX_SCORE
+                        * 100
+                    ),
+                    "schedule": cfg,
+                    "top_properties": [
+                        {
+                            "uid": p.get("uid", ""),
+                            "title": p.get("title", ""),
+                            "price": p.get("price", 0),
+                            "score": round(p.get("score_total", 0), 1),
+                            "zone_id": p.get("zone_id", ""),
+                            "url": p.get("url", ""),
+                            "rooms": p.get("rooms"),
+                            "size_m2": p.get("size_m2"),
+                            "first_seen": p.get("first_seen", ""),
+                        }
+                        for p in status.top_properties
+                    ],
+                },
+            )
 
         elif self.path.startswith("/radar"):
             if _scheduler_instance is None:
-                self._send_json(503, {"error": "Not ready"}); return
+                self._send_json(503, {"error": "Not ready"})
+                return
             # Parsear query params: ?limit=20&offset=0&sort_by=score&sort_dir=desc
-            from urllib.parse import urlparse, parse_qs
+            from urllib.parse import parse_qs, urlparse
+
             parsed = urlparse(self.path)
             qs = parse_qs(parsed.query)
+
             def _qs(key, default):
                 return qs.get(key, [default])[0]
+
             try:
-                limit   = min(int(_qs("limit",   "20")), 100)
-                offset  = max(int(_qs("offset",  "0")),  0)
+                limit = min(int(_qs("limit", "20")), 100)
+                offset = max(int(_qs("offset", "0")), 0)
                 sort_by = _qs("sort_by", "score")
-                sort_dir= _qs("sort_dir", "desc")
+                sort_dir = _qs("sort_dir", "desc")
             except (ValueError, TypeError):
                 limit, offset, sort_by, sort_dir = 20, 0, "score", "desc"
-            filter_by     = _qs("filter", None)
+            filter_by = _qs("filter", None)
             portal_filter = _qs("portal", None)
             result = _scheduler_instance.get_radar(
-                limit=limit, offset=offset,
-                sort_by=sort_by, sort_dir=sort_dir,
-                filter_by=filter_by, portal_filter=portal_filter,
+                limit=limit,
+                offset=offset,
+                sort_by=sort_by,
+                sort_dir=sort_dir,
+                filter_by=filter_by,
+                portal_filter=portal_filter,
             )
             self._send_json(200, result)
 
         elif self.path == "/dismissed":
             if _scheduler_instance is None:
-                self._send_json(503, {"error": "Not ready"}); return
+                self._send_json(503, {"error": "Not ready"})
+                return
             props = _scheduler_instance.get_dismissed()
             self._send_json(200, {"properties": props})
 
         elif self.path == "/schedule":
             if _scheduler_instance is None:
-                self._send_json(503, {"error": "Not ready"}); return
+                self._send_json(503, {"error": "Not ready"})
+                return
             self._send_json(200, _scheduler_instance.get_schedule_config())
 
         elif self.path == "/summary":
             if _scheduler_instance is None:
-                self._send_json(503, {"error": "Not ready"}); return
+                self._send_json(503, {"error": "Not ready"})
+                return
             summary = _scheduler_instance.get_last_summary()
             self._send_json(200, summary or {"content": None, "sent_at": None})
 
@@ -215,15 +253,14 @@ class _StatusHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         global _scheduler_instance
         if _scheduler_instance is None:
-            self._send_json(503, {"error": "Not ready"}); return
+            self._send_json(503, {"error": "Not ready"})
+            return
 
         length = int(self.headers.get("Content-Length", 0))
         body = {}
         if length:
-            try:
+            with contextlib.suppress(Exception):
                 body = json.loads(self.rfile.read(length))
-            except Exception:
-                pass
 
         if self.path == "/dismiss":
             uid = body.get("uid", "")
@@ -241,9 +278,11 @@ class _StatusHandler(BaseHTTPRequestHandler):
 
         elif self.path == "/run-scraping":
             import threading
+
             threading.Thread(
                 target=_scheduler_instance.run_scraping_now,
-                daemon=True, name="manual-scraping"
+                daemon=True,
+                name="manual-scraping",
             ).start()
             self._send_json(202, {"ok": True, "message": "Scraping iniciado"})
 
@@ -267,23 +306,29 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 self._send_json(200, {"ok": True, "warn": str(e)})
         elif self.path == "/run-summary":
             import threading
+
             threading.Thread(
                 target=_scheduler_instance.run_summary_now,
-                daemon=True, name="manual-summary"
+                daemon=True,
+                name="manual-summary",
             ).start()
             self._send_json(202, {"ok": True, "message": "Resumen iniciado"})
         elif self.path == "/run-fotocasa-check":
             import threading
+
             threading.Thread(
                 target=_scheduler_instance.run_fotocasa_check_now,
-                daemon=True, name="manual-fotocasa"
+                daemon=True,
+                name="manual-fotocasa",
             ).start()
             self._send_json(202, {"ok": True, "message": "Fotocasa check iniciado"})
         elif self.path == "/run-gmail-check":
             import threading
+
             threading.Thread(
                 target=_scheduler_instance.run_gmail_check_now,
-                daemon=True, name="manual-gmail"
+                daemon=True,
+                name="manual-gmail",
             ).start()
             self._send_json(202, {"ok": True, "message": "Gmail check iniciado"})
         elif self.path == "/mark-viewed":
@@ -303,12 +348,15 @@ class _StatusHandler(BaseHTTPRequestHandler):
 def _start_status_server(port: int) -> None:
     """Arranca el servidor HTTP de estado en un thread daemon."""
     server = HTTPServer(("0.0.0.0", port), _StatusHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True, name="casita-http")
+    thread = threading.Thread(
+        target=server.serve_forever, daemon=True, name="casita-http"
+    )
     thread.start()
     logger.info("[main] Servidor HTTP de estado en puerto %d", port)
 
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     _validate_config()
@@ -319,6 +367,7 @@ def main() -> None:
 
     # ── Singleton: una sola instancia ────────────────────────────────────────
     from singleton import ensure_singleton
+
     LOCK_PATH = os.environ.get("CASITA_LOCK_PATH", f"{DATA_DIR}/casita.lock")
     ensure_singleton(LOCK_PATH)
 
@@ -353,14 +402,19 @@ def main() -> None:
 
     # Arrancar polling de Telegram para registrar nuevos chats (/start)
     def _telegram_polling() -> None:
-        import httpx, time as _time
+        import time as _time
+
+        import httpx
+
         token = TELEGRAM_BOT_TOKEN
         offset = 0
         url = f"https://api.telegram.org/bot{token}/getUpdates"
         logger.info("[main] Polling Telegram iniciado")
         while True:
             try:
-                resp = httpx.get(url, params={"offset": offset, "timeout": 30}, timeout=35)
+                resp = httpx.get(
+                    url, params={"offset": offset, "timeout": 30}, timeout=35
+                )
                 updates = resp.json().get("result", [])
                 for upd in updates:
                     offset = upd["update_id"] + 1
@@ -371,28 +425,37 @@ def main() -> None:
                     username = chat.get("username", "") or chat.get("first_name", "")
                     if chat_id and text.startswith("/start"):
                         db.register_telegram_chat(chat_id, username)
-                        logger.info("[main] Nuevo chat registrado via /start: %s (%s)", chat_id, username)
+                        logger.info(
+                            "[main] Nuevo chat registrado via /start: %s (%s)",
+                            chat_id,
+                            username,
+                        )
                         # Mensaje de bienvenida
                         httpx.post(
                             f"https://api.telegram.org/bot{token}/sendMessage",
-                            json={"chat_id": chat_id,
-                                  "text": "Bienvenido/a a Casita Suenos! Recibiras alertas de nuevas casas en el radar."},
+                            json={
+                                "chat_id": chat_id,
+                                "text": "Bienvenido/a a Casita Suenos! Recibiras alertas de nuevas casas en el radar.",
+                            },
                             timeout=10,
                         )
             except Exception as e:
                 logger.debug("[main] Telegram polling error: %s", e)
             _time.sleep(1)
 
-    threading.Thread(target=_telegram_polling, daemon=True, name="telegram-polling").start()
+    threading.Thread(
+        target=_telegram_polling, daemon=True, name="telegram-polling"
+    ).start()
 
     # Arrancar servidor HTTP de estado (para dashboard)
     _start_status_server(STATUS_PORT)
 
     # Notificar arranque
-    radar_count = len(db.get_radar_properties(min_score=_ALERT_THRESHOLD, limit=500).get("items", []))
+    radar_count = len(
+        db.get_radar_properties(min_score=_ALERT_THRESHOLD, limit=500).get("items", [])
+    )
     notifier.send_status(
-        "🚀 Casita Suenos arrancado "
-        "· {} casas en el radar".format(radar_count)
+        f"🚀 Casita Suenos arrancado · {radar_count} casas en el radar"
     )
 
     # Arrancar scheduler
@@ -416,8 +479,6 @@ def main() -> None:
     except KeyboardInterrupt:
         _shutdown(None, None)
 
-
-from zones import ZONES
 
 if __name__ == "__main__":
     main()

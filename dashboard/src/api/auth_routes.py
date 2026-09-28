@@ -21,21 +21,20 @@ Device-token flow
    sets the rotated device cookie — transparent to the user.
 4. On logout → device token is revoked from DB.
 """
+
 import logging
 import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-from typing import Optional
-
-from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 import auth as auth_core
 import auth_devices
 import auth_users
 import user_profiles
+from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +55,8 @@ BASE_URL: str = "https://raspberrypi.tailaa37cd.ts.net"
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _serve_login_html(error: Optional[str] = None) -> HTMLResponse:
+
+def _serve_login_html(error: str | None = None) -> HTMLResponse:
     """Read and return login.html, optionally injecting an error message."""
     # __file__ is /app/api/auth_routes.py — static/ is at /app/static/
     login_path = Path(__file__).parent.parent / "static" / "login.html"
@@ -64,9 +64,10 @@ def _serve_login_html(error: Optional[str] = None) -> HTMLResponse:
     if error:
         # Remove 'hidden' from the error div class (works regardless of other classes)
         import re as _re
+
         content = _re.sub(
             r'(id="error-msg"[^>]*?)\bhidden\b',
-            r'\1',
+            r"\1",
             content,
             count=1,
         ).replace("__ERROR__", error)
@@ -105,9 +106,9 @@ def _clear_device_cookie(response: Response) -> None:
 def _send_trust_email(username: str, user_agent: str, ip: str, token: str) -> None:
     """Send the admin an approval/rejection email for a trust request."""
     approve_url = auth_users.make_action_url(BASE_URL, token, "approve")
-    reject_url  = auth_users.make_action_url(BASE_URL, token, "reject")
+    reject_url = auth_users.make_action_url(BASE_URL, token, "reject")
 
-    subject   = f"[Cuchi Casa] Solicitud de dispositivo de confianza — {username}"
+    subject = f"[Cuchi Casa] Solicitud de dispositivo de confianza — {username}"
     body_html = f"""
     <html><body style="font-family:sans-serif;color:#1e293b;max-width:520px;margin:auto">
       <h2 style="color:#4f46e5">🏠 Cuchi Casa — Dispositivo de confianza</h2>
@@ -140,8 +141,8 @@ def _send_trust_email(username: str, user_agent: str, ip: str, token: str) -> No
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"]    = SMTP_USER
-    msg["To"]      = ADMIN_EMAIL
+    msg["From"] = SMTP_USER
+    msg["To"] = ADMIN_EMAIL
     msg.attach(MIMEText(body_html, "html", "utf-8"))
 
     try:
@@ -152,7 +153,8 @@ def _send_trust_email(username: str, user_agent: str, ip: str, token: str) -> No
             server.sendmail(SMTP_USER, ADMIN_EMAIL, msg.as_bytes())
         logger.info(
             "Trust request email sent for user %r (token prefix: %s)",
-            username, token[:8],
+            username,
+            token[:8],
         )
     except Exception as exc:
         logger.error("Failed to send trust request email: %s", exc)
@@ -161,6 +163,7 @@ def _send_trust_email(username: str, user_agent: str, ip: str, token: str) -> No
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
 
 @router.get("/login", response_class=HTMLResponse)
 async def get_login(request: Request):
@@ -194,7 +197,8 @@ async def post_token(
     if not auth_users.authenticate_user(username, password):
         logger.warning(
             "Failed login for user %r from %s",
-            username, request.client.host if request.client else "unknown",
+            username,
+            request.client.host if request.client else "unknown",
         )
         return _serve_login_html(error="Usuario o contraseña incorrectos")
 
@@ -217,9 +221,7 @@ async def post_token(
             device_cookie = auth_devices.create_device_token(username, ua, ip)
             _set_device_cookie(response, device_cookie)
             auth_users.delete_trust_request(approved_row["token"])
-            logger.info(
-                "Device token issued for approved user %r", username
-            )
+            logger.info("Device token issued for approved user %r", username)
         else:
             # No approved request — create pending one (with dedup) and send email
             if not auth_users.has_active_trust_request(username):
@@ -229,7 +231,8 @@ async def post_token(
                 _send_trust_email(username, ua, ip, trust_token)
                 logger.info(
                     "Trust request created for user %r, token prefix: %s",
-                    username, trust_token[:8],
+                    username,
+                    trust_token[:8],
                 )
             else:
                 logger.info(
@@ -247,12 +250,15 @@ async def post_logout(request: Request):
     device_cookie = auth_devices.get_device_cookie_from_request(request)
     if device_cookie:
         from auth_devices import _decode_cookie, revoke_device
+
         parsed = _decode_cookie(device_cookie)
         if parsed:
             series, _ = parsed
             revoked = revoke_device(series)
             if revoked:
-                logger.info("Device token revoked on logout (series prefix: %s)", series[:8])
+                logger.info(
+                    "Device token revoked on logout (series prefix: %s)", series[:8]
+                )
 
     response = RedirectResponse(url="/auth/login", status_code=303)
     auth_core.clear_session_cookie(response)
@@ -275,20 +281,23 @@ async def get_me(request: Request):
 
     profile_key = user_profiles.get_profile_key(user)
     profile_def = user_profiles.PROFILES.get(profile_key, {})
-    return JSONResponse({
-        "username": user,
-        "trusted_device": has_device,
-        "profile": profile_key,
-        "profile_data": {
-            "show_config_apps": profile_def.get("show_config_apps", False),
-        },
-        "apps": user_profiles.app_permissions(user),
-    })
+    return JSONResponse(
+        {
+            "username": user,
+            "trusted_device": has_device,
+            "profile": profile_key,
+            "profile_data": {
+                "show_config_apps": profile_def.get("show_config_apps", False),
+            },
+            "apps": user_profiles.app_permissions(user),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Trust request management (admin email links)
 # ---------------------------------------------------------------------------
+
 
 @router.get("/trust/approve")
 async def trust_approve(token: str, sig: str):
@@ -298,21 +307,25 @@ async def trust_approve(token: str, sig: str):
 
     row = auth_users.resolve_trust_request(token, "approved")
     if row is None:
-        return HTMLResponse(_result_page(
-            "Ya procesado",
-            "Esta solicitud ya fue procesada anteriormente.",
-            success=False,
-        ))
+        return HTMLResponse(
+            _result_page(
+                "Ya procesado",
+                "Esta solicitud ya fue procesada anteriormente.",
+                success=False,
+            )
+        )
 
     username = row["username"]
     logger.info("Admin approved trusted device request for user %r", username)
-    return HTMLResponse(_result_page(
-        "Solicitud aprobada",
-        f"La solicitud de <strong>{username}</strong> ha sido aprobada. "
-        "En el próximo inicio de sesión con «Recordar dispositivo» marcado "
-        "recibirá su token de dispositivo.",
-        success=True,
-    ))
+    return HTMLResponse(
+        _result_page(
+            "Solicitud aprobada",
+            f"La solicitud de <strong>{username}</strong> ha sido aprobada. "
+            "En el próximo inicio de sesión con «Recordar dispositivo» marcado "
+            "recibirá su token de dispositivo.",
+            success=True,
+        )
+    )
 
 
 @router.get("/trust/reject")
@@ -323,27 +336,32 @@ async def trust_reject(token: str, sig: str):
 
     row = auth_users.resolve_trust_request(token, "rejected")
     if row is None:
-        return HTMLResponse(_result_page(
-            "Ya procesado",
-            "Esta solicitud ya fue procesada anteriormente.",
-            success=False,
-        ))
+        return HTMLResponse(
+            _result_page(
+                "Ya procesado",
+                "Esta solicitud ya fue procesada anteriormente.",
+                success=False,
+            )
+        )
 
     username = row["username"]
     logger.info("Admin rejected trusted device request for user %r", username)
-    return HTMLResponse(_result_page(
-        "Solicitud rechazada",
-        f"La solicitud de confianza de <strong>{username}</strong> ha sido rechazada.",
-        success=False,
-    ))
+    return HTMLResponse(
+        _result_page(
+            "Solicitud rechazada",
+            f"La solicitud de confianza de <strong>{username}</strong> ha sido rechazada.",
+            success=False,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
 # HTML result page (approve/reject confirmation)
 # ---------------------------------------------------------------------------
 
+
 def _result_page(title: str, message: str, success: bool) -> str:
-    icon  = "✅" if success else "❌"
+    icon = "✅" if success else "❌"
     color = "#4f46e5" if success else "#dc2626"
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -375,9 +393,10 @@ def _result_page(title: str, message: str, success: bool) -> str:
 
 # ── nginx auth_request guard ──────────────────────────────────────────────────
 
-@router.get('/verify')
+
+@router.get("/verify")
 async def verify_session(request: Request):
-    '''Endpoint for nginx auth_request.
+    """Endpoint for nginx auth_request.
 
     nginx calls this before forwarding requests to external microservices
     (ac-service, vacaciones-service, etc.).
@@ -385,13 +404,14 @@ async def verify_session(request: Request):
     Returns:
         200 if the request carries a valid JWT session cookie.
         401 if not authenticated (nginx will redirect to login).
-    '''
-    from fastapi.responses import Response as FastAPIResponse
+    """
     import auth as auth_core
+    from fastapi.responses import Response as FastAPIResponse
+
     user = auth_core.get_current_user(request)
     if user:
         # Pass username downstream so microservices can log it if needed
         resp = FastAPIResponse(status_code=200)
-        resp.headers['X-Auth-User'] = user
+        resp.headers["X-Auth-User"] = user
         return resp
     return FastAPIResponse(status_code=401)

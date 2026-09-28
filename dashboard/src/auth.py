@@ -5,9 +5,9 @@ Session tokens: short-lived JWT (24h), stored as HttpOnly cookie 'smh_session'.
 Device tokens: long-lived opaque Jaspan tokens, stored as HttpOnly cookie
                'smh_device' — see auth_devices.py.
 """
+
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Optional
+from datetime import datetime, timedelta, timezone
 
 import jwt
 from passlib.hash import apr_md5_crypt
@@ -17,17 +17,20 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration (injected from main.py lifespan)
 # ---------------------------------------------------------------------------
-AUTH_SECRET: str = ""           # REQUIRED: random 32+ char hex secret
-AUTH_SESSION_TTL: int = 86400   # 24 hours (seconds) — standard session JWT
-AUTH_TRUSTED_TTL: int = 31536000  # kept for reference; device tokens use auth_devices.py
+AUTH_SECRET: str = ""  # REQUIRED: random 32+ char hex secret
+AUTH_SESSION_TTL: int = 86400  # 24 hours (seconds) — standard session JWT
+AUTH_TRUSTED_TTL: int = (
+    31536000  # kept for reference; device tokens use auth_devices.py
+)
 
 COOKIE_NAME = "smh_session"
-ALGORITHM   = "HS256"
+ALGORITHM = "HS256"
 
 
 # ---------------------------------------------------------------------------
 # Password verification
 # ---------------------------------------------------------------------------
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plaintext password against an apr_md5_crypt hash ($apr1$...).
@@ -44,6 +47,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # ---------------------------------------------------------------------------
 # JWT session helpers
 # ---------------------------------------------------------------------------
+
 
 def create_token(username: str) -> str:
     """Create a signed JWT session token (24h).
@@ -66,7 +70,7 @@ def create_token(username: str) -> str:
     return jwt.encode(payload, AUTH_SECRET, algorithm=ALGORITHM)
 
 
-def decode_token(token: str) -> Optional[dict]:
+def decode_token(token: str) -> dict | None:
     """Decode and validate a JWT session token.
 
     Returns the payload dict on success, or None if invalid/expired.
@@ -83,7 +87,7 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
-def decode_token_expired_ok(token: str) -> Optional[dict]:
+def decode_token_expired_ok(token: str) -> dict | None:
     """Decode a JWT without checking expiry.
 
     Used by the middleware to read the username from an expired JWT before
@@ -103,12 +107,12 @@ def decode_token_expired_ok(token: str) -> Optional[dict]:
         return None
 
 
-def get_token_from_cookie(request) -> Optional[str]:
+def get_token_from_cookie(request) -> str | None:
     """Extract the session JWT from the request cookie jar."""
     return request.cookies.get(COOKIE_NAME)
 
 
-def get_current_user(request) -> Optional[str]:
+def get_current_user(request) -> str | None:
     """Return the authenticated username from the session cookie, or None.
 
     Only returns a value if the JWT is valid AND not expired.

@@ -23,13 +23,13 @@ Security properties:
     - Race condition handled: previous token valid for 30 seconds after rotation
       to handle parallel requests when JWT expires
 """
+
 import hashlib
 import logging
 import secrets
 import sqlite3
 import time
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +37,8 @@ logger = logging.getLogger(__name__)
 # Configuration (injected from main.py lifespan)
 # ---------------------------------------------------------------------------
 AUTH_DB_PATH: str = "/app/data/auth.db"
-DEVICE_TOKEN_TTL: int = 365 * 24 * 3600   # 1 year in seconds
-GRACE_WINDOW_SECONDS: int = 30            # Previous token valid for 30s after rotation
+DEVICE_TOKEN_TTL: int = 365 * 24 * 3600  # 1 year in seconds
+GRACE_WINDOW_SECONDS: int = 30  # Previous token valid for 30s after rotation
 
 DEVICE_COOKIE_NAME = "smh_device"
 _SEPARATOR = ":"
@@ -47,6 +47,7 @@ _SEPARATOR = ":"
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _db() -> sqlite3.Connection:
     """Open the auth SQLite database and ensure schema exists."""
@@ -75,7 +76,9 @@ def _db() -> sqlite3.Connection:
     except sqlite3.OperationalError:
         pass  # Column already exists
     try:
-        conn.execute("ALTER TABLE device_tokens ADD COLUMN prev_until REAL DEFAULT NULL")
+        conn.execute(
+            "ALTER TABLE device_tokens ADD COLUMN prev_until REAL DEFAULT NULL"
+        )
     except sqlite3.OperationalError:
         pass  # Column already exists
     conn.commit()
@@ -96,7 +99,7 @@ def _encode_cookie(series: str, token: str) -> str:
     return f"{series}{_SEPARATOR}{token}"
 
 
-def _decode_cookie(value: str) -> Optional[tuple[str, str]]:
+def _decode_cookie(value: str) -> tuple[str, str] | None:
     """Parse 'series:token' from cookie value. Returns None if malformed."""
     if not value or _SEPARATOR not in value:
         return None
@@ -110,6 +113,7 @@ def _decode_cookie(value: str) -> Optional[tuple[str, str]]:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def create_device_token(username: str, user_agent: str, ip_address: str) -> str:
     """Create a new device token entry and return the cookie value.
 
@@ -120,8 +124,8 @@ def create_device_token(username: str, user_agent: str, ip_address: str) -> str:
         Cookie value string: "<series>:<token>"
     """
     series = _generate()
-    token  = _generate()
-    now    = time.time()
+    token = _generate()
+    now = time.time()
 
     with _db() as conn:
         conn.execute(
@@ -131,8 +135,16 @@ def create_device_token(username: str, user_agent: str, ip_address: str) -> str:
                  created_at, last_used, expires_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (series, _hash(token), username, user_agent, ip_address,
-             now, now, now + DEVICE_TOKEN_TTL),
+            (
+                series,
+                _hash(token),
+                username,
+                user_agent,
+                ip_address,
+                now,
+                now,
+                now + DEVICE_TOKEN_TTL,
+            ),
         )
 
     logger.info(
@@ -143,7 +155,8 @@ def create_device_token(username: str, user_agent: str, ip_address: str) -> str:
 
 class VerifyResult:
     """Result of verify_and_rotate_device_token()."""
-    __slots__ = ("ok", "username", "new_cookie_value", "theft_detected")
+
+    __slots__ = ("new_cookie_value", "ok", "theft_detected", "username")
 
     def __init__(
         self,
@@ -209,21 +222,35 @@ def verify_and_rotate(cookie_value: str) -> VerifyResult:
                 """UPDATE device_tokens 
                    SET token_hash = ?, prev_hash = ?, prev_until = ?, last_used = ? 
                    WHERE series = ?""",
-                (_hash(new_token), row["token_hash"], now + GRACE_WINDOW_SECONDS, now, series),
+                (
+                    _hash(new_token),
+                    row["token_hash"],
+                    now + GRACE_WINDOW_SECONDS,
+                    now,
+                    series,
+                ),
             )
             new_cookie = _encode_cookie(series, new_token)
             logger.debug(
-                "Device token rotated for user %r (series prefix: %s)", username, series[:8]
+                "Device token rotated for user %r (series prefix: %s)",
+                username,
+                series[:8],
             )
             return VerifyResult(ok=True, username=username, new_cookie_value=new_cookie)
 
         # Case 3: Previous token within grace window → accept but don't rotate again
         prev_hash = row["prev_hash"]
         prev_until = row["prev_until"]
-        if prev_hash and prev_until and incoming_hash == prev_hash and now <= prev_until:
+        if (
+            prev_hash
+            and prev_until
+            and incoming_hash == prev_hash
+            and now <= prev_until
+        ):
             logger.debug(
                 "Device token validated via grace window for user %r (series %s)",
-                username, series[:8]
+                username,
+                series[:8],
             )
             # Return the CURRENT token (client should update to this)
             # We need to get the current token... but we only have the hash.
@@ -235,20 +262,17 @@ def verify_and_rotate(cookie_value: str) -> VerifyResult:
         logger.warning(
             "THEFT DETECTED: series %s for user %r — "
             "deleting ALL device tokens for this user",
-            series[:8], username,
+            series[:8],
+            username,
         )
-        conn.execute(
-            "DELETE FROM device_tokens WHERE username = ?", (username,)
-        )
+        conn.execute("DELETE FROM device_tokens WHERE username = ?", (username,))
         return VerifyResult(ok=False, theft_detected=True, username=username)
 
 
 def revoke_all_devices(username: str) -> int:
     """Delete all device tokens for a user. Returns number of rows deleted."""
     with _db() as conn:
-        cur = conn.execute(
-            "DELETE FROM device_tokens WHERE username = ?", (username,)
-        )
+        cur = conn.execute("DELETE FROM device_tokens WHERE username = ?", (username,))
         count = cur.rowcount
     logger.info("Revoked %d device token(s) for user %r", count, username)
     return count
@@ -257,9 +281,7 @@ def revoke_all_devices(username: str) -> int:
 def revoke_device(series: str) -> bool:
     """Delete a single device token by series. Returns True if found."""
     with _db() as conn:
-        cur = conn.execute(
-            "DELETE FROM device_tokens WHERE series = ?", (series,)
-        )
+        cur = conn.execute("DELETE FROM device_tokens WHERE series = ?", (series,))
     return cur.rowcount > 0
 
 
@@ -277,6 +299,6 @@ def list_devices(username: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def get_device_cookie_from_request(request) -> Optional[str]:
+def get_device_cookie_from_request(request) -> str | None:
     """Extract the device cookie value from a request."""
     return request.cookies.get(DEVICE_COOKIE_NAME)

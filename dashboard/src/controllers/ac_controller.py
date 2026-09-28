@@ -1,4 +1,4 @@
-﻿"""AC controller.
+"""AC controller.
 
 Orchestrates the state machine, reads sensors, applies outputs via MELCloud.
 Decision logic is 100% in state_machine.py (pure function).
@@ -10,18 +10,19 @@ import threading
 import time
 from dataclasses import dataclass
 
+from melcloud_client import MelCloudClient
+from mqtt_handler import MqttHandler
+from state_persistence import PersistedState, load_state, save_state
+
 from controllers.state_machine import (
     ControllerState,
-    ManualParams,
     ManualMode,
+    ManualParams,
     StateMachineConfig,
     StateMachineInputs,
     StateMachineOutputs,
     evaluate,
 )
-from melcloud_client import MelCloudClient
-from mqtt_handler import MqttHandler
-from state_persistence import PersistedState, load_state, save_state
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class ControlState:
     manual_params: ManualParams | None = None
     ac_mode: str = "cool"  # Current AC mode: "cool" or "heat"
     fan_speed: int = 0  # Current fan speed
-    
+
     # Real AC state (cached from MELCloud)
     ac_real_power: bool | None = None
     ac_real_mode: str | None = None  # "cool" or "heat"
@@ -104,7 +105,9 @@ class ACController:
         self.config = config
         self.state = ControlState()
         # Initialize manual_params with defaults
-        self.state.manual_params = ManualParams(temperature=23.0, fan_speed=0, mode="cool")
+        self.state.manual_params = ManualParams(
+            temperature=23.0, fan_speed=0, mode="cool"
+        )
         self.history: list[HistoryRecord] = []
         self._running = False
         self._thread: threading.Thread | None = None
@@ -121,9 +124,9 @@ class ACController:
 
         # Energy tracking
         self._energy_state = {
-            'last_state': 'off',
-            'last_transition': time.time(),
-            'kwh_session': 0.0  # kWh accumulated in current session
+            "last_state": "off",
+            "last_transition": time.time(),
+            "kwh_session": 0.0,  # kWh accumulated in current session
         }
 
     @property
@@ -168,11 +171,14 @@ class ACController:
         """Saves manual mode parameters."""
         with self._lock:
             self.state.manual_params = ManualParams(
-                temperature=temperature,
-                fan_speed=fan_speed,
-                mode=mode
+                temperature=temperature, fan_speed=fan_speed, mode=mode
             )
-        logger.info("Manual params set: temp=%.1f°C, fan=%d, mode=%s", temperature, fan_speed, mode)
+        logger.info(
+            "Manual params set: temp=%.1f°C, fan=%d, mode=%s",
+            temperature,
+            fan_speed,
+            mode,
+        )
         # Persist state after user change
         self._persist_state()
 
@@ -181,27 +187,23 @@ class ACController:
         with self._lock:
             if self.state.manual_params is None:
                 self.state.manual_params = ManualParams()
-            
+
             current = self.state.manual_params
             if param == "temperature":
                 self.state.manual_params = ManualParams(
-                    temperature=value,
-                    fan_speed=current.fan_speed,
-                    mode=current.mode
+                    temperature=value, fan_speed=current.fan_speed, mode=current.mode
                 )
             elif param == "fan_speed":
                 self.state.manual_params = ManualParams(
-                    temperature=current.temperature,
-                    fan_speed=value,
-                    mode=current.mode
+                    temperature=current.temperature, fan_speed=value, mode=current.mode
                 )
             elif param == "mode":
                 self.state.manual_params = ManualParams(
                     temperature=current.temperature,
                     fan_speed=current.fan_speed,
-                    mode=value
+                    mode=value,
                 )
-        
+
         logger.info("Manual param updated: %s = %s", param, value)
         # Persist state after user change
         self._persist_state()
@@ -228,9 +230,9 @@ class ACController:
 
     def restore_state(self) -> bool:
         """Restores controller state from disk.
-        
+
         Must be called BEFORE start() to restore previous session.
-        
+
         Returns:
             True if state was restored, False if no state found
         """
@@ -238,7 +240,7 @@ class ACController:
         if persisted is None:
             logger.info("No previous state to restore, using defaults")
             return False
-        
+
         # Restore configuration
         self.config.target_temperature = persisted.target_temperature
         self.config.hysteresis_on = persisted.hysteresis_on
@@ -247,7 +249,7 @@ class ACController:
         self.config.max_setpoint = persisted.max_setpoint
         self.config.cooldown_seconds = persisted.cooldown_seconds
         self.config.sensor_timeout = persisted.sensor_timeout
-        
+
         # Restore manual mode
         with self._lock:
             # Map old override values to new control_mode
@@ -257,47 +259,53 @@ class ACController:
                 self.state.control_mode = "off"
             else:
                 self.state.control_mode = "auto"
-            
+
             # Always initialize manual_params (even if not in manual mode)
             if persisted.force_on_temperature is not None:
                 self.state.manual_params = ManualParams(
                     temperature=persisted.force_on_temperature,
                     fan_speed=persisted.force_on_fan_speed or 0,
-                    mode="cool"  # Default to cool for backward compatibility
+                    mode="cool",  # Default to cool for backward compatibility
                 )
             else:
                 # Initialize with defaults if not present
                 self.state.manual_params = ManualParams(
-                    temperature=23.0,
-                    fan_speed=0,
-                    mode="cool"
+                    temperature=23.0, fan_speed=0, mode="cool"
                 )
-        
+
         # Restore internal state machine state
         try:
             # Map old state names to new ones
-            state_mapping = {
-                "forced_on": "manual",
-                "forced_off": "system_off"
-            }
-            state_value = state_mapping.get(persisted.current_sm_state, persisted.current_sm_state)
+            state_mapping = {"forced_on": "manual", "forced_off": "system_off"}
+            state_value = state_mapping.get(
+                persisted.current_sm_state, persisted.current_sm_state
+            )
             self._current_sm_state = ControllerState(state_value)
         except ValueError:
-            logger.warning("Invalid state '%s', defaulting to SYSTEM_OFF", persisted.current_sm_state)
+            logger.warning(
+                "Invalid state '%s', defaulting to SYSTEM_OFF",
+                persisted.current_sm_state,
+            )
             self._current_sm_state = ControllerState.SYSTEM_OFF
-        
+
         self._last_off_time = persisted.last_off_timestamp
         self._last_modulating_setpoint = persisted.last_modulating_setpoint
-        
+
         logger.info("Controller state restored successfully")
         return True
 
     def _persist_state(self):
         """Saves current controller state to disk."""
         with self._lock:
-            manual_temp = self.state.manual_params.temperature if self.state.manual_params else None
-            manual_fan = self.state.manual_params.fan_speed if self.state.manual_params else None
-            
+            manual_temp = (
+                self.state.manual_params.temperature
+                if self.state.manual_params
+                else None
+            )
+            manual_fan = (
+                self.state.manual_params.fan_speed if self.state.manual_params else None
+            )
+
             # Map new control_mode to old override for backward compatibility
             override_value = None
             if self.state.control_mode == "manual":
@@ -306,7 +314,7 @@ class ACController:
                 override_value = "off"
             else:
                 override_value = None
-            
+
             state = PersistedState(
                 target_temperature=self.config.target_temperature,
                 hysteresis_on=self.config.hysteresis_on,
@@ -322,7 +330,7 @@ class ACController:
                 last_off_timestamp=self._last_off_time,
                 last_modulating_setpoint=self._last_modulating_setpoint,
             )
-        
+
         save_state(state)
 
     def _control_loop(self):
@@ -331,7 +339,7 @@ class ACController:
             try:
                 self._tick()
             except Exception as e:
-                logger.error("Error en loop de control: %s", e, exc_info=True)
+                logger.exception("Error en loop de control: %s", e)
 
             time.sleep(self.config.loop_interval)
 
@@ -384,16 +392,24 @@ class ACController:
         # Exclude the virtual 'AC' sensor (MELCloud room temp recorder) from averages
         active_readings = {
             name: r
-            for name, r in self.mqtt.get_active_readings(self.config.sensor_timeout).items()
+            for name, r in self.mqtt.get_active_readings(
+                self.config.sensor_timeout
+            ).items()
             if name != "AC"
         }
 
         if active_readings:
-            temps = [r.temperature for r in active_readings.values() if r.temperature is not None]
+            temps = [
+                r.temperature
+                for r in active_readings.values()
+                if r.temperature is not None
+            ]
             if temps:
                 avg_temp = sum(temps) / len(temps)
 
-            hums = [r.humidity for r in active_readings.values() if r.humidity is not None]
+            hums = [
+                r.humidity for r in active_readings.values() if r.humidity is not None
+            ]
             if hums:
                 avg_hum = sum(hums) / len(hums)
 
@@ -407,7 +423,9 @@ class ACController:
         active_count = len(active_readings)
         return avg_temp, avg_hum, active_count, last_sensor_time
 
-    def _build_inputs(self, avg_temp: float | None, last_sensor_time: float) -> StateMachineInputs:
+    def _build_inputs(
+        self, avg_temp: float | None, last_sensor_time: float
+    ) -> StateMachineInputs:
         """Builds inputs for state machine."""
         with self._lock:
             control_mode = self.state.control_mode
@@ -475,26 +493,33 @@ class ACController:
                 self._consecutive_melcloud_failures = 0
                 # Register shutdown for cooldown
                 if not outputs.power and self._current_sm_state not in (
-                    ControllerState.OFF, ControllerState.COOLDOWN, ControllerState.SYSTEM_OFF
+                    ControllerState.OFF,
+                    ControllerState.COOLDOWN,
+                    ControllerState.SYSTEM_OFF,
                 ):
                     self._last_off_time = time.time()
-                    logger.info("AC apagado. Cooldown de %ds iniciado.", self.config.cooldown_seconds)
+                    logger.info(
+                        "AC apagado. Cooldown de %ds iniciado.",
+                        self.config.cooldown_seconds,
+                    )
                 elif outputs.power:
                     logger.info(
                         "AC encendido: consigna=%.1f°C, fan=%d",
-                        outputs.setpoint, outputs.fan_speed,
+                        outputs.setpoint,
+                        outputs.fan_speed,
                     )
             else:
                 self._consecutive_melcloud_failures += 1
                 logger.warning(
                     "Fallo MELCloud (%d consecutivos). Estado deseado: %s",
-                    self._consecutive_melcloud_failures, outputs.state.value,
+                    self._consecutive_melcloud_failures,
+                    outputs.state.value,
                 )
 
         # Update internal state machine state
         old_sm_state = self._current_sm_state
         self._current_sm_state = outputs.state
-        
+
         # Track energy transition if state changed
         if old_sm_state != outputs.state:
             self._track_energy_transition(outputs.state.value)
@@ -520,12 +545,15 @@ class ACController:
             return True
         if outputs.setpoint != last.setpoint:
             return True
-        if outputs.fan_speed != last.fan_speed:
-            return True
+        return outputs.fan_speed != last.fan_speed
 
-        return False
-
-    def _update_state(self, outputs: StateMachineOutputs, avg_temp: float | None, avg_hum: float | None, active_count: int):
+    def _update_state(
+        self,
+        outputs: StateMachineOutputs,
+        avg_temp: float | None,
+        avg_hum: float | None,
+        active_count: int,
+    ):
         """Updates visible state (for API/UI) and history."""
         with self._lock:
             self.state.state = outputs.state.value
@@ -533,7 +561,9 @@ class ACController:
             self.state.ac_mode = outputs.mode
             self.state.fan_speed = outputs.fan_speed
             self.state.average_temp = round(avg_temp, 2) if avg_temp else None
-            self.state.average_humidity = round(avg_hum, 1) if avg_hum else None  # Guardamos para la API
+            self.state.average_humidity = (
+                round(avg_hum, 1) if avg_hum else None
+            )  # Guardamos para la API
             self.state.active_sensors = active_count
             self.state.last_update = time.time()
             self.state.sensor_alert = outputs.sensor_alert
@@ -543,29 +573,34 @@ class ACController:
             if self._error_tracker:
                 if outputs.sensor_alert:
                     self._error_tracker.register(
-                        "sensor_alert", "warning",
-                        "One or more sensors are offline or not reporting", "sensors"
+                        "sensor_alert",
+                        "warning",
+                        "One or more sensors are offline or not reporting",
+                        "sensors",
                     )
                 else:
                     self._error_tracker.clear("sensor_alert")
 
                 if outputs.melcloud_error:
                     self._error_tracker.register(
-                        "melcloud_error", "error",
+                        "melcloud_error",
+                        "error",
                         f"MELCloud unreachable ({self._consecutive_melcloud_failures} consecutive failures)",
-                        "melcloud"
+                        "melcloud",
                     )
                 else:
                     self._error_tracker.clear("melcloud_error")
 
             # History
-            self.history.append(HistoryRecord(
-                timestamp=time.time(),
-                average_temp=round(avg_temp, 2) if avg_temp else None,
-                state=outputs.state.value,
-                setpoint=outputs.setpoint,
-                active_sensors=active_count,
-            ))
+            self.history.append(
+                HistoryRecord(
+                    timestamp=time.time(),
+                    average_temp=round(avg_temp, 2) if avg_temp else None,
+                    state=outputs.state.value,
+                    setpoint=outputs.setpoint,
+                    active_sensors=active_count,
+                )
+            )
 
             # Limit history
             if len(self.history) > 1000:
@@ -573,22 +608,24 @@ class ACController:
 
     def update_ac_real_cache(self, melcloud_data: dict):
         """Updates AC real state cache from subscription manager data.
-        
+
         Called by SubscriptionManager after fetching from MELCloud.
-        
+
         Args:
             melcloud_data: Raw data from MELCloud API
         """
         if melcloud_data is None:
             return
-        
+
         # Map MELCloud format to internal format
         # OperationMode: 1=HEAT, 2=DRY, 3=COOL, 7=FAN, 8=AUTO
         mode_map = {1: "heat", 2: "dry", 3: "cool", 7: "fan", 8: "auto"}
-        
+
         with self._lock:
             self.state.ac_real_power = melcloud_data.get("Power", False)
-            self.state.ac_real_mode = mode_map.get(melcloud_data.get("OperationMode"), "cool")
+            self.state.ac_real_mode = mode_map.get(
+                melcloud_data.get("OperationMode"), "cool"
+            )
             self.state.ac_real_fan_speed = melcloud_data.get("SetFanSpeed", 0)
             self.state.ac_real_setpoint = melcloud_data.get("SetTemperature")
             self.state.ac_real_room_temp = melcloud_data.get("RoomTemperature")
@@ -599,59 +636,62 @@ class ACController:
     def _track_energy_transition(self, new_state: str):
         """Record state transition for energy calculation."""
         now = time.time()
-        elapsed_hours = (now - self._energy_state['last_transition']) / 3600
-        
+        elapsed_hours = (now - self._energy_state["last_transition"]) / 3600
+
         # Calcular consumo del estado anterior
-        power_kw = self._get_power_for_state(self._energy_state['last_state'])
+        power_kw = self._get_power_for_state(self._energy_state["last_state"])
         kwh_consumed = power_kw * elapsed_hours
-        self._energy_state['kwh_session'] += kwh_consumed
-        
+        self._energy_state["kwh_session"] += kwh_consumed
+
         # Update state
-        self._energy_state['last_state'] = new_state
-        self._energy_state['last_transition'] = now
-        
+        self._energy_state["last_state"] = new_state
+        self._energy_state["last_transition"] = now
+
         if kwh_consumed > 0:
             logger.debug(
                 "Energía: estado %s durante %.2fh consumió %.4f kWh (total sesión: %.4f kWh)",
-                self._energy_state['last_state'],
+                self._energy_state["last_state"],
                 elapsed_hours,
                 kwh_consumed,
-                self._energy_state['kwh_session']
+                self._energy_state["kwh_session"],
             )
-    
+
     def _get_power_for_state(self, state: str) -> float:
         """Return power in kW for a state.
-        
+
         Args:
             state: Estado del controlador
-            
+
         Returns:
             Potencia en kW
         """
         power_map = {
-            'cooling_max': self.config.ac_power_cooling_max,
-            'cooling_mid': self.config.ac_power_cooling_mid,
-            'modulating': self.config.ac_power_modulating,
-            'forced_on': self.config.ac_power_forced_on,
+            "cooling_max": self.config.ac_power_cooling_max,
+            "cooling_mid": self.config.ac_power_cooling_mid,
+            "modulating": self.config.ac_power_modulating,
+            "forced_on": self.config.ac_power_forced_on,
         }
         return power_map.get(state, 0.0)
-    
+
     def get_session_kwh(self) -> float:
         """Return kWh consumed in current session (since last record).
-        
+
         Returns:
             kWh acumulados en la sesión
         """
         # Add current state consumption until now
         now = time.time()
-        elapsed_hours = (now - self._energy_state['last_transition']) / 3600
-        power_kw = self._get_power_for_state(self._energy_state['last_state'])
+        elapsed_hours = (now - self._energy_state["last_transition"]) / 3600
+        power_kw = self._get_power_for_state(self._energy_state["last_state"])
         current_kwh = power_kw * elapsed_hours
-        total = self._energy_state['kwh_session'] + current_kwh
+        total = self._energy_state["kwh_session"] + current_kwh
         return total
-    
+
     def reset_session_kwh(self):
         """Reset session counter (called after hourly log)."""
-        logger.info("Resetting energy session (accumulated: %.4f kWh)", self._energy_state['kwh_session'])
-        self._energy_state['kwh_session'] = 0.0
-        self._energy_state['last_transition'] = time.time()
+        logger.info(
+            "Resetting energy session (accumulated: %.4f kWh)",
+            self._energy_state["kwh_session"],
+        )
+        self._energy_state["kwh_session"] = 0.0
+        self._energy_state["last_transition"] = time.time()

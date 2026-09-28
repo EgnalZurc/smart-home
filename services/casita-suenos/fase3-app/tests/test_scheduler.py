@@ -6,17 +6,17 @@ Verifica la lógica de scheduling sin levantar threads ni red.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import pytest
-from casita_scheduler import CasitaScheduler, _SCRAPING_DAYS, _SUMMARY_DAY
-
+from casita_scheduler import CasitaScheduler
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def scheduler() -> CasitaScheduler:
@@ -49,8 +49,8 @@ def scheduler() -> CasitaScheduler:
 
 # ── Tests de condiciones de scheduling ───────────────────────────────────────
 
-class TestSchedulingConditions:
 
+class TestSchedulingConditions:
     def test_scraping_runs_on_monday_at_7(self, scheduler):
         # Lunes (weekday=0) a las 07:00
         monday_7am = datetime(2026, 8, 31, 7, 0, 0)  # lunes
@@ -82,13 +82,11 @@ class TestSchedulingConditions:
         assert scheduler._should_run_gmail_check(datetime.now()) is True
 
     def test_gmail_check_waits_30_min(self, scheduler):
-        from datetime import timedelta
         now = datetime(2026, 8, 31, 12, 0, 0)
         scheduler._last_gmail_check = datetime(2026, 8, 31, 11, 45, 0)  # hace 15 min
         assert scheduler._should_run_gmail_check(now) is False
 
     def test_gmail_check_runs_after_30_min(self, scheduler):
-        from datetime import timedelta
         now = datetime(2026, 8, 31, 12, 31, 0)
         scheduler._last_gmail_check = datetime(2026, 8, 31, 12, 0, 0)  # hace 31 min
         assert scheduler._should_run_gmail_check(now) is True
@@ -110,8 +108,8 @@ class TestSchedulingConditions:
 
 # ── Tests de run_weekly_summary ───────────────────────────────────────────────
 
-class TestWeeklySummary:
 
+class TestWeeklySummary:
     def test_summary_calls_notifier(self, scheduler):
         scheduler._db.get_top_scored.return_value = []
         scheduler._run_weekly_summary()
@@ -129,8 +127,8 @@ class TestWeeklySummary:
 
 # ── Tests de _infer_zone_from_url ─────────────────────────────────────────────
 
-class TestZoneInference:
 
+class TestZoneInference:
     def test_infer_zamora_from_url(self, scheduler):
         url = "https://www.idealista.com/inmueble/12345678/"
         # Sin keywords → fallback a zamora_meseta
@@ -154,33 +152,43 @@ class TestZoneInference:
 
 # ── Tests de run_gmail_check (mock) ───────────────────────────────────────────
 
-class TestGmailCheck:
 
+class TestGmailCheck:
     def test_gmail_check_with_no_urls(self, scheduler):
         with patch("idealista_email_parser.fetch_new_alert_urls", return_value=[]):
             scheduler._run_gmail_check()
             scheduler._apify.scrape_property_url.assert_not_called()
 
     def test_gmail_check_with_url_below_threshold(self, scheduler):
-        from models import FireRisk, Piscina, Portal, Property
         from datetime import datetime as dt
 
+        from models import Piscina, Portal, Property
+
         low_score_prop = Property(
-            portal=Portal.IDEALISTA, portal_id="111",
+            portal=Portal.IDEALISTA,
+            portal_id="111",
             url="https://www.idealista.com/inmueble/111/",
             zone_id="zamora_meseta",
-            title="Casa pequeña", price=310_000,  # cerca del límite → score bajo
-            size_m2=60.0, rooms=3,
-            has_garage=True, has_garden_or_plot=True,
-            piscina=Piscina.NINGUNA, has_internet_mention=True,
-            habitable=True, description="",
-            first_seen=dt.now(), last_seen=dt.now(),
+            title="Casa pequeña",
+            price=310_000,  # cerca del límite → score bajo
+            size_m2=60.0,
+            rooms=3,
+            has_garage=True,
+            has_garden_or_plot=True,
+            piscina=Piscina.NINGUNA,
+            has_internet_mention=True,
+            habitable=True,
+            description="",
+            first_seen=dt.now(),
+            last_seen=dt.now(),
         )
 
         scheduler._apify.scrape_property_url.return_value = low_score_prop
 
-        with patch("idealista_email_parser.fetch_new_alert_urls",
-                   return_value=["https://www.idealista.com/inmueble/111/"]):
+        with patch(
+            "idealista_email_parser.fetch_new_alert_urls",
+            return_value=["https://www.idealista.com/inmueble/111/"],
+        ):
             scheduler._run_gmail_check()
             # Debe haber procesado pero no alertado (score bajo)
             scheduler._db.upsert_property.assert_called()

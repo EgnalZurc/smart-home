@@ -4,11 +4,15 @@ Envia mensajes a TODOS los chats que hayan iniciado el bot (/start).
 Los chat_ids se guardan en la BD (tabla telegram_chats).
 Si no hay chats en BD, usa TELEGRAM_CHAT_ID del .env como fallback.
 """
+
 from __future__ import annotations
+
 import logging
 from datetime import datetime
+
 import telegram
 from models import PriceEvent, ScoredProperty
+
 logger = logging.getLogger(__name__)
 _SCORE_EMOJI = {
     range(70, 85): "🏆",
@@ -17,10 +21,10 @@ _SCORE_EMOJI = {
     range(50, 55): "⭐",
 }
 _PISCINA_EMOJI = {
-    "propia":      "🏊 piscina propia",
-    "espacio":     "🏊 espacio para piscina",
+    "propia": "🏊 piscina propia",
+    "espacio": "🏊 espacio para piscina",
     "comunitaria": "🏊 piscina comunitaria",
-    "ninguna":     "",
+    "ninguna": "",
 }
 
 
@@ -38,16 +42,17 @@ def _format_price(price: int) -> str:
 def _escape_md(text: str) -> str:
     """Escapa caracteres especiales de Markdown para evitar errores 400 en Telegram."""
     # Escapa los caracteres que abren entidades pero Telegram no puede cerrar
-    for ch in ['*', '_', '`', '[']:
-        text = text.replace(ch, '\\' + ch)
+    for ch in ["*", "_", "`", "["]:
+        text = text.replace(ch, "\\" + ch)
     return text
+
 
 def _format_new_property_alert(scored: ScoredProperty) -> str:
     prop = scored.prop
     s = scored.score
     emoji = _score_emoji(scored.total_score)
-    safe_title = _escape_md(prop.title or '')
-    safe_zone  = _escape_md(scored.zone.name)
+    _escape_md(prop.title or "")
+    safe_zone = _escape_md(scored.zone.name)
     piscina = _PISCINA_EMOJI.get(prop.piscina.value, "")
     lines = [
         f"{emoji} Nueva vivienda — {scored.total_score:.1f}/84 pts",
@@ -88,7 +93,9 @@ def _format_new_property_alert(scored: ScoredProperty) -> str:
     return "\n".join(lines)
 
 
-def _format_price_drop_alert(event: PriceEvent, title: str, url: str, zone_name: str) -> str:
+def _format_price_drop_alert(
+    event: PriceEvent, title: str, url: str, zone_name: str
+) -> str:
     direction = "📉 *Bajada de precio*" if event.delta < 0 else "📈 *Subida de precio*"
     lines = [
         direction,
@@ -135,8 +142,7 @@ class TelegramNotifier:
     Fallback al chat_id del .env si no hay chats en BD.
     """
 
-    def __init__(self, bot_token: str, fallback_chat_id: str,
-                 db=None) -> None:
+    def __init__(self, bot_token: str, fallback_chat_id: str, db=None) -> None:
         self._bot = telegram.Bot(token=bot_token)
         self._fallback_chat_id = fallback_chat_id
         self._db = db  # instancia de Database para leer chat_ids
@@ -170,6 +176,7 @@ class TelegramNotifier:
 
         # Usar httpx sincrono: mas robusto para envio masivo sin asyncio overhead
         import httpx
+
         token = self._bot.token
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         success = True
@@ -180,13 +187,16 @@ class TelegramNotifier:
                     json={
                         "chat_id": chat_id,
                         "text": text,
-                        
                         "disable_web_page_preview": True,
                     },
                     timeout=15.0,
                 )
                 if not resp.json().get("ok"):
-                    logger.error("[telegram] API error para chat %s: %s", chat_id, resp.text[:120])
+                    logger.error(
+                        "[telegram] API error para chat %s: %s",
+                        chat_id,
+                        resp.text[:120],
+                    )
                     success = False
             except Exception as e:
                 logger.error("[telegram] Error enviando a chat %s: %s", chat_id, e)
@@ -208,7 +218,8 @@ class TelegramNotifier:
         if success:
             logger.info(
                 "[telegram] Alerta enviada: %s — %.1f pts",
-                scored.prop.unique_id, scored.total_score,
+                scored.prop.unique_id,
+                scored.total_score,
             )
         return success
 
@@ -224,7 +235,8 @@ class TelegramNotifier:
         if success:
             logger.info(
                 "[telegram] Alerta precio enviada: %s %+.1f%%",
-                event.property_uid, event.delta_pct,
+                event.property_uid,
+                event.delta_pct,
             )
         return success
 
@@ -233,7 +245,8 @@ class TelegramNotifier:
         success = self._send(text)
         if success:
             logger.info(
-                "[telegram] Resumen semanal enviado (%d propiedades)", len(top_properties)
+                "[telegram] Resumen semanal enviado (%d propiedades)",
+                len(top_properties),
             )
         return success
 

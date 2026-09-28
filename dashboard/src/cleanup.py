@@ -63,7 +63,11 @@ def run_cleanup():
 
     # 1. Zigbee2MQTT logs
     removed = cleanup_old_logs(Z2M_LOG_DIR, LOG_RETENTION_DAYS)
-    logger.info("Zigbee2MQTT: %d old logs deleted (retention: %d days)", removed, LOG_RETENTION_DAYS)
+    logger.info(
+        "Zigbee2MQTT: %d old logs deleted (retention: %d days)",
+        removed,
+        LOG_RETENTION_DAYS,
+    )
 
     logger.info("=== Daily cleanup completed ===")
 
@@ -73,7 +77,7 @@ class CleanupScheduler:
 
     def __init__(self, interval: int = 86400, grace_period: int = 60):
         """Initializes the scheduler.
-        
+
         Args:
             interval: Interval between cleanups (seconds), default 24h
             grace_period: Wait time before first cleanup (seconds)
@@ -88,8 +92,11 @@ class CleanupScheduler:
         self._running = True
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
-        logger.info("Cleanup scheduler started (every %dh, retention %d days)",
-                    self._interval // 3600, LOG_RETENTION_DAYS)
+        logger.info(
+            "Cleanup scheduler started (every %dh, retention %d days)",
+            self._interval // 3600,
+            LOG_RETENTION_DAYS,
+        )
 
     def stop(self):
         """Stops the scheduler."""

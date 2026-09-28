@@ -202,15 +202,15 @@ elif result.ok:
 
 **Configuration injected in `lifespan()`** — never at module level:
 ```python
-auth_core.AUTH_SECRET      = AUTH_SECRET
+auth_core.AUTH_SECRET = AUTH_SECRET
 auth_core.AUTH_SESSION_TTL = AUTH_SESSION_TTL
-auth_users.HTPASSWD_PATH   = AUTH_HTPASSWD
-auth_users.AUTH_DB_PATH    = AUTH_DB_PATH
-auth_users.TRUST_SECRET    = AUTH_SECRET
-auth_devices.AUTH_DB_PATH  = AUTH_DB_PATH
-auth_routes.SMTP_USER      = AUTH_SMTP_USER
-auth_routes.SMTP_PASSWORD  = AUTH_SMTP_PASS
-auth_routes.BASE_URL       = AUTH_BASE_URL
+auth_users.HTPASSWD_PATH = AUTH_HTPASSWD
+auth_users.AUTH_DB_PATH = AUTH_DB_PATH
+auth_users.TRUST_SECRET = AUTH_SECRET
+auth_devices.AUTH_DB_PATH = AUTH_DB_PATH
+auth_routes.SMTP_USER = AUTH_SMTP_USER
+auth_routes.SMTP_PASSWORD = AUTH_SMTP_PASS
+auth_routes.BASE_URL = AUTH_BASE_URL
 ```
 
 ---
@@ -360,7 +360,7 @@ _AUTH_PUBLIC_PREFIXES = (
     "/static/manifest.json",
     "/static/favicon.ico",
     "/favicon.ico",
-    "/your-new-public-path",   # ← add here
+    "/your-new-public-path",  # ← add here
 )
 ```
 

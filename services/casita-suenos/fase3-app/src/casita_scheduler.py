@@ -16,21 +16,21 @@ También expone get_status() para el endpoint HTTP del dashboard.
 """
 
 from __future__ import annotations
-from scorer import ALERT_THRESHOLD as _ALERT_THRESHOLD, MAX_SCORE as _MAX_SCORE
 
 import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, time as dtime
+from datetime import datetime
+from datetime import time as dtime
 from typing import TYPE_CHECKING
 
 import fotocasa_scraper
 import habitaclia_scraper
 import pisos_scraper
-from scraper_base import ScraperResult
+from scorer import ALERT_THRESHOLD as _ALERT_THRESHOLD
 from scorer import evaluate, evaluate_from_email
-from zones import ZONES, ZONE_COORDS
+from zones import ZONE_COORDS, ZONES, Zone
 
 if TYPE_CHECKING:
     from apify_client_wrapper import IdealistaApifyClient
@@ -69,6 +69,7 @@ _LOOP_TICK_SEC = 60
 @dataclass
 class ScraperError:
     """Registro de un fallo de scraper para el estado del dashboard."""
+
     portal: str
     zone_id: str
     error: str
@@ -78,12 +79,13 @@ class ScraperError:
 @dataclass
 class SchedulerStatus:
     """Estado del scheduler para el endpoint del dashboard."""
+
     running: bool
     last_scraping: datetime | None
     last_gmail_check: datetime | None
     last_fotocasa_check: datetime | None
     last_summary: datetime | None
-    last_scraping_result: str        # "ok", "ok_with_errors", "error", "never"
+    last_scraping_result: str  # "ok", "ok_with_errors", "error", "never"
     total_properties: int
     radar_count: int
     dismissed_count: int
@@ -99,9 +101,9 @@ class CasitaScheduler:
 
     def __init__(
         self,
-        db: "Database",
-        notifier: "TelegramNotifier",
-        apify: "IdealistaApifyClient",
+        db: Database,
+        notifier: TelegramNotifier,
+        apify: IdealistaApifyClient,
         gmail_address: str,
         gmail_app_password: str,
     ) -> None:
@@ -124,7 +126,9 @@ class CasitaScheduler:
         self._last_summary_date: datetime | None = None
 
         # Resultado del último scraping
-        self._last_scraping_result: str = "never"  # "never"|"ok"|"ok_with_errors"|"error"
+        self._last_scraping_result: str = (
+            "never"  # "never"|"ok"|"ok_with_errors"|"error"
+        )
 
         # Registro de errores de scrapers (se limpia al resolver)
         self._scraper_errors: list[ScraperError] = []
@@ -163,34 +167,46 @@ class CasitaScheduler:
             # ── Scraping completo ────────────────────────────────────────────
             scraping_days = set(cfg.get("scraping_days", [0, 3]))
             scraping_hour = int(cfg.get("scraping_hour", 7))
-            if (cfg.get("scraping_enabled", True)
-                    and now.weekday() in scraping_days
-                    and now.hour == scraping_hour
-                    and now.minute == 0
-                    and (not self._last_scraping_date
-                         or self._last_scraping_date.date() != now.date())):
+            if (
+                cfg.get("scraping_enabled", True)
+                and now.weekday() in scraping_days
+                and now.hour == scraping_hour
+                and now.minute == 0
+                and (
+                    not self._last_scraping_date
+                    or self._last_scraping_date.date() != now.date()
+                )
+            ):
                 self._run_scraping()
                 self._last_scraping_date = now
 
             # ── Check Gmail ──────────────────────────────────────────────────
             gmail_interval = int(cfg.get("gmail_interval_min", 30)) * 60
-            if cfg.get("gmail_check_enabled", True) and self._should_run_gmail_check_interval(gmail_interval):
+            if cfg.get(
+                "gmail_check_enabled", True
+            ) and self._should_run_gmail_check_interval(gmail_interval):
                 self._run_gmail_check()
                 self._last_gmail_check = now
             # ── Check Fotocasa (mismo intervalo que Gmail) ───────────────────
-            if cfg.get("gmail_check_enabled", True) and self._should_run_fotocasa_check_interval(gmail_interval):
+            if cfg.get(
+                "gmail_check_enabled", True
+            ) and self._should_run_fotocasa_check_interval(gmail_interval):
                 self._run_fotocasa_check()
                 self._last_fotocasa_check = now
 
             # ── Resumen semanal ──────────────────────────────────────────────
-            summary_day  = int(cfg.get("summary_day", 6))
+            summary_day = int(cfg.get("summary_day", 6))
             summary_hour = int(cfg.get("summary_hour", 9))
-            if (cfg.get("summary_enabled", True)
-                    and now.weekday() == summary_day
-                    and now.hour == summary_hour
-                    and now.minute == 0
-                    and (not self._last_summary_date
-                         or self._last_summary_date.date() != now.date())):
+            if (
+                cfg.get("summary_enabled", True)
+                and now.weekday() == summary_day
+                and now.hour == summary_hour
+                and now.minute == 0
+                and (
+                    not self._last_summary_date
+                    or self._last_summary_date.date() != now.date()
+                )
+            ):
                 self._run_weekly_summary()
                 self._last_summary_date = now
 
@@ -205,9 +221,9 @@ class CasitaScheduler:
             return False
         if now.hour != _SCRAPING_HOUR.hour or now.minute != _SCRAPING_HOUR.minute:
             return False
-        if self._last_scraping_date and self._last_scraping_date.date() == now.date():
-            return False
-        return True
+        return not (
+            self._last_scraping_date and self._last_scraping_date.date() == now.date()
+        )
 
     def _should_run_gmail_check(self, now: datetime) -> bool:
         if self._last_gmail_check is None:
@@ -220,9 +236,9 @@ class CasitaScheduler:
             return False
         if now.hour != _SUMMARY_HOUR.hour or now.minute != _SUMMARY_HOUR.minute:
             return False
-        if self._last_summary_date and self._last_summary_date.date() == now.date():
-            return False
-        return True
+        return not (
+            self._last_summary_date and self._last_summary_date.date() == now.date()
+        )
 
     def _should_run_gmail_check_interval(self, interval_sec: int) -> bool:
         if self._last_gmail_check is None:
@@ -232,7 +248,9 @@ class CasitaScheduler:
     def _should_run_fotocasa_check_interval(self, interval_sec: int) -> bool:
         if self._last_fotocasa_check is None:
             return True
-        return (datetime.now() - self._last_fotocasa_check).total_seconds() >= interval_sec
+        return (
+            datetime.now() - self._last_fotocasa_check
+        ).total_seconds() >= interval_sec
 
     # ------------------------------------------------------------------
     # Jobs — públicos para llamada manual / tests
@@ -267,18 +285,30 @@ class CasitaScheduler:
             last_summary=self._last_summary_date,
             last_scraping_result=result,
             total_properties=self._db.count_properties(),
-            radar_count=self._db.get_radar_properties(min_score=_ALERT_THRESHOLD, limit=1, offset=0).get("total", 0),
+            radar_count=self._db.get_radar_properties(
+                min_score=_ALERT_THRESHOLD, limit=1, offset=0
+            ).get("total", 0),
             dismissed_count=len(self._db.get_dismissed()),
             scraper_errors=errors,
             top_properties=self._db.get_top_scored(limit=5, min_score=_ALERT_THRESHOLD),
         )
 
-    def get_radar(self, limit: int = 20, offset: int = 0,
-                  sort_by: str = "score", sort_dir: str = "desc",
-                  filter_by: str | None = None, portal_filter: str | None = None) -> dict:
+    def get_radar(
+        self,
+        limit: int = 20,
+        offset: int = 0,
+        sort_by: str = "score",
+        sort_dir: str = "desc",
+        filter_by: str | None = None,
+        portal_filter: str | None = None,
+    ) -> dict:
         result = self._db.get_radar_properties(
-            min_score=_ALERT_THRESHOLD, limit=limit, offset=offset,
-            sort_by=sort_by, sort_dir=sort_dir, filter_by=filter_by,
+            min_score=_ALERT_THRESHOLD,
+            limit=limit,
+            offset=offset,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            filter_by=filter_by,
             portal_filter=portal_filter,
         )
         # Enriquecer cada item con distance_madrid_min de la zona
@@ -286,6 +316,7 @@ class CasitaScheduler:
             zone = ZONES.get(p.get("zone_id", ""))
             p["distance_madrid_min"] = zone.distance_madrid_min if zone else None
         return result
+
     def get_dismissed(self) -> list[dict]:
         """Propiedades descartadas."""
         return self._db.get_dismissed()
@@ -348,11 +379,20 @@ class CasitaScheduler:
                     all_props += props
                     if props:
                         portals_active.add(portal_name)
-                    logger.debug("[casita] %s/%s: %d propiedades", portal_name, zone_id, len(props))
+                    logger.debug(
+                        "[casita] %s/%s: %d propiedades",
+                        portal_name,
+                        zone_id,
+                        len(props),
+                    )
                 except Exception as e:
                     err_msg = str(e)
-                    logger.error("[casita] Error %s zona %s: %s", portal_name, zone_id, err_msg)
-                    error = ScraperError(portal=portal_name, zone_id=zone_id, error=err_msg)
+                    logger.error(
+                        "[casita] Error %s zona %s: %s", portal_name, zone_id, err_msg
+                    )
+                    error = ScraperError(
+                        portal=portal_name, zone_id=zone_id, error=err_msg
+                    )
                     new_errors.append(error)
 
             # ── Apify — solo las 8 zonas top ───────────────────────────────
@@ -363,12 +403,16 @@ class CasitaScheduler:
                 except Exception as e:
                     err_msg = str(e)
                     logger.error("[casita] Error apify zona %s: %s", zone_id, err_msg)
-                    new_errors.append(ScraperError(portal="idealista_apify", zone_id=zone_id, error=err_msg))
+                    new_errors.append(
+                        ScraperError(
+                            portal="idealista_apify", zone_id=zone_id, error=err_msg
+                        )
+                    )
 
             # ── Procesar propiedades obtenidas ─────────────────────────────
             for prop in all_props:
                 try:
-                    is_new = self._db.is_new(prop)
+                    self._db.is_new(prop)
                     price_event = self._db.upsert_property(prop)
                     scored = evaluate(prop, zone)
                     if scored is None:
@@ -401,7 +445,9 @@ class CasitaScheduler:
                     key = (err.portal, err.zone_id)
                     if key not in existing_keys:
                         self._scraper_errors.append(err)
-            result = "ok_with_errors" if total_new > 0 or total_price_drops > 0 else "error"
+            result = (
+                "ok_with_errors" if total_new > 0 or total_price_drops > 0 else "error"
+            )
         else:
             with self._lock:
                 self._scraper_errors.clear()
@@ -422,34 +468,58 @@ class CasitaScheduler:
         with self._lock:
             self._last_scraping_result = result
         elapsed = datetime.now() - start_time
-        elapsed_str = "{}m {}s".format(int(elapsed.total_seconds() // 60), int(elapsed.total_seconds() % 60))
+        elapsed_str = f"{int(elapsed.total_seconds() // 60)}m {int(elapsed.total_seconds() % 60)}s"
         logger.info(
             "[casita] Scraping completado [%s] %s | %d alertas | %d en radar | %d errores",
-            result, elapsed_str, total_new, total_scored, len(new_errors),
+            result,
+            elapsed_str,
+            total_new,
+            total_scored,
+            len(new_errors),
         )
         self._send_scraping_summary(
-            result=result, elapsed_str=elapsed_str, total_new=total_new,
-            total_price_drops=total_price_drops, total_scored=total_scored,
-            portals_active=portals_active, new_by_zone=new_by_zone,
+            result=result,
+            elapsed_str=elapsed_str,
+            total_new=total_new,
+            total_price_drops=total_price_drops,
+            total_scored=total_scored,
+            portals_active=portals_active,
+            new_by_zone=new_by_zone,
             errors_count=len(new_errors),
         )
 
-    def _send_scraping_summary(self, result, elapsed_str, total_new,
-                               total_price_drops, total_scored,
-                               portals_active, new_by_zone, errors_count):
+    def _send_scraping_summary(
+        self,
+        result,
+        elapsed_str,
+        total_new,
+        total_price_drops,
+        total_scored,
+        portals_active,
+        new_by_zone,
+        errors_count,
+    ):
         """Envia resumen del scraping por Telegram al finalizar."""
-        result_emoji = {"ok": "✅", "ok_with_errors": "⚠️", "error": "❌"}.get(result, "ℹ️")
-        portal_labels = {"pisos": "Pisos.com", "habitaclia": "Habitaclia",
-                         "fotocasa": "Fotocasa", "idealista": "Idealista"}
+        result_emoji = {"ok": "✅", "ok_with_errors": "⚠️", "error": "❌"}.get(
+            result, "ℹ️"
+        )
+        portal_labels = {
+            "pisos": "Pisos.com",
+            "habitaclia": "Habitaclia",
+            "fotocasa": "Fotocasa",
+            "idealista": "Idealista",
+        }
         if portals_active:
-            portals_str = ", ".join(portal_labels.get(p, p) for p in sorted(portals_active))
+            portals_str = ", ".join(
+                portal_labels.get(p, p) for p in sorted(portals_active)
+            )
         else:
             portals_str = "ninguno"
         lines = [
-            "{} *Scraping completado*".format(result_emoji),
-            "⏱ Tiempo: {}".format(elapsed_str),
-            "📡 Portales: {}".format(portals_str),
-            "🏠 Nuevas en radar: *{}*".format(total_new),
+            f"{result_emoji} *Scraping completado*",
+            f"⏱ Tiempo: {elapsed_str}",
+            f"📡 Portales: {portals_str}",
+            f"🏠 Nuevas en radar: *{total_new}*",
         ]
         if new_by_zone:
             lines.append("")
@@ -457,13 +527,13 @@ class CasitaScheduler:
             for zid, count in sorted(new_by_zone.items(), key=lambda x: -x[1]):
                 zone = ZONES.get(zid)
                 zname = zone.name.split("(")[0].strip() if zone else zid
-                lines.append("  • {}: {}".format(zname, count))
+                lines.append(f"  • {zname}: {count}")
         if total_price_drops > 0:
             lines.append("")
-            lines.append("📉 Bajadas de precio: {}".format(total_price_drops))
+            lines.append(f"📉 Bajadas de precio: {total_price_drops}")
         if errors_count > 0:
             lines.append("")
-            lines.append("🔧 Errores de scraper: {} (ver dashboard)".format(errors_count))
+            lines.append(f"🔧 Errores de scraper: {errors_count} (ver dashboard)")
         if total_new == 0 and result == "ok":
             lines.append("")
             lines.append("_Sin casas nuevas por encima del umbral de 50 pts._")
@@ -480,7 +550,9 @@ class CasitaScheduler:
             short_err = err.error[:120] + "..." if len(err.error) > 120 else err.error
             lines.append(f"  `{short_err}`")
             lines.append("")
-        lines.append("_Revisa los scrapers correspondientes y actualiza los selectores si es necesario._")
+        lines.append(
+            "_Revisa los scrapers correspondientes y actualiza los selectores si es necesario._"
+        )
         self._notifier.send_status("\n".join(lines))
 
     def _run_gmail_check(self) -> None:
@@ -494,7 +566,8 @@ class CasitaScheduler:
             self._gmail_check_running = False
 
     def _do_gmail_check(self) -> None:
-        from idealista_email_parser import fetch_new_alerts, delete_processed_emails
+        from idealista_email_parser import delete_processed_emails, fetch_new_alerts
+
         logger.info("[casita] Comprobando alertas Gmail de Idealista")
         try:
             alerts, errors, imap_conn = fetch_new_alerts(
@@ -513,8 +586,11 @@ class CasitaScheduler:
             )
         if not alerts:
             if imap_conn:
-                try: imap_conn.close(); imap_conn.logout()
-                except Exception: pass
+                try:
+                    imap_conn.close()
+                    imap_conn.logout()
+                except Exception:
+                    pass
             return
         logger.info("[casita] %d anuncios de Idealista desde Gmail", len(alerts))
         processed_email_ids, total_new, new_by_zone = [], 0, {}
@@ -522,25 +598,38 @@ class CasitaScheduler:
             try:
                 zone = self._infer_zone_from_hint(alert.location_hint, alert.url)
                 if not zone:
-                    processed_email_ids.append(alert.email_id); continue
+                    processed_email_ids.append(alert.email_id)
+                    continue
                 prop = self._scrape_idealista_property(alert, zone)
                 if not prop:
-                    processed_email_ids.append(alert.email_id); continue
-                is_new = self._db.is_new(prop)
+                    processed_email_ids.append(alert.email_id)
+                    continue
+                self._db.is_new(prop)
                 price_event = self._db.upsert_property(prop)
-                scored = evaluate_from_email(prop, zone)  # bonus email: defaults garantizados por filtros del portal
+                scored = evaluate_from_email(
+                    prop, zone
+                )  # bonus email: defaults garantizados por filtros del portal
                 if scored is None:
-                    processed_email_ids.append(alert.email_id); continue
+                    processed_email_ids.append(alert.email_id)
+                    continue
                 self._db.upsert_score(scored)
                 if scored.passes_alert_threshold:  # notificar si pasa threshold y no fue alertado (independiente de is_new)
                     if not self._db.is_alerted(prop.unique_id):
                         self._db.mark_alerted(prop.unique_id)
                         total_new += 1
                         new_by_zone[zone.id] = new_by_zone.get(zone.id, 0) + 1
-                        logger.info("[casita] Idealista ALERTA: %s %.1f pts", prop.unique_id, scored.total_score)
+                        logger.info(
+                            "[casita] Idealista ALERTA: %s %.1f pts",
+                            prop.unique_id,
+                            scored.total_score,
+                        )
                 if price_event and price_event.delta < 0:
                     self._notifier.send_price_drop_alert(
-                        event=price_event, title=prop.title, url=prop.url, zone_name=zone.name)
+                        event=price_event,
+                        title=prop.title,
+                        url=prop.url,
+                        zone_name=zone.name,
+                    )
                 processed_email_ids.append(alert.email_id)
             except Exception as e:
                 logger.error("[casita] Error procesando alerta %s: %s", alert.url, e)
@@ -550,25 +639,31 @@ class CasitaScheduler:
         if processed_alerts and imap_conn:
             delete_processed_emails(imap_conn, processed_alerts)
         elif imap_conn:
-            try: imap_conn.close(); imap_conn.logout()
-            except Exception: pass
+            try:
+                imap_conn.close()
+                imap_conn.logout()
+            except Exception:
+                pass
         # Solo notificar si hay casas nuevas en el radar
         if total_new > 0:
             lines = [
                 "Correo Idealista procesado",
-                "Anuncios analizados: {}".format(len(alerts)),
-                "Nuevas en radar: {}".format(total_new),
+                f"Anuncios analizados: {len(alerts)}",
+                f"Nuevas en radar: {total_new}",
             ]
             if new_by_zone:
                 lines.append("")
                 for zid, cnt in sorted(new_by_zone.items(), key=lambda x: -x[1]):
                     zn = ZONES.get(zid)
-                    lines.append("  - {}: {}".format(zn.name.split("(")[0].strip() if zn else zid, cnt))
+                    lines.append(
+                        "  - {}: {}".format(
+                            zn.name.split("(")[0].strip() if zn else zid, cnt
+                        )
+                    )
             lines += ["", "https://raspberrypi.tailaa37cd.ts.net/smart-home/casita"]
             self._notifier.send_status("\n".join(lines))
         else:
             logger.info("[casita] Gmail check sin nuevas casas para el radar")
-
 
     def _run_fotocasa_check(self) -> None:
         if self._fotocasa_check_running:
@@ -581,14 +676,13 @@ class CasitaScheduler:
             self._fotocasa_check_running = False
 
     def _do_fotocasa_check(self) -> None:
-        from fotocasa_email_parser import (
-            fetch_new_fotocasa_alerts,
-            delete_processed_fotocasa_emails,
-            FotocasaAlert,
-        )
-        from models import Property, Portal, Piscina, GarageType, Habitability, Internet
-        from scraper_base import (infer_habitable, infer_habitability, infer_has_garage, infer_has_garden, infer_garage_type, infer_ac, infer_ac_type, infer_internet, infer_piscina)
         from datetime import datetime as _dt
+
+        from fotocasa_email_parser import (
+            delete_processed_fotocasa_emails,
+            fetch_new_fotocasa_alerts,
+        )
+        from models import GarageType, Habitability, Internet, Piscina, Portal, Property
 
         logger.info("[casita] Comprobando alertas Gmail de Fotocasa")
         try:
@@ -609,8 +703,11 @@ class CasitaScheduler:
 
         if not alerts:
             if imap_conn:
-                try: imap_conn.close(); imap_conn.logout()
-                except Exception: pass
+                try:
+                    imap_conn.close()
+                    imap_conn.logout()
+                except Exception:
+                    pass
             return
 
         logger.info("[casita] %d anuncios de Fotocasa desde Gmail", len(alerts))
@@ -625,20 +722,26 @@ class CasitaScheduler:
                 # Inferir zona desde el municipio en la URL
                 zone = self._infer_zone_from_hint(alert.location_hint, alert.url)
                 if not zone:
-                    logger.warning("[casita] Fotocasa sin zona para %s (%s)", alert.url, alert.location_hint)
+                    logger.warning(
+                        "[casita] Fotocasa sin zona para %s (%s)",
+                        alert.url,
+                        alert.location_hint,
+                    )
                     processed_email_ids.append(alert.email_id)
                     continue
 
                 # Fotocasa bloquea scraping (SPA React) → usar solo datos del email
                 if not alert.price:
-                    logger.debug("[casita] Fotocasa sin precio para %s, descartando", alert.url)
+                    logger.debug(
+                        "[casita] Fotocasa sin precio para %s, descartando", alert.url
+                    )
                     processed_email_ids.append(alert.email_id)
                     continue
 
                 # Los filtros de Fotocasa ya garantizan jardín/garaje si están en la URL
                 # Si no están en la URL, asumir True (el usuario ya configuró el filtro)
-                has_garden = alert.has_garden or True   # filtro Fotocasa ya aplicado
-                has_garage = alert.has_garage or True   # filtro Fotocasa ya aplicado
+                has_garden = alert.has_garden or True  # filtro Fotocasa ya aplicado
+                has_garage = alert.has_garage or True  # filtro Fotocasa ya aplicado
 
                 # Inferir garage_type desde has_garage del alert
                 garage_t = GarageType.EXTERIOR if has_garage else GarageType.NINGUNO
@@ -668,7 +771,7 @@ class CasitaScheduler:
                     last_seen=_dt.now(),
                 )
 
-                is_new = self._db.is_new(prop)
+                self._db.is_new(prop)
                 price_event = self._db.upsert_property(prop)
                 scored = evaluate_from_email(prop, zone)  # bonus email
                 if scored is None:
@@ -681,11 +784,19 @@ class CasitaScheduler:
                         self._db.mark_alerted(prop.unique_id)
                         total_new += 1
                         new_by_zone[zone.id] = new_by_zone.get(zone.id, 0) + 1
-                        logger.info("[casita] Fotocasa ALERTA: %s %.1f pts", prop.unique_id, scored.total_score)
+                        logger.info(
+                            "[casita] Fotocasa ALERTA: %s %.1f pts",
+                            prop.unique_id,
+                            scored.total_score,
+                        )
 
                 if price_event and price_event.delta < 0:
                     self._notifier.send_price_drop_alert(
-                        event=price_event, title=prop.title, url=prop.url, zone_name=zone.name)
+                        event=price_event,
+                        title=prop.title,
+                        url=prop.url,
+                        zone_name=zone.name,
+                    )
 
                 processed_email_ids.append(alert.email_id)
 
@@ -697,22 +808,31 @@ class CasitaScheduler:
 
         processed_alerts = [a for a in alerts if a.email_id in set(processed_email_ids)]
         if (processed_alerts or alerts) and imap_conn:
-            delete_processed_fotocasa_emails(imap_conn, processed_alerts, failed_ids=failed_ids)
+            delete_processed_fotocasa_emails(
+                imap_conn, processed_alerts, failed_ids=failed_ids
+            )
         elif imap_conn:
-            try: imap_conn.close(); imap_conn.logout()
-            except Exception: pass
+            try:
+                imap_conn.close()
+                imap_conn.logout()
+            except Exception:
+                pass
 
         if total_new > 0:
             lines = [
                 "Correo Fotocasa procesado",
-                "Anuncios analizados: {}".format(len(alerts)),
-                "Nuevas en radar: {}".format(total_new),
+                f"Anuncios analizados: {len(alerts)}",
+                f"Nuevas en radar: {total_new}",
             ]
             if new_by_zone:
                 lines.append("")
                 for zid, cnt in sorted(new_by_zone.items(), key=lambda x: -x[1]):
                     zn = ZONES.get(zid)
-                    lines.append("  - {}: {}".format(zn.name.split("(")[0].strip() if zn else zid, cnt))
+                    lines.append(
+                        "  - {}: {}".format(
+                            zn.name.split("(")[0].strip() if zn else zid, cnt
+                        )
+                    )
             lines += ["", "https://raspberrypi.tailaa37cd.ts.net/smart-home/casita"]
             self._notifier.send_status("\n".join(lines))
         else:
@@ -724,8 +844,10 @@ class CasitaScheduler:
             # 1. Buscar en fotocasa_municipios (match exacto del municipio)
             for zone in ZONES.values():
                 if hasattr(zone, "fotocasa_municipios") and zone.fotocasa_municipios:
-                    if any(m.lower().replace("-", " ") == hl.replace("-", " ")
-                           for m in zone.fotocasa_municipios):
+                    if any(
+                        m.lower().replace("-", " ") == hl.replace("-", " ")
+                        for m in zone.fotocasa_municipios
+                    ):
                         return zone
             # 2. Buscar en idealista_alert_keywords
             for zone in ZONES.values():
@@ -736,11 +858,17 @@ class CasitaScheduler:
             # 3. Buscar municipio de Fotocasa como substring
             for zone in ZONES.values():
                 if hasattr(zone, "fotocasa_municipios") and zone.fotocasa_municipios:
-                    if any(m.lower().replace("-", " ") in hl for m in zone.fotocasa_municipios):
+                    if any(
+                        m.lower().replace("-", " ") in hl
+                        for m in zone.fotocasa_municipios
+                    ):
                         return zone
         ul = url.lower()
         for zone in ZONES.values():
-            if any(kw.lower().replace(" ", "-") in ul for kw in zone.idealista_alert_keywords):
+            if any(
+                kw.lower().replace(" ", "-") in ul
+                for kw in zone.idealista_alert_keywords
+            ):
                 return zone
             if hasattr(zone, "fotocasa_municipios") and zone.fotocasa_municipios:
                 if any(m.lower() in ul for m in zone.fotocasa_municipios):
@@ -759,17 +887,20 @@ class CasitaScheduler:
         Solo se invoca cuando el mapeo por keywords falla.
         Máx distancia: 200 km. Si está más lejos de todas las zonas → None.
         """
-        import math
         import json
-        import urllib.request
+        import math
         import urllib.parse
+        import urllib.request
+
         try:
-            q = urllib.parse.urlencode({
-                "q": hint.replace("-", " ") + ", España",
-                "format": "json",
-                "limit": "1",
-                "countrycodes": "es",
-            })
+            q = urllib.parse.urlencode(
+                {
+                    "q": hint.replace("-", " ") + ", España",
+                    "format": "json",
+                    "limit": "1",
+                    "countrycodes": "es",
+                }
+            )
             req = urllib.request.Request(
                 f"https://nominatim.openstreetmap.org/search?{q}",
                 headers={"User-Agent": "casita-suenos/1.0 (raspberrypi)"},
@@ -781,17 +912,24 @@ class CasitaScheduler:
                 return None
             lat = float(data[0]["lat"])
             lon = float(data[0]["lon"])
-            logger.info("[casita] Nominatim '%s' → (%.3f, %.3f) tipo=%s",
-                        hint, lat, lon, data[0].get("type", "?"))
+            logger.info(
+                "[casita] Nominatim '%s' → (%.3f, %.3f) tipo=%s",
+                hint,
+                lat,
+                lon,
+                data[0].get("type", "?"),
+            )
 
             def _haversine(lat1, lon1, lat2, lon2):
                 R = 6371.0
                 dlat = math.radians(lat2 - lat1)
                 dlon = math.radians(lon2 - lon1)
-                a = (math.sin(dlat / 2) ** 2
-                     + math.cos(math.radians(lat1))
-                     * math.cos(math.radians(lat2))
-                     * math.sin(dlon / 2) ** 2)
+                a = (
+                    math.sin(dlat / 2) ** 2
+                    + math.cos(math.radians(lat1))
+                    * math.cos(math.radians(lat2))
+                    * math.sin(dlon / 2) ** 2
+                )
                 return R * 2 * math.asin(math.sqrt(a))
 
             best_zone = None
@@ -807,52 +945,103 @@ class CasitaScheduler:
 
             MAX_DIST_KM = 200.0
             if best_zone and best_dist <= MAX_DIST_KM:
-                logger.info("[casita] Nominatim fallback: '%s' → %s (%.0f km)",
-                            hint, best_zone.id, best_dist)
+                logger.info(
+                    "[casita] Nominatim fallback: '%s' → %s (%.0f km)",
+                    hint,
+                    best_zone.id,
+                    best_dist,
+                )
                 return best_zone
             elif best_zone:
-                logger.info("[casita] Nominatim '%s' demasiado lejos: %.0f km (zona más cercana: %s)",
-                            hint, best_dist, best_zone.id)
+                logger.info(
+                    "[casita] Nominatim '%s' demasiado lejos: %.0f km (zona más cercana: %s)",
+                    hint,
+                    best_dist,
+                    best_zone.id,
+                )
                 return None
         except Exception as e:
             logger.warning("[casita] Nominatim fallback falló para '%s': %s", hint, e)
         return None
 
     def _scrape_idealista_property(self, alert, zone):
+        from datetime import datetime as _dt
+
         import httpx
         from bs4 import BeautifulSoup
-        from models import Property, Portal, Piscina, GarageType, Habitability, Internet
-        from scraper_base import (infer_habitable, infer_habitability, infer_has_garage, infer_has_garden, infer_garage_type, infer_piscina, infer_ac, infer_ac_type, infer_internet, infer_terrain_m2, parse_price, parse_rooms, parse_size)
-        from datetime import datetime as _dt
-        title, price, rooms, size_m2, desc = alert.title, alert.price, alert.rooms, alert.size_m2, ""
+        from models import Piscina, Portal, Property
+        from scraper_base import (
+            infer_ac,
+            infer_ac_type,
+            infer_garage_type,
+            infer_habitability,
+            infer_habitable,
+            infer_has_garage,
+            infer_has_garden,
+            infer_internet,
+            infer_piscina,
+            infer_terrain_m2,
+            parse_price,
+            parse_rooms,
+            parse_size,
+        )
+
+        title, price, rooms, size_m2, desc = (
+            alert.title,
+            alert.price,
+            alert.rooms,
+            alert.size_m2,
+            "",
+        )
         has_garage, has_garden, has_ac_v, piscina = False, False, False, Piscina.NINGUNA
         try:
-            hdrs = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Accept-Language": "es-ES,es;q=0.9"}
-            with httpx.Client(headers=hdrs, follow_redirects=True, timeout=15) as client:
+            hdrs = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept-Language": "es-ES,es;q=0.9",
+            }
+            with httpx.Client(
+                headers=hdrs, follow_redirects=True, timeout=15
+            ) as client:
                 r = client.get(alert.url)
                 if r.status_code == 200 and len(r.text) > 5000:
                     soup = BeautifulSoup(r.text, "html.parser")
                     h1 = soup.select_one("h1 .main-info__title-main, h1")
-                    if h1: title = h1.get_text(strip=True)
-                    pe = soup.select_one(".info-data-price span, [class*=info-data-price]")
+                    if h1:
+                        title = h1.get_text(strip=True)
+                    pe = soup.select_one(
+                        ".info-data-price span, [class*=info-data-price]"
+                    )
                     if pe:
                         pp = parse_price(pe.get_text(strip=True))
-                        if pp: price = pp
+                        if pp:
+                            price = pp
                     de = soup.select_one("div.comment, .adCommentsLanguage")
-                    if de: desc = de.get_text(" ", strip=True)
-                    feats = [f.get_text(strip=True) for f in soup.select(".details-property-feature li, .feature-details li")]
+                    if de:
+                        desc = de.get_text(" ", strip=True)
+                    feats = [
+                        f.get_text(strip=True)
+                        for f in soup.select(
+                            ".details-property-feature li, .feature-details li"
+                        )
+                    ]
                     ft = desc + " " + " ".join(feats)
                     r2 = parse_rooms(ft)
-                    if r2: rooms = r2
+                    if r2:
+                        rooms = r2
                     s2 = parse_size(ft)
-                    if s2: size_m2 = s2
+                    if s2:
+                        size_m2 = s2
                     has_garage = infer_has_garage(ft, feats)
                     has_garden = infer_has_garden(ft, feats)
-                    has_ac_v   = infer_ac(ft, feats)
-                    piscina    = Piscina(infer_piscina(ft, feats))
+                    has_ac_v = infer_ac(ft, feats)
+                    piscina = Piscina(infer_piscina(ft, feats))
                     logger.info("[casita] Ficha Idealista OK: %s", alert.url)
                 else:
-                    logger.warning("[casita] Idealista bloqueo status=%d: %s", r.status_code, alert.url)
+                    logger.warning(
+                        "[casita] Idealista bloqueo status=%d: %s",
+                        r.status_code,
+                        alert.url,
+                    )
         except Exception as e:
             logger.warning("[casita] Error scraping %s: %s", alert.url, e)
         # Fallback al precio del email si el scraping fue bloqueado (403)
@@ -866,26 +1055,38 @@ class CasitaScheduler:
         if not price:
             logger.debug("[casita] Sin precio para %s, descartando", alert.url)
             return None
-        if not has_garden: has_garden = True  # Idealista ya filtro jardin
-        if not has_garage: has_garage = True  # Idealista ya filtro garaje
+        if not has_garden:
+            has_garden = True  # Idealista ya filtro jardin
+        if not has_garage:
+            has_garage = True  # Idealista ya filtro garaje
         return Property(
-            portal=Portal.IDEALISTA, portal_id=alert.property_id, url=alert.url,
-            zone_id=zone.id, title=title or "Idealista {}".format(alert.property_id),
-            price=price, size_m2=size_m2, rooms=rooms,
+            portal=Portal.IDEALISTA,
+            portal_id=alert.property_id,
+            url=alert.url,
+            zone_id=zone.id,
+            title=title or f"Idealista {alert.property_id}",
+            price=price,
+            size_m2=size_m2,
+            rooms=rooms,
             has_garage=has_garage,
             has_garden_or_plot=has_garden,
             terrain_m2=infer_terrain_m2(desc, feats) if desc else None,
-            garage_type=infer_garage_type(desc, feats) if desc else (
-                "edificio" if has_garage else "ninguno"),
+            garage_type=infer_garage_type(desc, feats)
+            if desc
+            else ("edificio" if has_garage else "ninguno"),
             habitability=infer_habitability(desc, title or "") if desc else None,
             internet=infer_internet(desc, feats) if desc else None,
             has_ac=(lambda t: t[0])(infer_ac_type(desc, feats)) if desc else has_ac_v,
-            has_ac_preinstalled=(lambda t: t[1])(infer_ac_type(desc, feats)) if desc else False,
+            has_ac_preinstalled=(lambda t: t[1])(infer_ac_type(desc, feats))
+            if desc
+            else False,
             piscina=piscina,
             has_internet_mention=True,
             habitable=infer_habitable(desc, title or "") if desc else True,
-            description=desc, source="gmail_idealista",
-            first_seen=_dt.now(), last_seen=_dt.now(),
+            description=desc,
+            source="gmail_idealista",
+            first_seen=_dt.now(),
+            last_seen=_dt.now(),
         )
 
     def _run_weekly_summary(self) -> None:
@@ -896,9 +1097,8 @@ class CasitaScheduler:
             self._notifier.send_weekly_summary(top)
             stats = self._db.count_by_zone()
             total = self._db.count_properties()
-            status_msg = (
-                f"📊 Total propiedades monitorizadas: {total}\n"
-                + "\n".join(f"  • {z}: {n}" for z, n in stats.items())
+            status_msg = f"📊 Total propiedades monitorizadas: {total}\n" + "\n".join(
+                f"  • {z}: {n}" for z, n in stats.items()
             )
             self._notifier.send_status(status_msg)
 
@@ -906,11 +1106,11 @@ class CasitaScheduler:
             summary_lines = ["📋 Resumen semanal — Casita Sueños", ""]
             for i, p in enumerate(top, 1):
                 summary_lines.append(
-                    f"{i}. {p.get('score_total',0):.1f}pts — "
-                    f"{p.get('price',0):,}€ — "
-                    f"{p.get('zone_id','').replace('_',' ').title()}"
+                    f"{i}. {p.get('score_total', 0):.1f}pts — "
+                    f"{p.get('price', 0):,}€ — "
+                    f"{p.get('zone_id', '').replace('_', ' ').title()}"
                 )
-                summary_lines.append(f"   {p.get('url','')}")
+                summary_lines.append(f"   {p.get('url', '')}")
             summary_lines.append("")
             summary_lines.append(status_msg)
             self._db.save_weekly_summary("\n".join(summary_lines))
@@ -921,7 +1121,7 @@ class CasitaScheduler:
     # Utilidades internas
     # ------------------------------------------------------------------
 
-    def _infer_zone_from_url(self, url: str) -> "Zone | None":
+    def _infer_zone_from_url(self, url: str) -> Zone | None:
         """
         Intenta inferir a qué zona pertenece una URL de Idealista
         buscando keywords de cada zona en la URL.

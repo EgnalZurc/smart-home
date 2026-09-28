@@ -11,9 +11,9 @@ from pathlib import Path
 # Añadir src al path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-import pytest
 from datetime import datetime
 
+import pytest
 from models import FireRisk, Piscina, Portal, Property, Zone
 from scorer import (
     ALERT_THRESHOLD,
@@ -32,8 +32,8 @@ from scorer import (
     evaluate,
 )
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def base_zone() -> Zone:
@@ -79,8 +79,8 @@ def base_property(base_zone: Zone) -> Property:
 
 # ── Tests de limitantes ───────────────────────────────────────────────────────
 
-class TestLimiters:
 
+class TestLimiters:
     def test_all_pass(self, base_property, base_zone):
         result = apply_limiters(base_property, base_zone)
         assert result.passes is True
@@ -130,12 +130,17 @@ class TestLimiters:
 
     def test_l6_too_far_fail(self, base_property, base_zone):
         base_zone = Zone(
-            id="far_zone", name="Zona lejana",
+            id="far_zone",
+            name="Zona lejana",
             distance_madrid_min=300,  # > 270 min (4h30)
-            distance_beach_min=None, distance_natural_pools_min=None,
-            distance_supermarket_min=10, distance_health_center_min=10,
-            distance_hospital_min=20, fire_risk=FireRisk.NULO,
-            price_min=0, price_max=999_999,
+            distance_beach_min=None,
+            distance_natural_pools_min=None,
+            distance_supermarket_min=10,
+            distance_health_center_min=10,
+            distance_hospital_min=20,
+            fire_risk=FireRisk.NULO,
+            price_min=0,
+            price_max=999_999,
         )
         result = apply_limiters(base_property, base_zone)
         assert result.passes is False
@@ -143,11 +148,17 @@ class TestLimiters:
 
     def test_l7_supermarket_too_far_fail(self, base_property, base_zone):
         base_zone = Zone(
-            id="z", name="z", distance_madrid_min=150,
-            distance_beach_min=None, distance_natural_pools_min=None,
+            id="z",
+            name="z",
+            distance_madrid_min=150,
+            distance_beach_min=None,
+            distance_natural_pools_min=None,
             distance_supermarket_min=35,  # > 30 min
-            distance_health_center_min=10, distance_hospital_min=20,
-            fire_risk=FireRisk.NULO, price_min=0, price_max=999_999,
+            distance_health_center_min=10,
+            distance_hospital_min=20,
+            fire_risk=FireRisk.NULO,
+            price_min=0,
+            price_max=999_999,
         )
         result = apply_limiters(base_property, base_zone)
         assert result.passes is False
@@ -155,11 +166,17 @@ class TestLimiters:
 
     def test_l8_health_too_far_fail(self, base_property, base_zone):
         base_zone = Zone(
-            id="z", name="z", distance_madrid_min=150,
-            distance_beach_min=None, distance_natural_pools_min=None,
-            distance_supermarket_min=10, distance_health_center_min=65,  # > 60
-            distance_hospital_min=20, fire_risk=FireRisk.NULO,
-            price_min=0, price_max=999_999,
+            id="z",
+            name="z",
+            distance_madrid_min=150,
+            distance_beach_min=None,
+            distance_natural_pools_min=None,
+            distance_supermarket_min=10,
+            distance_health_center_min=65,  # > 60
+            distance_hospital_min=20,
+            fire_risk=FireRisk.NULO,
+            price_min=0,
+            price_max=999_999,
         )
         result = apply_limiters(base_property, base_zone)
         assert result.passes is False
@@ -167,11 +184,17 @@ class TestLimiters:
 
     def test_l9_hospital_too_far_fail(self, base_property, base_zone):
         base_zone = Zone(
-            id="z", name="z", distance_madrid_min=150,
-            distance_beach_min=None, distance_natural_pools_min=None,
-            distance_supermarket_min=10, distance_health_center_min=10,
+            id="z",
+            name="z",
+            distance_madrid_min=150,
+            distance_beach_min=None,
+            distance_natural_pools_min=None,
+            distance_supermarket_min=10,
+            distance_health_center_min=10,
             distance_hospital_min=100,  # > 90
-            fire_risk=FireRisk.NULO, price_min=0, price_max=999_999,
+            fire_risk=FireRisk.NULO,
+            price_min=0,
+            price_max=999_999,
         )
         result = apply_limiters(base_property, base_zone)
         assert result.passes is False
@@ -179,11 +202,17 @@ class TestLimiters:
 
     def test_l10_very_high_fire_risk_fail(self, base_property, base_zone):
         base_zone = Zone(
-            id="z", name="z", distance_madrid_min=150,
-            distance_beach_min=None, distance_natural_pools_min=None,
-            distance_supermarket_min=10, distance_health_center_min=10,
-            distance_hospital_min=20, fire_risk=FireRisk.MUY_ALTO,
-            price_min=0, price_max=999_999,
+            id="z",
+            name="z",
+            distance_madrid_min=150,
+            distance_beach_min=None,
+            distance_natural_pools_min=None,
+            distance_supermarket_min=10,
+            distance_health_center_min=10,
+            distance_hospital_min=20,
+            fire_risk=FireRisk.MUY_ALTO,
+            price_min=0,
+            price_max=999_999,
         )
         result = apply_limiters(base_property, base_zone)
         assert result.passes is False
@@ -192,11 +221,17 @@ class TestLimiters:
     def test_l10_high_fire_risk_passes(self, base_property, base_zone):
         """Riesgo ALTO (no MUY_ALTO) no descarta — solo penaliza en puntuación."""
         base_zone = Zone(
-            id="z", name="z", distance_madrid_min=150,
-            distance_beach_min=None, distance_natural_pools_min=None,
-            distance_supermarket_min=10, distance_health_center_min=10,
-            distance_hospital_min=20, fire_risk=FireRisk.ALTO,
-            price_min=0, price_max=999_999,
+            id="z",
+            name="z",
+            distance_madrid_min=150,
+            distance_beach_min=None,
+            distance_natural_pools_min=None,
+            distance_supermarket_min=10,
+            distance_health_center_min=10,
+            distance_hospital_min=20,
+            fire_risk=FireRisk.ALTO,
+            price_min=0,
+            price_max=999_999,
         )
         result = apply_limiters(base_property, base_zone)
         assert result.passes is True
@@ -224,8 +259,8 @@ class TestLimiters:
 
 # ── Tests de puntuación ───────────────────────────────────────────────────────
 
-class TestScoringFunctions:
 
+class TestScoringFunctions:
     def test_rooms_3(self):
         assert _score_rooms(3) == pytest.approx(2.0)
 
@@ -299,23 +334,26 @@ class TestScoringFunctions:
 
 
 class TestP11Preference:
-
     def test_preference_max(self, base_zone):
         base_zone = Zone(**{**base_zone.__dict__, "zone_preference": 9.0})
         from scorer import _score_preference
+
         assert _score_preference(9.0) == pytest.approx(9.0)
 
     def test_preference_min(self):
         from scorer import _score_preference
+
         assert _score_preference(0.0) == pytest.approx(0.0)
 
     def test_preference_clamped_above(self):
         from scorer import _score_preference
+
         assert _score_preference(15.0) == pytest.approx(9.0)
 
     def test_preference_cantabria(self):
         """Cantabria tiene la máxima preferencia (9) según especificación."""
         from zones import ZONES
+
         assert ZONES["cantabria_liebana"].zone_preference == pytest.approx(9.0)
 
     def test_preference_in_total(self, base_property, base_zone):
@@ -323,27 +361,36 @@ class TestP11Preference:
         score = calculate_score(base_property, base_zone)
         assert score.p11_preference == pytest.approx(5.0)  # zona de prueba con pref=5
         assert score.total == pytest.approx(
-            score.p1_rooms + score.p2_piscina + score.p3_distance +
-            score.p4_beach + score.p5_pools + score.p6_supermarket +
-            score.p7_health + score.p8_hospital + score.p9_price +
-            score.p10_fire + score.p11_preference
+            score.p1_rooms
+            + score.p2_piscina
+            + score.p3_distance
+            + score.p4_beach
+            + score.p5_pools
+            + score.p6_supermarket
+            + score.p7_health
+            + score.p8_hospital
+            + score.p9_price
+            + score.p10_fire
+            + score.p11_preference
         )
 
     def test_max_score_updated(self):
         """La puntuación máxima debe ser 84 (75 + 9 de P11)."""
         from models import ScoreBreakdown
+
         assert ScoreBreakdown.MAX_SCORE == pytest.approx(84.0)
 
     def test_alert_threshold_updated(self):
         """El umbral de alerta debe ser 50 (sube 5 con P11)."""
         from scorer import ALERT_THRESHOLD
+
         assert ALERT_THRESHOLD == pytest.approx(50.0)
 
 
 # ── Tests de calculate_score ──────────────────────────────────────────────────
 
-class TestCalculateScore:
 
+class TestCalculateScore:
     def test_total_does_not_exceed_max(self, base_property, base_zone):
         base_property.piscina = Piscina.PROPIA
         base_property.rooms = 5
@@ -354,18 +401,26 @@ class TestCalculateScore:
     def test_total_is_sum_of_parts(self, base_property, base_zone):
         score = calculate_score(base_property, base_zone)
         expected = (
-            score.p1_rooms + score.p2_piscina + score.p3_distance +
-            score.p4_beach + score.p5_pools + score.p6_supermarket +
-            score.p7_health + score.p8_hospital + score.p9_price +
-            score.p10_fire + score.p11_preference
+            score.p1_rooms
+            + score.p2_piscina
+            + score.p3_distance
+            + score.p4_beach
+            + score.p5_pools
+            + score.p6_supermarket
+            + score.p7_health
+            + score.p8_hospital
+            + score.p9_price
+            + score.p10_fire
+            + score.p11_preference
         )
         assert score.total == pytest.approx(expected)
 
     def test_property_distance_overrides_zone(self, base_property, base_zone):
         """Si la propiedad tiene distancias específicas, se usan sobre las de la zona."""
-        base_property.distance_supermarket_min = 3   # muy cerca → 8 pts
+        base_property.distance_supermarket_min = 3  # muy cerca → 8 pts
         base_zone_copy = Zone(
-            id=base_zone.id, name=base_zone.name,
+            id=base_zone.id,
+            name=base_zone.name,
             distance_madrid_min=base_zone.distance_madrid_min,
             distance_beach_min=base_zone.distance_beach_min,
             distance_natural_pools_min=base_zone.distance_natural_pools_min,
@@ -373,7 +428,8 @@ class TestCalculateScore:
             distance_health_center_min=base_zone.distance_health_center_min,
             distance_hospital_min=base_zone.distance_hospital_min,
             fire_risk=base_zone.fire_risk,
-            price_min=base_zone.price_min, price_max=base_zone.price_max,
+            price_min=base_zone.price_min,
+            price_max=base_zone.price_max,
         )
         score = calculate_score(base_property, base_zone_copy)
         assert score.p6_supermarket == pytest.approx(8.0)  # usa el de la propiedad
@@ -381,8 +437,8 @@ class TestCalculateScore:
 
 # ── Tests de evaluate ─────────────────────────────────────────────────────────
 
-class TestEvaluate:
 
+class TestEvaluate:
     def test_valid_property_returns_scored(self, base_property, base_zone):
         result = evaluate(base_property, base_zone)
         assert result is not None
@@ -407,15 +463,17 @@ class TestEvaluate:
         """Propiedad con muchos puntos negativos no debe superar el umbral."""
         # Zona con hospital lejos, supermercado lejos
         far_zone = Zone(
-            id="far", name="Far zone",
-            distance_madrid_min=260,   # casi en el límite → baja puntuación P3
+            id="far",
+            name="Far zone",
+            distance_madrid_min=260,  # casi en el límite → baja puntuación P3
             distance_beach_min=None,
             distance_natural_pools_min=None,
             distance_supermarket_min=28,
             distance_health_center_min=55,
             distance_hospital_min=85,
             fire_risk=FireRisk.MEDIO_ALTO,
-            price_min=0, price_max=999_999,
+            price_min=0,
+            price_max=999_999,
         )
         base_property.price = 310_000  # caro → baja puntuación P9
         base_property.rooms = 3
@@ -435,17 +493,25 @@ class TestEvaluate:
 
 # ── Tests del modelo ──────────────────────────────────────────────────────────
 
-class TestPropertyModel:
 
+class TestPropertyModel:
     def test_unique_id_format(self, base_property):
         assert base_property.unique_id == "pisos:12345"
 
     def test_unique_id_is_composite(self):
         prop = Property(
-            portal=Portal.FOTOCASA, portal_id="abc",
-            url="", zone_id="z", title="", price=100_000,
-            size_m2=None, rooms=None, has_garage=True,
-            has_garden_or_plot=True, piscina=Piscina.NINGUNA,
-            has_internet_mention=True, habitable=True,
+            portal=Portal.FOTOCASA,
+            portal_id="abc",
+            url="",
+            zone_id="z",
+            title="",
+            price=100_000,
+            size_m2=None,
+            rooms=None,
+            has_garage=True,
+            has_garden_or_plot=True,
+            piscina=Piscina.NINGUNA,
+            has_internet_mention=True,
+            habitable=True,
         )
         assert prop.unique_id == "fotocasa:abc"

@@ -9,6 +9,7 @@ Assignments
 - egnal  → SUPER
 - virchi → FAMILIA_PRINCIPAL
 """
+
 import os
 import sys
 
@@ -17,12 +18,14 @@ AUTH_DB_PATH = os.environ.get("AUTH_DB_PATH", "/app/data/auth.db")
 
 # Inject path so user_profiles can find the DB.
 import user_profiles
+
 user_profiles.AUTH_DB_PATH = AUTH_DB_PATH
 
 INITIAL_PROFILES = {
-    "egnal":  "SUPER",
+    "egnal": "SUPER",
     "virchi": "FAMILIA_PRINCIPAL",
 }
+
 
 def main() -> None:
     print(f"Migration target: {AUTH_DB_PATH}")
@@ -33,6 +36,7 @@ def main() -> None:
         except Exception as exc:
             print(f"  ✗ {username}: {exc}", file=sys.stderr)
     print("Done.")
+
 
 if __name__ == "__main__":
     main()

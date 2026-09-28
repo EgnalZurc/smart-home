@@ -7,7 +7,7 @@ Updated post-refactoring:
 - Dashboard has two sections: infrastructure (SUPER) + services
 - Stop/start buttons only visible to SUPER
 """
-import pytest
+
 from pathlib import Path
 
 # Use paths relative to this test file
@@ -19,6 +19,7 @@ BACKEND_STATIC = BACKEND_SRC / "static"
 
 # ── Helper ────────────────────────────────────────────────────────────────────
 
+
 def _html():
     return (BACKEND_STATIC / "dashboard.html").read_text(encoding="utf-8")
 
@@ -29,8 +30,8 @@ def _main():
 
 # ── Dashboard file ────────────────────────────────────────────────────────────
 
-class TestDashboardFileExists:
 
+class TestDashboardFileExists:
     def test_dashboard_html_exists(self):
         assert (BACKEND_STATIC / "dashboard.html").exists()
 
@@ -57,8 +58,8 @@ class TestDashboardFileExists:
 
 # ── App catalogue and service cards ───────────────────────────────────────────
 
-class TestDashboardAppCatalogue:
 
+class TestDashboardAppCatalogue:
     def test_app_catalogue_contains_ac(self):
         html = _html()
         assert "APP_CATALOGUE" in html
@@ -96,8 +97,8 @@ class TestDashboardAppCatalogue:
 
 # ── Infrastructure bar (SUPER only) ──────────────────────────────────────────
 
-class TestInfrastructureBar:
 
+class TestInfrastructureBar:
     def test_core_section_exists(self):
         assert "core-section" in _html()
 
@@ -150,13 +151,16 @@ class TestInfrastructureBar:
         backend_entry_start = core_block.index("core_backend")
         backend_entry_end = core_block.index("core_mqtt")
         backend_entry = core_block[backend_entry_start:backend_entry_end]
-        assert "'/api/health/backend'" in backend_entry or '"/api/health/backend"' in backend_entry
+        assert (
+            "'/api/health/backend'" in backend_entry
+            or '"/api/health/backend"' in backend_entry
+        )
 
 
 # ── Health status polling ─────────────────────────────────────────────────────
 
-class TestDashboardHealthPolling:
 
+class TestDashboardHealthPolling:
     def test_dashboard_uses_health_ac(self):
         assert "/api/health/ac" in _html()
 
@@ -189,8 +193,8 @@ class TestDashboardHealthPolling:
 
 # ── Stop/start buttons (SUPER only) ──────────────────────────────────────────
 
-class TestStopStartButtons:
 
+class TestStopStartButtons:
     def test_dashboard_has_svc_btn_class(self):
         assert "svc-btn" in _html()
 
@@ -226,8 +230,8 @@ def html():
 
 # ── main.py routing ───────────────────────────────────────────────────────────
 
-class TestMainPyRouting:
 
+class TestMainPyRouting:
     def test_root_redirects_to_smart_home(self):
         """/ must redirect to /smart-home."""
         assert "RedirectResponse" in _main()
@@ -257,8 +261,8 @@ class TestMainPyRouting:
 
 # ── Static assets ─────────────────────────────────────────────────────────────
 
-class TestStaticAssets:
 
+class TestStaticAssets:
     def test_favicon_exists(self):
         assert (BACKEND_STATIC / "favicon.ico").exists()
 

@@ -17,8 +17,11 @@ Para rehabilitar este portal se necesita:
 
 Decisión: deshabilitar hasta tener infraestructura adecuada.
 """
+
 from __future__ import annotations
+
 import logging
+
 import httpx
 from models import Property
 from zones import Zone

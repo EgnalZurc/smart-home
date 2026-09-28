@@ -208,9 +208,9 @@ python -m pytest tests/test_state_machine.py -v
 def test_temperature_average():
     """Test temperature average calculation"""
     sensors = [
-        {'temperature': 25.0},
-        {'temperature': 26.0},
-        {'temperature': 24.0},
+        {"temperature": 25.0},
+        {"temperature": 26.0},
+        {"temperature": 24.0},
     ]
     assert calculate_average(sensors) == 25.0
 ```

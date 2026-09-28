@@ -31,8 +31,10 @@ Política de errores:
   - Si un email falla al procesarse → NO se elimina del buzón → se notifica por Telegram
   - Solo se eliminan los emails procesados con éxito
 """
+
 from __future__ import annotations
 
+import contextlib
 import email
 import email.header
 import imaplib
@@ -43,17 +45,17 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
-_FOTOCASA_SENDER  = "enviosfotocasa@fotocasa.es"
-_IMAP_HOST        = "imap.gmail.com"
-_IMAP_PORT        = 993
-_SEARCH_FOLDERS   = ["INBOX", "[Gmail]/Todos", "[Gmail]/Papelera", "[Gmail]/Spam"]
+_FOTOCASA_SENDER = "enviosfotocasa@fotocasa.es"
+_IMAP_HOST = "imap.gmail.com"
+_IMAP_PORT = 993
+_SEARCH_FOLDERS = ["INBOX", "[Gmail]/Todos", "[Gmail]/Papelera", "[Gmail]/Spam"]
 
 # URL completa de anuncio:  /es/comprar/vivienda/{municipio}/{filtros}/{ID}/d
 _URL_PATTERN = re.compile(
     r"https://www\.fotocasa\.es/es/comprar/vivienda/"
-    r"([\w\-]+)"          # grupo 1: municipio
-    r"/([\w\-]+)"         # grupo 2: filtros
-    r"/(\d{7,})/d",       # grupo 3: property_id
+    r"([\w\-]+)"  # grupo 1: municipio
+    r"/([\w\-]+)"  # grupo 2: filtros
+    r"/(\d{7,})/d",  # grupo 3: property_id
     re.IGNORECASE,
 )
 
@@ -64,25 +66,25 @@ _PRICE_PATTERN = re.compile(
 )
 
 _ROOMS_PATTERN = re.compile(r"(\d+)\s+hab", re.IGNORECASE)
-_SIZE_PATTERN  = re.compile(r"([\d]+[,.]?\d*)\s*m[\u00b22]", re.IGNORECASE)
+_SIZE_PATTERN = re.compile(r"([\d]+[,.]?\d*)\s*m[\u00b22]", re.IGNORECASE)
 
 # Palabras en el segmento de filtros de la URL que indican características
-_GARDEN_KEYWORDS  = {"jardin", "patio", "terraza", "finca", "huerto", "parcela"}
-_GARAGE_KEYWORDS  = {"parking", "garaje", "cochera", "garage"}
-_AC_KEYWORDS      = {"calefaccion", "aire", "climatizacion", "ac", "aerotermia"}
+_GARDEN_KEYWORDS = {"jardin", "patio", "terraza", "finca", "huerto", "parcela"}
+_GARAGE_KEYWORDS = {"parking", "garaje", "cochera", "garage"}
+_AC_KEYWORDS = {"calefaccion", "aire", "climatizacion", "ac", "aerotermia"}
 
 
 class FotocasaEmailType(str, Enum):
     # "Tienes N anuncio(s) en tu zona personalizada de Vivienda en Venta, que no se te adelanten"
-    ALERTA_ZONA    = "alerta_zona"
+    ALERTA_ZONA = "alerta_zona"
     # "¡Precio reducido! Tu alerta de..." (bajada de precio en alerta)
-    BAJADA_PRECIO  = "bajada_precio"
+    BAJADA_PRECIO = "bajada_precio"
     # "Novedades de tus búsquedas guardadas" / "Nuevos anuncios en tu zona"
-    RESUMEN        = "resumen"
+    RESUMEN = "resumen"
     # "¡Nuevo anuncio que coincide con tu búsqueda!"  (anuncio individual directo)
-    NUEVO_ANUNCIO  = "nuevo_anuncio"
+    NUEVO_ANUNCIO = "nuevo_anuncio"
     # "Tu búsqueda guardada tiene actividad" / notificación genérica
-    OTRO           = "otro"
+    OTRO = "otro"
 
 
 @dataclass
@@ -109,6 +111,7 @@ class FotocasaAlert:
 # Utilidades internas
 # ---------------------------------------------------------------------------
 
+
 def _connect_imap(email_address: str, app_password: str) -> imaplib.IMAP4_SSL:
     imap = imaplib.IMAP4_SSL(_IMAP_HOST, _IMAP_PORT)
     imap.login(email_address, app_password)
@@ -132,10 +135,10 @@ def _get_body(msg: email.message.Message) -> str:
     if msg.is_multipart():
         for part in msg.walk():
             if part.get_content_type() in ("text/plain", "text/html"):
-                try:
-                    parts.append(part.get_payload(decode=True).decode("utf-8", errors="ignore"))
-                except Exception:
-                    pass
+                with contextlib.suppress(Exception):
+                    parts.append(
+                        part.get_payload(decode=True).decode("utf-8", errors="ignore")
+                    )
     else:
         try:
             parts.append(msg.get_payload(decode=True).decode("utf-8", errors="ignore"))
@@ -162,20 +165,33 @@ def _classify_fotocasa_email(subject: str) -> FotocasaEmailType:
     """
     sl = subject.lower()
     # Bajada de precio — más específico primero
-    if ("precio reducido" in sl or "bajada de precio" in sl
-            or "precio rebajado" in sl or "precio ha bajado" in sl
-            or "rebaja" in sl):
+    if (
+        "precio reducido" in sl
+        or "bajada de precio" in sl
+        or "precio rebajado" in sl
+        or "precio ha bajado" in sl
+        or "rebaja" in sl
+    ):
         return FotocasaEmailType.BAJADA_PRECIO
     # Alerta de zona — formato principal que llega
     if "zona personalizada" in sl and ("anuncio" in sl or "inmueble" in sl):
         return FotocasaEmailType.ALERTA_ZONA
     # Resumen / múltiples anuncios
-    if ("novedades" in sl or "resumen" in sl or "nuevos anuncios" in sl
-            or "busquedas guardadas" in sl or "búsquedas guardadas" in sl):
+    if (
+        "novedades" in sl
+        or "resumen" in sl
+        or "nuevos anuncios" in sl
+        or "busquedas guardadas" in sl
+        or "búsquedas guardadas" in sl
+    ):
         return FotocasaEmailType.RESUMEN
     # Nuevo anuncio individual
-    if ("nuevo anuncio" in sl or "nuevo inmueble" in sl
-            or "coincide con tu busqueda" in sl or "coincide con tu búsqueda" in sl):
+    if (
+        "nuevo anuncio" in sl
+        or "nuevo inmueble" in sl
+        or "coincide con tu busqueda" in sl
+        or "coincide con tu búsqueda" in sl
+    ):
         return FotocasaEmailType.NUEVO_ANUNCIO
     # Fallback — si tiene URLs de anuncio se procesará igual
     if "anuncio" in sl or "inmueble" in sl or "venta" in sl or "alerta" in sl:
@@ -192,23 +208,31 @@ def _infer_features_from_url(filtros_segment: str) -> tuple[bool, bool, bool]:
     tokens = set(filtros_segment.lower().replace("-", " ").split())
     has_garden = bool(tokens & _GARDEN_KEYWORDS)
     has_garage = bool(tokens & _GARAGE_KEYWORDS)
-    has_ac     = bool(tokens & _AC_KEYWORDS)
+    has_ac = bool(tokens & _AC_KEYWORDS)
     return has_garden, has_garage, has_ac
 
 
-def _extract_price_near_url(body: str, url_match_start: int, url_match_end: int) -> tuple[int | None, int | None, float | None]:
+def _extract_price_near_url(
+    body: str, url_match_start: int, url_match_end: int
+) -> tuple[int | None, int | None, float | None]:
     """Extrae precio, habitaciones y m² del body en contexto ±600 chars alrededor de la URL."""
     start = max(0, url_match_start - 600)
-    end   = min(len(body), url_match_end + 600)
-    ctx   = body[start:end]
+    end = min(len(body), url_match_end + 600)
+    ctx = body[start:end]
 
     price_m = _PRICE_PATTERN.search(ctx)
     rooms_m = _ROOMS_PATTERN.search(ctx)
-    size_m  = _SIZE_PATTERN.search(ctx)
+    size_m = _SIZE_PATTERN.search(ctx)
 
     price = None
     if price_m:
-        raw = price_m.group(1).replace(".", "").replace(" ", "").replace("\xa0", "").replace(",", "")
+        raw = (
+            price_m.group(1)
+            .replace(".", "")
+            .replace(" ", "")
+            .replace("\xa0", "")
+            .replace(",", "")
+        )
         try:
             val = int(raw)
             price = val if 10_000 <= val <= 10_000_000 else None
@@ -219,17 +243,26 @@ def _extract_price_near_url(body: str, url_match_start: int, url_match_end: int)
     if not price:
         price_m2 = _PRICE_PATTERN.search(body)
         if price_m2:
-            raw = price_m2.group(1).replace(".", "").replace(" ", "").replace("\xa0", "").replace(",", "")
+            raw = (
+                price_m2.group(1)
+                .replace(".", "")
+                .replace(" ", "")
+                .replace("\xa0", "")
+                .replace(",", "")
+            )
             try:
                 val = int(raw)
                 price = val if 10_000 <= val <= 10_000_000 else None
             except ValueError:
                 pass
             if price:
-                logger.debug("[fotocasa] Precio no en contexto de URL, hallado en body completo: %s", price)
+                logger.debug(
+                    "[fotocasa] Precio no en contexto de URL, hallado en body completo: %s",
+                    price,
+                )
 
     rooms = int(rooms_m.group(1)) if rooms_m else None
-    size  = float(size_m.group(1).replace(",", ".")) if size_m else None
+    size = float(size_m.group(1).replace(",", ".")) if size_m else None
     return price, rooms, size
 
 
@@ -244,48 +277,54 @@ def _extract_alerts_from_email(
     """
     try:
         subject_raw = msg.get("Subject", "")
-        subject     = _decode_subject(subject_raw)
-        body        = _get_body(msg)
-        email_type  = _classify_fotocasa_email(subject)
+        subject = _decode_subject(subject_raw)
+        body = _get_body(msg)
+        email_type = _classify_fotocasa_email(subject)
 
         seen_ids: set[str] = set()
-        alerts:   list[FotocasaAlert] = []
+        alerts: list[FotocasaAlert] = []
 
         for match in _URL_PATTERN.finditer(body):
-            municipio = match.group(1)   # ej: "fuentespina"
-            filtros   = match.group(2)   # ej: "jardin-patio-no-amueblado"
-            pid       = match.group(3)   # ej: "188996167"
+            municipio = match.group(1)  # ej: "fuentespina"
+            filtros = match.group(2)  # ej: "jardin-patio-no-amueblado"
+            pid = match.group(3)  # ej: "188996167"
 
             if pid in seen_ids:
                 continue
             seen_ids.add(pid)
 
             has_garden, has_garage, has_ac = _infer_features_from_url(filtros)
-            price, rooms, size_m2 = _extract_price_near_url(body, match.start(), match.end())
+            price, rooms, size_m2 = _extract_price_near_url(
+                body, match.start(), match.end()
+            )
 
             # URL canónica sin tracking params
             url = f"https://www.fotocasa.es/es/comprar/vivienda/{municipio}/{filtros}/{pid}/d"
 
-            alerts.append(FotocasaAlert(
-                url=url,
-                property_id=pid,
-                email_id=msg_id,
-                folder=folder,
-                location_hint=municipio,
-                email_type=email_type,
-                price=price,
-                rooms=rooms,
-                size_m2=size_m2,
-                has_garden=has_garden,
-                has_garage=has_garage,
-                has_ac=has_ac,
-                is_price_drop=(email_type == FotocasaEmailType.BAJADA_PRECIO),
-            ))
+            alerts.append(
+                FotocasaAlert(
+                    url=url,
+                    property_id=pid,
+                    email_id=msg_id,
+                    folder=folder,
+                    location_hint=municipio,
+                    email_type=email_type,
+                    price=price,
+                    rooms=rooms,
+                    size_m2=size_m2,
+                    has_garden=has_garden,
+                    has_garage=has_garage,
+                    has_ac=has_ac,
+                    is_price_drop=(email_type == FotocasaEmailType.BAJADA_PRECIO),
+                )
+            )
 
         if not alerts:
             logger.info(
                 "[fotocasa] Email %s sin URLs de anuncios (tipo: %s, subject: %.60s)",
-                msg_id, email_type.value, subject,
+                msg_id,
+                email_type.value,
+                subject,
             )
 
         return alerts, None
@@ -299,6 +338,7 @@ def _extract_alerts_from_email(
 # ---------------------------------------------------------------------------
 # API pública
 # ---------------------------------------------------------------------------
+
 
 def fetch_new_fotocasa_alerts(
     email_address: str,
@@ -316,10 +356,10 @@ def fetch_new_fotocasa_alerts(
         logger.error("[fotocasa] Error conectando a IMAP: %s", e)
         return [], [str(e)], None
 
-    all_alerts:  list[FotocasaAlert] = []
-    all_errors:  list[str]           = []
-    seen_pids:   set[str]            = set()
-    failed_ids:  set[str]            = set()
+    all_alerts: list[FotocasaAlert] = []
+    all_errors: list[str] = []
+    seen_pids: set[str] = set()
+    failed_ids: set[str] = set()
 
     search_criteria = f'(FROM "{_FOTOCASA_SENDER}")'
 
@@ -331,8 +371,12 @@ def fetch_new_fotocasa_alerts(
             if status != "OK":
                 continue
             # Para Papelera/Spam: solo emails no leídos (evita reprocesar)
-            trash_folders = {"[Gmail]/Papelera", "[Gmail]/Spam",
-                             "[Gmail]/Trash", "[Gmail]/Junk"}
+            trash_folders = {
+                "[Gmail]/Papelera",
+                "[Gmail]/Spam",
+                "[Gmail]/Trash",
+                "[Gmail]/Junk",
+            }
             if folder in trash_folders:
                 criteria_folder = f"(UNSEEN {search_criteria[1:-1]})"
             else:
@@ -370,7 +414,9 @@ def fetch_new_fotocasa_alerts(
                 seen_pids.add(a.property_id)
                 all_alerts.append(a)
 
-    logger.info("[fotocasa] Total: %d anuncios, %d errores", len(all_alerts), len(all_errors))
+    logger.info(
+        "[fotocasa] Total: %d anuncios, %d errores", len(all_alerts), len(all_errors)
+    )
     return all_alerts, all_errors, imap
 
 
@@ -396,8 +442,12 @@ def delete_processed_fotocasa_emails(
             continue
         # No eliminar emails de Papelera/Spam — ya están descartados.
         # Los marcamos como leídos (\Seen) para no reprocesarlos.
-        if a.folder in ("[Gmail]/Papelera", "[Gmail]/Spam",
-                        "[Gmail]/Trash", "[Gmail]/Junk"):
+        if a.folder in (
+            "[Gmail]/Papelera",
+            "[Gmail]/Spam",
+            "[Gmail]/Trash",
+            "[Gmail]/Junk",
+        ):
             seen_folder.setdefault(a.folder, set()).add(a.email_id)
             continue
         by_folder.setdefault(a.folder, set()).add(a.email_id)
@@ -416,7 +466,9 @@ def delete_processed_fotocasa_emails(
             imap.select(folder)
             for msg_id in ids:
                 imap.store(msg_id.encode(), "+FLAGS", "\\Seen")
-            logger.info("[fotocasa] %d emails marcados como leídos en %s", len(ids), folder)
+            logger.info(
+                "[fotocasa] %d emails marcados como leídos en %s", len(ids), folder
+            )
         except Exception as e:
             logger.warning("[fotocasa] Error marcando como leídos en %s: %s", folder, e)
 

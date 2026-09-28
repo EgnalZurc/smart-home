@@ -1,4 +1,4 @@
-﻿"""Unit tests for the AC controller state machine.
+"""Unit tests for the AC controller state machine.
 
 Cover all transitions, corner cases and cross-cutting rules.
 """
@@ -17,15 +17,12 @@ from controllers.state_machine import (
     StateMachineConfig,
     StateMachineInputs,
     StateMachineOutputs,
-    evaluate,
     _calculate_proportional_setpoint,
-    COOLDOWN_SECONDS,
-    SENSOR_ALERT_SECONDS,
-    MELCLOUD_MAX_FAILURES,
+    evaluate,
 )
 
-
 # --- Helpers ---
+
 
 def make_inputs(
     average_temp: float | None = 26.0,
@@ -54,6 +51,7 @@ DEFAULT_CONFIG = StateMachineConfig()
 # TESTS: Outputs completos
 # =============================================================================
 
+
 class TestOutputsAlwaysComplete:
     """Verifica que todos los outputs tengan valores definidos en cualquier estado."""
 
@@ -67,39 +65,62 @@ class TestOutputsAlwaysComplete:
         assert isinstance(outputs.melcloud_error, bool)
 
     def test_off_state_complete(self):
-        result = evaluate(ControllerState.OFF, make_inputs(average_temp=22.0), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.OFF, make_inputs(average_temp=22.0), DEFAULT_CONFIG
+        )
         self._assert_outputs_complete(result)
 
     def test_cooling_max_complete(self):
-        result = evaluate(ControllerState.OFF, make_inputs(average_temp=26.0), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.OFF, make_inputs(average_temp=26.0), DEFAULT_CONFIG
+        )
         self._assert_outputs_complete(result)
 
     def test_modulating_complete(self):
-        result = evaluate(ControllerState.COOLING_MAX, make_inputs(average_temp=23.2), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.COOLING_MAX, make_inputs(average_temp=23.2), DEFAULT_CONFIG
+        )
         self._assert_outputs_complete(result)
 
     def test_cooldown_complete(self):
-        result = evaluate(ControllerState.COOLDOWN, make_inputs(seconds_since_last_off=10.0), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.COOLDOWN,
+            make_inputs(seconds_since_last_off=10.0),
+            DEFAULT_CONFIG,
+        )
         self._assert_outputs_complete(result)
 
     def test_forced_on_complete(self):
         result = evaluate(
             ControllerState.OFF,
-            make_inputs(manual_mode=ManualMode.FORCE_ON, force_on_params=ForceOnParams(temperature=25.0, fan_speed=2)),
+            make_inputs(
+                manual_mode=ManualMode.FORCE_ON,
+                force_on_params=ForceOnParams(temperature=25.0, fan_speed=2),
+            ),
             DEFAULT_CONFIG,
         )
         self._assert_outputs_complete(result)
 
     def test_forced_off_complete(self):
-        result = evaluate(ControllerState.COOLING_MAX, make_inputs(manual_mode=ManualMode.FORCE_OFF), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.COOLING_MAX,
+            make_inputs(manual_mode=ManualMode.FORCE_OFF),
+            DEFAULT_CONFIG,
+        )
         self._assert_outputs_complete(result)
 
     def test_error_complete(self):
-        result = evaluate(ControllerState.OFF, make_inputs(consecutive_melcloud_failures=100), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.OFF,
+            make_inputs(consecutive_melcloud_failures=100),
+            DEFAULT_CONFIG,
+        )
         self._assert_outputs_complete(result)
 
     def test_none_temp_complete(self):
-        result = evaluate(ControllerState.COOLING_MAX, make_inputs(average_temp=None), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.COOLING_MAX, make_inputs(average_temp=None), DEFAULT_CONFIG
+        )
         self._assert_outputs_complete(result)
 
 
@@ -107,36 +128,47 @@ class TestOutputsAlwaysComplete:
 # TESTS: Estado OFF
 # =============================================================================
 
+
 class TestStateOff:
     """Transiciones desde OFF."""
 
     def test_stays_off_when_below_target(self):
-        result = evaluate(ControllerState.OFF, make_inputs(average_temp=22.0), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.OFF, make_inputs(average_temp=22.0), DEFAULT_CONFIG
+        )
         assert result.state == ControllerState.OFF
         assert result.power is False
 
     def test_stays_off_when_in_dead_zone(self):
         # 23.3 is between target-0.3 (22.7) and target+0.5 (23.5)
-        result = evaluate(ControllerState.OFF, make_inputs(average_temp=23.3), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.OFF, make_inputs(average_temp=23.3), DEFAULT_CONFIG
+        )
         assert result.state == ControllerState.OFF
         assert result.power is False
 
     def test_stays_off_at_hot_threshold_exactly(self):
         # 23.5 = obj + 0.5, no supera
-        result = evaluate(ControllerState.OFF, make_inputs(average_temp=23.5), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.OFF, make_inputs(average_temp=23.5), DEFAULT_CONFIG
+        )
         assert result.state == ControllerState.OFF
         assert result.power is False
 
     def test_transitions_to_cooling_max_above_threshold(self):
         # 23.6 > obj + 0.5
-        result = evaluate(ControllerState.OFF, make_inputs(average_temp=23.6), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.OFF, make_inputs(average_temp=23.6), DEFAULT_CONFIG
+        )
         assert result.state == ControllerState.COOLING_MAX
         assert result.power is True
         assert result.setpoint == 19.0
         assert result.fan_speed == 3
 
     def test_stays_off_with_no_sensor_data(self):
-        result = evaluate(ControllerState.OFF, make_inputs(average_temp=None), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.OFF, make_inputs(average_temp=None), DEFAULT_CONFIG
+        )
         assert result.state == ControllerState.OFF
         assert result.power is False
 
@@ -145,11 +177,14 @@ class TestStateOff:
 # TESTS: Estado COOLING_MAX
 # =============================================================================
 
+
 class TestStateCoolingMax:
     """Transiciones desde COOLING_MAX."""
 
     def test_stays_cooling_max_when_hot(self):
-        result = evaluate(ControllerState.COOLING_MAX, make_inputs(average_temp=26.0), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.COOLING_MAX, make_inputs(average_temp=26.0), DEFAULT_CONFIG
+        )
         assert result.state == ControllerState.COOLING_MAX
         assert result.power is True
         assert result.setpoint == 19.0
@@ -157,19 +192,25 @@ class TestStateCoolingMax:
 
     def test_transitions_to_modulating_in_dead_zone(self):
         # 23.0 is between 22.7 and 23.5
-        result = evaluate(ControllerState.COOLING_MAX, make_inputs(average_temp=23.0), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.COOLING_MAX, make_inputs(average_temp=23.0), DEFAULT_CONFIG
+        )
         assert result.state == ControllerState.MODULATING
         assert result.power is True
         assert result.fan_speed == 0
 
     def test_transitions_to_cooldown_below_cold_threshold(self):
         # 22.6 < 22.7 (obj - 0.3)
-        result = evaluate(ControllerState.COOLING_MAX, make_inputs(average_temp=22.6), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.COOLING_MAX, make_inputs(average_temp=22.6), DEFAULT_CONFIG
+        )
         assert result.state == ControllerState.COOLDOWN
         assert result.power is False
 
     def test_maintains_cooling_with_no_sensor_data(self):
-        result = evaluate(ControllerState.COOLING_MAX, make_inputs(average_temp=None), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.COOLING_MAX, make_inputs(average_temp=None), DEFAULT_CONFIG
+        )
         assert result.state == ControllerState.COOLING_MAX
         assert result.power is True
         assert result.setpoint == 19.0
@@ -179,23 +220,30 @@ class TestStateCoolingMax:
 # TESTS: Estado MODULATING
 # =============================================================================
 
+
 class TestStateModulating:
     """Transiciones desde MODULATING."""
 
     def test_stays_modulating_in_dead_zone(self):
-        result = evaluate(ControllerState.MODULATING, make_inputs(average_temp=23.2), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.MODULATING, make_inputs(average_temp=23.2), DEFAULT_CONFIG
+        )
         assert result.state == ControllerState.MODULATING
         assert result.power is True
         assert 19.0 <= result.setpoint <= 30.0
 
     def test_transitions_to_cooling_max_when_hot(self):
-        result = evaluate(ControllerState.MODULATING, make_inputs(average_temp=23.6), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.MODULATING, make_inputs(average_temp=23.6), DEFAULT_CONFIG
+        )
         assert result.state == ControllerState.COOLING_MAX
         assert result.setpoint == 19.0
         assert result.fan_speed == 3
 
     def test_transitions_to_cooldown_when_cold(self):
-        result = evaluate(ControllerState.MODULATING, make_inputs(average_temp=22.6), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.MODULATING, make_inputs(average_temp=22.6), DEFAULT_CONFIG
+        )
         assert result.state == ControllerState.COOLDOWN
         assert result.power is False
 
@@ -212,18 +260,23 @@ class TestStateModulating:
 
     def test_setpoint_proportional_near_hot_edge(self):
         # 23.4 very close to hot (23.5) → low setpoint (more power)
-        result = evaluate(ControllerState.MODULATING, make_inputs(average_temp=23.4), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.MODULATING, make_inputs(average_temp=23.4), DEFAULT_CONFIG
+        )
         assert result.setpoint < 22.0  # Close to minimum
 
     def test_setpoint_proportional_near_cold_edge(self):
         # 22.8 very close to cold (22.7) → high setpoint (less power)
-        result = evaluate(ControllerState.MODULATING, make_inputs(average_temp=22.8), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.MODULATING, make_inputs(average_temp=22.8), DEFAULT_CONFIG
+        )
         assert result.setpoint > 27.0  # Close to maximum
 
 
 # =============================================================================
 # TESTS: Estado COOLDOWN
 # =============================================================================
+
 
 class TestStateCooldown:
     """Transiciones desde COOLDOWN."""
@@ -286,6 +339,7 @@ class TestStateCooldown:
 # TESTS: Override manual
 # =============================================================================
 
+
 class TestManualOverride:
     """Force ON / Force OFF desde cualquier estado."""
 
@@ -323,7 +377,11 @@ class TestManualOverride:
         params = ForceOnParams(temperature=21.0, fan_speed=3)
         result = evaluate(
             ControllerState.COOLDOWN,
-            make_inputs(manual_mode=ManualMode.FORCE_ON, force_on_params=params, seconds_since_last_off=10.0),
+            make_inputs(
+                manual_mode=ManualMode.FORCE_ON,
+                force_on_params=params,
+                seconds_since_last_off=10.0,
+            ),
             DEFAULT_CONFIG,
         )
         assert result.state == ControllerState.FORCED_ON
@@ -335,7 +393,9 @@ class TestManualOverride:
         """Al volver a auto desde FORCED_OFF, no se aplica cooldown."""
         result = evaluate(
             ControllerState.FORCED_OFF,
-            make_inputs(average_temp=26.0, seconds_since_last_off=0.0),  # 0s desde apagado
+            make_inputs(
+                average_temp=26.0, seconds_since_last_off=0.0
+            ),  # 0s desde apagado
             DEFAULT_CONFIG,
         )
         # Should go to COOLING_MAX directly, without cooldown
@@ -356,6 +416,7 @@ class TestManualOverride:
 # =============================================================================
 # TESTS: Error MELCloud
 # =============================================================================
+
 
 class TestMelCloudError:
     """Estado ERROR tras 100 fallos consecutivos."""
@@ -392,7 +453,9 @@ class TestMelCloudError:
         """Error tiene prioridad sobre force_on."""
         result = evaluate(
             ControllerState.FORCED_ON,
-            make_inputs(manual_mode=ManualMode.FORCE_ON, consecutive_melcloud_failures=100),
+            make_inputs(
+                manual_mode=ManualMode.FORCE_ON, consecutive_melcloud_failures=100
+            ),
             DEFAULT_CONFIG,
         )
         assert result.state == ControllerState.ERROR
@@ -402,6 +465,7 @@ class TestMelCloudError:
 # =============================================================================
 # TESTS: Alerta sensores
 # =============================================================================
+
 
 class TestSensorAlert:
     """Alert when no update in 60 minutes."""
@@ -438,6 +502,7 @@ class TestSensorAlert:
 # TESTS: Consigna proporcional
 # =============================================================================
 
+
 class TestProportionalSetpoint:
     """Proportional setpoint calculation."""
 
@@ -470,15 +535,20 @@ class TestProportionalSetpoint:
 # TESTS: Modo siempre cool
 # =============================================================================
 
+
 class TestAlwaysCool:
     """El modo es siempre 'cool'."""
 
     def test_mode_cool_in_off(self):
-        result = evaluate(ControllerState.OFF, make_inputs(average_temp=22.0), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.OFF, make_inputs(average_temp=22.0), DEFAULT_CONFIG
+        )
         assert result.mode == "cool"
 
     def test_mode_cool_in_cooling_max(self):
-        result = evaluate(ControllerState.OFF, make_inputs(average_temp=26.0), DEFAULT_CONFIG)
+        result = evaluate(
+            ControllerState.OFF, make_inputs(average_temp=26.0), DEFAULT_CONFIG
+        )
         assert result.mode == "cool"
 
     def test_mode_cool_in_forced_on(self):
@@ -501,6 +571,7 @@ class TestAlwaysCool:
 # =============================================================================
 # TESTS: Determinismo (mismos inputs → mismos outputs)
 # =============================================================================
+
 
 class TestDeterminism:
     """The state machine is deterministic."""

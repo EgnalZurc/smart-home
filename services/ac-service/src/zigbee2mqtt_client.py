@@ -68,9 +68,13 @@ class Zigbee2MQTTClient:
         client.on_message = self._on_message
 
         try:
-            logger.info("Connecting to MQTT %s:%d to get devices...", self.mqtt_broker, self.mqtt_port)
+            logger.info(
+                "Connecting to MQTT %s:%d to get devices...",
+                self.mqtt_broker,
+                self.mqtt_port,
+            )
             client.connect(self.mqtt_broker, self.mqtt_port, 60)
-            
+
             # Start loop in background
             client.loop_start()
 
@@ -79,6 +83,7 @@ class Zigbee2MQTTClient:
 
             # Wait for response with timeout
             import time
+
             elapsed = 0.0
             poll_interval = 0.1
             while not self.response_received and elapsed < self.timeout:
@@ -86,7 +91,9 @@ class Zigbee2MQTTClient:
                 elapsed += poll_interval
 
             if not self.response_received:
-                raise Exception(f"Timeout waiting for Zigbee2MQTT response after {self.timeout}s")
+                raise Exception(
+                    f"Timeout waiting for Zigbee2MQTT response after {self.timeout}s"
+                )
 
             logger.info("Got %d devices from Zigbee2MQTT", len(self.devices))
             return self.devices
@@ -124,11 +131,14 @@ class Zigbee2MQTTClient:
 
                 exposes = definition.get("exposes", [])
                 has_temperature = any(
-                    expose.get("property") == "temperature" or 
-                    (expose.get("type") == "climate" and any(
-                        f.get("property") == "temperature" 
-                        for f in expose.get("features", [])
-                    ))
+                    expose.get("property") == "temperature"
+                    or (
+                        expose.get("type") == "climate"
+                        and any(
+                            f.get("property") == "temperature"
+                            for f in expose.get("features", [])
+                        )
+                    )
                     for expose in exposes
                 )
 

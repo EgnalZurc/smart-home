@@ -1,7 +1,9 @@
 """Unit tests for mqtt_handler.py"""
-import json, time
+
+import json
+import time
 from unittest.mock import MagicMock, patch
-import pytest
+
 from mqtt_handler import MqttHandler, SensorReading
 
 
@@ -40,8 +42,10 @@ class TestOnMessage:
     def test_processes_valid_message(self):
         h = self._make_handler(["Salon"])
         with patch.object(h, "_save_to_disk"):
-            msg = self._make_msg("zigbee2mqtt/Salon",
-                                  {"temperature": 25.0, "humidity": 40, "battery": 90})
+            msg = self._make_msg(
+                "zigbee2mqtt/Salon",
+                {"temperature": 25.0, "humidity": 40, "battery": 90},
+            )
             h._on_message(None, None, msg)
         assert "Salon" in h.readings
         assert h.readings["Salon"].temperature == 25.0
@@ -57,8 +61,9 @@ class TestOnMessage:
         h = self._make_handler(["Salon"])
         with patch.object(h, "_save_to_disk"):
             for i in range(10):
-                msg = self._make_msg("zigbee2mqtt/Salon",
-                                      {"temperature": float(i), "humidity": 40})
+                msg = self._make_msg(
+                    "zigbee2mqtt/Salon", {"temperature": float(i), "humidity": 40}
+                )
                 h._on_message(None, None, msg)
         assert len(h.history["Salon"]) <= 5
 
@@ -121,6 +126,7 @@ class TestRecordAcTemp:
     def test_record_ac_temp_adds_to_history(self, tmp_path, monkeypatch):
         monkeypatch.setenv("SENSOR_PERSIST_FILE", str(tmp_path / "sensor.json"))
         import mqtt_handler as mh
+
         monkeypatch.setattr(mh, "PERSIST_FILE", str(tmp_path / "sensor.json"))
         h = self._make_handler()
         h.record_ac_temp(24.5)
@@ -131,7 +137,10 @@ class TestRecordAcTemp:
         assert h.history["AC"][0].battery is None
 
     def test_record_ac_temp_persists_to_disk(self, tmp_path, monkeypatch):
-        import json, mqtt_handler as mh
+        import json
+
+        import mqtt_handler as mh
+
         persist = tmp_path / "sensor.json"
         monkeypatch.setattr(mh, "PERSIST_FILE", str(persist))
         h = self._make_handler()
@@ -142,6 +151,7 @@ class TestRecordAcTemp:
 
     def test_record_ac_temp_respects_max_history(self, tmp_path, monkeypatch):
         import mqtt_handler as mh
+
         monkeypatch.setattr(mh, "PERSIST_FILE", str(tmp_path / "sensor.json"))
         h = self._make_handler()
         h.max_history = 5
@@ -151,13 +161,28 @@ class TestRecordAcTemp:
 
     def test_ac_sensor_loaded_from_disk(self, tmp_path, monkeypatch):
         """AC entries persisted on disk are loaded even though AC not in sensor_names."""
-        import json, mqtt_handler as mh
+        import json
+
+        import mqtt_handler as mh
+
         persist = tmp_path / "sensor.json"
         monkeypatch.setattr(mh, "PERSIST_FILE", str(persist))
         # Write pre-existing AC data
-        persist.write_text(json.dumps({
-            "AC": [{"temperature": 23.0, "humidity": None, "battery": None, "timestamp": 1000.0}]
-        }), encoding="utf-8")
+        persist.write_text(
+            json.dumps(
+                {
+                    "AC": [
+                        {
+                            "temperature": 23.0,
+                            "humidity": None,
+                            "battery": None,
+                            "timestamp": 1000.0,
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
         with patch("mqtt_handler.mqtt"):
             h = MqttHandler("localhost", 1883, ["s1"], max_history=200)
             h._error_tracker = None
@@ -169,7 +194,9 @@ class TestSensorReadingOptionalFields:
     """SensorReading supports None humidity/battery (AC virtual sensor)."""
 
     def test_ac_reading_humidity_battery_none(self):
-        r = SensorReading(temperature=23.5, humidity=None, battery=None, timestamp=999.0)
+        r = SensorReading(
+            temperature=23.5, humidity=None, battery=None, timestamp=999.0
+        )
         assert r.humidity is None
         assert r.battery is None
 
