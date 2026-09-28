@@ -140,20 +140,6 @@
         .user-menu.open { display:block; }
         .user-menu-item { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:7px; font-size:0.8125rem; color:#94a3b8; cursor:pointer; transition:background .15s, color .15s; border:none; background:none; width:100%; text-align:left; }
         .user-menu-item:hover { background:rgba(239,68,68,.1); color:#f87171; }
-
-        /* Mode selector */
-        .mode-bar { background: rgba(15,23,42,0.7); border: 1px solid rgba(51,65,85,0.35); border-radius: 14px; }
-        .mode-btns { display: flex; gap: 6px; }
-        .mode-btn {
-            flex: 1; padding: 8px 12px; border-radius: 10px;
-            font-size: 12px; font-weight: 600; text-align: center;
-            cursor: pointer; transition: all 0.2s ease;
-            border: 1px solid transparent; background: transparent; color: #64748b;
-        }
-        .mode-btn:hover { background: rgba(51,65,85,0.3); color: #94a3b8; }
-        .mode-btn.active { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.4); color: #a5b4fc; }
-        .mode-btn.loading { opacity: 0.5; cursor: wait; }
-        .mode-btn .mode-icon { font-size: 16px; margin-bottom: 2px; display: block; }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
@@ -231,27 +217,6 @@
         </div>
     </section>
 
-    <!-- SECTION 1.5: Mode selector (SUPER only) -->
-    <section class="mb-7" id="mode-section" style="display:none">
-        <p id="mode-label" class="section-label mb-2 px-1">Modo</p>
-        <div class="mode-bar px-3 py-3">
-            <div class="mode-btns">
-                <button class="mode-btn" data-mode="gaming" onclick="setMode('gaming')">
-                    <span class="mode-icon">🎮</span>
-                    <span id="mode-gaming-label">Juego</span>
-                </button>
-                <button class="mode-btn" data-mode="photos" onclick="setMode('photos')">
-                    <span class="mode-icon">📷</span>
-                    <span id="mode-photos-label">Fotos</span>
-                </button>
-                <button class="mode-btn" data-mode="minimal" onclick="setMode('minimal')">
-                    <span class="mode-icon">⚡</span>
-                    <span id="mode-minimal-label">Básico</span>
-                </button>
-            </div>
-        </div>
-    </section>
-
     <!-- SECTION 2: Services -->
     <section id="services-section" style="display:none">
         <p id="apps-label" class="section-label mb-3 px-1">Servicios</p>
@@ -273,7 +238,6 @@ const T = {
         res_title: 'Recursos del sistema', res_ram: 'RAM', res_swap: 'Swap',
         res_cpu: 'CPU', res_disk: 'Disco', res_temp: 'Temperatura',
         res_used: 'usados', res_free: 'libres',
-        mode_label: 'Modo', mode_gaming: 'Juego', mode_photos: 'Fotos', mode_minimal: 'Básico',
         ac_name: 'Control AC', ac_desc: 'Temperatura, sensores Zigbee, MELCloud',
         photos_name: 'Fotos', photos_desc: 'Copia de seguridad de fotos y vídeos',
         vacaciones_name: 'Cuchi Vacaciones', vacaciones_desc: 'Planificador de cuchi vacaciones',
@@ -291,7 +255,6 @@ const T = {
         res_title: 'System resources', res_ram: 'RAM', res_swap: 'Swap',
         res_cpu: 'CPU', res_disk: 'Disk', res_temp: 'Temperature',
         res_used: 'used', res_free: 'free',
-        mode_label: 'Mode', mode_gaming: 'Gaming', mode_photos: 'Photos', mode_minimal: 'Minimal',
         ac_name: 'AC Control', ac_desc: 'Temperature control, Zigbee sensors, MELCloud',
         photos_name: 'Photos', photos_desc: 'Photo and video backup',
         vacaciones_name: 'Cuchi Holidays', vacaciones_desc: 'Holiday planner',
@@ -336,17 +299,13 @@ function applyLang() {
     document.getElementById('core-label').textContent = t('infrastructure');
     document.getElementById('apps-label').textContent = t('services');
     document.getElementById('res-title').textContent  = t('res_title');
-    document.getElementById('mode-label').textContent = t('mode_label');
-    document.getElementById('mode-gaming-label').textContent = t('mode_gaming');
-    document.getElementById('mode-photos-label').textContent = t('mode_photos');
-    document.getElementById('mode-minimal-label').textContent = t('mode_minimal');
     const logoutText = document.getElementById('logout-text');
     if (logoutText) logoutText.textContent = t('logout_label');
     saveLang(currentLang);
 }
 function setLang(l) {
     document.getElementById('lang-menu').classList.remove('open');
-    currentLang = l; applyLang(); renderCore(); renderMode(); renderApps(); loadStatus();
+    currentLang = l; applyLang(); renderCore(); renderApps(); loadStatus();
 }
 function toggleLang() { document.getElementById('lang-menu').classList.toggle('open'); }
 document.addEventListener('click', e => {
@@ -365,53 +324,6 @@ function renderCore() {
             : `<div class="core-item">${inner}</div>`;
     }).join('');
     document.getElementById('core-section').style.display = 'block';
-}
-
-// Mode selector
-let currentMode = null;
-let modeChanging = false;
-
-function renderMode() {
-    if (!currentProfile?.show_config_apps) return;
-    document.getElementById('mode-section').style.display = 'block';
-    loadMode();
-}
-
-async function loadMode() {
-    try {
-        const r = await fetch('/api/system/mode');
-        if (!r.ok) return;
-        const data = await r.json();
-        currentMode = data.mode;
-        updateModeButtons();
-    } catch {}
-}
-
-function updateModeButtons() {
-    document.querySelectorAll('.mode-btn').forEach(btn => {
-        const mode = btn.dataset.mode;
-        btn.classList.toggle('active', mode === currentMode);
-        btn.classList.toggle('loading', modeChanging);
-    });
-}
-
-async function setMode(mode) {
-    if (modeChanging || mode === currentMode) return;
-    modeChanging = true;
-    updateModeButtons();
-    try {
-        const r = await fetch(`/api/system/mode/${mode}`, { method: 'POST' });
-        if (r.ok) {
-            currentMode = mode;
-            // Wait for containers to settle, then refresh
-            await new Promise(res => setTimeout(res, 3000));
-            await loadContainerStates();
-            Object.keys(statusCache).forEach(k => delete statusCache[k]);
-            await loadStatus();
-        }
-    } catch {}
-    modeChanging = false;
-    updateModeButtons();
 }
 
 // Service cards
@@ -649,7 +561,6 @@ async function loadUser() {
             .map(p => ({ key: p.key, ...APP_CATALOGUE[p.key] }))
             .filter(a => a);  // url may be null (e.g. valheim has no web UI)
         renderCore();
-        renderMode();
         renderApps();
         loadStatus();
     } catch {}
