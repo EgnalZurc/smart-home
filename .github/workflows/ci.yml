@@ -415,10 +415,23 @@ jobs:
           timeout: 120s
           script: |
             cd ~/smart-home-prod
-            echo "=== Pulling updated images ==="
-            docker compose pull
-            echo "=== Restarting services ==="
-            docker compose up -d
+            
+            # Build list of services to update
+            SERVICES=""
+            [ "${{ needs.detect-changes.outputs.dashboard }}" == "true" ] && SERVICES="$SERVICES dashboard"
+            [ "${{ needs.detect-changes.outputs.ac-service }}" == "true" ] && SERVICES="$SERVICES ac-service"
+            [ "${{ needs.detect-changes.outputs.baby-gifts }}" == "true" ] && SERVICES="$SERVICES baby-gifts-service"
+            [ "${{ needs.detect-changes.outputs.vacaciones }}" == "true" ] && SERVICES="$SERVICES vacaciones-service"
+            [ "${{ needs.detect-changes.outputs.casita }}" == "true" ] && SERVICES="$SERVICES casita-suenos"
+            
+            if [ -n "$SERVICES" ]; then
+              echo "=== Updating services:$SERVICES ==="
+              docker compose pull $SERVICES
+              docker compose up -d $SERVICES
+            else
+              echo "=== No services to update ==="
+            fi
+            
             echo "=== Deploy complete ==="
             docker ps --format "table {{.Names}}\t{{.Status}}" | head -15
 
