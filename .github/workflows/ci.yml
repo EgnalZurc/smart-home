@@ -421,3 +421,72 @@ jobs:
             docker compose up -d ${{ matrix.service.name }}
             echo "=== Done ==="
             docker ps --filter "name=${{ matrix.service.name }}" --format "table {{.Names}}\t{{.Status}}"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Verify - check all deployed services are healthy
+  # ─────────────────────────────────────────────────────────────────────────────
+  verify:
+    needs: [build, deploy]
+    if: always() && needs.deploy.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Wait for services to start
+        run: sleep 15
+
+      - name: Verify deployed services
+        run: |
+          BASE_URL="https://${{ secrets.PI_SSH_HOST }}"
+          FAILED=false
+          
+          check_health() {
+            local name=$1
+            local endpoint=$2
+            local changed=$3
+            
+            if [[ "$changed" != "true" ]]; then
+              echo "⏭️  $name (not deployed)"
+              return
+            fi
+            
+            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "$BASE_URL$endpoint" || echo "000")
+            if [[ "$HTTP_CODE" == "200" ]]; then
+              echo "✅ $name ($endpoint) - OK"
+            else
+              echo "❌ $name ($endpoint) - HTTP $HTTP_CODE"
+              FAILED=true
+            fi
+          }
+          
+          echo "=== Health Check Results ==="
+          check_health "Dashboard" "/api/health" "${{ needs.build.outputs.dashboard }}"
+          check_health "AC Service" "/api/ac/status" "${{ needs.build.outputs.ac-service }}"
+          check_health "Baby Gifts" "/api/baby-gifts/health" "${{ needs.build.outputs.baby-gifts }}"
+          check_health "Vacaciones" "/api/vacaciones/health" "${{ needs.build.outputs.vacaciones }}"
+          check_health "Casita" "/api/casita/status" "${{ needs.build.outputs.casita }}"
+          echo "============================"
+          
+          if [[ "$FAILED" == "true" ]]; then
+            echo "::error::Some services failed health check"
+            exit 1
+          fi
+          echo "All deployed services are healthy!"
+
+      - name: Deploy Summary
+        if: always()
+        run: |
+          echo "## 🚀 Deploy Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Deployed |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Dashboard | ${{ needs.build.outputs.dashboard }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| AC Service | ${{ needs.build.outputs.ac-service }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Baby Gifts | ${{ needs.build.outputs.baby-gifts }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Vacaciones | ${{ needs.build.outputs.vacaciones }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Casita | ${{ needs.build.outputs.casita }} |" >> $GITHUB_STEP_SUMMARY
