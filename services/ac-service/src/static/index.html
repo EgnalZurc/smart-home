@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Smart Home</title>
-    <link rel="manifest" href="/static/manifest.json">
+    <link rel="manifest" href="/static/ac/manifest.json">
     <meta name="theme-color" content="#0f172a">
     <!-- Tailwind CSS v4 - compiled locally, no CDN, no warnings -->
-    <link rel="stylesheet" href="/static/tailwind.css">
+    <link rel="stylesheet" href="/static/ac/tailwind.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * { -webkit-tap-highlight-color: transparent; }
@@ -135,20 +135,20 @@
     <!-- Header -->
     <header class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-3">
-            <a href="/smart-home" class="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-700/40 transition-all flex-shrink-0" aria-label="Dashboard" title="Cuchi Casa"><img src="/static/icono-cuchi-casa.png" class="w-5 h-5 object-contain rounded" alt="Home"></a>
+            <a href="/smart-home" class="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-700/40 transition-all flex-shrink-0" aria-label="Dashboard" title="Cuchi Casa"><img src="/static/ac/icono-cuchi-casa.png" class="w-5 h-5 object-contain rounded" alt="Home"></a>
             <h1 class="text-lg font-semibold tracking-tight" data-i18n="header.title">Smart Home</h1>
         </div>
         <div class="flex items-center gap-3">
             <div class="lang-dropdown">
                 <div class="lang-current" onclick="toggleLanguageMenu()" id="lang-current">
-                    <img id="current-flag" src="/static/flags/gb.svg" alt="Language" class="flag-img">
+                    <img id="current-flag" src="/static/ac/flags/gb.svg" alt="Language" class="flag-img">
                 </div>
                 <div class="lang-menu" id="lang-menu">
                     <div class="lang-option" onclick="selectLanguage('en')" data-lang="en" title="English">
-                        <img src="/static/flags/gb.svg" alt="English" class="flag-img">
+                        <img src="/static/ac/flags/gb.svg" alt="English" class="flag-img">
                     </div>
                     <div class="lang-option" onclick="selectLanguage('es')" data-lang="es" title="Espa?ol">
-                        <img src="/static/flags/es.svg" alt="Espa?ol" class="flag-img">
+                        <img src="/static/ac/flags/es.svg" alt="Espa?ol" class="flag-img">
                     </div>
                 </div>
             </div>
@@ -328,8 +328,8 @@
 </div>
 
 <!-- i18n (must load before app.js) -->
-<script src="/static/i18n.js"></script>
+<script src="/static/ac/i18n.js"></script>
 <!-- App modules (ES modules) -->
-<script type="module" src="/static/js/app.js"></script>
+<script type="module" src="/static/ac/js/app.js"></script>
 </body>
 </html>
