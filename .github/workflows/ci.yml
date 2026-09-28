@@ -434,14 +434,13 @@ jobs:
             echo "=== Deploying ${{ matrix.service.name }} ==="
             docker compose pull ${{ matrix.service.name }}
             
-            # Solo reiniciar si el servicio ya estaba corriendo
+            # Always force-recreate to ensure new image is used
+            # Even if digest matches, container might be running old cached layers
             if docker compose ps ${{ matrix.service.name }} --status running -q | grep -q .; then
-              docker compose up -d ${{ matrix.service.name }}
-              echo "✅ Service updated and restarted"
-              echo "SERVICE_RESTARTED=true"
+              docker compose up -d --force-recreate ${{ matrix.service.name }}
+              echo "✅ Service recreated with new image"
             else
               echo "⏸️ Service was stopped - image updated but not started"
-              echo "SERVICE_RESTARTED=false"
             fi
             
             echo "=== Done ==="

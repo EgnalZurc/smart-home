@@ -11,7 +11,16 @@ The Raspberry Pi is a **deployment target**, not a development environment.
 - `scp` files directly to the Pi
 - SSH to edit config files on the Pi
 - `docker cp` files into running containers
+- `docker compose up`, `docker compose pull`, `docker compose restart` on the Pi
+- `docker exec` to modify anything inside containers
 - Any manual "fix" that bypasses the deployment pipeline
+
+### Why docker commands are forbidden:
+Even "simple" commands like `docker compose up -d --force-recreate` bypass the deployment pipeline:
+- No audit trail in GitHub Actions
+- No verification step runs
+- Creates inconsistency between what GitHub shows as deployed vs what's actually running
+- The next CI deploy might not recreate if the image hash matches
 
 ### ✅ ALWAYS do this:
 1. Fix the source code in `C:\Users\acmls\Documents\Development\smart-home`
