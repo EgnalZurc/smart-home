@@ -502,12 +502,19 @@ class Database:
             if filter_by == "viewed"
             else ("AND COALESCE(s.viewed,0) = 0" if filter_by == "not_viewed" else "")
         )
-        _pf = f"AND p.portal = '{portal_filter}'" if portal_filter else ""
+        # Validate portal_filter against whitelist to prevent SQL injection
+        VALID_PORTALS = {"pisos", "habitaclia", "idealista", "fotocasa"}
+        _pf = ""
+        params = [min_score]
+        if portal_filter and portal_filter in VALID_PORTALS:
+            _pf = "AND p.portal = ?"
+            params.append(portal_filter)
+
         total = self._conn.execute(
             f"SELECT COUNT(*) FROM scored_properties s "
             f"JOIN properties p ON p.uid=s.property_uid "
             f"WHERE s.score_total >= ? AND s.dismissed = 0 {_fc} {_pf}",
-            (min_score,),
+            params,
         ).fetchone()[0]
 
         rows = self._conn.execute(
@@ -526,7 +533,7 @@ class Database:
                WHERE s.score_total >= ? AND s.dismissed = 0 {_fc} {_pf}
                ORDER BY {order_col} {order_dir}
                LIMIT ? OFFSET ?""",
-            (min_score, limit, offset),
+            params + [limit, offset],
         ).fetchall()
 
         items = [dict(r) for r in rows]
