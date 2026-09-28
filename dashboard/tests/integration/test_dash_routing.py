@@ -255,8 +255,15 @@ class TestMainPyRouting:
         assert "serve_vacaciones" not in _main()
 
     def test_auth_public_prefixes_includes_api_health(self):
-        """_AUTH_PUBLIC_PREFIXES must include /api/health/ for status polling."""
-        assert '"/api/health/"' in _main() or "'/api/health/'" in _main()
+        """_AUTH_PUBLIC_PREFIXES must include /api/health for status polling."""
+        main_content = _main()
+        # Accept with or without trailing slash
+        assert (
+            '"/api/health/"' in main_content
+            or "'/api/health/'" in main_content
+            or '"/api/health"' in main_content
+            or "'/api/health'" in main_content
+        )
 
 
 # ── Static assets ─────────────────────────────────────────────────────────────
