@@ -7,8 +7,9 @@
 #   3. Approve via GitHub UI or CLI: gh run review --approve
 #
 # Manual trigger:
-#   gh workflow run ci.yml --repo EgnalZurc/smart-home                    # normal (detect changes)
-#   gh workflow run ci.yml -f force_all_tests=true --repo EgnalZurc/smart-home  # run ALL tests
+#   gh workflow run ci.yml --repo EgnalZurc/smart-home                           # normal (detect changes)
+#   gh workflow run ci.yml -f force_all_tests=true --repo EgnalZurc/smart-home   # run ALL tests
+#   gh workflow run ci.yml -f service=dashboard --repo EgnalZurc/smart-home      # test ONE service
 #
 # To deploy from CLI after tests pass:
 #   gh run view <run-id> --repo EgnalZurc/smart-home
@@ -24,11 +25,19 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      force_all_tests:
-        description: 'Run ALL tests regardless of changes'
+      service:
+        description: 'Service to test (or "all" to test everything)'
         required: false
-        default: false
-        type: boolean
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - all
+          - dashboard
+          - ac-service
+          - baby-gifts
+          - vacaciones
+          - casita
       force_deploy:
         description: 'Enable deploy even without detected changes'
         required: false
@@ -56,7 +65,7 @@ jobs:
       
       - uses: dorny/paths-filter@v3
         id: filter
-        if: ${{ github.event.inputs.force_all_tests != 'true' }}
+        if: ${{ github.event.inputs.service == 'auto' || github.event.inputs.service == '' }}
         with:
           filters: |
             dashboard:
@@ -76,35 +85,64 @@ jobs:
       - name: Determine what to test
         id: result
         run: |
-          FORCE_ALL="${{ github.event.inputs.force_all_tests }}"
+          SERVICE="${{ github.event.inputs.service }}"
           FORCE_DEPLOY="${{ github.event.inputs.force_deploy }}"
           
-          if [[ "$FORCE_ALL" == "true" ]]; then
-            echo "🔄 Force all tests enabled"
-            echo "dashboard=true" >> $GITHUB_OUTPUT
-            echo "ac-service=true" >> $GITHUB_OUTPUT
-            echo "baby-gifts=true" >> $GITHUB_OUTPUT
-            echo "vacaciones=true" >> $GITHUB_OUTPUT
-            echo "casita=true" >> $GITHUB_OUTPUT
+          # Initialize all to false
+          DASHBOARD=false
+          AC_SERVICE=false
+          BABY_GIFTS=false
+          VACACIONES=false
+          CASITA=false
+          
+          if [[ "$SERVICE" == "all" ]]; then
+            echo "🔄 Testing ALL services"
+            DASHBOARD=true
+            AC_SERVICE=true
+            BABY_GIFTS=true
+            VACACIONES=true
+            CASITA=true
+          elif [[ "$SERVICE" == "dashboard" ]]; then
+            echo "🎯 Testing only: dashboard"
+            DASHBOARD=true
+          elif [[ "$SERVICE" == "ac-service" ]]; then
+            echo "🎯 Testing only: ac-service"
+            AC_SERVICE=true
+          elif [[ "$SERVICE" == "baby-gifts" ]]; then
+            echo "🎯 Testing only: baby-gifts"
+            BABY_GIFTS=true
+          elif [[ "$SERVICE" == "vacaciones" ]]; then
+            echo "🎯 Testing only: vacaciones"
+            VACACIONES=true
+          elif [[ "$SERVICE" == "casita" ]]; then
+            echo "🎯 Testing only: casita"
+            CASITA=true
+          else
+            # Auto mode: use paths-filter results
+            echo "🔍 Auto-detecting changed services"
+            DASHBOARD=${{ steps.filter.outputs.dashboard }}
+            AC_SERVICE=${{ steps.filter.outputs.ac-service }}
+            BABY_GIFTS=${{ steps.filter.outputs.baby-gifts }}
+            VACACIONES=${{ steps.filter.outputs.vacaciones }}
+            CASITA=${{ steps.filter.outputs.casita }}
+          fi
+          
+          echo "dashboard=$DASHBOARD" >> $GITHUB_OUTPUT
+          echo "ac-service=$AC_SERVICE" >> $GITHUB_OUTPUT
+          echo "baby-gifts=$BABY_GIFTS" >> $GITHUB_OUTPUT
+          echo "vacaciones=$VACACIONES" >> $GITHUB_OUTPUT
+          echo "casita=$CASITA" >> $GITHUB_OUTPUT
+          
+          if [[ "$DASHBOARD" == "true" ]] || \
+             [[ "$AC_SERVICE" == "true" ]] || \
+             [[ "$BABY_GIFTS" == "true" ]] || \
+             [[ "$VACACIONES" == "true" ]] || \
+             [[ "$CASITA" == "true" ]] || \
+             [[ "${{ steps.filter.outputs.infrastructure }}" == "true" ]] || \
+             [[ "$FORCE_DEPLOY" == "true" ]]; then
             echo "any-service=true" >> $GITHUB_OUTPUT
           else
-            echo "dashboard=${{ steps.filter.outputs.dashboard }}" >> $GITHUB_OUTPUT
-            echo "ac-service=${{ steps.filter.outputs.ac-service }}" >> $GITHUB_OUTPUT
-            echo "baby-gifts=${{ steps.filter.outputs.baby-gifts }}" >> $GITHUB_OUTPUT
-            echo "vacaciones=${{ steps.filter.outputs.vacaciones }}" >> $GITHUB_OUTPUT
-            echo "casita=${{ steps.filter.outputs.casita }}" >> $GITHUB_OUTPUT
-            
-            if [[ "${{ steps.filter.outputs.dashboard }}" == "true" ]] || \
-               [[ "${{ steps.filter.outputs.ac-service }}" == "true" ]] || \
-               [[ "${{ steps.filter.outputs.baby-gifts }}" == "true" ]] || \
-               [[ "${{ steps.filter.outputs.vacaciones }}" == "true" ]] || \
-               [[ "${{ steps.filter.outputs.casita }}" == "true" ]] || \
-               [[ "${{ steps.filter.outputs.infrastructure }}" == "true" ]] || \
-               [[ "$FORCE_DEPLOY" == "true" ]]; then
-              echo "any-service=true" >> $GITHUB_OUTPUT
-            else
-              echo "any-service=false" >> $GITHUB_OUTPUT
-            fi
+            echo "any-service=false" >> $GITHUB_OUTPUT
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
