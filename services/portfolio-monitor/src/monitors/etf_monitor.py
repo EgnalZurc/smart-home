@@ -144,9 +144,10 @@ def fetch_etf_data(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
         
         info = {}
         try:
-            info = ticker.fast_info
-        except (AttributeError, KeyError, ValueError):
-            logger.debug(f"Fast info not available for {ticker_sym}")
+            # Try fast_info first (yfinance 0.2.x), fall back to info (yfinance 1.x)
+            info = getattr(ticker, 'fast_info', None) or ticker.info or {}
+        except (AttributeError, KeyError, ValueError, TypeError):
+            logger.debug(f"Info not available for {ticker_sym}")
         
         return hist, info
     except Exception as e:
