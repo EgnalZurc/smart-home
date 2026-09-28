@@ -356,10 +356,27 @@ jobs:
           PYTHONPATH: src
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Test Vaultwarden (Dockerfile config tests only - no runtime tests)
+  # ─────────────────────────────────────────────────────────────────────────────
+  test-vaultwarden:
+    needs: build
+    if: ${{ needs.build.outputs.vaultwarden == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: pip install pytest
+      - name: Run Dockerfile tests
+        run: cd services/vaultwarden && python -m pytest tests/test_dockerfile.py -v --tb=short
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Test Summary - gate for deploy
   # ─────────────────────────────────────────────────────────────────────────────
   test-summary:
-    needs: [build, test-dashboard, test-ac-service, test-baby-gifts, test-vacaciones, test-casita]
+    needs: [build, test-dashboard, test-ac-service, test-baby-gifts, test-vacaciones, test-casita, test-vaultwarden]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -369,7 +386,7 @@ jobs:
           FAILED=false
           for result in "${{ needs.test-dashboard.result }}" "${{ needs.test-ac-service.result }}" \
                         "${{ needs.test-baby-gifts.result }}" "${{ needs.test-vacaciones.result }}" \
-                        "${{ needs.test-casita.result }}"; do
+                        "${{ needs.test-casita.result }}" "${{ needs.test-vaultwarden.result }}"; do
             [[ "$result" == "failure" ]] && FAILED=true
           done
           
