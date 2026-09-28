@@ -545,7 +545,7 @@ jobs:
             docker compose config --quiet && echo "✅ Compose file valid" || echo "⚠️ Compose file has warnings"
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Verify - check all deployed services are healthy
+  # Verify - check all deployed services are healthy (via SSH to Pi)
   # ─────────────────────────────────────────────────────────────────────────────
   verify:
     needs: [build, deploy, deploy-nginx, deploy-compose]
@@ -562,57 +562,69 @@ jobs:
       - name: Wait for services to start
         run: sleep 20
 
-      - name: Verify deployed services
-        run: |
-          BASE_URL="https://${{ secrets.PI_SSH_HOST }}"
-          FAILED=false
-          
-          check_health() {
-            local name=$1
-            local endpoint=$2
-            local changed=$3
+      - name: Verify deployed services via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DASHBOARD_CHANGED: ${{ needs.build.outputs.dashboard }}
+          AC_CHANGED: ${{ needs.build.outputs.ac-service }}
+          BABYGIFTS_CHANGED: ${{ needs.build.outputs.baby-gifts }}
+          VACACIONES_CHANGED: ${{ needs.build.outputs.vacaciones }}
+          CASITA_CHANGED: ${{ needs.build.outputs.casita }}
+        with:
+          host: ${{ secrets.PI_SSH_HOST }}
+          username: ${{ secrets.PI_SSH_USER }}
+          key: ${{ secrets.PI_SSH_KEY }}
+          timeout: 60s
+          envs: DASHBOARD_CHANGED,AC_CHANGED,BABYGIFTS_CHANGED,VACACIONES_CHANGED,CASITA_CHANGED
+          script: |
+            BASE_URL="https://localhost"
+            FAILED=false
             
-            if [[ "$changed" != "true" ]]; then
-              echo "⏭️  $name (not deployed)"
-              return
-            fi
-            
-            # Retry up to 3 times with 5s delay for transient failures
-            for attempt in 1 2 3; do
-              HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "$BASE_URL$endpoint" || echo "000")
-              if [[ "$HTTP_CODE" == "200" ]]; then
-                echo "✅ $name ($endpoint) - OK"
-                return
-              elif [[ "$HTTP_CODE" =~ ^0+$ ]] || [[ "$HTTP_CODE" == "502" ]] || [[ "$HTTP_CODE" == "503" ]]; then
-                if [[ $attempt -lt 3 ]]; then
-                  echo "⏳ $name ($endpoint) - HTTP $HTTP_CODE, retrying in 5s..."
-                  sleep 5
-                else
-                  echo "⚠️  $name ($endpoint) - Service not responding after 3 attempts"
-                  echo "::warning::$name not responding - may still be starting or intentionally stopped"
-                fi
-              else
-                echo "❌ $name ($endpoint) - HTTP $HTTP_CODE"
-                FAILED=true
+            check_health() {
+              local name=$1
+              local endpoint=$2
+              local changed=$3
+              
+              if [[ "$changed" != "true" ]]; then
+                echo "⏭️  $name (not deployed)"
                 return
               fi
-            done
-          }
-          
-          echo "=== Health Check Results ==="
-          # All health checks go through dashboard proxy at /api/health/*
-          check_health "Dashboard" "/api/health" "${{ needs.build.outputs.dashboard }}"
-          check_health "AC Service" "/api/health/ac" "${{ needs.build.outputs.ac-service }}"
-          check_health "Baby Gifts" "/api/health/baby-gifts" "${{ needs.build.outputs.baby-gifts }}"
-          check_health "Vacaciones" "/api/health/vacaciones" "${{ needs.build.outputs.vacaciones }}"
-          check_health "Casita" "/api/health/casita" "${{ needs.build.outputs.casita }}"
-          echo "============================"
-          
-          if [[ "$FAILED" == "true" ]]; then
-            echo "::error::Some services failed health check with unexpected errors"
-            exit 1
-          fi
-          echo "Health check complete!"
+              
+              # Retry up to 3 times with 5s delay for transient failures
+              for attempt in 1 2 3; do
+                HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "$BASE_URL$endpoint" || echo "000")
+                if [[ "$HTTP_CODE" == "200" ]]; then
+                  echo "✅ $name ($endpoint) - OK"
+                  return
+                elif [[ "$HTTP_CODE" =~ ^0+$ ]] || [[ "$HTTP_CODE" == "502" ]] || [[ "$HTTP_CODE" == "503" ]]; then
+                  if [[ $attempt -lt 3 ]]; then
+                    echo "⏳ $name ($endpoint) - HTTP $HTTP_CODE, retrying in 5s..."
+                    sleep 5
+                  else
+                    echo "⚠️  $name ($endpoint) - Service not responding after 3 attempts"
+                  fi
+                else
+                  echo "❌ $name ($endpoint) - HTTP $HTTP_CODE"
+                  FAILED=true
+                  return
+                fi
+              done
+            }
+            
+            echo "=== Health Check Results (from Pi) ==="
+            # All health checks go through dashboard proxy at /api/health/*
+            check_health "Dashboard" "/api/health" "$DASHBOARD_CHANGED"
+            check_health "AC Service" "/api/health/ac" "$AC_CHANGED"
+            check_health "Baby Gifts" "/api/health/baby-gifts" "$BABYGIFTS_CHANGED"
+            check_health "Vacaciones" "/api/health/vacaciones" "$VACACIONES_CHANGED"
+            check_health "Casita" "/api/health/casita" "$CASITA_CHANGED"
+            echo "======================================="
+            
+            if [[ "$FAILED" == "true" ]]; then
+              echo "❌ Some services failed health check with unexpected errors"
+              exit 1
+            fi
+            echo "✅ Health check complete!"
 
       - name: Deploy Summary
         if: always()
