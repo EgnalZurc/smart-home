@@ -366,7 +366,7 @@ jobs:
       needs.test-summary.result == 'success' &&
       needs.build.outputs.any-service == 'true' &&
       needs.build.outputs.services-matrix != '[]' &&
-      github.event_name == 'push' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment: production
