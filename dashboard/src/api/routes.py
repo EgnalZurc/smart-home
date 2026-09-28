@@ -942,3 +942,587 @@ async def proxy_firms(lat: float, lon: float):
     total_focos = sum(results)
 
     return {"status": "ok", "focos": total_focos, "radio_km": 30, "periodo": "jun-oct ultimos 3 anos", "peticiones": len(windows)}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AC Service Proxy Routes
+# All AC endpoints are proxied to ac-service:8002
+# ══════════════════════════════════════════════════════════════════════════════
+
+AC_SERVICE_URL = "http://ac-service:8002"
+
+
+@router.get("/ac/status", tags=["AC"])
+async def get_ac_status():
+    """Get current AC and sensor status."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/status")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/ac/sensors", tags=["AC"])
+async def get_ac_sensors():
+    """Get all sensor readings."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/sensors")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/ac/sensors/history", tags=["AC"])
+async def get_ac_sensors_history(start: float | None = None, end: float | None = None, last: int | None = None):
+    """Get sensor reading history."""
+    try:
+        params = {}
+        if start is not None:
+            params["start"] = start
+        if end is not None:
+            params["end"] = end
+        if last is not None:
+            params["last"] = last
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/sensors/history", params=params)
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/ac/history", tags=["AC"])
+async def get_ac_history(limit: int = 100):
+    """Get controller action history."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/history", params={"limit": limit})
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/ac/config", tags=["AC"])
+async def get_ac_config():
+    """Get controller configuration."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/config")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/ac/config", tags=["AC"])
+async def update_ac_config(request: Request):
+    """Update controller configuration."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{AC_SERVICE_URL}/api/ac/config", json=body)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/ac/control", tags=["AC"])
+async def set_ac_control_mode(request: Request):
+    """Set control mode (auto/manual/off)."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{AC_SERVICE_URL}/api/ac/control", json=body)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/ac/manual", tags=["AC"])
+async def set_ac_manual_params(request: Request):
+    """Set manual control parameters."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{AC_SERVICE_URL}/api/ac/manual", json=body)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/ac/manual/param", tags=["AC"])
+async def update_ac_manual_param(param: str, value: str):
+    """Update a single manual parameter."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{AC_SERVICE_URL}/api/ac/manual/param", params={"param": param, "value": value})
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/ac/real", tags=["AC"])
+async def get_ac_real():
+    """Get real AC state from MELCloud."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/real")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/ac/outdoor", tags=["AC"])
+async def get_ac_outdoor():
+    """Get outdoor temperature and air quality."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/outdoor")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/ac/errors", tags=["AC"])
+async def get_ac_errors():
+    """Get active errors."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/errors")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/ac/humidity/study", tags=["AC"])
+async def get_ac_humidity_study():
+    """Get humidity analysis summary."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/humidity/study")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/ac/humidity/study/run", tags=["AC"])
+async def trigger_ac_humidity_analysis():
+    """Trigger manual humidity analysis."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{AC_SERVICE_URL}/api/ac/humidity/study/run")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/ac/energy/current", tags=["AC"])
+async def get_ac_energy_current():
+    """Get current energy consumption."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/energy/current")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/ac/energy/hourly", tags=["AC"])
+async def get_ac_energy_hourly():
+    """Get hourly energy data."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/energy/hourly")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/ac/energy/monthly", tags=["AC"])
+async def get_ac_energy_monthly():
+    """Get monthly energy data."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/energy/monthly")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/ac/subscriptions/stats", tags=["AC"])
+async def get_ac_subscriptions_stats():
+    """Get subscription manager stats."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/subscriptions/stats")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Vacaciones Service Proxy Routes
+# All Vacaciones endpoints are proxied to vacaciones-service:8003
+# ══════════════════════════════════════════════════════════════════════════════
+
+VACACIONES_SERVICE_URL = "http://vacaciones-service:8003"
+
+
+@router.get("/vacaciones", tags=["Vacaciones"])
+async def get_vacaciones():
+    """Returns all vacaciones data including config and momentos."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{VACACIONES_SERVICE_URL}/api/vacaciones")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/vacaciones/config", tags=["Vacaciones"])
+async def get_vacaciones_config():
+    """Returns vacaciones configuration (nucleos and personas)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{VACACIONES_SERVICE_URL}/api/vacaciones/config")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/vacaciones/config", tags=["Vacaciones"])
+async def post_vacaciones_config(request: Request):
+    """Save vacaciones configuration."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{VACACIONES_SERVICE_URL}/api/vacaciones/config", json=body)
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/vacaciones/year", tags=["Vacaciones"])
+async def add_vacaciones_year():
+    """Add a new year (next after highest existing)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{VACACIONES_SERVICE_URL}/api/vacaciones/year")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/vacaciones/year/{year}", tags=["Vacaciones"])
+async def post_vacaciones_year(year: int, request: Request):
+    """Save a year's planning."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{VACACIONES_SERVICE_URL}/api/vacaciones/year/{year}", json=body)
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.delete("/vacaciones/year/{year}", tags=["Vacaciones"])
+async def delete_vacaciones_year(year: int):
+    """Delete a year."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.delete(f"{VACACIONES_SERVICE_URL}/api/vacaciones/year/{year}")
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Baby Gifts Service Proxy Routes
+# All Baby Gifts endpoints are proxied to baby-gifts-service:8004
+# ══════════════════════════════════════════════════════════════════════════════
+
+BABY_GIFTS_SERVICE_URL = "http://baby-gifts-service:8004"
+
+
+# ── Admin endpoints ──────────────────────────────────────────────────────────
+
+
+@router.get("/baby-gifts", tags=["Baby Gifts"])
+async def get_all_baby_gifts():
+    """Get all gifts with full reservation details (admin only)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/baby-gifts", tags=["Baby Gifts"])
+async def create_baby_gift(request: Request):
+    """Add a new gift (admin only)."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts", json=body)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.put("/baby-gifts/{gift_id}", tags=["Baby Gifts"])
+async def update_baby_gift(gift_id: str, request: Request):
+    """Update a gift (admin only)."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.put(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/{gift_id}", json=body)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.delete("/baby-gifts/{gift_id}", tags=["Baby Gifts"])
+async def delete_baby_gift(gift_id: str):
+    """Delete a gift (admin only)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.delete(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/{gift_id}")
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/baby-gifts/{gift_id}/unreserve", tags=["Baby Gifts"])
+async def admin_unreserve_baby_gift(gift_id: str):
+    """Admin can unreserve any gift."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/{gift_id}/unreserve")
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.put("/baby-gifts/categories", tags=["Baby Gifts"])
+async def update_baby_gifts_categories(request: Request):
+    """Update gift categories (admin only)."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.put(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/categories", json=body)
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+# ── Invitation management ────────────────────────────────────────────────────
+
+
+@router.get("/baby-gifts/invitations", tags=["Baby Gifts"])
+async def get_baby_gifts_invitations():
+    """List all invitations (admin only)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/invitations")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/baby-gifts/invitations", tags=["Baby Gifts"])
+async def create_baby_gifts_invitation(request: Request):
+    """Create a new invitation (admin only)."""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/invitations", json=body)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.delete("/baby-gifts/invitations/{token}", tags=["Baby Gifts"])
+async def delete_baby_gifts_invitation(token: str):
+    """Delete an invitation (admin only)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.delete(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/invitations/{token}")
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/baby-gifts/invitations/{token}/revoke", tags=["Baby Gifts"])
+async def revoke_baby_gifts_invitation(token: str):
+    """Revoke an invitation without deleting it (admin only)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/invitations/{token}/revoke")
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+# ── Authenticated user endpoints ─────────────────────────────────────────────
+
+
+@router.get("/baby-gifts/user", tags=["Baby Gifts"])
+async def get_baby_gifts_for_user(request: Request):
+    """Get gifts for an authenticated user."""
+    try:
+        # Forward auth header
+        headers = {}
+        if "X-Auth-User" in request.headers:
+            headers["X-Auth-User"] = request.headers["X-Auth-User"]
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/user", headers=headers)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/baby-gifts/user/reserve/{gift_id}", tags=["Baby Gifts"])
+async def user_reserve_baby_gift(gift_id: str, request: Request):
+    """Reserve a gift as an authenticated user."""
+    try:
+        headers = {}
+        if "X-Auth-User" in request.headers:
+            headers["X-Auth-User"] = request.headers["X-Auth-User"]
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/user/reserve/{gift_id}", headers=headers)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/baby-gifts/user/unreserve/{gift_id}", tags=["Baby Gifts"])
+async def user_unreserve_baby_gift(gift_id: str, request: Request):
+    """Cancel own reservation as an authenticated user."""
+    try:
+        headers = {}
+        if "X-Auth-User" in request.headers:
+            headers["X-Auth-User"] = request.headers["X-Auth-User"]
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/user/unreserve/{gift_id}", headers=headers)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+# ── Guest endpoints (public, token-based) ────────────────────────────────────
+
+
+@router.get("/baby-gifts/guest/{token}", tags=["Baby Gifts"])
+async def get_baby_gifts_for_guest(token: str, request: Request):
+    """Get gifts for a guest."""
+    try:
+        # Forward client IP for rate limiting
+        headers = {}
+        if "X-Forwarded-For" in request.headers:
+            headers["X-Forwarded-For"] = request.headers["X-Forwarded-For"]
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/guest/{token}", headers=headers)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/baby-gifts/guest/{token}/reserve/{gift_id}", tags=["Baby Gifts"])
+async def guest_reserve_baby_gift(token: str, gift_id: str, request: Request):
+    """Reserve a gift as a guest."""
+    try:
+        headers = {}
+        if "X-Forwarded-For" in request.headers:
+            headers["X-Forwarded-For"] = request.headers["X-Forwarded-For"]
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/guest/{token}/reserve/{gift_id}", headers=headers)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/baby-gifts/guest/{token}/unreserve/{gift_id}", tags=["Baby Gifts"])
+async def guest_unreserve_baby_gift(token: str, gift_id: str, request: Request):
+    """Cancel own reservation as a guest."""
+    try:
+        headers = {}
+        if "X-Forwarded-For" in request.headers:
+            headers["X-Forwarded-For"] = request.headers["X-Forwarded-For"]
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/guest/{token}/unreserve/{gift_id}", headers=headers)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))

@@ -164,6 +164,18 @@ tags_metadata = [
         "description": "Health check endpoints for all services",
     },
     {
+        "name": "AC",
+        "description": "Air conditioning control and sensor monitoring",
+    },
+    {
+        "name": "Vacaciones",
+        "description": "Christmas vacation planning",
+    },
+    {
+        "name": "Baby Gifts",
+        "description": "Baby gift registry management",
+    },
+    {
         "name": "Casita",
         "description": "Property search and monitoring (Casita Sueños)",
     },
@@ -184,21 +196,25 @@ tags_metadata = [
 app = FastAPI(
     title="Smart Home API",
     description="""
-## Smart Home Control Platform
+## Smart Home Control Platform — Unified API
 
-API documentation for all Smart Home services.
+All microservice APIs are accessible through this single gateway.
 
 ### Authentication
 
-Most endpoints require authentication. Use `/api/auth/token` to obtain a session cookie.
+Most endpoints require authentication. Use `POST /api/auth/token` to obtain a session cookie.
 
 ### Services
 
-- **Dashboard**: This service (auth, health proxies, UI)
-- **AC Service**: Climate control (`/api/ac/*`)
-- **Baby Gifts**: Gift registry (`/api/baby-gifts/*`)
-- **Vacaciones**: Vacation planning (`/api/vacaciones/*`)
-- **Casita Sueños**: Property monitoring (`/api/casita/*`)
+| Service | Endpoints | Description |
+|---------|-----------|-------------|
+| **Auth** | `/api/auth/*` | Login, logout, session management |
+| **AC** | `/api/ac/*` | Climate control, sensors, energy |
+| **Vacaciones** | `/api/vacaciones/*` | Christmas vacation planning |
+| **Baby Gifts** | `/api/baby-gifts/*` | Gift registry with guest access |
+| **Casita** | `/api/casita/*` | Property search and monitoring |
+| **System** | `/api/system/*` | Pi stats, containers, modes |
+| **Proxy** | `/api/proxy/*` | External APIs (flood, fire risk) |
     """,
     version="2.0.0",
     lifespan=lifespan,
