@@ -35,6 +35,7 @@ on:
           - dashboard
           - ac-service
           - baby-gifts
+          - portfolio-monitor
           - vacaciones
           - casita
           - vaultwarden
@@ -58,6 +59,7 @@ jobs:
       dashboard: ${{ steps.changes.outputs.dashboard }}
       ac-service: ${{ steps.changes.outputs.ac-service }}
       baby-gifts: ${{ steps.changes.outputs.baby-gifts }}
+      portfolio-monitor: ${{ steps.changes.outputs.portfolio-monitor }}
       vacaciones: ${{ steps.changes.outputs.vacaciones }}
       casita: ${{ steps.changes.outputs.casita }}
       vaultwarden: ${{ steps.changes.outputs.vaultwarden }}
@@ -81,6 +83,8 @@ jobs:
               - 'services/ac-service/**'
             baby-gifts:
               - 'services/baby-gifts-service/**'
+            portfolio-monitor:
+              - 'services/portfolio-monitor/**'
             vacaciones:
               - 'services/vacaciones-service/**'
             casita:
@@ -103,25 +107,27 @@ jobs:
           SERVICE="${{ github.event.inputs.service }}"
           FORCE_DEPLOY="${{ github.event.inputs.force_deploy }}"
           
-          DASHBOARD=false; AC_SERVICE=false; BABY_GIFTS=false; VACACIONES=false; CASITA=false; VAULTWARDEN=false; VALHEIM_ADMIN=false; NGINX=false; COMPOSE=false
+          DASHBOARD=false; AC_SERVICE=false; BABY_GIFTS=false; PORTFOLIO_MONITOR=false; VACACIONES=false; CASITA=false; VAULTWARDEN=false; VALHEIM_ADMIN=false; NGINX=false; COMPOSE=false
           
           case "$SERVICE" in
             all)
               echo "🔄 Building ALL services"
-              DASHBOARD=true; AC_SERVICE=true; BABY_GIFTS=true; VACACIONES=true; CASITA=true; VAULTWARDEN=true; VALHEIM_ADMIN=true; NGINX=true; COMPOSE=true
+              DASHBOARD=true; AC_SERVICE=true; BABY_GIFTS=true; PORTFOLIO_MONITOR=true; VACACIONES=true; CASITA=true; VAULTWARDEN=true; VALHEIM_ADMIN=true; NGINX=true; COMPOSE=true
               ;;
-            dashboard)     echo "🎯 Building: dashboard";     DASHBOARD=true ;;
-            ac-service)    echo "🎯 Building: ac-service";    AC_SERVICE=true ;;
-            baby-gifts)    echo "🎯 Building: baby-gifts";    BABY_GIFTS=true ;;
-            vacaciones)    echo "🎯 Building: vacaciones";    VACACIONES=true ;;
-            casita)        echo "🎯 Building: casita";        CASITA=true ;;
-            vaultwarden)   echo "🎯 Building: vaultwarden";   VAULTWARDEN=true ;;
-            valheim-admin) echo "🎯 Building: valheim-admin"; VALHEIM_ADMIN=true ;;
+            dashboard)         echo "🎯 Building: dashboard";         DASHBOARD=true ;;
+            ac-service)        echo "🎯 Building: ac-service";        AC_SERVICE=true ;;
+            baby-gifts)        echo "🎯 Building: baby-gifts";        BABY_GIFTS=true ;;
+            portfolio-monitor) echo "🎯 Building: portfolio-monitor"; PORTFOLIO_MONITOR=true ;;
+            vacaciones)        echo "🎯 Building: vacaciones";        VACACIONES=true ;;
+            casita)            echo "🎯 Building: casita";            CASITA=true ;;
+            vaultwarden)       echo "🎯 Building: vaultwarden";       VAULTWARDEN=true ;;
+            valheim-admin)     echo "🎯 Building: valheim-admin";     VALHEIM_ADMIN=true ;;
             *)
               echo "🔍 Auto-detecting changed services"
               DASHBOARD=${{ steps.filter.outputs.dashboard }}
               AC_SERVICE=${{ steps.filter.outputs.ac-service }}
               BABY_GIFTS=${{ steps.filter.outputs.baby-gifts }}
+              PORTFOLIO_MONITOR=${{ steps.filter.outputs.portfolio-monitor }}
               VACACIONES=${{ steps.filter.outputs.vacaciones }}
               CASITA=${{ steps.filter.outputs.casita }}
               VAULTWARDEN=${{ steps.filter.outputs.vaultwarden }}
@@ -134,6 +140,7 @@ jobs:
           echo "dashboard=$DASHBOARD" >> $GITHUB_OUTPUT
           echo "ac-service=$AC_SERVICE" >> $GITHUB_OUTPUT
           echo "baby-gifts=$BABY_GIFTS" >> $GITHUB_OUTPUT
+          echo "portfolio-monitor=$PORTFOLIO_MONITOR" >> $GITHUB_OUTPUT
           echo "vacaciones=$VACACIONES" >> $GITHUB_OUTPUT
           echo "casita=$CASITA" >> $GITHUB_OUTPUT
           echo "vaultwarden=$VAULTWARDEN" >> $GITHUB_OUTPUT
@@ -142,7 +149,8 @@ jobs:
           echo "compose=$COMPOSE" >> $GITHUB_OUTPUT
           
           if [[ "$DASHBOARD" == "true" ]] || [[ "$AC_SERVICE" == "true" ]] || \
-             [[ "$BABY_GIFTS" == "true" ]] || [[ "$VACACIONES" == "true" ]] || \
+             [[ "$BABY_GIFTS" == "true" ]] || [[ "$PORTFOLIO_MONITOR" == "true" ]] || \
+             [[ "$VACACIONES" == "true" ]] || \
              [[ "$CASITA" == "true" ]] || [[ "$VAULTWARDEN" == "true" ]] || \
              [[ "$VALHEIM_ADMIN" == "true" ]] || [[ "$NGINX" == "true" ]] || \
              [[ "$COMPOSE" == "true" ]] || \
@@ -171,6 +179,8 @@ jobs:
             add_service "ac-service" "egnal/smart-home-ac-service" "./services/ac-service"
           [[ "${{ steps.changes.outputs.baby-gifts }}" == "true" ]] && \
             add_service "baby-gifts-service" "egnal/smart-home-baby-gifts" "./services/baby-gifts-service"
+          [[ "${{ steps.changes.outputs.portfolio-monitor }}" == "true" ]] && \
+            add_service "portfolio-monitor" "egnal/smart-home-portfolio-monitor" "./services/portfolio-monitor"
           [[ "${{ steps.changes.outputs.vacaciones }}" == "true" ]] && \
             add_service "vacaciones-service" "egnal/smart-home-vacaciones" "./services/vacaciones-service"
           [[ "${{ steps.changes.outputs.casita }}" == "true" ]] && \
@@ -218,6 +228,14 @@ jobs:
           ruff format services/baby-gifts-service/src --check --diff || true
           echo "::endgroup::"
 
+      - name: Lint portfolio-monitor
+        if: ${{ steps.changes.outputs.portfolio-monitor == 'true' }}
+        run: |
+          echo "::group::Lint portfolio-monitor"
+          ruff check services/portfolio-monitor/src --output-format=github || true
+          ruff format services/portfolio-monitor/src --check --diff || true
+          echo "::endgroup::"
+
       - name: Lint vacaciones-service
         if: ${{ steps.changes.outputs.vacaciones == 'true' }}
         run: |
@@ -244,6 +262,7 @@ jobs:
           echo "| Dashboard | ${{ steps.changes.outputs.dashboard }} |" >> $GITHUB_STEP_SUMMARY
           echo "| AC Service | ${{ steps.changes.outputs.ac-service }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Baby Gifts | ${{ steps.changes.outputs.baby-gifts }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Portfolio Monitor | ${{ steps.changes.outputs.portfolio-monitor }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Vacaciones | ${{ steps.changes.outputs.vacaciones }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Casita | ${{ steps.changes.outputs.casita }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Vaultwarden | ${{ steps.changes.outputs.vaultwarden }} |" >> $GITHUB_STEP_SUMMARY
@@ -317,6 +336,29 @@ jobs:
           pip install pytest pytest-asyncio
       - name: Run tests
         run: cd services/baby-gifts-service && python -m pytest tests/ -v --tb=short || echo "No tests found"
+        env:
+          PYTHONPATH: src
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Test Portfolio Monitor Service
+  # ─────────────────────────────────────────────────────────────────────────────
+  test-portfolio-monitor:
+    needs: build
+    if: ${{ needs.build.outputs.portfolio-monitor == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: 'services/portfolio-monitor/requirements.txt'
+      - name: Install dependencies
+        run: |
+          pip install -r services/portfolio-monitor/requirements.txt
+          pip install pytest pytest-asyncio
+      - name: Run tests
+        run: cd services/portfolio-monitor && python -m pytest tests/ -v --tb=short || echo "No tests found"
         env:
           PYTHONPATH: src
 
@@ -410,7 +452,7 @@ jobs:
   # Test Summary - gate for deploy
   # ─────────────────────────────────────────────────────────────────────────────
   test-summary:
-    needs: [build, test-dashboard, test-ac-service, test-baby-gifts, test-vacaciones, test-casita, test-vaultwarden, test-valheim-admin]
+    needs: [build, test-dashboard, test-ac-service, test-baby-gifts, test-portfolio-monitor, test-vacaciones, test-casita, test-vaultwarden, test-valheim-admin]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -419,7 +461,8 @@ jobs:
           echo "=== Test Summary ==="
           FAILED=false
           for result in "${{ needs.test-dashboard.result }}" "${{ needs.test-ac-service.result }}" \
-                        "${{ needs.test-baby-gifts.result }}" "${{ needs.test-vacaciones.result }}" \
+                        "${{ needs.test-baby-gifts.result }}" "${{ needs.test-portfolio-monitor.result }}" \
+                        "${{ needs.test-vacaciones.result }}" \
                         "${{ needs.test-casita.result }}" "${{ needs.test-vaultwarden.result }}" \
                         "${{ needs.test-valheim-admin.result }}"; do
             [[ "$result" == "failure" ]] && FAILED=true
@@ -630,6 +673,7 @@ jobs:
           DASHBOARD_CHANGED: ${{ needs.build.outputs.dashboard }}
           AC_CHANGED: ${{ needs.build.outputs.ac-service }}
           BABYGIFTS_CHANGED: ${{ needs.build.outputs.baby-gifts }}
+          PORTFOLIO_CHANGED: ${{ needs.build.outputs.portfolio-monitor }}
           VACACIONES_CHANGED: ${{ needs.build.outputs.vacaciones }}
           CASITA_CHANGED: ${{ needs.build.outputs.casita }}
           VAULTWARDEN_CHANGED: ${{ needs.build.outputs.vaultwarden }}
@@ -639,7 +683,7 @@ jobs:
           username: ${{ secrets.PI_SSH_USER }}
           key: ${{ secrets.PI_SSH_KEY }}
           timeout: 60s
-          envs: DASHBOARD_CHANGED,AC_CHANGED,BABYGIFTS_CHANGED,VACACIONES_CHANGED,CASITA_CHANGED,VAULTWARDEN_CHANGED,VALHEIM_ADMIN_CHANGED
+          envs: DASHBOARD_CHANGED,AC_CHANGED,BABYGIFTS_CHANGED,PORTFOLIO_CHANGED,VACACIONES_CHANGED,CASITA_CHANGED,VAULTWARDEN_CHANGED,VALHEIM_ADMIN_CHANGED
           script: |
             BASE_URL="https://localhost"
             FAILED=false
@@ -680,6 +724,7 @@ jobs:
             check_health "Dashboard" "/api/health" "$DASHBOARD_CHANGED"
             check_health "AC Service" "/api/health/ac" "$AC_CHANGED"
             check_health "Baby Gifts" "/api/health/baby-gifts" "$BABYGIFTS_CHANGED"
+            check_health "Portfolio Monitor" "/api/health/portfolio" "$PORTFOLIO_CHANGED"
             check_health "Vacaciones" "/api/health/vacaciones" "$VACACIONES_CHANGED"
             check_health "Casita" "/api/health/casita" "$CASITA_CHANGED"
             check_health "Vaultwarden" "/passwords/" "$VAULTWARDEN_CHANGED"
@@ -702,6 +747,7 @@ jobs:
           echo "| Dashboard | ${{ needs.build.outputs.dashboard }} |" >> $GITHUB_STEP_SUMMARY
           echo "| AC Service | ${{ needs.build.outputs.ac-service }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Baby Gifts | ${{ needs.build.outputs.baby-gifts }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Portfolio Monitor | ${{ needs.build.outputs.portfolio-monitor }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Vacaciones | ${{ needs.build.outputs.vacaciones }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Casita | ${{ needs.build.outputs.casita }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Vaultwarden | ${{ needs.build.outputs.vaultwarden }} |" >> $GITHUB_STEP_SUMMARY

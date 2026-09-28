@@ -158,6 +158,28 @@ services:
     networks:
       - smart-home
 
+  portfolio-monitor:
+    image: egnal/smart-home-portfolio-monitor:latest
+    container_name: portfolio-monitor
+    restart: on-failure:5
+    mem_limit: 256m
+    memswap_limit: 256m
+    expose:
+      - 8010
+    volumes:
+      - ./data/portfolio-monitor:/app/data
+    environment:
+      - TZ=Europe/Madrid
+      - MONITOR_LANG=es
+    networks:
+      - smart-home
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8010/health', timeout=3)"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
   vacaciones-service:
     image: egnal/smart-home-vacaciones:latest
     container_name: vacaciones-service

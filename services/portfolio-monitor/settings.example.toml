@@ -1,0 +1,175 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Portfolio Monitor — Configuration File
+# ═══════════════════════════════════════════════════════════════════════════════
+# Copy this file to data/settings.toml and fill in your values.
+# Credentials (GMAIL_USER, GMAIL_PASS) must be set as environment variables.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [general]
+# ─────────────────────────────────────────────────────────────────────────────
+[general]
+# Report language: "es" (Spanish) or "en" (English)
+lang = "es"
+
+# Log verbosity: "DEBUG", "INFO", or "WARNING"
+log_level = "INFO"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [schedule] — When to run each monitor
+# ─────────────────────────────────────────────────────────────────────────────
+[schedule]
+# ETF monitor runs after European markets close
+etf_time = "18:00"
+
+# Crypto monitor runs in the morning
+crypto_time = "09:00"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ETF MONITOR
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [[etf.funds]] — One block per ETF
+# ─────────────────────────────────────────────────────────────────────────────
+[[etf.funds]]
+id               = "IUIT"
+ticker           = "IUIT.L"
+name             = "iShares S&P 500 IT Sector UCITS ETF"
+isin             = "IE00B3WJKG14"
+precio_medio     = 32.77
+participaciones  = 33.547411
+aportacion_mes   = 50.0
+aportacion_fase2 = 500.0
+inicio           = "2024-01-01"
+color            = "#3A7BD5"
+
+[[etf.funds]]
+id               = "IWDA"
+ticker           = "IWDA.L"
+name             = "iShares Core MSCI World UCITS ETF"
+isin             = "IE00B4L5Y983"
+precio_medio     = 120.84
+participaciones  = 1.65511
+aportacion_mes   = 100.0
+aportacion_fase2 = 1098.0
+inicio           = "2026-06-01"
+color            = "#1A7A4A"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [etf.plan] — Investment plan phases and milestones
+# ─────────────────────────────────────────────────────────────────────────────
+[etf.plan]
+# Date when Phase 2 begins (accelerated contributions)
+phase_change_date = "2027-03-01"
+
+# Projected portfolio values per year (one value per fund, same order as above)
+[etf.plan.milestones]
+1  = [1_800,    1_257]
+2  = [3_352,    3_643]
+3  = [10_812,   17_821]
+4  = [20_090,   33_484]
+5  = [31_627,   50_787]
+6  = [45_975,   69_903]
+7  = [63_818,   91_019]
+8  = [86_007,   114_347]
+9  = [113_602,  140_118]
+10 = [147_918,  168_587]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [etf.tax] — Spanish IRPF capital gains brackets (base del ahorro)
+# Updated for 2025 per Ley 7/2024 (vigente desde 1 enero 2025)
+# These are TOTAL rates (estatal + autonómico combined)
+# ─────────────────────────────────────────────────────────────────────────────
+[etf.tax]
+brackets = [
+    [6_000,        0.19],    # 0 - 6.000€: 19%
+    [50_000,       0.21],    # 6.000 - 50.000€: 21%
+    [200_000,      0.23],    # 50.000 - 200.000€: 23%
+    [300_000,      0.27],    # 200.000 - 300.000€: 27%
+    [999_999_999,  0.30],    # +300.000€: 30% (nuevo tramo 2025)
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [etf.thresholds] — Technical analysis thresholds
+# ─────────────────────────────────────────────────────────────────────────────
+[etf.thresholds]
+ma_short            = 50     # Short moving average (days)
+ma_long             = 200    # Long moving average (days)
+drop_from_high_warn = -0.15  # Warn at -15% from 52w high
+loss_vs_cost_warn   = -0.10  # Warn at -10% below avg cost
+critical_threshold  = -0.20  # Critical alert at -20%
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CRYPTO STAKING MONITOR
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [[crypto.positions]] — One block per staking position
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[crypto.positions]]
+symbol                 = "ETH"
+name                   = "Ethereum"
+amount                 = 0.17130007
+product                = "Flexible Stake"
+apy                    = 2.14
+type                   = "flexible"
+rescue_days            = 5
+start_date             = "2026-04-20"
+next_distribution      = "2026-04-22"
+distribution_freq_days = 2
+coingecko_id           = "ethereum"
+
+[[crypto.positions]]
+symbol                 = "SOL"
+name                   = "Solana"
+amount                 = 0.2910987
+product                = "Flexible Stake"
+apy                    = 5.00
+type                   = "flexible"
+rescue_days            = 5
+start_date             = "2026-04-20"
+next_distribution      = "2026-04-22"
+distribution_freq_days = 2
+coingecko_id           = "solana"
+
+[[crypto.positions]]
+symbol                 = "KCS"
+name                   = "KuCoin Token"
+amount                 = 2.9374238
+product                = "Fijo 60 días"
+apy                    = 1.36
+type                   = "fixed"
+rescue_days            = 0
+start_date             = "2026-04-20"
+maturity_date          = "2026-06-19"
+coingecko_id           = "kucoin-shares"
+
+[[crypto.positions]]
+symbol                 = "BTC"
+name                   = "Bitcoin"
+amount                 = 0.01835148
+product                = "Ahorro 60 días"
+apy                    = 0.30
+type                   = "fixed"
+rescue_days            = 0
+start_date             = "2026-04-20"
+maturity_date          = "2026-06-19"
+coingecko_id           = "bitcoin"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [crypto.thresholds] — Signal thresholds
+# NOTE: Fear & Greed is a sentiment indicator, not a price predictor.
+# Extreme readings suggest sentiment extremes but are not reliable buy/sell signals alone.
+# ─────────────────────────────────────────────────────────────────────────────
+[crypto.thresholds]
+fg_extreme_greed  = 75    # Fear & Greed: caution above this (market euphoria)
+fg_high_greed     = 60    # Fear & Greed: elevated sentiment
+fg_extreme_fear   = 25    # Fear & Greed: extreme pessimism (potential opportunity)
+change_24h_danger = -10   # 24h change: significant drop
+change_24h_warn   = -5    # 24h change: notable drop
+change_24h_pump   = 10    # 24h change: rapid rise (watch for correction)
+change_30d_bear   = -20   # 30d change: sustained bearish trend
+change_30d_bull   = 20    # 30d change: sustained bullish trend
+ath_danger_pct    = -5    # ATH: very close to all-time high
+ath_warn_pct      = -15   # ATH: approaching all-time high

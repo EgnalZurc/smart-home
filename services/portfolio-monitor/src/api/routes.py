@@ -1,0 +1,176 @@
+"""
+Portfolio Monitor — API Routes.
+"""
+
+from dataclasses import asdict
+from datetime import datetime
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+
+from models import AlertLevel
+from orchestrator import get_orchestrator
+
+router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
+
+
+def _serialize_analysis(obj: Any) -> dict:
+    """Convert analysis dataclass to serializable dict."""
+    if hasattr(obj, "__dataclass_fields__"):
+        result = {}
+        for field_name in obj.__dataclass_fields__:
+            value = getattr(obj, field_name)
+            if isinstance(value, AlertLevel):
+                result[field_name] = value.name
+            elif isinstance(value, datetime):
+                result[field_name] = value.isoformat()
+            elif isinstance(value, list):
+                result[field_name] = [_serialize_analysis(item) for item in value]
+            elif hasattr(value, "__dataclass_fields__"):
+                result[field_name] = _serialize_analysis(value)
+            else:
+                result[field_name] = value
+        return result
+    return obj
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Summary endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/summary")
+async def get_summary():
+    """Get the full portfolio summary."""
+    orch = get_orchestrator()
+    summary = orch.get_summary()
+    
+    return {
+        "etf": {
+            "total_value": summary.etf_total_value,
+            "total_invested": summary.etf_total_invested,
+            "total_gain_loss": summary.etf_total_gain_loss,
+            "total_gain_loss_pct": summary.etf_total_gain_loss_pct,
+            "level": summary.etf_level.name,
+            "last_update": summary.etf_last_update.isoformat() if summary.etf_last_update else None,
+            "analysis": [_serialize_analysis(a) for a in summary.etf_analysis],
+            "phase": summary.phase,
+            "phase_months_remaining": summary.phase_months_remaining,
+        },
+        "crypto": {
+            "total_value": summary.crypto_total_value,
+            "total_daily_gain": summary.crypto_total_daily_gain,
+            "level": summary.crypto_level.name,
+            "last_update": summary.crypto_last_update.isoformat() if summary.crypto_last_update else None,
+            "analysis": [_serialize_analysis(a) for a in summary.crypto_analysis],
+            "fear_greed": summary.crypto_fear_greed,
+            "fear_greed_label": summary.crypto_fear_greed_label,
+        },
+    }
+
+
+@router.get("/etf")
+async def get_etf_summary():
+    """Get ETF portfolio summary."""
+    orch = get_orchestrator()
+    summary = orch.get_summary()
+    
+    return {
+        "total_value": summary.etf_total_value,
+        "total_invested": summary.etf_total_invested,
+        "total_gain_loss": summary.etf_total_gain_loss,
+        "total_gain_loss_pct": summary.etf_total_gain_loss_pct,
+        "level": summary.etf_level.name,
+        "last_update": summary.etf_last_update.isoformat() if summary.etf_last_update else None,
+        "analysis": [_serialize_analysis(a) for a in summary.etf_analysis],
+        "phase": summary.phase,
+        "phase_months_remaining": summary.phase_months_remaining,
+    }
+
+
+@router.get("/crypto")
+async def get_crypto_summary():
+    """Get crypto staking summary."""
+    orch = get_orchestrator()
+    summary = orch.get_summary()
+    
+    return {
+        "total_value": summary.crypto_total_value,
+        "total_daily_gain": summary.crypto_total_daily_gain,
+        "level": summary.crypto_level.name,
+        "last_update": summary.crypto_last_update.isoformat() if summary.crypto_last_update else None,
+        "analysis": [_serialize_analysis(a) for a in summary.crypto_analysis],
+        "fear_greed": summary.crypto_fear_greed,
+        "fear_greed_label": summary.crypto_fear_greed_label,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Control endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+@router.post("/refresh")
+async def refresh_all(background_tasks: BackgroundTasks):
+    """Trigger a refresh of all monitors."""
+    orch = get_orchestrator()
+    
+    async def run_refresh():
+        await orch.run_all_monitors()
+    
+    background_tasks.add_task(run_refresh)
+    
+    return {"status": "refresh_started", "monitors": ["etf", "crypto"]}
+
+
+@router.post("/refresh/{monitor_name}")
+async def refresh_monitor(monitor_name: str, background_tasks: BackgroundTasks):
+    """Trigger a refresh of a specific monitor."""
+    if monitor_name not in ["etf", "crypto"]:
+        raise HTTPException(status_code=404, detail=f"Unknown monitor: {monitor_name}")
+    
+    orch = get_orchestrator()
+    
+    async def run_refresh():
+        await orch.run_monitor(monitor_name)
+    
+    background_tasks.add_task(run_refresh)
+    
+    return {"status": "refresh_started", "monitor": monitor_name}
+
+
+@router.get("/schedule")
+async def get_schedule():
+    """Get the monitoring schedule."""
+    orch = get_orchestrator()
+    schedule = orch.get_schedule()
+    next_runs = orch.get_next_run_times()
+    
+    return {
+        "schedule": schedule,
+        "next_runs": {
+            name: ts.isoformat() if ts else None
+            for name, ts in next_runs.items()
+        },
+    }
+
+
+@router.post("/reload-config")
+async def reload_config():
+    """Reload configuration from disk."""
+    orch = get_orchestrator()
+    orch.reload_config()
+    return {"status": "config_reloaded"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Health endpoint
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    orch = get_orchestrator()
+    state = orch.get_state()
+    
+    return {
+        "online": True,
+        "service": "portfolio-monitor",
+        "last_etf_run": state.last_etf_run.isoformat() if state.last_etf_run else None,
+        "last_crypto_run": state.last_crypto_run.isoformat() if state.last_crypto_run else None,
+    }

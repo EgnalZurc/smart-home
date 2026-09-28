@@ -140,6 +140,26 @@ services:
       - smart-home
       - cuchi-casa
 
+  # Portfolio Monitor Service - ETF and Crypto portfolio monitoring
+  portfolio-monitor:
+    build:
+      context: ./services/portfolio-monitor
+      dockerfile: Dockerfile
+    container_name: portfolio-monitor
+    restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 256m
+    expose:
+      - 8010
+    volumes:
+      - ./data/portfolio-monitor:/app/data
+    environment:
+      - TZ=Europe/Madrid
+      - MONITOR_LANG=es
+    networks:
+      - smart-home
+      - cuchi-casa
+
 networks:
   smart-home:
     driver: bridge

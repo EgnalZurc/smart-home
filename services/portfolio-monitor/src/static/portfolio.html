@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 Portfolio Monitor</title>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #3b82f6;
+            --accent-green: #22c55e;
+            --accent-yellow: #eab308;
+            --accent-red: #ef4444;
+            --border: #475569;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: none;
+        }
+        
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+        
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--bg-secondary);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+        }
+        
+        .tab {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem 0.5rem 0 0;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: transparent;
+            border: none;
+            transition: all 0.15s;
+        }
+        
+        .tab.active {
+            color: var(--accent-blue);
+            background: var(--bg-secondary);
+        }
+        
+        .tab:hover:not(.active) {
+            color: var(--text-primary);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .summary-card {
+            background: var(--bg-secondary);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+        }
+        
+        .summary-card-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
+        }
+        
+        .summary-card-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .summary-card-subtitle {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+        
+        .positive { color: var(--accent-green); }
+        .negative { color: var(--accent-red); }
+        .neutral { color: var(--text-secondary); }
+        .warning { color: var(--accent-yellow); }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .status-ok { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
+        .status-info { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); }
+        .status-warn { background: rgba(234, 179, 8, 0.2); color: var(--accent-yellow); }
+        .status-danger { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+        
+        .fund-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1rem;
+        }
+        
+        .fund-card {
+            background: var(--bg-secondary);
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+        
+        .fund-card-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .fund-card-title {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .fund-card-title .color-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .fund-card-body {
+            padding: 1rem;
+        }
+        
+        .fund-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+        
+        .fund-stat {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .fund-stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        .fund-stat-value {
+            font-weight: 500;
+        }
+        
+        .signals-list {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        
+        .signal {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+            padding: 0.5rem 0;
+            font-size: 0.875rem;
+        }
+        
+        .signal-icon {
+            flex-shrink: 0;
+        }
+        
+        .signal-body {
+            color: var(--text-secondary);
+        }
+        
+        .recommendation-card {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+        }
+        
+        .recommendation-card.danger { background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); }
+        .recommendation-card.warn { background: rgba(234, 179, 8, 0.1); border: 1px solid var(--accent-yellow); }
+        .recommendation-card.ok { background: rgba(34, 197, 94, 0.1); border: 1px solid var(--accent-green); }
+        
+        .recommendation-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        
+        .sparkline-container {
+            height: 40px;
+            margin: 0.5rem 0;
+        }
+        
+        .sparkline {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+        
+        .fear-greed-meter {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        
+        .fear-greed-bar {
+            flex: 1;
+            height: 8px;
+            background: linear-gradient(to right, #22c55e, #eab308, #ef4444);
+            border-radius: 4px;
+            position: relative;
+        }
+        
+        .fear-greed-indicator {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            border: 2px solid var(--bg-primary);
+        }
+        
+        .last-update {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-align: right;
+        }
+        
+        @media (max-width: 640px) {
+            .fund-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .summary-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Portfolio Monitor</h1>
+            <div class="header-actions">
+                <span id="lastUpdate" class="last-update"></span>
+                <button id="refreshBtn" class="btn btn-primary" onclick="refreshAll()">
+                    🔄 Actualizar
+                </button>
+            </div>
+        </header>
+        
+        <!-- Disclaimer -->
+        <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid var(--accent-blue); border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.8rem; color: var(--text-secondary);">
+            ⚠️ <strong>Aviso:</strong> Las señales técnicas (medias móviles, Fear &amp; Greed) son indicadores de <em>tendencia y sentimiento</em>, no predicciones de precio. Los impuestos se calculan según tramos IRPF 2025 (Ley 7/2024). Consulta a un asesor fiscal para tu situación específica.
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" data-tab="etf">📈 ETFs</button>
+            <button class="tab" data-tab="crypto">₿ Crypto Staking</button>
+        </div>
+        
+        <!-- ETF Tab -->
+        <div id="etf-tab" class="tab-content active">
+            <div id="etf-loading" class="loading">
+                <div class="loading-spinner"></div>
+                Cargando datos ETFs...
+            </div>
+            <div id="etf-content" style="display: none;">
+                <div id="etf-summary" class="summary-grid"></div>
+                <div id="etf-funds" class="fund-grid"></div>
+            </div>
+        </div>
+        
+        <!-- Crypto Tab -->
+        <div id="crypto-tab" class="tab-content">
+            <div id="crypto-loading" class="loading">
+                <div class="loading-spinner"></div>
+                Cargando datos Crypto...
+            </div>
+            <div id="crypto-content" style="display: none;">
+                <div id="crypto-summary" class="summary-grid"></div>
+                <div id="crypto-positions" class="fund-grid"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // State
+        let currentTab = 'etf';
+        let data = null;
+        let refreshing = false;
+        
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');
+                currentTab = tab.dataset.tab;
+            });
+        });
+        
+        // Formatting helpers
+        const formatEur = (v) => v?.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }) || '—';
+        const formatPct = (v) => v != null ? (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%' : '—';
+        const formatNum = (v, d = 2) => v?.toLocaleString('es-ES', { minimumFractionDigits: d, maximumFractionDigits: d }) || '—';
+        
+        function getLevelClass(level) {
+            const map = { OK: 'ok', INFO: 'info', WARN: 'warn', DANGER: 'danger' };
+            return map[level] || 'ok';
+        }
+        
+        function getLevelText(level) {
+            const map = { OK: '✅ En orden', INFO: 'ℹ️ Info', WARN: '⚠️ Corrección', DANGER: '🚨 Revisar' };
+            return map[level] || level;
+        }
+        
+        function pctClass(v) {
+            if (v == null) return 'neutral';
+            return v >= 0 ? 'positive' : 'negative';
+        }
+        
+        // Render ETF tab
+        function renderETF(etf) {
+            if (!etf?.analysis?.length) {
+                document.getElementById('etf-content').innerHTML = '<div class="empty-state">No hay fondos configurados</div>';
+                return;
+            }
+            
+            // Summary cards
+            document.getElementById('etf-summary').innerHTML = `
+                <div class="summary-card">
+                    <div class="summary-card-label">Valor Total</div>
+                    <div class="summary-card-value">${formatEur(etf.total_value)}</div>
+                    <div class="summary-card-subtitle ${pctClass(etf.total_gain_loss_pct)}">${formatPct(etf.total_gain_loss_pct)} (${formatEur(etf.total_gain_loss)})</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-card-label">Total Invertido</div>
+                    <div class="summary-card-value">${formatEur(etf.total_invested)}</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-card-label">Estado</div>
+                    <div class="summary-card-value">
+                        <span class="status-badge status-${getLevelClass(etf.level)}">${getLevelText(etf.level)}</span>
+                    </div>
+                    <div class="summary-card-subtitle">${etf.phase || ''}</div>
+                </div>
+            `;
+            
+            // Fund cards
+            document.getElementById('etf-funds').innerHTML = etf.analysis.map(fund => `
+                <div class="fund-card">
+                    <div class="fund-card-header">
+                        <div class="fund-card-title">
+                            <span class="color-dot" style="background: ${fund.color}"></span>
+                            ${fund.name}
+                        </div>
+                        <span class="status-badge status-${getLevelClass(fund.level)}">${getLevelText(fund.level)}</span>
+                    </div>
+                    <div class="fund-card-body">
+                        ${fund.ohlc?.length ? `<div class="sparkline-container"><canvas class="sparkline" data-ohlc='${JSON.stringify(fund.ohlc)}'></canvas></div>` : ''}
+                        <div class="fund-stats">
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Precio actual</span>
+                                <span class="fund-stat-value">${formatEur(fund.price)}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Precio medio</span>
+                                <span class="fund-stat-value">${fund.avg_cost ? formatEur(fund.avg_cost) : '—'}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Participaciones</span>
+                                <span class="fund-stat-value">${formatNum(fund.units, 4)}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Valor actual</span>
+                                <span class="fund-stat-value">${formatEur(fund.current_value)}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Ganancia/pérdida</span>
+                                <span class="fund-stat-value ${pctClass(fund.gain_loss_pct)}">${formatPct(fund.gain_loss_pct)}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Aportación/mes</span>
+                                <span class="fund-stat-value">${formatEur(fund.monthly_contrib)}</span>
+                            </div>
+                        </div>
+                        ${fund.signals?.length ? `
+                            <div class="signals-list">
+                                ${fund.signals.map(s => `
+                                    <div class="signal">
+                                        <span class="signal-icon">${s.level === 'DANGER' ? '🚨' : s.level === 'WARN' ? '⚠️' : s.level === 'INFO' ? 'ℹ️' : '✅'}</span>
+                                        <span class="signal-body">${s.title ? `<strong>${s.title}</strong> ` : ''}${s.body}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                        ${fund.recommendation ? `
+                            <div class="recommendation-card ${getLevelClass(fund.recommendation.level)}">
+                                <div class="recommendation-title">${fund.recommendation.title}</div>
+                                <div>${fund.recommendation.body}</div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+            
+            // Render sparklines
+            renderSparklines();
+        }
+        
+        // Render Crypto tab
+        function renderCrypto(crypto) {
+            if (!crypto?.analysis?.length) {
+                document.getElementById('crypto-content').innerHTML = '<div class="empty-state">No hay posiciones configuradas</div>';
+                return;
+            }
+            
+            // Summary cards
+            let fgHtml = '';
+            if (crypto.fear_greed != null) {
+                fgHtml = `
+                    <div class="summary-card">
+                        <div class="summary-card-label">Fear & Greed</div>
+                        <div class="summary-card-value">${crypto.fear_greed}</div>
+                        <div class="summary-card-subtitle">${crypto.fear_greed_label || ''}</div>
+                        <div class="fear-greed-meter" style="margin-top: 0.5rem;">
+                            <div class="fear-greed-bar">
+                                <div class="fear-greed-indicator" style="left: ${crypto.fear_greed}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            document.getElementById('crypto-summary').innerHTML = `
+                <div class="summary-card">
+                    <div class="summary-card-label">Valor Total Staking</div>
+                    <div class="summary-card-value">${formatEur(crypto.total_value)}</div>
+                    <div class="summary-card-subtitle positive">+${formatEur(crypto.total_daily_gain)}/día</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-card-label">Estado</div>
+                    <div class="summary-card-value">
+                        <span class="status-badge status-${getLevelClass(crypto.level)}">${getLevelText(crypto.level)}</span>
+                    </div>
+                </div>
+                ${fgHtml}
+            `;
+            
+            // Position cards
+            document.getElementById('crypto-positions').innerHTML = crypto.analysis.map(pos => `
+                <div class="fund-card">
+                    <div class="fund-card-header">
+                        <div class="fund-card-title">
+                            <span>${pos.symbol}</span>
+                            <span style="font-weight: 400; color: var(--text-secondary)">${pos.name}</span>
+                        </div>
+                        <span class="status-badge status-${getLevelClass(pos.level)}">${getLevelText(pos.level)}</span>
+                    </div>
+                    <div class="fund-card-body">
+                        ${pos.ohlc?.length ? `<div class="sparkline-container"><canvas class="sparkline" data-ohlc='${JSON.stringify(pos.ohlc)}'></canvas></div>` : ''}
+                        <div class="fund-stats">
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Cantidad</span>
+                                <span class="fund-stat-value">${formatNum(pos.amount, 6)} ${pos.symbol}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Valor actual</span>
+                                <span class="fund-stat-value">${formatEur(pos.current_value)}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Producto</span>
+                                <span class="fund-stat-value">${pos.product}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">APY</span>
+                                <span class="fund-stat-value positive">${pos.apy}%</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Ganancia/día</span>
+                                <span class="fund-stat-value positive">+${formatEur(pos.daily_gain)}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Acumulado</span>
+                                <span class="fund-stat-value positive">+${formatEur(pos.accumulated_gain)}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">24h</span>
+                                <span class="fund-stat-value ${pctClass(pos.change_24h/100)}">${pos.change_24h?.toFixed(1)}%</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Disponible</span>
+                                <span class="fund-stat-value">${pos.days_until_available === 0 ? 'Ahora' : pos.days_until_available + 'd'}</span>
+                            </div>
+                        </div>
+                        ${pos.signals?.length ? `
+                            <div class="signals-list">
+                                ${pos.signals.map(s => `
+                                    <div class="signal">
+                                        <span class="signal-body">${s.body}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+            
+            // Render sparklines
+            renderSparklines();
+        }
+        
+        // Render sparklines using canvas
+        function renderSparklines() {
+            document.querySelectorAll('.sparkline').forEach(canvas => {
+                try {
+                    const ohlc = JSON.parse(canvas.dataset.ohlc);
+                    if (!ohlc?.length) return;
+                    
+                    const ctx = canvas.getContext('2d');
+                    const rect = canvas.getBoundingClientRect();
+                    canvas.width = rect.width * 2;
+                    canvas.height = rect.height * 2;
+                    ctx.scale(2, 2);
+                    
+                    const closes = ohlc.map(d => d[4]); // Close prices
+                    const min = Math.min(...closes);
+                    const max = Math.max(...closes);
+                    const range = max - min || 1;
+                    
+                    const w = rect.width;
+                    const h = rect.height;
+                    const padding = 2;
+                    
+                    ctx.beginPath();
+                    ctx.strokeStyle = closes[closes.length - 1] >= closes[0] ? '#22c55e' : '#ef4444';
+                    ctx.lineWidth = 1.5;
+                    
+                    closes.forEach((v, i) => {
+                        const x = padding + (i / (closes.length - 1)) * (w - 2 * padding);
+                        const y = h - padding - ((v - min) / range) * (h - 2 * padding);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    });
+                    
+                    ctx.stroke();
+                } catch (e) {
+                    console.error('Sparkline error:', e);
+                }
+            });
+        }
+        
+        // Fetch data
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/portfolio/summary');
+                if (!res.ok) throw new Error('API error');
+                data = await res.json();
+                
+                // Update last update time
+                const lastEtf = data.etf?.last_update ? new Date(data.etf.last_update) : null;
+                const lastCrypto = data.crypto?.last_update ? new Date(data.crypto.last_update) : null;
+                const latest = lastEtf && lastCrypto 
+                    ? (lastEtf > lastCrypto ? lastEtf : lastCrypto)
+                    : (lastEtf || lastCrypto);
+                
+                if (latest) {
+                    document.getElementById('lastUpdate').textContent = `Actualizado: ${latest.toLocaleString('es-ES')}`;
+                }
+                
+                // Render
+                renderETF(data.etf);
+                renderCrypto(data.crypto);
+                
+                // Show content, hide loading
+                document.getElementById('etf-loading').style.display = 'none';
+                document.getElementById('etf-content').style.display = 'block';
+                document.getElementById('crypto-loading').style.display = 'none';
+                document.getElementById('crypto-content').style.display = 'block';
+                
+            } catch (e) {
+                console.error('Fetch error:', e);
+                document.getElementById('etf-loading').innerHTML = '<div class="empty-state">Error cargando datos. <button onclick="fetchData()" class="btn btn-secondary">Reintentar</button></div>';
+                document.getElementById('crypto-loading').innerHTML = '<div class="empty-state">Error cargando datos. <button onclick="fetchData()" class="btn btn-secondary">Reintentar</button></div>';
+            }
+        }
+        
+        // Refresh all monitors
+        async function refreshAll() {
+            if (refreshing) return;
+            refreshing = true;
+            
+            const btn = document.getElementById('refreshBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Actualizando...';
+            
+            try {
+                await fetch('/api/portfolio/refresh', { method: 'POST' });
+                // Wait a bit for monitors to run
+                await new Promise(r => setTimeout(r, 5000));
+                await fetchData();
+            } catch (e) {
+                console.error('Refresh error:', e);
+            } finally {
+                refreshing = false;
+                btn.disabled = false;
+                btn.textContent = '🔄 Actualizar';
+            }
+        }
+        
+        // Initial load
+        fetchData();
+        
+        // Auto-refresh every 5 minutes
+        setInterval(fetchData, 5 * 60 * 1000);
+    </script>
+</body>
+</html>
