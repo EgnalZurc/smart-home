@@ -2,12 +2,12 @@
 const BASE = '';
 
 export async function fetchStatus() {
-    const r = await fetch(`${BASE}/api/status`);
+    const r = await fetch(`${BASE}/api/ac/status`);
     return r.json();
 }
 
 export async function fetchSensors() {
-    const r = await fetch(`${BASE}/api/sensors`);
+    const r = await fetch(`${BASE}/api/ac/sensors`);
     return r.json();
 }
 
@@ -17,17 +17,17 @@ export async function fetchSensorHistoryApi(start = null, end = null) {
     if (start !== null) params.set('start', start);
     if (end   !== null) params.set('end',   end);
     const qs = params.toString();
-    const r = await fetch(`${BASE}/api/sensors/history${qs ? '?' + qs : ''}`);
+    const r = await fetch(`${BASE}/api/ac/sensors/history${qs ? '?' + qs : ''}`);
     return r.json();
 }
 
 export async function fetchOutdoor() {
-    const r = await fetch(`${BASE}/api/outdoor`);
+    const r = await fetch(`${BASE}/api/ac/outdoor`);
     return r.json();
 }
 
 export async function postConfig(targetTemperature) {
-    const r = await fetch(`${BASE}/api/config`, {
+    const r = await fetch(`${BASE}/api/ac/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_temperature: targetTemperature }),
@@ -37,18 +37,18 @@ export async function postConfig(targetTemperature) {
 }
 
 export async function postControlMode(mode) {
-    const r = await fetch(`${BASE}/api/control_mode`, {
+    const r = await fetch(`${BASE}/api/ac/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode }),
     });
-    if (!r.ok) throw new Error(`control_mode failed: ${r.status}`);
+    if (!r.ok) throw new Error(`control failed: ${r.status}`);
     return r.json();
 }
 
 export async function postManualParam(param, value) {
     const r = await fetch(
-        `${BASE}/api/manual_param?param=${param}&value=${encodeURIComponent(value)}`,
+        `${BASE}/api/ac/manual/param?param=${param}&value=${encodeURIComponent(value)}`,
         { method: 'POST' }
     );
     if (!r.ok) throw new Error(`manual_param failed: ${r.status}`);
@@ -56,6 +56,6 @@ export async function postManualParam(param, value) {
 }
 
 export async function fetchErrors() {
-    const r = await fetch(`${BASE}/api/errors`);
+    const r = await fetch(`${BASE}/api/ac/errors`);
     return r.json();
 }

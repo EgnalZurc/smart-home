@@ -1,32 +1,32 @@
-"""Baby Gifts Service ??? standalone microservice for baby gift registry.
+"""Baby Gifts Service — standalone microservice for baby gift registry.
 Three access modes:
 1. Admin (authenticated via nginx auth_request + SUPER profile): full CRUD + invitation management
 2. Authenticated User (via nginx auth_request): view gifts + reserve/unreserve
 3. Guest (via invitation token): view gifts + reserve/unreserve own
 Serves:
-  GET  /smart-home/baby-gifts       ??? SPA (admin/user view, requires auth)
-  GET  /baby-gifts/i/{token}        ??? SPA (guest view, token-based access)
+  GET  /smart-home/baby-gifts       → SPA (admin/user view, requires auth)
+  GET  /guest/baby-gifts/{token}    → SPA (guest view, token-based access)
   # Admin endpoints (protected by nginx auth_request, requires SUPER)
-  GET  /api/baby-gifts              ??? all gifts (with reservation details)
-  POST /api/baby-gifts              ??? add gift
-  PUT  /api/baby-gifts/{id}         ??? update gift
-  DELETE /api/baby-gifts/{id}       ??? delete gift
-  POST /api/baby-gifts/{id}/unreserve ??? admin can unreserve any gift
-  GET  /api/baby-gifts/invitations  ??? list all invitations
-  POST /api/baby-gifts/invitations  ??? create invitation
-  DELETE /api/baby-gifts/invitations/{token} ??? delete invitation
-  POST /api/baby-gifts/invitations/{token}/revoke ??? revoke invitation
-  PUT  /api/baby-gifts/categories   ??? update categories
+  GET  /api/baby-gifts              → all gifts (with reservation details)
+  POST /api/baby-gifts              → add gift
+  PUT  /api/baby-gifts/{id}         → update gift
+  DELETE /api/baby-gifts/{id}       → delete gift
+  POST /api/baby-gifts/{id}/unreserve → admin can unreserve any gift
+  GET  /api/baby-gifts/invitations  → list all invitations
+  POST /api/baby-gifts/invitations  → create invitation
+  DELETE /api/baby-gifts/invitations/{token} → delete invitation
+  POST /api/baby-gifts/invitations/{token}/revoke → revoke invitation
+  PUT  /api/baby-gifts/categories   → update categories
   # Authenticated user endpoints (protected by nginx auth_request)
-  GET  /api/baby-gifts/user              ??? get gifts for authenticated user
-  POST /api/baby-gifts/user/reserve/{id} ??? reserve a gift as authenticated user
-  POST /api/baby-gifts/user/unreserve/{id} ??? unreserve own gift
+  GET  /api/baby-gifts/user              → get gifts for authenticated user
+  POST /api/baby-gifts/user/reserve/{id} → reserve a gift as authenticated user
+  POST /api/baby-gifts/user/unreserve/{id} → unreserve own gift
   # Guest endpoints (token-based, public)
-  GET  /api/baby-gifts/guest/{token}           ??? get gifts for guest
-  POST /api/baby-gifts/guest/{token}/reserve/{id}   ??? reserve a gift
-  POST /api/baby-gifts/guest/{token}/unreserve/{id} ??? unreserve own gift
-  GET  /health                      ??? health check
-  GET  /api/health/baby-gifts       ??? health check alias
+  GET  /api/baby-gifts/guest/{token}           → get gifts for guest
+  POST /api/baby-gifts/guest/{token}/reserve/{id}   → reserve a gift
+  POST /api/baby-gifts/guest/{token}/unreserve/{id} → unreserve own gift
+  GET  /health                      → health check
+  GET  /api/health/baby-gifts       → health check alias
 Port: 8004
 """
 import logging
@@ -157,7 +157,7 @@ async def serve_admin(request: Request):
     else:
         # Admin view (legacy, no specific user info)
         return _serve_html("baby-gifts.html")
-@app.get("/baby-gifts/i/{token}")
+@app.get("/guest/baby-gifts/{token}")
 async def serve_guest(token: str, request: Request):
     """Serves the guest SPA (public, token-validated).
     NOTE: No rate limiting here - we only validate token once on page load.

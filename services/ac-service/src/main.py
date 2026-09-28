@@ -294,8 +294,15 @@ class ManualParamsRequest(BaseModel):
 
 # ── Health ────────────────────────────────────────────────────────────────────
 
-@app.get("/health")
+@app.get("/health", tags=["Health"])
 def health():
+    """Internal health check for Docker/nginx."""
+    return {"online": True, "service": "ac"}
+
+
+@app.get("/api/health/ac", tags=["Health"])
+def health_api():
+    """Public health check endpoint (matches dashboard pattern)."""
     return {"online": True, "service": "ac"}
 
 
@@ -315,15 +322,17 @@ def _serve_html(filename: str) -> HTMLResponse:
     )
 
 
-@app.get("/smart-home/ac")
+@app.get("/smart-home/ac", tags=["SPA"])
 async def serve_ac():
+    """Serve the AC control SPA."""
     return _serve_html("index.html")
 
 
-# ── API routes (same paths as before — nginx proxies these) ───────────────────
+# ── API routes (/api/ac/*) ────────────────────────────────────────────────────
 
-@app.get("/api/status")
+@app.get("/api/ac/status", tags=["AC Control"])
 def get_status():
+    """Get current AC and sensor status."""
     state = ac_controller.current_state
     return {
         "average_temperature": state.average_temp,
@@ -358,8 +367,9 @@ def get_status():
     }
 
 
-@app.get("/api/sensors")
+@app.get("/api/ac/sensors", tags=["Sensors"])
 def get_sensors():
+    """Get all sensor readings."""
     all_sensors = mqtt_handler.sensor_names
     now = time.time()
     sensors = []
@@ -385,8 +395,9 @@ def get_sensors():
     return {"sensors": sensors}
 
 
-@app.get("/api/sensors/history")
+@app.get("/api/ac/sensors/history", tags=["Sensors"])
 def get_sensors_history(start: float | None = None, end: float | None = None, last: int | None = None):
+    """Get sensor reading history."""
     result = {}
     with mqtt_handler._lock:
         for name, readings_list in mqtt_handler.history.items():
@@ -407,13 +418,15 @@ def get_sensors_history(start: float | None = None, end: float | None = None, la
     return result
 
 
-@app.get("/api/history")
+@app.get("/api/ac/history", tags=["AC Control"])
 def get_history(limit: int = 100):
+    """Get controller action history."""
     return {"history": ac_controller.get_history(limit)}
 
 
-@app.get("/api/config")
+@app.get("/api/ac/config", tags=["AC Control"])
 def get_config():
+    """Get controller configuration."""
     cfg = ac_controller.config
     return {
         "target_temperature": cfg.target_temperature,
@@ -429,8 +442,9 @@ def get_config():
     }
 
 
-@app.post("/api/config")
+@app.post("/api/ac/config", tags=["AC Control"])
 def update_config(update: ConfigUpdate):
+    """Update controller configuration."""
     changes = update.model_dump(exclude_none=True)
     if not changes:
         raise HTTPException(400, "No changes")
@@ -442,8 +456,9 @@ def update_config(update: ConfigUpdate):
     return {"status": "updated", "changes": changes}
 
 
-@app.post("/api/control_mode")
+@app.post("/api/ac/control", tags=["AC Control"])
 def set_control_mode(req: ControlModeRequest):
+    """Set control mode (auto/manual/off)."""
     if req.mode not in ("auto", "manual", "off"):
         raise HTTPException(400, "mode must be 'auto', 'manual', or 'off'")
     if req.mode == "manual":
@@ -457,8 +472,9 @@ def set_control_mode(req: ControlModeRequest):
     return {"status": "ok", "control_mode": req.mode}
 
 
-@app.post("/api/manual_params")
+@app.post("/api/ac/manual", tags=["AC Control"])
 def set_manual_params(req: ManualParamsRequest):
+    """Set manual control parameters."""
     min_temp = ac_controller.config.min_setpoint
     max_temp = ac_controller.config.max_setpoint
     if req.temperature < min_temp or req.temperature > max_temp:
@@ -478,8 +494,9 @@ def set_manual_params(req: ManualParamsRequest):
     return {"status": "ok", "message": "Parameters saved"}
 
 
-@app.post("/api/manual_param")
+@app.post("/api/ac/manual/param", tags=["AC Control"])
 def update_manual_param(param: str, value: str):
+    """Update a single manual parameter."""
     state = ac_controller.current_state
     if state.control_mode != "manual":
         raise HTTPException(400, "Not in manual mode")
@@ -519,8 +536,9 @@ def update_manual_param(param: str, value: str):
     return {"status": "ok" if success else "error", "applied": {"mode": mode, "fan_speed": fan_speed, "temperature": temperature}}
 
 
-@app.get("/api/ac_real")
+@app.get("/api/ac/real", tags=["AC Control"])
 def get_ac_real():
+    """Get real AC state from MELCloud."""
     try:
         state = ac_controller.melcloud.get_device_state(
             ac_controller.config.device_id, ac_controller.config.building_id,
@@ -540,8 +558,9 @@ def get_ac_real():
         return {"power": None, "mode": None, "fan_speed": None, "set_temp": None, "room_temp": None}
 
 
-@app.get("/api/outdoor")
+@app.get("/api/ac/outdoor", tags=["Environment"])
 def get_outdoor():
+    """Get outdoor temperature and air quality."""
     outdoor_data = subscription_manager.get_cached("outdoor", default={})
     if not outdoor_data:
         return {"temperature": None, "humidity": None, "timestamp": 0}
@@ -555,16 +574,18 @@ def get_outdoor():
     }
 
 
-@app.get("/api/errors")
+@app.get("/api/ac/errors", tags=["AC Control"])
 def get_errors():
+    """Get active errors."""
     if error_tracker is None:
         return {"errors": [], "has_errors": False}
     active = error_tracker.get_active()
     return {"errors": active, "has_errors": bool(active)}
 
 
-@app.get("/api/humidity/study")
+@app.get("/api/ac/humidity/study", tags=["Humidity"])
 def get_humidity_study():
+    """Get humidity analysis summary."""
     from humidity_analysis import get_summary
     summary = get_summary()
     if summary is None:
@@ -572,38 +593,44 @@ def get_humidity_study():
     return summary
 
 
-@app.post("/api/humidity/study/run")
+@app.post("/api/ac/humidity/study/run", tags=["Humidity"])
 def trigger_humidity_analysis():
+    """Trigger manual humidity analysis."""
     if humidity_scheduler is None:
         return {"status": "error", "message": "Humidity scheduler not initialized"}
     humidity_scheduler.run_now()
     return {"status": "ok", "message": "Analysis triggered"}
 
 
-@app.get("/api/energy/current")
+@app.get("/api/ac/energy/current", tags=["Energy"])
 def get_energy_current():
+    """Get current energy consumption (placeholder)."""
     return {"kwh": 0.0, "cost": 0.0, "last_update": time.time(), "note": "energy tracker not in ac-service"}
 
 
-@app.get("/api/energy/hourly")
+@app.get("/api/ac/energy/hourly", tags=["Energy"])
 def get_energy_hourly():
+    """Get hourly energy data (placeholder)."""
     return {"data": {}}
 
 
-@app.get("/api/energy/monthly")
+@app.get("/api/ac/energy/monthly", tags=["Energy"])
 def get_energy_monthly():
+    """Get monthly energy data (placeholder)."""
     return {"data": {}}
 
 
-@app.get("/api/subscriptions/stats")
+@app.get("/api/ac/subscriptions/stats", tags=["AC Control"])
 def get_subscription_stats():
+    """Get subscription manager stats."""
     if subscription_manager is None:
         return {"error": "not initialized"}
     return subscription_manager.get_stats()
 
 
-@app.get("/api/health/zigbee")
+@app.get("/api/ac/health/zigbee", tags=["Health"])
 def get_zigbee_health():
+    """Get Zigbee/MQTT health status."""
     mqtt_ok = mqtt_handler is not None and mqtt_handler.is_connected
     active = {}
     if mqtt_handler is not None:

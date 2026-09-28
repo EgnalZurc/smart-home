@@ -451,7 +451,7 @@ function renderApps() {
 // Container control
 async function loadContainerStates() {
     try {
-        const r = await fetch('/api/containers');
+        const r = await fetch('/api/system/containers');
         if (!r.ok) return;
         const data = await r.json();
         containerState = {};
@@ -482,7 +482,7 @@ async function toggleService(event, key) {
     const wasRunning = containerState[key];
     btn.disabled = true; btn.className = 'svc-btn loading'; btn.textContent = t('svc_loading');
     try {
-        const r = await fetch(`/api/containers/${key}/${wasRunning ? 'stop' : 'start'}`, { method: 'POST' });
+        const r = await fetch(`/api/system/containers/${key}/${wasRunning ? 'stop' : 'start'}`, { method: 'POST' });
         if (r.ok) {
             await new Promise(res => setTimeout(res, 1500));
             await loadContainerStates();

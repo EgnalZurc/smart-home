@@ -198,7 +198,7 @@ class TestStopStartButtons:
         assert "toggleService" in _html()
 
     def test_toggle_calls_containers_api(self):
-        assert "/api/containers/" in _html()
+        assert "/api/system/containers/" in _html()
 
     def test_button_gated_by_is_super(self):
         """Stop/start button must only render for SUPER."""

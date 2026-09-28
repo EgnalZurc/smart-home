@@ -775,7 +775,7 @@ async function createInvitation() {
         const data = await res.json();
         closeInvModal();
         // Show link modal
-        currentLink = `${window.location.origin}/baby-gifts/i/${data.token}`;
+        currentLink = `${window.location.origin}/guest/baby-gifts/${data.token}`;
         document.getElementById('link-name').textContent = name;
         document.getElementById('link-url').textContent = currentLink;
         document.getElementById('link-modal').classList.add('open');
@@ -799,7 +799,7 @@ async function copyLink() {
 }
 
 async function copyInvLink(token, name) {
-    const link = `${window.location.origin}/baby-gifts/i/${token}`;
+    const link = `${window.location.origin}/guest/baby-gifts/${token}`;
     try {
         await navigator.clipboard.writeText(link);
         showToast(`Enlace de ${escapeHtml(name)} copiado`, 'success');

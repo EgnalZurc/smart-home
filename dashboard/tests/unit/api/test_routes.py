@@ -259,16 +259,16 @@ def _patch_super_inline():
 class TestRequireSuperGuard:
 
     def test_familia_principal_returns_403(self):
-        """FAMILIA_PRINCIPAL (no show_gaming_apps) cannot access /api/containers."""
+        """FAMILIA_PRINCIPAL (no show_gaming_apps) cannot access /api/system/containers."""
         import auth as auth_core
         import user_profiles
         c = _make_client()
         with patch.object(auth_core, 'get_current_user', return_value='virchi'),              patch.object(user_profiles, 'get_profile_key', return_value='FAMILIA_PRINCIPAL'):
-            r = c.get("/api/containers")
+            r = c.get("/api/system/containers")
         assert r.status_code == 403
 
     def test_super_can_call_get_containers(self):
-        """SUPER can access /api/containers and sees all services."""
+        """SUPER can access /api/system/containers and sees all services."""
         import auth as auth_core
         import user_profiles
         c = _make_client()
@@ -286,11 +286,11 @@ class TestRequireSuperGuard:
         with patch.object(auth_core, 'get_current_user', return_value='egnal'),              patch.object(user_profiles, 'get_profile_key', return_value='SUPER'):
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
-                r = c.get("/api/containers")
+                r = c.get("/api/system/containers")
         assert r.status_code == 200
 
 
-# ── GET /api/containers ───────────────────────────────────────────────────────
+# ── GET /api/system/containers ────────────────────────────────────────────────
 
 class TestGetContainers:
 
@@ -315,7 +315,7 @@ class TestGetContainers:
         with _patch_super_inline():
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=self._all_running())
-                r = c.get("/api/containers")
+                r = c.get("/api/system/containers")
         assert r.status_code == 200
         data = r.json()
         for key in ("ac", "vacaciones", "casita", "photos", "passwords"):
@@ -332,7 +332,7 @@ class TestGetContainers:
         with _patch_super_inline():
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
-                r = c.get("/api/containers")
+                r = c.get("/api/system/containers")
         data = r.json()
         assert data["ac"]["running"] is False
         assert data["photos"]["running"] is True
@@ -348,7 +348,7 @@ class TestGetContainers:
         with _patch_super_inline():
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
-                r = c.get("/api/containers")
+                r = c.get("/api/system/containers")
         assert r.json()["photos"]["running"] is False
 
     def test_response_includes_states_detail(self):
@@ -362,7 +362,7 @@ class TestGetContainers:
         with _patch_super_inline():
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_cls.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
-                r = c.get("/api/containers")
+                r = c.get("/api/system/containers")
         data = r.json()
         assert data["ac"]["states"]["ac-service"] == "running"
         assert data["vacaciones"]["states"]["vacaciones-service"] == "exited"
@@ -374,7 +374,7 @@ class TestGetContainers:
                 mock_cls.return_value.__aenter__.return_value.get = AsyncMock(
                     side_effect=Exception("connection refused")
                 )
-                r = c.get("/api/containers")
+                r = c.get("/api/system/containers")
         assert r.status_code == 503
 
 
@@ -389,14 +389,14 @@ class TestStopService:
         with _patch_require_super('egnal', 'SUPER'):
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_cls.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_resp)
-                r = c.post("/api/containers/ac/stop")
+                r = c.post("/api/system/containers/ac/stop")
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
 
     def test_stop_unknown_service_returns_404(self):
         c = _make_client()
         with _patch_require_super('egnal', 'SUPER'):
-            r = c.post("/api/containers/nonexistent/stop")
+            r = c.post("/api/system/containers/nonexistent/stop")
         assert r.status_code == 404
 
     def test_stop_already_stopped_container_is_ok(self):
@@ -406,7 +406,7 @@ class TestStopService:
         with _patch_require_super('egnal', 'SUPER'):
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_cls.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_resp)
-                r = c.post("/api/containers/ac/stop")
+                r = c.post("/api/system/containers/ac/stop")
         assert r.json()["status"] == "ok"
 
     def test_stop_non_super_returns_403(self):
@@ -428,7 +428,7 @@ class TestStopService:
         with _patch_require_super('egnal', 'SUPER'):
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_cls.return_value.__aenter__.return_value.post = fake_post
-                r = c.post("/api/containers/photos/stop")
+                r = c.post("/api/system/containers/photos/stop")
 
         assert r.status_code == 200
         assert any("immich_server" in u for u in call_urls)
@@ -448,14 +448,14 @@ class TestStartService:
         with _patch_require_super('egnal', 'SUPER'):
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_cls.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_resp)
-                r = c.post("/api/containers/ac/start")
+                r = c.post("/api/system/containers/ac/start")
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
 
     def test_start_unknown_service_returns_404(self):
         c = _make_client()
         with _patch_require_super('egnal', 'SUPER'):
-            r = c.post("/api/containers/unknown/start")
+            r = c.post("/api/system/containers/unknown/start")
         assert r.status_code == 404
 
     def test_start_already_running_is_ok(self):
@@ -465,7 +465,7 @@ class TestStartService:
         with _patch_require_super('egnal', 'SUPER'):
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_cls.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_resp)
-                r = c.post("/api/containers/vacaciones/start")
+                r = c.post("/api/system/containers/vacaciones/start")
         assert r.json()["status"] == "ok"
 
     def test_start_non_super_returns_403(self):

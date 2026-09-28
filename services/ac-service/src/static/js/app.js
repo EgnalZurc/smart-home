@@ -104,7 +104,7 @@ window.showHumidityStudy = async function() {
 
     content.innerHTML = '<p class="text-slate-400 text-sm text-center py-4">Loading\u2026</p>';
     try {
-        const r = await fetch('/api/humidity/study');
+        const r = await fetch('/api/ac/humidity/study');
         const d = await r.json();
         content.innerHTML = _renderHumidityStudy(d);
     } catch (e) {

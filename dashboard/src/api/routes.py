@@ -31,7 +31,7 @@ async def get_zigbee_health():
     """Proxy health check to ac-service (which manages Zigbee/MQTT)."""
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get("http://ac-service:8002/api/health/zigbee")
+            r = await client.get("http://ac-service:8002/api/ac/health/zigbee")
             return r.json()
     except Exception:
         return {"online": False, "mqtt_connected": False, "active_sensors": 0}
@@ -42,7 +42,7 @@ async def get_ac_health():
     """Health check for AC service."""
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get("http://ac-service:8002/health")
+            r = await client.get("http://ac-service:8002/api/health/ac")
             data = r.json()
             return {"online": data.get("online", False)}
     except Exception:
@@ -351,7 +351,7 @@ def _require_super(request: Request) -> str:
 
 
 
-@router.get("/containers", tags=["📦 Containers"])
+@router.get("/system/containers", tags=["📦 Containers"])
 async def get_containers(request: Request):
     """Return running state for all controllable services.
 
@@ -390,7 +390,7 @@ async def get_containers(request: Request):
     return result
 
 
-@router.post("/containers/{app_key}/stop", tags=["📦 Containers"])
+@router.post("/system/containers/{app_key}/stop", tags=["📦 Containers"])
 async def stop_service(app_key: str, request: Request):
     """Stop all containers for the given service app key.
 
@@ -416,7 +416,7 @@ async def stop_service(app_key: str, request: Request):
     return {"status": "ok" if all_ok else "partial", "results": results}
 
 
-@router.post("/containers/{app_key}/start", tags=["📦 Containers"])
+@router.post("/system/containers/{app_key}/start", tags=["📦 Containers"])
 async def start_service(app_key: str, request: Request):
     """Start all containers for the given service app key.
 
