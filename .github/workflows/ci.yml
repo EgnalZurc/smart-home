@@ -580,12 +580,13 @@ jobs:
           BABYGIFTS_CHANGED: ${{ needs.build.outputs.baby-gifts }}
           VACACIONES_CHANGED: ${{ needs.build.outputs.vacaciones }}
           CASITA_CHANGED: ${{ needs.build.outputs.casita }}
+          VAULTWARDEN_CHANGED: ${{ needs.build.outputs.vaultwarden }}
         with:
           host: ${{ secrets.PI_SSH_HOST }}
           username: ${{ secrets.PI_SSH_USER }}
           key: ${{ secrets.PI_SSH_KEY }}
           timeout: 60s
-          envs: DASHBOARD_CHANGED,AC_CHANGED,BABYGIFTS_CHANGED,VACACIONES_CHANGED,CASITA_CHANGED
+          envs: DASHBOARD_CHANGED,AC_CHANGED,BABYGIFTS_CHANGED,VACACIONES_CHANGED,CASITA_CHANGED,VAULTWARDEN_CHANGED
           script: |
             BASE_URL="https://localhost"
             FAILED=false
@@ -628,6 +629,7 @@ jobs:
             check_health "Baby Gifts" "/api/health/baby-gifts" "$BABYGIFTS_CHANGED"
             check_health "Vacaciones" "/api/health/vacaciones" "$VACACIONES_CHANGED"
             check_health "Casita" "/api/health/casita" "$CASITA_CHANGED"
+            check_health "Vaultwarden" "/passwords/" "$VAULTWARDEN_CHANGED"
             echo "======================================="
             
             if [[ "$FAILED" == "true" ]]; then
