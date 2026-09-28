@@ -2,9 +2,13 @@
 # Smart Home - Test and Deploy Pipeline
 # 
 # Flow:
-#   1. Tests run automatically on push/PR to main
+#   1. Tests run automatically on push/PR to main (only changed services)
 #   2. If tests pass → deploy job becomes available (requires manual approval)
 #   3. Approve via GitHub UI or CLI: gh run review --approve
+#
+# Manual trigger:
+#   gh workflow run ci.yml --repo EgnalZurc/smart-home                    # normal (detect changes)
+#   gh workflow run ci.yml -f force_all_tests=true --repo EgnalZurc/smart-home  # run ALL tests
 #
 # To deploy from CLI after tests pass:
 #   gh run view <run-id> --repo EgnalZurc/smart-home
@@ -18,28 +22,41 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_all_tests:
+        description: 'Run ALL tests regardless of changes'
+        required: false
+        default: false
+        type: boolean
+      force_deploy:
+        description: 'Enable deploy even without detected changes'
+        required: false
+        default: false
+        type: boolean
 
 env:
   DOCKERHUB_USERNAME: egnal
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
-  # Detect which services changed
+  # Detect which services changed (or force all if manual trigger)
   # ─────────────────────────────────────────────────────────────────────────────
   detect-changes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
-      dashboard: ${{ steps.filter.outputs.dashboard }}
-      ac-service: ${{ steps.filter.outputs.ac-service }}
-      baby-gifts: ${{ steps.filter.outputs.baby-gifts }}
-      vacaciones: ${{ steps.filter.outputs.vacaciones }}
-      casita: ${{ steps.filter.outputs.casita }}
-      any-service: ${{ steps.check.outputs.any-service }}
+      dashboard: ${{ steps.result.outputs.dashboard }}
+      ac-service: ${{ steps.result.outputs.ac-service }}
+      baby-gifts: ${{ steps.result.outputs.baby-gifts }}
+      vacaciones: ${{ steps.result.outputs.vacaciones }}
+      casita: ${{ steps.result.outputs.casita }}
+      any-service: ${{ steps.result.outputs.any-service }}
     steps:
       - uses: actions/checkout@v4
       
       - uses: dorny/paths-filter@v3
         id: filter
+        if: ${{ github.event.inputs.force_all_tests != 'true' }}
         with:
           filters: |
             dashboard:
@@ -56,18 +73,38 @@ jobs:
               - 'infrastructure/**'
               - 'docker-compose*.yml'
 
-      - name: Check if any service changed
-        id: check
+      - name: Determine what to test
+        id: result
         run: |
-          if [[ "${{ steps.filter.outputs.dashboard }}" == "true" ]] || \
-             [[ "${{ steps.filter.outputs.ac-service }}" == "true" ]] || \
-             [[ "${{ steps.filter.outputs.baby-gifts }}" == "true" ]] || \
-             [[ "${{ steps.filter.outputs.vacaciones }}" == "true" ]] || \
-             [[ "${{ steps.filter.outputs.casita }}" == "true" ]] || \
-             [[ "${{ steps.filter.outputs.infrastructure }}" == "true" ]]; then
+          FORCE_ALL="${{ github.event.inputs.force_all_tests }}"
+          FORCE_DEPLOY="${{ github.event.inputs.force_deploy }}"
+          
+          if [[ "$FORCE_ALL" == "true" ]]; then
+            echo "🔄 Force all tests enabled"
+            echo "dashboard=true" >> $GITHUB_OUTPUT
+            echo "ac-service=true" >> $GITHUB_OUTPUT
+            echo "baby-gifts=true" >> $GITHUB_OUTPUT
+            echo "vacaciones=true" >> $GITHUB_OUTPUT
+            echo "casita=true" >> $GITHUB_OUTPUT
             echo "any-service=true" >> $GITHUB_OUTPUT
           else
-            echo "any-service=false" >> $GITHUB_OUTPUT
+            echo "dashboard=${{ steps.filter.outputs.dashboard }}" >> $GITHUB_OUTPUT
+            echo "ac-service=${{ steps.filter.outputs.ac-service }}" >> $GITHUB_OUTPUT
+            echo "baby-gifts=${{ steps.filter.outputs.baby-gifts }}" >> $GITHUB_OUTPUT
+            echo "vacaciones=${{ steps.filter.outputs.vacaciones }}" >> $GITHUB_OUTPUT
+            echo "casita=${{ steps.filter.outputs.casita }}" >> $GITHUB_OUTPUT
+            
+            if [[ "${{ steps.filter.outputs.dashboard }}" == "true" ]] || \
+               [[ "${{ steps.filter.outputs.ac-service }}" == "true" ]] || \
+               [[ "${{ steps.filter.outputs.baby-gifts }}" == "true" ]] || \
+               [[ "${{ steps.filter.outputs.vacaciones }}" == "true" ]] || \
+               [[ "${{ steps.filter.outputs.casita }}" == "true" ]] || \
+               [[ "${{ steps.filter.outputs.infrastructure }}" == "true" ]] || \
+               [[ "$FORCE_DEPLOY" == "true" ]]; then
+              echo "any-service=true" >> $GITHUB_OUTPUT
+            else
+              echo "any-service=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -76,7 +113,7 @@ jobs:
   test-dashboard:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.dashboard == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -102,7 +139,7 @@ jobs:
   test-ac-service:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.ac-service == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -128,7 +165,7 @@ jobs:
   test-baby-gifts:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.baby-gifts == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -154,7 +191,7 @@ jobs:
   test-vacaciones:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.vacaciones == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -180,7 +217,7 @@ jobs:
   test-casita:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.casita == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -206,7 +243,7 @@ jobs:
   test-summary:
     needs: [detect-changes, test-dashboard, test-ac-service, test-baby-gifts, test-vacaciones, test-casita]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       tests-passed: ${{ steps.result.outputs.passed }}
     steps:
@@ -255,7 +292,7 @@ jobs:
       needs.detect-changes.outputs.any-service == 'true' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: production  # ← Requires manual approval in GitHub settings
     
     steps:
