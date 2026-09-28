@@ -10,7 +10,7 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: mosquitto
-    restart: unless-stopped
+    restart: on-failure:5
     mem_limit: 16m
     memswap_limit: 16m
     ports:
@@ -25,7 +25,7 @@ services:
   zigbee2mqtt:
     image: koenkk/zigbee2mqtt:latest
     container_name: zigbee2mqtt
-    restart: unless-stopped
+    restart: on-failure:5
     mem_limit: 128m
     memswap_limit: 128m
     depends_on:
@@ -45,9 +45,9 @@ services:
   nginx:
     image: nginx:alpine
     container_name: nginx-reverse-proxy
-    restart: unless-stopped
-    mem_limit: 64m
-    memswap_limit: 64m
+    restart: on-failure:5
+    mem_limit: 32m
+    memswap_limit: 32m
     depends_on:
       - smart-home-backend
       - zigbee2mqtt
@@ -66,7 +66,7 @@ services:
   docker-socket-proxy:
     image: ghcr.io/tecnativa/docker-socket-proxy:latest
     container_name: docker-socket-proxy
-    restart: unless-stopped
+    restart: on-failure:5
     mem_limit: 32m
     memswap_limit: 32m
     environment:
@@ -103,9 +103,9 @@ services:
   smart-home-backend:
     image: egnal/smart-home-dashboard:latest
     container_name: smart-home-backend
-    restart: unless-stopped
-    mem_limit: 96m
-    memswap_limit: 96m
+    restart: on-failure:5
+    mem_limit: 72m
+    memswap_limit: 72m
     expose:
       - 8080
     volumes:
@@ -121,9 +121,9 @@ services:
   ac-service:
     image: egnal/smart-home-ac-service:latest
     container_name: ac-service
-    restart: unless-stopped
-    mem_limit: 96m
-    memswap_limit: 96m
+    restart: on-failure:5
+    mem_limit: 80m
+    memswap_limit: 80m
     expose:
       - 8002
     volumes:
@@ -146,7 +146,7 @@ services:
   baby-gifts-service:
     image: egnal/smart-home-baby-gifts:latest
     container_name: baby-gifts-service
-    restart: unless-stopped
+    restart: on-failure:5
     mem_limit: 64m
     memswap_limit: 64m
     expose:
@@ -161,7 +161,7 @@ services:
   vacaciones-service:
     image: egnal/smart-home-vacaciones:latest
     container_name: vacaciones-service
-    restart: unless-stopped
+    restart: on-failure:5
     mem_limit: 64m
     memswap_limit: 64m
     expose:
@@ -183,7 +183,7 @@ services:
   casita-suenos:
     image: egnal/smart-home-casita-suenos:latest
     container_name: casita-suenos
-    restart: unless-stopped
+    restart: on-failure:5
     mem_limit: 96m
     memswap_limit: 96m
     expose:
@@ -210,7 +210,7 @@ services:
   vaultwarden:
     image: egnal/smart-home-vaultwarden:latest
     container_name: vaultwarden
-    restart: unless-stopped
+    restart: on-failure:5
     mem_limit: 128m
     memswap_limit: 128m
     expose:
@@ -229,9 +229,9 @@ services:
   valheim-admin:
     image: egnal/smart-home-valheim-admin:latest
     container_name: valheim-admin
-    restart: unless-stopped
-    mem_limit: 96m
-    memswap_limit: 96m
+    restart: on-failure:5
+    mem_limit: 80m
+    memswap_limit: 80m
     expose:
       - 8080
     environment:
