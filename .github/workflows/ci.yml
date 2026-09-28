@@ -61,10 +61,10 @@ jobs:
       any-service: ${{ steps.changes.outputs.any-service }}
       services-matrix: ${{ steps.matrix.outputs.services }}
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7
 
       # ── Detect changes ──
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         if: ${{ github.event.inputs.service == 'auto' || github.event.inputs.service == '' }}
         with:
@@ -155,7 +155,7 @@ jobs:
 
       # ── Setup Python for linting ──
       - name: Set up Python
-        uses: actions/setup-python@v5.6.0
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -224,7 +224,7 @@ jobs:
     if: ${{ needs.build.outputs.dashboard == 'true' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
@@ -247,7 +247,7 @@ jobs:
     if: ${{ needs.build.outputs.ac-service == 'true' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
@@ -270,7 +270,7 @@ jobs:
     if: ${{ needs.build.outputs.baby-gifts == 'true' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
@@ -293,7 +293,7 @@ jobs:
     if: ${{ needs.build.outputs.vacaciones == 'true' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
@@ -316,7 +316,7 @@ jobs:
     if: ${{ needs.build.outputs.casita == 'true' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.12'
@@ -376,7 +376,7 @@ jobs:
       fail-fast: false
     
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
