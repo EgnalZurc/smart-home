@@ -382,6 +382,8 @@
         <div class="tabs">
             <button class="tab active" data-tab="etf">📈 ETFs</button>
             <button class="tab" data-tab="crypto">₿ Crypto Staking</button>
+            <button class="tab" data-tab="savings">🏦 Ahorros</button>
+            <button class="tab" data-tab="alerts">🔔 Alertas</button>
         </div>
         
         <!-- ETF Tab -->
@@ -405,6 +407,25 @@
             <div id="crypto-content" style="display: none;">
                 <div id="crypto-summary" class="summary-grid"></div>
                 <div id="crypto-positions" class="fund-grid"></div>
+            </div>
+        </div>
+        
+        <!-- Savings Tab -->
+        <div id="savings-tab" class="tab-content">
+            <div id="savings-loading" class="loading">
+                <div class="loading-spinner"></div>
+                Cargando datos Ahorros...
+            </div>
+            <div id="savings-content" style="display: none;">
+                <div id="savings-summary" class="summary-grid"></div>
+                <div id="savings-accounts" class="fund-grid"></div>
+            </div>
+        </div>
+        
+        <!-- Alerts Tab -->
+        <div id="alerts-tab" class="tab-content">
+            <div id="alerts-content">
+                <div id="alerts-list" class="fund-grid"></div>
             </div>
         </div>
     </div>
@@ -637,6 +658,115 @@
             renderSparklines();
         }
         
+        // Render Savings tab
+        function renderSavings(savings) {
+            if (!savings?.analysis?.length) {
+                document.getElementById('savings-content').innerHTML = '<div class="empty-state">No hay cuentas configuradas</div>';
+                return;
+            }
+            
+            document.getElementById('savings-summary').innerHTML = `
+                <div class="summary-card">
+                    <div class="summary-card-label">Saldo Total</div>
+                    <div class="summary-card-value">${formatEur(savings.total_balance)}</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-card-label">Intereses Anuales</div>
+                    <div class="summary-card-value positive">+${formatEur(savings.yearly_interest)}</div>
+                    <div class="summary-card-subtitle">+${formatEur(savings.yearly_interest / 12)}/mes</div>
+                </div>
+            `;
+            
+            document.getElementById('savings-accounts').innerHTML = savings.analysis.map(acc => `
+                <div class="fund-card">
+                    <div class="fund-card-header">
+                        <div class="fund-card-title">
+                            🏦 ${acc.name}
+                        </div>
+                        <span class="status-badge status-ok">✅ Activa</span>
+                    </div>
+                    <div class="fund-card-body">
+                        <div class="fund-stats">
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Banco</span>
+                                <span class="fund-stat-value">${acc.bank}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Saldo</span>
+                                <span class="fund-stat-value">${formatEur(acc.balance)}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">TAE</span>
+                                <span class="fund-stat-value positive">${acc.apy}%</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Interés/mes</span>
+                                <span class="fund-stat-value positive">+${formatEur(acc.monthly_interest)}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Interés/año</span>
+                                <span class="fund-stat-value positive">+${formatEur(acc.yearly_interest)}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Días activa</span>
+                                <span class="fund-stat-value">${acc.days_active} días</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Render Alerts tab
+        function renderAlerts(alerts) {
+            if (!alerts?.length) {
+                document.getElementById('alerts-list').innerHTML = '<div class="empty-state">No hay alertas programadas para los próximos 5 días</div>';
+                return;
+            }
+            
+            const priorityEmoji = { high: '🔴', medium: '🟡', low: '🔵' };
+            const actionEmoji = { sell_crypto: '💰', buy_etf: '📈', review: '👀' };
+            
+            document.getElementById('alerts-list').innerHTML = alerts.map(alert => {
+                const daysUntil = Math.ceil((new Date(alert.date) - new Date()) / (1000 * 60 * 60 * 24));
+                const urgency = daysUntil <= 1 ? 'danger' : daysUntil <= 3 ? 'warn' : 'info';
+                
+                return `
+                    <div class="fund-card">
+                        <div class="fund-card-header">
+                            <div class="fund-card-title">
+                                ${priorityEmoji[alert.priority] || '⚪'} ${alert.title}
+                            </div>
+                            <span class="status-badge status-${urgency}">${daysUntil === 0 ? '¡HOY!' : daysUntil === 1 ? 'Mañana' : 'En ' + daysUntil + 'd'}</span>
+                        </div>
+                        <div class="fund-card-body">
+                            <div class="fund-stats">
+                                <div class="fund-stat">
+                                    <span class="fund-stat-label">Fecha</span>
+                                    <span class="fund-stat-value">${new Date(alert.date).toLocaleDateString('es-ES')}</span>
+                                </div>
+                                <div class="fund-stat">
+                                    <span class="fund-stat-label">Acción</span>
+                                    <span class="fund-stat-value">${actionEmoji[alert.action] || '📋'} ${alert.action.replace('_', ' ')}</span>
+                                </div>
+                                <div class="fund-stat">
+                                    <span class="fund-stat-label">Activo</span>
+                                    <span class="fund-stat-value">${alert.symbol}</span>
+                                </div>
+                                <div class="fund-stat">
+                                    <span class="fund-stat-label">Recurrente</span>
+                                    <span class="fund-stat-value">${alert.recurring || 'No'}</span>
+                                </div>
+                            </div>
+                            <div style="margin-top: 1rem; padding: 0.75rem; background: var(--bg-card); border-radius: 0.5rem;">
+                                ${alert.description}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
         // Render sparklines using canvas
         function renderSparklines() {
             document.querySelectorAll('.sparkline').forEach(canvas => {
@@ -698,12 +828,16 @@
                 // Render
                 renderETF(data.etf);
                 renderCrypto(data.crypto);
+                renderSavings(data.savings);
+                renderAlerts(data.upcoming_alerts);
                 
                 // Show content, hide loading
                 document.getElementById('etf-loading').style.display = 'none';
                 document.getElementById('etf-content').style.display = 'block';
                 document.getElementById('crypto-loading').style.display = 'none';
                 document.getElementById('crypto-content').style.display = 'block';
+                document.getElementById('savings-loading').style.display = 'none';
+                document.getElementById('savings-content').style.display = 'block';
                 
             } catch (e) {
                 console.error('Fetch error:', e);

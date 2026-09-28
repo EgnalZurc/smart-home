@@ -162,9 +162,25 @@ CRYPTO_THRESHOLDS = {
 # ─────────────────────────────────────────────────────────────────────────────
 # Utility: Reload configuration
 # ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Savings Accounts Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+SAVINGS_ACCOUNTS: list[dict[str, Any]] = _get(_S, "savings.accounts", [])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Scheduled Alerts Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+SCHEDULED_ALERTS: list[dict[str, Any]] = _get(_S, "alerts.scheduled", [])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Utility: Reload configuration
+# ─────────────────────────────────────────────────────────────────────────────
 def reload_config() -> dict[str, Any]:
     """Reload settings from disk. Returns the raw config dict."""
     global _S, ETF_PORTFOLIO, ETF_FUND_IDS, ETF_PLAN, CRYPTO_POSITIONS
+    global SAVINGS_ACCOUNTS, SCHEDULED_ALERTS
     _S = _load_settings()
     
     ETF_PORTFOLIO = {
@@ -188,5 +204,7 @@ def reload_config() -> dict[str, Any]:
     }
     
     CRYPTO_POSITIONS = _get(_S, "crypto.positions", [])
+    SAVINGS_ACCOUNTS = _get(_S, "savings.accounts", [])
+    SCHEDULED_ALERTS = _get(_S, "alerts.scheduled", [])
     
     return _S

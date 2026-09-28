@@ -57,10 +57,12 @@ class Orchestrator:
         # Import monitors (they auto-register via decorator)
         from monitors.crypto_monitor import CryptoMonitor
         from monitors.etf_monitor import ETFMonitor
+        from monitors.savings_monitor import SavingsMonitor
         
         self._monitors = {
             "etf": ETFMonitor(),
             "crypto": CryptoMonitor(),
+            "savings": SavingsMonitor(),
         }
         logger.info(f"Initialized {len(self._monitors)} monitors: {list(self._monitors.keys())}")
     
@@ -96,6 +98,11 @@ class Orchestrator:
                 self._summary.crypto_fear_greed = result.get("fear_greed")
                 self._summary.crypto_fear_greed_label = result.get("fear_greed_label")
                 self._summary.crypto_last_update = result.get("last_update")
+            elif name == "savings":
+                self._summary.savings_total_balance = result.get("total_balance", 0)
+                self._summary.savings_yearly_interest = result.get("yearly_interest", 0)
+                self._summary.savings_analysis = result.get("analysis", [])
+                self._summary.savings_last_update = result.get("last_update")
             
             self._save_state()
             logger.info(f"Monitor {name} completed successfully")
@@ -117,10 +124,29 @@ class Orchestrator:
                 logger.error(f"Failed to run {name}: {e}")
                 results[name] = {"error": str(e)}
         
+        # Load upcoming alerts
+        self._load_upcoming_alerts()
+        
+        # Check and send scheduled alerts due today
+        self._check_scheduled_alerts()
+        
         # Send Telegram alert if there are WARN or DANGER signals
         await self._send_alerts_if_needed()
         
         return results
+    
+    def _load_upcoming_alerts(self):
+        """Load alerts scheduled in the next 5 days."""
+        from alerts import get_upcoming_alerts
+        self._summary.upcoming_alerts = get_upcoming_alerts(days=5)
+        logger.info(f"Loaded {len(self._summary.upcoming_alerts)} upcoming alerts")
+    
+    def _check_scheduled_alerts(self):
+        """Check for alerts due today and send notifications."""
+        from alerts import check_and_trigger_alerts
+        triggered = check_and_trigger_alerts(self._notifier)
+        if triggered:
+            logger.info(f"Triggered {len(triggered)} scheduled alerts")
     
     async def _send_alerts_if_needed(self):
         """Send Telegram alerts if there are warnings or dangers."""

@@ -62,6 +62,27 @@ async def get_summary():
             "fear_greed": summary.crypto_fear_greed,
             "fear_greed_label": summary.crypto_fear_greed_label,
         },
+        "savings": {
+            "total_balance": summary.savings_total_balance,
+            "yearly_interest": summary.savings_yearly_interest,
+            "last_update": summary.savings_last_update.isoformat() if summary.savings_last_update else None,
+            "analysis": [_serialize_analysis(a) for a in summary.savings_analysis],
+        },
+        "upcoming_alerts": [_serialize_alert(a) for a in summary.upcoming_alerts],
+    }
+
+
+def _serialize_alert(alert) -> dict:
+    """Convert alert to serializable dict."""
+    return {
+        "id": alert.alert_id,
+        "date": alert.date,
+        "action": alert.action,
+        "symbol": alert.symbol,
+        "title": alert.title,
+        "description": alert.description,
+        "priority": alert.priority,
+        "recurring": alert.recurring,
     }
 
 
@@ -114,7 +135,33 @@ async def refresh_all(background_tasks: BackgroundTasks):
     
     background_tasks.add_task(run_refresh)
     
-    return {"status": "refresh_started", "monitors": ["etf", "crypto"]}
+    return {"status": "refresh_started", "monitors": ["etf", "crypto", "savings"]}
+
+
+@router.get("/savings")
+async def get_savings_summary():
+    """Get savings accounts summary."""
+    orch = get_orchestrator()
+    summary = orch.get_summary()
+    
+    return {
+        "total_balance": summary.savings_total_balance,
+        "yearly_interest": summary.savings_yearly_interest,
+        "last_update": summary.savings_last_update.isoformat() if summary.savings_last_update else None,
+        "analysis": [_serialize_analysis(a) for a in summary.savings_analysis],
+    }
+
+
+@router.get("/alerts")
+async def get_alerts():
+    """Get upcoming scheduled alerts (next 5 days)."""
+    orch = get_orchestrator()
+    summary = orch.get_summary()
+    
+    return {
+        "upcoming": [_serialize_alert(a) for a in summary.upcoming_alerts],
+        "count": len(summary.upcoming_alerts),
+    }
 
 
 @router.post("/refresh/{monitor_name}")

@@ -302,3 +302,29 @@ class TelegramNotifier:
             "Telegram notifications are working correctly."
         )
         return self._send(text)
+
+    def send_scheduled_alert(self, alert) -> NotificationResult:
+        """Send a notification for a scheduled alert."""
+
+        priority_emoji = {
+            "high": "🔴",
+            "medium": "🟡",
+            "low": "🔵",
+        }.get(alert.priority, "⚪")
+
+        action_emoji = {
+            "sell_crypto": "💰",
+            "buy_etf": "📈",
+            "review": "👀",
+        }.get(alert.action, "📋")
+
+        text = (
+            f"{priority_emoji} *Alerta Programada*\n"
+            f"_{datetime.now().strftime('%d/%m/%Y %H:%M')}_\n\n"
+            f"{action_emoji} *{_escape_md(alert.title)}*\n\n"
+            f"{_escape_md(alert.description)}\n\n"
+            f"📅 Fecha: {alert.date}\n"
+            f"🏷️ Activo: {alert.symbol}\n\n"
+            f"🔗 Dashboard: /smart-home/portfolio"
+        )
+        return self._send(text)

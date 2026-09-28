@@ -124,6 +124,43 @@ class CryptoAnalysis:
 
 
 @dataclass
+class SavingsAnalysis:
+    """Analysis result for a savings account."""
+    account_id: str
+    name: str
+    bank: str
+    
+    # Account data
+    balance: float = 0.0
+    apy: float = 0.0
+    account_type: str = "remunerada"
+    start_date: str = ""
+    
+    # Calculated values
+    monthly_interest: float = 0.0
+    yearly_interest: float = 0.0
+    days_active: int = 0
+    accumulated_interest: float = 0.0
+    
+    # Level (always OK for savings)
+    level: AlertLevel = AlertLevel.OK
+
+
+@dataclass
+class ScheduledAlert:
+    """A scheduled alert for future action."""
+    alert_id: str
+    date: str  # ISO format YYYY-MM-DD
+    action: str  # "buy_etf", "sell_crypto", "review"
+    symbol: str
+    title: str
+    description: str
+    priority: str = "medium"  # "high", "medium", "low"
+    recurring: str | None = None  # "monthly", "weekly", None
+    triggered: bool = False
+
+
+@dataclass
 class PortfolioSummary:
     """Summary of the entire portfolio."""
     # ETF totals
@@ -142,6 +179,14 @@ class PortfolioSummary:
     crypto_fear_greed: int | None = None
     crypto_fear_greed_label: str | None = None
     
+    # Savings totals
+    savings_total_balance: float = 0.0
+    savings_yearly_interest: float = 0.0
+    savings_analysis: list[SavingsAnalysis] = field(default_factory=list)
+    
+    # Scheduled alerts
+    upcoming_alerts: list[ScheduledAlert] = field(default_factory=list)
+    
     # Plan info
     phase: str = ""
     phase_months_remaining: int | None = None
@@ -149,6 +194,7 @@ class PortfolioSummary:
     # Timestamps
     etf_last_update: datetime | None = None
     crypto_last_update: datetime | None = None
+    savings_last_update: datetime | None = None
 
 
 @dataclass
