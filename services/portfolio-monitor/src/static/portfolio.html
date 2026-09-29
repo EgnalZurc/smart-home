@@ -649,6 +649,7 @@
             // Fund cards
             document.getElementById('etf-funds').innerHTML = etf.analysis.map(fund => {
                 const fundNeedsNote = fund.level === 'INFO';
+                const gainClass = (fund.gain_loss_pct || 0) >= 0 ? 'positive' : 'negative';
                 return `
                 <div class="fund-card">
                     <div class="fund-card-header">
@@ -659,8 +660,15 @@
                         <span class="status-badge status-${getLevelClass(fund.level)}">${getLevelText(fund.level)}</span>
                     </div>
                     <div class="fund-card-body">
-                        ${fund.ohlc?.length ? `<div class="sparkline-container"><canvas class="sparkline" data-ohlc='${JSON.stringify(fund.ohlc)}'></canvas></div>` : ''}
                         <div class="fund-stats">
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Valor actual</span>
+                                <span class="fund-stat-value ${gainClass}">${formatEur(fund.current_value)}</span>
+                            </div>
+                            <div class="fund-stat">
+                                <span class="fund-stat-label">Ganancia/pérdida</span>
+                                <span class="fund-stat-value ${pctClass(fund.gain_loss_pct)}">${formatPct(fund.gain_loss_pct)}</span>
+                            </div>
                             <div class="fund-stat">
                                 <span class="fund-stat-label">Precio actual</span>
                                 <span class="fund-stat-value">${formatEur(fund.price)}</span>
@@ -672,14 +680,6 @@
                             <div class="fund-stat">
                                 <span class="fund-stat-label">Participaciones</span>
                                 <span class="fund-stat-value">${formatNum(fund.units, 4)}</span>
-                            </div>
-                            <div class="fund-stat">
-                                <span class="fund-stat-label">Valor actual</span>
-                                <span class="fund-stat-value">${formatEur(fund.current_value)}</span>
-                            </div>
-                            <div class="fund-stat">
-                                <span class="fund-stat-label">Ganancia/pérdida</span>
-                                <span class="fund-stat-value ${pctClass(fund.gain_loss_pct)}">${formatPct(fund.gain_loss_pct)}</span>
                             </div>
                             <div class="fund-stat">
                                 <span class="fund-stat-label">Aportación/mes</span>
@@ -706,9 +706,6 @@
                     </div>
                 </div>
             `}).join('');
-            
-            // Render sparklines
-            renderSparklines();
         }
         
         // Format gain intelligently (show weekly/monthly if daily is too small)
