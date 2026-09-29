@@ -5,8 +5,6 @@ These tests verify the progressive bracket calculation is correct
 according to Spanish tax law (Ley 7/2024, vigente desde 1 enero 2025).
 """
 
-import pytest
-
 
 class TestIRPFCalculation:
     """Tests for IRPF capital gains tax calculation."""

@@ -16,6 +16,7 @@
             --accent-green: #22c55e;
             --accent-yellow: #eab308;
             --accent-red: #ef4444;
+            --accent-orange: #f97316;
             --border: #475569;
         }
         
@@ -75,11 +76,14 @@
             background: rgba(51, 65, 85, 0.4);
         }
         
-        .home-btn img {
-            width: 20px;
-            height: 20px;
-            object-fit: contain;
-            border-radius: 4px;
+        .home-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: var(--text-secondary);
+        }
+        
+        .home-btn:hover svg {
+            fill: var(--text-primary);
         }
         
         h1 {
@@ -130,6 +134,23 @@
             cursor: not-allowed;
         }
         
+        /* Compact disclaimer */
+        .disclaimer {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(59, 130, 246, 0.08);
+            border-left: 3px solid var(--accent-blue);
+            padding: 0.5rem 0.75rem;
+            margin-bottom: 1rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        .disclaimer strong {
+            color: var(--accent-yellow);
+        }
+        
         .tabs {
             display: flex;
             gap: 0.5rem;
@@ -171,6 +192,46 @@
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 1rem;
             margin-bottom: 1.5rem;
+        }
+        
+        /* Compact summary for crypto */
+        .summary-compact {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            padding: 0.75rem;
+            background: var(--bg-secondary);
+            border-radius: 0.75rem;
+            align-items: center;
+        }
+        
+        .summary-compact-item {
+            display: flex;
+            flex-direction: column;
+            padding: 0 1rem;
+            border-right: 1px solid var(--border);
+        }
+        
+        .summary-compact-item:last-child {
+            border-right: none;
+        }
+        
+        .summary-compact-label {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .summary-compact-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        
+        .summary-compact-sub {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
         }
         
         .summary-card {
@@ -215,8 +276,15 @@
         
         .status-ok { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
         .status-info { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); }
-        .status-warn { background: rgba(234, 179, 8, 0.2); color: var(--accent-yellow); }
+        .status-warn { background: rgba(234, 179, 8, 0.15); color: var(--accent-yellow); border: 1px solid rgba(234, 179, 8, 0.3); }
         .status-danger { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+        
+        /* Muted warn for "no action needed" states */
+        .status-warn-muted { 
+            background: rgba(249, 115, 22, 0.1); 
+            color: var(--accent-orange); 
+            border: 1px dashed rgba(249, 115, 22, 0.3);
+        }
         
         .fund-grid {
             display: grid;
@@ -354,8 +422,9 @@
         .fear-greed-meter {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            margin-bottom: 1rem;
+            gap: 0.5rem;
+            flex: 1;
+            min-width: 150px;
         }
         
         .fear-greed-bar {
@@ -368,8 +437,8 @@
         
         .fear-greed-indicator {
             position: absolute;
-            width: 16px;
-            height: 16px;
+            width: 12px;
+            height: 12px;
             background: white;
             border-radius: 50%;
             top: 50%;
@@ -383,6 +452,34 @@
             text-align: right;
         }
         
+        /* Info note for ETF */
+        .info-note {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background: rgba(59, 130, 246, 0.08);
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+        }
+        
+        .info-note-icon {
+            color: var(--accent-blue);
+        }
+        
+        /* Staking advice */
+        .staking-advice {
+            margin-top: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            background: rgba(249, 115, 22, 0.1);
+            border-left: 3px solid var(--accent-orange);
+            border-radius: 0 0.375rem 0.375rem 0;
+            font-size: 0.8rem;
+            color: var(--accent-orange);
+        }
+        
         @media (max-width: 640px) {
             .fund-grid {
                 grid-template-columns: 1fr;
@@ -390,6 +487,18 @@
             
             .summary-grid {
                 grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .summary-compact {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .summary-compact-item {
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+                padding: 0.5rem 0;
+                width: 100%;
             }
         }
     </style>
@@ -399,9 +508,11 @@
         <header>
             <div class="header-left">
                 <a href="/smart-home" class="home-btn" aria-label="Dashboard" title="Cuchi Casa">
-                    <img src="/static/portfolio/icono-cuchi-casa.png" alt="Home">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                    </svg>
                 </a>
-                <h1>📊 Portfolio Monitor</h1>
+                <h1>Portfolio Monitor</h1>
             </div>
             <div class="header-actions">
                 <span id="lastUpdate" class="last-update"></span>
@@ -411,9 +522,9 @@
             </div>
         </header>
         
-        <!-- Disclaimer -->
-        <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid var(--accent-blue); border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.8rem; color: var(--text-secondary);">
-            ⚠️ <strong>Aviso:</strong> Las señales técnicas (medias móviles, Fear &amp; Greed) son indicadores de <em>tendencia y sentimiento</em>, no predicciones de precio. Los impuestos se calculan según tramos IRPF 2025 (Ley 7/2024). Consulta a un asesor fiscal para tu situación específica.
+        <!-- Compact Disclaimer -->
+        <div class="disclaimer">
+            <strong>⚠️</strong> Las señales técnicas son indicadores de tendencia, no predicciones. Impuestos IRPF 2025 (Ley 7/2024).
         </div>
         
         <div class="tabs">
@@ -442,7 +553,7 @@
                 Cargando datos Crypto...
             </div>
             <div id="crypto-content" style="display: none;">
-                <div id="crypto-summary" class="summary-grid"></div>
+                <div id="crypto-summary"></div>
                 <div id="crypto-positions" class="fund-grid"></div>
             </div>
         </div>
@@ -495,7 +606,7 @@
         }
         
         function getLevelText(level) {
-            const map = { OK: '✅ En orden', INFO: 'ℹ️ Info', WARN: '⚠️ Corrección', DANGER: '🚨 Revisar' };
+            const map = { OK: '✅ En orden', INFO: 'ℹ️ Info', WARN: '⚠️ Atención', DANGER: '🚨 Revisar' };
             return map[level] || level;
         }
         
@@ -510,6 +621,9 @@
                 document.getElementById('etf-content').innerHTML = '<div class="empty-state">No hay fondos configurados</div>';
                 return;
             }
+            
+            // Check if INFO level needs note
+            const needsInfoNote = etf.level === 'INFO';
             
             // Summary cards
             document.getElementById('etf-summary').innerHTML = `
@@ -528,11 +642,14 @@
                         <span class="status-badge status-${getLevelClass(etf.level)}">${getLevelText(etf.level)}</span>
                     </div>
                     <div class="summary-card-subtitle">${etf.phase || ''}</div>
+                    ${needsInfoNote ? '<div class="info-note"><span class="info-note-icon">ℹ️</span> Sin acción manual requerida</div>' : ''}
                 </div>
             `;
             
             // Fund cards
-            document.getElementById('etf-funds').innerHTML = etf.analysis.map(fund => `
+            document.getElementById('etf-funds').innerHTML = etf.analysis.map(fund => {
+                const fundNeedsNote = fund.level === 'INFO';
+                return `
                 <div class="fund-card">
                     <div class="fund-card-header">
                         <div class="fund-card-title">
@@ -585,12 +702,26 @@
                                 <div>${fund.recommendation.body}</div>
                             </div>
                         ` : ''}
+                        ${fundNeedsNote ? '<div class="info-note"><span class="info-note-icon">ℹ️</span> Info, sin acción manual requerida</div>' : ''}
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
             
             // Render sparklines
             renderSparklines();
+        }
+        
+        // Format gain intelligently (show weekly/monthly if daily is too small)
+        function formatGainSmart(dailyGain, label = 'día') {
+            if (dailyGain >= 0.01) {
+                return { value: dailyGain, period: label };
+            }
+            const weekly = dailyGain * 7;
+            if (weekly >= 0.01) {
+                return { value: weekly, period: 'semana' };
+            }
+            const monthly = dailyGain * 30;
+            return { value: monthly, period: 'mes' };
         }
         
         // Render Crypto tab
@@ -600,15 +731,23 @@
                 return;
             }
             
-            // Summary cards
+            // Calculate totals
+            const totalStaked = crypto.analysis.reduce((sum, p) => sum + (p.current_value || 0), 0);
+            const totalAccumulated = crypto.analysis.reduce((sum, p) => sum + (p.accumulated_gain || 0), 0);
+            const totalDailyGain = crypto.total_daily_gain || 0;
+            const gainInfo = formatGainSmart(totalDailyGain);
+            
+            // Compact summary bar
             let fgHtml = '';
             if (crypto.fear_greed != null) {
                 fgHtml = `
-                    <div class="summary-card">
-                        <div class="summary-card-label">Fear & Greed</div>
-                        <div class="summary-card-value">${crypto.fear_greed}</div>
-                        <div class="summary-card-subtitle">${crypto.fear_greed_label || ''}</div>
-                        <div class="fear-greed-meter" style="margin-top: 0.5rem;">
+                    <div class="summary-compact-item" style="flex: 1; min-width: 200px;">
+                        <span class="summary-compact-label">Fear & Greed</span>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span class="summary-compact-value">${crypto.fear_greed}</span>
+                            <span style="font-size: 0.75rem; color: var(--text-muted)">${crypto.fear_greed_label || ''}</span>
+                        </div>
+                        <div class="fear-greed-meter">
                             <div class="fear-greed-bar">
                                 <div class="fear-greed-indicator" style="left: ${crypto.fear_greed}%"></div>
                             </div>
@@ -617,30 +756,44 @@
                 `;
             }
             
+            // Determine status badge style - use muted for WARN without urgent action
+            const statusClass = crypto.level === 'WARN' ? 'warn-muted' : getLevelClass(crypto.level);
+            const statusText = crypto.level === 'WARN' ? '⚡ Atención' : getLevelText(crypto.level);
+            
             document.getElementById('crypto-summary').innerHTML = `
-                <div class="summary-card">
-                    <div class="summary-card-label">Valor Total Staking</div>
-                    <div class="summary-card-value">${formatEur(crypto.total_value)}</div>
-                    <div class="summary-card-subtitle positive">+${formatEur(crypto.total_daily_gain)}/día</div>
-                </div>
-                <div class="summary-card">
-                    <div class="summary-card-label">Estado</div>
-                    <div class="summary-card-value">
-                        <span class="status-badge status-${getLevelClass(crypto.level)}">${getLevelText(crypto.level)}</span>
+                <div class="summary-compact">
+                    <div class="summary-compact-item">
+                        <span class="summary-compact-label">Valor Total</span>
+                        <span class="summary-compact-value">${formatEur(totalStaked)}</span>
                     </div>
+                    <div class="summary-compact-item">
+                        <span class="summary-compact-label">Ganancia Staking</span>
+                        <span class="summary-compact-value positive">+${formatEur(totalAccumulated)}</span>
+                        <span class="summary-compact-sub positive">+${formatEur(gainInfo.value)}/${gainInfo.period}</span>
+                    </div>
+                    <div class="summary-compact-item">
+                        <span class="summary-compact-label">Estado</span>
+                        <span class="status-badge status-${statusClass}">${statusText}</span>
+                    </div>
+                    ${fgHtml}
                 </div>
-                ${fgHtml}
             `;
             
             // Position cards
-            document.getElementById('crypto-positions').innerHTML = crypto.analysis.map(pos => `
+            document.getElementById('crypto-positions').innerHTML = crypto.analysis.map(pos => {
+                const posGain = formatGainSmart(pos.daily_gain || 0);
+                const hasLowYield = (pos.daily_gain || 0) < 0.001 && pos.apy < 1;
+                const statusClass = pos.level === 'WARN' ? 'warn-muted' : getLevelClass(pos.level);
+                const statusText = pos.level === 'WARN' ? '⚡ Atención' : getLevelText(pos.level);
+                
+                return `
                 <div class="fund-card">
                     <div class="fund-card-header">
                         <div class="fund-card-title">
                             <span>${pos.symbol}</span>
                             <span style="font-weight: 400; color: var(--text-secondary)">${pos.name}</span>
                         </div>
-                        <span class="status-badge status-${getLevelClass(pos.level)}">${getLevelText(pos.level)}</span>
+                        <span class="status-badge status-${statusClass}">${statusText}</span>
                     </div>
                     <div class="fund-card-body">
                         ${pos.ohlc?.length ? `<div class="sparkline-container"><canvas class="sparkline" data-ohlc='${JSON.stringify(pos.ohlc)}'></canvas></div>` : ''}
@@ -651,7 +804,7 @@
                             </div>
                             <div class="fund-stat">
                                 <span class="fund-stat-label">Valor actual</span>
-                                <span class="fund-stat-value">${formatEur(pos.current_value)}</span>
+                                <span class="fund-stat-value">${pos.current_value > 0 ? formatEur(pos.current_value) : '—'}</span>
                             </div>
                             <div class="fund-stat">
                                 <span class="fund-stat-label">Producto</span>
@@ -659,19 +812,19 @@
                             </div>
                             <div class="fund-stat">
                                 <span class="fund-stat-label">APY</span>
-                                <span class="fund-stat-value positive">${pos.apy}%</span>
+                                <span class="fund-stat-value ${pos.apy >= 1 ? 'positive' : 'warning'}">${pos.apy}%</span>
                             </div>
                             <div class="fund-stat">
-                                <span class="fund-stat-label">Ganancia/día</span>
-                                <span class="fund-stat-value positive">+${formatEur(pos.daily_gain)}</span>
+                                <span class="fund-stat-label">Ganancia/${posGain.period}</span>
+                                <span class="fund-stat-value ${posGain.value > 0 ? 'positive' : 'neutral'}">${posGain.value > 0 ? '+' + formatEur(posGain.value) : '—'}</span>
                             </div>
                             <div class="fund-stat">
                                 <span class="fund-stat-label">Acumulado</span>
-                                <span class="fund-stat-value positive">+${formatEur(pos.accumulated_gain)}</span>
+                                <span class="fund-stat-value ${pos.accumulated_gain > 0 ? 'positive' : 'neutral'}">${pos.accumulated_gain > 0 ? '+' + formatEur(pos.accumulated_gain) : '—'}</span>
                             </div>
                             <div class="fund-stat">
                                 <span class="fund-stat-label">24h</span>
-                                <span class="fund-stat-value ${pctClass(pos.change_24h/100)}">${pos.change_24h?.toFixed(1)}%</span>
+                                <span class="fund-stat-value ${pctClass(pos.change_24h/100)}">${pos.change_24h != null ? pos.change_24h.toFixed(1) + '%' : '—'}</span>
                             </div>
                             <div class="fund-stat">
                                 <span class="fund-stat-label">Disponible</span>
@@ -687,9 +840,14 @@
                                 `).join('')}
                             </div>
                         ` : ''}
+                        ${hasLowYield ? `
+                            <div class="staking-advice">
+                                💡 APY muy bajo (${pos.apy}%). Considera migrar a un producto con mejor rendimiento o consolidar en otra posición.
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
             
             // Render sparklines
             renderSparklines();

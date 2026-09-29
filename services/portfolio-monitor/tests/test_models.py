@@ -4,9 +4,7 @@ Test data models.
 Ensures dataclasses and enums work correctly.
 """
 
-import pytest
-
-from models import AlertLevel, Signal, ETFAnalysis, CryptoAnalysis
+from models import AlertLevel, CryptoAnalysis, ETFAnalysis, Signal
 
 
 class TestAlertLevel:

@@ -121,10 +121,11 @@ Para añadir un nuevo monitor:
 ```python
 from monitors import BaseMonitor, register_monitor
 
+
 @register_monitor
 class NewMonitor(BaseMonitor):
     name = "new"
-    
+
     async def run(self) -> dict:
         # Tu lógica aquí
         pass

@@ -4,10 +4,9 @@ Test Telegram notifier.
 Tests the notification logic without actually sending messages.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from models import AlertLevel, Signal, ETFAnalysis, CryptoAnalysis
+from models import AlertLevel, CryptoAnalysis, ETFAnalysis, Signal
 
 
 class TestNotifierConfiguration:
@@ -18,16 +17,18 @@ class TestNotifierConfiguration:
         with patch.dict("os.environ", {}, clear=True):
             # Re-import to pick up empty env
             import importlib
+
             import notifier as notifier_module
+
             importlib.reload(notifier_module)
-            
+
             n = notifier_module.TelegramNotifier(bot_token="", chat_id="")
             assert not n.enabled
 
     def test_notifier_enabled_with_credentials(self):
         """Notifier should be enabled with credentials."""
         from notifier import TelegramNotifier
-        
+
         n = TelegramNotifier(bot_token="test_token", chat_id="123456")
         assert n.enabled
 
@@ -38,26 +39,26 @@ class TestMessageFormatting:
     def test_format_price(self):
         """Test price formatting."""
         from notifier import _format_price
-        
+
         # Uses Spanish format: dots for thousands, price in euros
         result = _format_price(1234.56)
         assert "1.234" in result or "1,234" in result  # thousand separator
         assert "€" in result
-        
+
         result = _format_price(1000000, 0)
         assert "€" in result
 
     def test_escape_markdown(self):
         """Test markdown escaping."""
         from notifier import _escape_md
-        
+
         assert _escape_md("test*bold*") == "test\\*bold\\*"
         assert _escape_md("test_italic_") == "test\\_italic\\_"
 
     def test_level_emoji(self):
         """Test level emoji mapping."""
         from notifier import _level_emoji
-        
+
         assert _level_emoji("DANGER") == "🔴"
         assert _level_emoji("WARN") == "🟡"
         assert _level_emoji("OK") == "🟢"
@@ -69,74 +70,70 @@ class TestAlertLogic:
     def test_no_alert_when_ok(self):
         """Should not send alert when level is OK."""
         from notifier import TelegramNotifier
-        
+
         notifier = TelegramNotifier(bot_token="test", chat_id="123")
-        
+
         result = notifier.send_summary_alert(
             etf_results=[],
             crypto_results=[],
             overall_level=AlertLevel.OK,
             fear_greed=50,
         )
-        
+
         assert result.success
         assert "No alert needed" in result.message
 
     def test_no_alert_when_info(self):
         """Should not send alert when level is INFO."""
         from notifier import TelegramNotifier
-        
+
         notifier = TelegramNotifier(bot_token="test", chat_id="123")
-        
+
         result = notifier.send_summary_alert(
             etf_results=[],
             crypto_results=[],
             overall_level=AlertLevel.INFO,
             fear_greed=50,
         )
-        
+
         assert result.success
         assert "No alert needed" in result.message
 
     @patch("httpx.post")
     def test_alert_sent_when_warn(self, mock_post):
         """Should send alert when level is WARN."""
-        mock_post.return_value = MagicMock(
-            json=lambda: {"ok": True}
-        )
-        
+        mock_post.return_value = MagicMock(json=lambda: {"ok": True})
+
         from notifier import TelegramNotifier
-        
+
         notifier = TelegramNotifier(bot_token="test", chat_id="123")
-        
+
         result = notifier.send_summary_alert(
             etf_results=[],
             crypto_results=[],
             overall_level=AlertLevel.WARN,
             fear_greed=75,
         )
-        
+
         assert result.success
         mock_post.assert_called_once()
 
     @patch("httpx.post")
     def test_alert_sent_when_danger(self, mock_post):
         """Should send alert when level is DANGER."""
-        mock_post.return_value = MagicMock(
-            json=lambda: {"ok": True}
-        )
-        
+        mock_post.return_value = MagicMock(json=lambda: {"ok": True})
+
         from notifier import TelegramNotifier
-        
+
         notifier = TelegramNotifier(bot_token="test", chat_id="123")
-        
+
         result = notifier.send_summary_alert(
             etf_results=[],
             crypto_results=[],
             overall_level=AlertLevel.DANGER,
             fear_greed=85,
         )
-        
+
         assert result.success
         mock_post.assert_called_once()
 
@@ -147,7 +144,7 @@ class TestETFAlertFormatting:
     def test_format_etf_alert(self):
         """Test ETF alert message contains key info."""
         from notifier import _format_etf_alert
-        
+
         analysis = ETFAnalysis(
             fund_id="IUIT",
             ticker="IUIT.L",
@@ -183,9 +180,9 @@ class TestETFAlertFormatting:
             recommendation=Signal("Hold", "Keep holding", "OK"),
             ohlc=[],
         )
-        
+
         text = _format_etf_alert(analysis)
-        
+
         assert "iShares S&P 500 IT" in text
         assert "35" in text  # price
         assert "WARN" not in text or "Señales" in text  # signals section
@@ -197,7 +194,7 @@ class TestCryptoAlertFormatting:
     def test_format_crypto_alert(self):
         """Test crypto alert message contains key info."""
         from notifier import _format_crypto_alert
-        
+
         analysis = CryptoAnalysis(
             symbol="ETH",
             name="Ethereum",
@@ -226,9 +223,9 @@ class TestCryptoAlertFormatting:
             level=AlertLevel.WARN,
             ohlc=[],
         )
-        
+
         text = _format_crypto_alert(analysis, fear_greed=25)
-        
+
         assert "Ethereum" in text
         assert "2.14" in text  # APY
         assert "Fear & Greed" in text

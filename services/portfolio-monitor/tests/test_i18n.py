@@ -4,8 +4,6 @@ Test internationalisation (i18n) module.
 Ensures all required translation keys exist and translations work correctly.
 """
 
-import pytest
-
 
 class TestTranslationFunction:
     """Tests for the t() translation function."""
@@ -69,10 +67,14 @@ class TestSignalTranslations:
                 en_text = _CATALOGUE[key].get("en", "").lower()
 
                 for word in prescriptive_words_es:
-                    assert word not in es_text, f"ATH signal '{key}' contains prescriptive word '{word}'"
+                    assert word not in es_text, (
+                        f"ATH signal '{key}' contains prescriptive word '{word}'"
+                    )
 
                 for word in prescriptive_words_en:
-                    assert word not in en_text, f"ATH signal '{key}' contains prescriptive word '{word}'"
+                    assert word not in en_text, (
+                        f"ATH signal '{key}' contains prescriptive word '{word}'"
+                    )
 
     def test_pump_signal_is_not_negative(self):
         """Pump signal should not predict corrections."""
@@ -86,26 +88,32 @@ class TestSignalTranslations:
             # Should not contain negative predictions
             negative_words = ["corrección", "correction", "cuidado", "caution"]
             for word in negative_words:
-                assert word not in es_text, f"Pump signal contains negative word '{word}'"
-                assert word not in en_text, f"Pump signal contains negative word '{word}'"
+                assert word not in es_text, (
+                    f"Pump signal contains negative word '{word}'"
+                )
+                assert word not in en_text, (
+                    f"Pump signal contains negative word '{word}'"
+                )
 
     def test_recommendation_signals_are_informational(self):
         """Recommendation signals should inform, not prescribe."""
         from i18n import _CATALOGUE
 
         rec_keys = ["rec.danger.title", "rec.warn.title", "rec.ok.title"]
-        
+
         for key in rec_keys:
             if key in _CATALOGUE:
                 es_text = _CATALOGUE[key].get("es", "").lower()
-                
+
                 # Should not contain urgent action language
                 urgent_words = ["urgente", "inmediato", "ahora"]
                 for word in urgent_words:
                     if "danger" in key:
                         # Danger can have "urgente" but title shouldn't prescribe action
                         continue
-                    assert word not in es_text, f"Rec signal '{key}' is too prescriptive"
+                    assert word not in es_text, (
+                        f"Rec signal '{key}' is too prescriptive"
+                    )
 
 
 class TestAlertLevelTranslations:

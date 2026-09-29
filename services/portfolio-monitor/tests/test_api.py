@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 def client():
     """Create a test client for the API."""
     from main import app
+
     return TestClient(app)
 
 
@@ -59,7 +60,7 @@ class TestAPIEndpoints:
         """Schedule endpoint should return monitor times."""
         response = client.get("/api/portfolio/schedule")
         data = response.json()
-        
+
         # Schedule times are nested under 'schedule' key
         assert "schedule" in data
         assert "etf_time" in data["schedule"]

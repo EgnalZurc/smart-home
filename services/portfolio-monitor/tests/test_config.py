@@ -4,8 +4,6 @@ Test configuration loading and defaults.
 Ensures configuration is loaded correctly and sensible defaults are applied.
 """
 
-import pytest
-
 
 class TestDefaultConfiguration:
     """Tests for default configuration values."""
@@ -45,7 +43,9 @@ class TestDefaultConfiguration:
 
         for actual, exp in zip(_DEFAULT_TAX_BRACKETS, expected):
             assert actual[0] == exp[0], f"Limit mismatch: {actual[0]} != {exp[0]}"
-            assert abs(actual[1] - exp[1]) < 0.001, f"Rate mismatch: {actual[1]} != {exp[1]}"
+            assert abs(actual[1] - exp[1]) < 0.001, (
+                f"Rate mismatch: {actual[1]} != {exp[1]}"
+            )
 
     def test_default_crypto_thresholds(self):
         """Test default crypto thresholds are sensible."""
@@ -57,7 +57,11 @@ class TestDefaultConfiguration:
         assert 20 <= CRYPTO_THRESHOLDS["fg_extreme_fear"] <= 30
 
         # Change thresholds
-        assert CRYPTO_THRESHOLDS["change_24h_danger"] < CRYPTO_THRESHOLDS["change_24h_warn"] < 0
+        assert (
+            CRYPTO_THRESHOLDS["change_24h_danger"]
+            < CRYPTO_THRESHOLDS["change_24h_warn"]
+            < 0
+        )
         assert CRYPTO_THRESHOLDS["change_24h_pump"] > 0
 
     def test_default_etf_thresholds(self):
@@ -74,7 +78,9 @@ class TestDefaultConfiguration:
         assert ETF_THRESHOLDS["critical_threshold"] < 0
 
         # Critical should be more severe than warning
-        assert ETF_THRESHOLDS["critical_threshold"] < ETF_THRESHOLDS["drop_from_high_warn"]
+        assert (
+            ETF_THRESHOLDS["critical_threshold"] < ETF_THRESHOLDS["drop_from_high_warn"]
+        )
 
 
 class TestConfigReload:
@@ -100,10 +106,15 @@ class TestScheduleConfig:
 
     def test_schedule_times_are_valid_format(self):
         """Schedule times should be in HH:MM format."""
-        from config import SCHEDULE
         import re
+
+        from config import SCHEDULE
 
         time_pattern = re.compile(r"^\d{2}:\d{2}$")
 
-        assert time_pattern.match(SCHEDULE["etf_time"]), f"Invalid etf_time format: {SCHEDULE['etf_time']}"
-        assert time_pattern.match(SCHEDULE["crypto_time"]), f"Invalid crypto_time format: {SCHEDULE['crypto_time']}"
+        assert time_pattern.match(SCHEDULE["etf_time"]), (
+            f"Invalid etf_time format: {SCHEDULE['etf_time']}"
+        )
+        assert time_pattern.match(SCHEDULE["crypto_time"]), (
+            f"Invalid crypto_time format: {SCHEDULE['crypto_time']}"
+        )

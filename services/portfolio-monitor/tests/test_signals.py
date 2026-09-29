@@ -5,8 +5,6 @@ These tests ensure signals are generated correctly and with appropriate
 alert levels - informational vs actionable.
 """
 
-import pytest
-
 from models import AlertLevel, Signal
 
 
@@ -87,11 +85,15 @@ class TestCryptoSignalLevels:
         signals, level = compute_signals(pos, price_data, fear_greed_val=50)
 
         # Find ATH signal if present
-        ath_signals = [s for s in signals if "ATH" in s.body or "máximos" in s.body.lower()]
-        
+        ath_signals = [
+            s for s in signals if "ATH" in s.body or "máximos" in s.body.lower()
+        ]
+
         for signal in ath_signals:
             # ATH signals should be INFO, not DANGER or WARN
-            assert signal.level == "INFO", f"ATH signal should be INFO, got {signal.level}"
+            assert signal.level == "INFO", (
+                f"ATH signal should be INFO, got {signal.level}"
+            )
 
         # Overall level should NOT be escalated due to ATH alone
         assert level != AlertLevel.DANGER, "ATH proximity should not trigger DANGER"
@@ -113,10 +115,16 @@ class TestCryptoSignalLevels:
         signals, level = compute_signals(pos, price_data, fear_greed_val=50)
 
         # Find pump signal
-        pump_signals = [s for s in signals if "15" in s.body or "subida" in s.body.lower() or "surge" in s.body.lower()]
-        
+        pump_signals = [
+            s
+            for s in signals
+            if "15" in s.body or "subida" in s.body.lower() or "surge" in s.body.lower()
+        ]
+
         for signal in pump_signals:
-            assert signal.level == "INFO", f"Pump signal should be INFO, got {signal.level}"
+            assert signal.level == "INFO", (
+                f"Pump signal should be INFO, got {signal.level}"
+            )
 
     def test_significant_drop_is_danger(self):
         """Significant price drops should properly escalate to DANGER."""
@@ -159,7 +167,11 @@ class TestCryptoSignalLevels:
 
         # Extreme fear (below 25)
         signals, level = compute_signals(pos, price_data, fear_greed_val=15)
-        fg_signals = [s for s in signals if "Fear" in s.body or "Greed" in s.body or "Miedo" in s.body]
+        fg_signals = [
+            s
+            for s in signals
+            if "Fear" in s.body or "Greed" in s.body or "Miedo" in s.body
+        ]
         assert len(fg_signals) > 0, "Should generate F&G signal at extreme fear"
         # Extreme fear is informational (opportunity), not a danger
         assert level == AlertLevel.OK
@@ -170,43 +182,53 @@ class TestETFSignalLevels:
 
     def test_profit_signal_is_ok(self):
         """Being in profit should generate OK signal."""
-        import pandas as pd
         import numpy as np
+        import pandas as pd
         from monitors.etf_monitor import calculate_signals
 
         # Create mock historical data
         dates = pd.date_range(end="2024-01-15", periods=250, freq="D")
         prices = np.linspace(100, 120, 250)  # Steady uptrend
-        hist = pd.DataFrame({
-            "Open": prices * 0.99,
-            "High": prices * 1.01,
-            "Low": prices * 0.98,
-            "Close": prices,
-        }, index=dates)
+        hist = pd.DataFrame(
+            {
+                "Open": prices * 0.99,
+                "High": prices * 1.01,
+                "Low": prices * 0.98,
+                "Close": prices,
+            },
+            index=dates,
+        )
 
         # Avg cost of 100, current price ~120
         result = calculate_signals(hist, avg_cost=100.0)
 
         # Should have profit signal
-        profit_signals = [s for s in result["signals"] if "profit" in s.title.lower() or "beneficio" in s.title.lower()]
+        profit_signals = [
+            s
+            for s in result["signals"]
+            if "profit" in s.title.lower() or "beneficio" in s.title.lower()
+        ]
         assert len(profit_signals) > 0, "Should generate profit signal"
         assert result["level"] in (AlertLevel.OK, AlertLevel.INFO)
 
     def test_loss_signal_escalates(self):
         """Being in significant loss should escalate alert level."""
-        import pandas as pd
         import numpy as np
+        import pandas as pd
         from monitors.etf_monitor import calculate_signals
 
         # Create mock data with price below cost
         dates = pd.date_range(end="2024-01-15", periods=250, freq="D")
         prices = np.linspace(100, 75, 250)  # Downtrend
-        hist = pd.DataFrame({
-            "Open": prices * 1.01,
-            "High": prices * 1.02,
-            "Low": prices * 0.99,
-            "Close": prices,
-        }, index=dates)
+        hist = pd.DataFrame(
+            {
+                "Open": prices * 1.01,
+                "High": prices * 1.02,
+                "Low": prices * 0.99,
+                "Close": prices,
+            },
+            index=dates,
+        )
 
         # Avg cost of 100, current price ~75 = -25% loss
         result = calculate_signals(hist, avg_cost=100.0)
