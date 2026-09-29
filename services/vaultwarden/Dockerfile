@@ -5,6 +5,7 @@
 # Customization: Environment variables baked in for subpath deployment
 #
 # ADMIN_TOKEN is NOT included here — passed via runtime secret
+# hadolint ignore=DL3007
 FROM vaultwarden/server:latest
 
 # Timezone

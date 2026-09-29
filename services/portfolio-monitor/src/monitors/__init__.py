@@ -11,19 +11,19 @@ from models import AlertLevel
 
 class BaseMonitor(ABC):
     """Base class for all portfolio monitors."""
-    
+
     name: str = "base"
-    
+
     @abstractmethod
     async def run(self) -> dict[str, Any]:
         """Execute the monitor and return results."""
         pass
-    
+
     @abstractmethod
     def get_level(self) -> AlertLevel:
         """Return the current alert level."""
         pass
-    
+
     @abstractmethod
     def get_last_update(self) -> datetime | None:
         """Return the last update timestamp."""

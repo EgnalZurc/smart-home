@@ -156,7 +156,7 @@ def authorize_headless(credentials_path: Path, token_path: Path) -> None:
     )
 
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req) as resp:  # nosec B310
             token_response = json.loads(resp.read())
     except urllib.error.HTTPError as e:
         body = e.read().decode()

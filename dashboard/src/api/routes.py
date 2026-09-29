@@ -653,7 +653,9 @@ async def proxy_flood(lat: float, lon: float):
         return abs(v - 3.4) < 0.1
 
     async def _wms_query(layer: str, delta: float) -> float | None:
-        bbox = f"{lon - delta:.5f},{lat - delta:.5f},{lon + delta:.5f},{lat + delta:.5f}"
+        bbox = (
+            f"{lon - delta:.5f},{lat - delta:.5f},{lon + delta:.5f},{lat + delta:.5f}"
+        )
         url = (
             f"{WMS_BASE}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo"
             f"&BBOX={bbox}&WIDTH=10&HEIGHT=10"
@@ -675,10 +677,21 @@ async def proxy_flood(lat: float, lon: float):
             t10 = None if _is_fill(t10_raw) else round(t10_raw, 2)
             t100 = None if _is_fill(t100_raw) else round(t100_raw, 2)
             t500 = None if _is_fill(t500_raw) else round(t500_raw, 2)
-            if t10 is not None and t100 is not None and t500 is not None and t10 == t100 == t500:
+            if (
+                t10 is not None
+                and t100 is not None
+                and t500 is not None
+                and t10 == t100 == t500
+            ):
                 t10 = t100 = t500 = None
             if any(v is not None for v in (t10, t100, t500)):
-                return {"t10": t10, "t100": t100, "t500": t500, "bbox_delta_deg": delta, "bbox_radius_m": int(delta * 111000)}
+                return {
+                    "t10": t10,
+                    "t100": t100,
+                    "t500": t500,
+                    "bbox_delta_deg": delta,
+                    "bbox_radius_m": int(delta * 111000),
+                }
         return None
 
     async def _glofas() -> dict | None:
@@ -708,7 +721,9 @@ async def proxy_flood(lat: float, lon: float):
         except Exception:
             return None
 
-    snczi_data, glofas_data = await asyncio.gather(_snczi_with_progressive_bbox(), _glofas())
+    snczi_data, glofas_data = await asyncio.gather(
+        _snczi_with_progressive_bbox(), _glofas()
+    )
 
     risk_level = "sin_datos"
     risk_source = "sin_datos"
@@ -737,7 +752,13 @@ async def proxy_flood(lat: float, lon: float):
             risk_level = "bajo"
         risk_source = "glofas"
 
-    return {"snczi": snczi_data, "glofas": glofas_data, "risk_level": risk_level, "risk_source": risk_source, "calado_m": calado_m}
+    return {
+        "snczi": snczi_data,
+        "glofas": glofas_data,
+        "risk_level": risk_level,
+        "risk_source": risk_source,
+        "calado_m": calado_m,
+    }
 
 
 @router.get("/proxy/firms", tags=["Proxy"])
@@ -806,7 +827,13 @@ async def proxy_firms(lat: float, lon: float):
     results = await asyncio.gather(*[_fetch_window(w) for w in windows])
     total_focos = sum(results)
 
-    return {"status": "ok", "focos": total_focos, "radio_km": 30, "periodo": "jun-oct ultimos 3 anos", "peticiones": len(windows)}
+    return {
+        "status": "ok",
+        "focos": total_focos,
+        "radio_km": 30,
+        "periodo": "jun-oct ultimos 3 anos",
+        "peticiones": len(windows),
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -840,7 +867,9 @@ async def get_ac_sensors():
 
 
 @router.get("/ac/sensors/history", tags=["AC"])
-async def get_ac_sensors_history(start: float | None = None, end: float | None = None, last: int | None = None):
+async def get_ac_sensors_history(
+    start: float | None = None, end: float | None = None, last: int | None = None
+):
     """Get sensor reading history."""
     try:
         params = {}
@@ -851,7 +880,9 @@ async def get_ac_sensors_history(start: float | None = None, end: float | None =
         if last is not None:
             params["last"] = last
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/sensors/history", params=params)
+            resp = await client.get(
+                f"{AC_SERVICE_URL}/api/ac/sensors/history", params=params
+            )
             return resp.json()
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -862,7 +893,9 @@ async def get_ac_history(limit: int = 100):
     """Get controller action history."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{AC_SERVICE_URL}/api/ac/history", params={"limit": limit})
+            resp = await client.get(
+                f"{AC_SERVICE_URL}/api/ac/history", params={"limit": limit}
+            )
             return resp.json()
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -887,7 +920,10 @@ async def update_ac_config(request: Request):
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post(f"{AC_SERVICE_URL}/api/ac/config", json=body)
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -903,7 +939,10 @@ async def set_ac_control_mode(request: Request):
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post(f"{AC_SERVICE_URL}/api/ac/control", json=body)
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -919,7 +958,10 @@ async def set_ac_manual_params(request: Request):
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post(f"{AC_SERVICE_URL}/api/ac/manual", json=body)
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -932,9 +974,15 @@ async def update_ac_manual_param(param: str, value: str):
     """Update a single manual parameter."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{AC_SERVICE_URL}/api/ac/manual/param", params={"param": param, "value": value})
+            resp = await client.post(
+                f"{AC_SERVICE_URL}/api/ac/manual/param",
+                params={"param": param, "value": value},
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1055,7 +1103,9 @@ async def post_vacaciones_config(request: Request):
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{VACACIONES_SERVICE_URL}/api/vacaciones/config", json=body)
+            resp = await client.post(
+                f"{VACACIONES_SERVICE_URL}/api/vacaciones/config", json=body
+            )
             return resp.json()
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -1078,7 +1128,9 @@ async def post_vacaciones_year(year: int, request: Request):
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{VACACIONES_SERVICE_URL}/api/vacaciones/year/{year}", json=body)
+            resp = await client.post(
+                f"{VACACIONES_SERVICE_URL}/api/vacaciones/year/{year}", json=body
+            )
             return resp.json()
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -1089,9 +1141,14 @@ async def delete_vacaciones_year(year: int):
     """Delete a year."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.delete(f"{VACACIONES_SERVICE_URL}/api/vacaciones/year/{year}")
+            resp = await client.delete(
+                f"{VACACIONES_SERVICE_URL}/api/vacaciones/year/{year}"
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1127,9 +1184,14 @@ async def create_baby_gift(request: Request):
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts", json=body)
+            resp = await client.post(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts", json=body
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1143,9 +1205,14 @@ async def update_baby_gift(gift_id: str, request: Request):
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.put(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/{gift_id}", json=body)
+            resp = await client.put(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/{gift_id}", json=body
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1158,9 +1225,14 @@ async def delete_baby_gift(gift_id: str):
     """Delete a gift (admin only)."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.delete(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/{gift_id}")
+            resp = await client.delete(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/{gift_id}"
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1173,9 +1245,14 @@ async def admin_unreserve_baby_gift(gift_id: str):
     """Admin can unreserve any gift."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/{gift_id}/unreserve")
+            resp = await client.post(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/{gift_id}/unreserve"
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1189,7 +1266,9 @@ async def update_baby_gifts_categories(request: Request):
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.put(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/categories", json=body)
+            resp = await client.put(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/categories", json=body
+            )
             return resp.json()
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -1203,7 +1282,9 @@ async def get_baby_gifts_invitations():
     """List all invitations (admin only)."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/invitations")
+            resp = await client.get(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/invitations"
+            )
             return resp.json()
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -1215,9 +1296,14 @@ async def create_baby_gifts_invitation(request: Request):
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/invitations", json=body)
+            resp = await client.post(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/invitations", json=body
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1230,9 +1316,14 @@ async def delete_baby_gifts_invitation(token: str):
     """Delete an invitation (admin only)."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.delete(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/invitations/{token}")
+            resp = await client.delete(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/invitations/{token}"
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1245,9 +1336,14 @@ async def revoke_baby_gifts_invitation(token: str):
     """Revoke an invitation without deleting it (admin only)."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/invitations/{token}/revoke")
+            resp = await client.post(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/invitations/{token}/revoke"
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1267,9 +1363,14 @@ async def get_baby_gifts_for_user(request: Request):
         if "X-Auth-User" in request.headers:
             headers["X-Auth-User"] = request.headers["X-Auth-User"]
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/user", headers=headers)
+            resp = await client.get(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/user", headers=headers
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1285,9 +1386,15 @@ async def user_reserve_baby_gift(gift_id: str, request: Request):
         if "X-Auth-User" in request.headers:
             headers["X-Auth-User"] = request.headers["X-Auth-User"]
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/user/reserve/{gift_id}", headers=headers)
+            resp = await client.post(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/user/reserve/{gift_id}",
+                headers=headers,
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1303,9 +1410,15 @@ async def user_unreserve_baby_gift(gift_id: str, request: Request):
         if "X-Auth-User" in request.headers:
             headers["X-Auth-User"] = request.headers["X-Auth-User"]
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/user/unreserve/{gift_id}", headers=headers)
+            resp = await client.post(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/user/unreserve/{gift_id}",
+                headers=headers,
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1325,9 +1438,15 @@ async def get_baby_gifts_for_guest(token: str, request: Request):
         if "X-Forwarded-For" in request.headers:
             headers["X-Forwarded-For"] = request.headers["X-Forwarded-For"]
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/guest/{token}", headers=headers)
+            resp = await client.get(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/guest/{token}",
+                headers=headers,
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1343,9 +1462,15 @@ async def guest_reserve_baby_gift(token: str, gift_id: str, request: Request):
         if "X-Forwarded-For" in request.headers:
             headers["X-Forwarded-For"] = request.headers["X-Forwarded-For"]
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/guest/{token}/reserve/{gift_id}", headers=headers)
+            resp = await client.post(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/guest/{token}/reserve/{gift_id}",
+                headers=headers,
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1361,9 +1486,15 @@ async def guest_unreserve_baby_gift(token: str, gift_id: str, request: Request):
         if "X-Forwarded-For" in request.headers:
             headers["X-Forwarded-For"] = request.headers["X-Forwarded-For"]
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/guest/{token}/unreserve/{gift_id}", headers=headers)
+            resp = await client.post(
+                f"{BABY_GIFTS_SERVICE_URL}/api/baby-gifts/guest/{token}/unreserve/{gift_id}",
+                headers=headers,
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1428,9 +1559,14 @@ async def refresh_portfolio_monitor(monitor_name: str):
     """Trigger a refresh of a specific monitor (etf or crypto)."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{PORTFOLIO_SERVICE_URL}/api/portfolio/refresh/{monitor_name}")
+            resp = await client.post(
+                f"{PORTFOLIO_SERVICE_URL}/api/portfolio/refresh/{monitor_name}"
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise
@@ -1454,7 +1590,9 @@ async def reload_portfolio_config():
     """Reload portfolio configuration from disk."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(f"{PORTFOLIO_SERVICE_URL}/api/portfolio/reload-config")
+            resp = await client.post(
+                f"{PORTFOLIO_SERVICE_URL}/api/portfolio/reload-config"
+            )
             return resp.json()
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -1465,7 +1603,9 @@ async def get_portfolio_notification_status():
     """Get the notification system status."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{PORTFOLIO_SERVICE_URL}/api/portfolio/notifications/status")
+            resp = await client.get(
+                f"{PORTFOLIO_SERVICE_URL}/api/portfolio/notifications/status"
+            )
             return resp.json()
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -1476,9 +1616,14 @@ async def test_portfolio_notification():
     """Send a test notification to verify Telegram setup."""
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(f"{PORTFOLIO_SERVICE_URL}/api/portfolio/notifications/test")
+            resp = await client.post(
+                f"{PORTFOLIO_SERVICE_URL}/api/portfolio/notifications/test"
+            )
             if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", "Error"))
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", "Error"),
+                )
             return resp.json()
     except HTTPException:
         raise

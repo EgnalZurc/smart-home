@@ -4,7 +4,7 @@ Serves:
   GET  /smart-home/portfolio         → SPA dashboard
   GET  /api/portfolio/summary        → Full portfolio summary
   GET  /api/portfolio/etf            → ETF analysis
-  GET  /api/portfolio/crypto         → Crypto staking analysis  
+  GET  /api/portfolio/crypto         → Crypto staking analysis
   POST /api/portfolio/refresh        → Trigger full refresh
   POST /api/portfolio/refresh/{name} → Trigger specific monitor refresh
   GET  /api/portfolio/schedule       → Get monitoring schedule
@@ -43,13 +43,13 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     logger.info("Starting Portfolio Monitor service...")
-    
+
     # Start orchestrator
     orch = get_orchestrator()
     await orch.start()
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down Portfolio Monitor service...")
     await orch.stop()
@@ -83,7 +83,9 @@ async def health():
         "online": True,
         "service": "portfolio-monitor",
         "last_etf_run": state.last_etf_run.isoformat() if state.last_etf_run else None,
-        "last_crypto_run": state.last_crypto_run.isoformat() if state.last_crypto_run else None,
+        "last_crypto_run": state.last_crypto_run.isoformat()
+        if state.last_crypto_run
+        else None,
     }
 
 
@@ -104,11 +106,11 @@ def _serve_html(filename: str) -> HTMLResponse:
             content="<h1>404 - Dashboard not found</h1><p>Static files not deployed.</p>",
             status_code=404,
         )
-    
+
     content = path.read_text(encoding="utf-8")
     # Inject cache buster
     content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")
-    
+
     return HTMLResponse(
         content=content,
         headers={
@@ -130,4 +132,6 @@ async def serve_dashboard():
 # ─────────────────────────────────────────────────────────────────────────────
 _static_dir = Path(__file__).parent / "static"
 if _static_dir.exists():
-    app.mount("/static/portfolio", StaticFiles(directory=str(_static_dir)), name="static")
+    app.mount(
+        "/static/portfolio", StaticFiles(directory=str(_static_dir)), name="static"
+    )

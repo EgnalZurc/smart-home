@@ -40,7 +40,7 @@ async def get_summary():
     """Get the full portfolio summary."""
     orch = get_orchestrator()
     summary = orch.get_summary()
-    
+
     return {
         "etf": {
             "total_value": summary.etf_total_value,
@@ -48,7 +48,9 @@ async def get_summary():
             "total_gain_loss": summary.etf_total_gain_loss,
             "total_gain_loss_pct": summary.etf_total_gain_loss_pct,
             "level": summary.etf_level.name,
-            "last_update": summary.etf_last_update.isoformat() if summary.etf_last_update else None,
+            "last_update": summary.etf_last_update.isoformat()
+            if summary.etf_last_update
+            else None,
             "analysis": [_serialize_analysis(a) for a in summary.etf_analysis],
             "phase": summary.phase,
             "phase_months_remaining": summary.phase_months_remaining,
@@ -57,7 +59,9 @@ async def get_summary():
             "total_value": summary.crypto_total_value,
             "total_daily_gain": summary.crypto_total_daily_gain,
             "level": summary.crypto_level.name,
-            "last_update": summary.crypto_last_update.isoformat() if summary.crypto_last_update else None,
+            "last_update": summary.crypto_last_update.isoformat()
+            if summary.crypto_last_update
+            else None,
             "analysis": [_serialize_analysis(a) for a in summary.crypto_analysis],
             "fear_greed": summary.crypto_fear_greed,
             "fear_greed_label": summary.crypto_fear_greed_label,
@@ -65,7 +69,9 @@ async def get_summary():
         "savings": {
             "total_balance": summary.savings_total_balance,
             "yearly_interest": summary.savings_yearly_interest,
-            "last_update": summary.savings_last_update.isoformat() if summary.savings_last_update else None,
+            "last_update": summary.savings_last_update.isoformat()
+            if summary.savings_last_update
+            else None,
             "analysis": [_serialize_analysis(a) for a in summary.savings_analysis],
         },
         "upcoming_alerts": [_serialize_alert(a) for a in summary.upcoming_alerts],
@@ -91,14 +97,16 @@ async def get_etf_summary():
     """Get ETF portfolio summary."""
     orch = get_orchestrator()
     summary = orch.get_summary()
-    
+
     return {
         "total_value": summary.etf_total_value,
         "total_invested": summary.etf_total_invested,
         "total_gain_loss": summary.etf_total_gain_loss,
         "total_gain_loss_pct": summary.etf_total_gain_loss_pct,
         "level": summary.etf_level.name,
-        "last_update": summary.etf_last_update.isoformat() if summary.etf_last_update else None,
+        "last_update": summary.etf_last_update.isoformat()
+        if summary.etf_last_update
+        else None,
         "analysis": [_serialize_analysis(a) for a in summary.etf_analysis],
         "phase": summary.phase,
         "phase_months_remaining": summary.phase_months_remaining,
@@ -110,12 +118,14 @@ async def get_crypto_summary():
     """Get crypto staking summary."""
     orch = get_orchestrator()
     summary = orch.get_summary()
-    
+
     return {
         "total_value": summary.crypto_total_value,
         "total_daily_gain": summary.crypto_total_daily_gain,
         "level": summary.crypto_level.name,
-        "last_update": summary.crypto_last_update.isoformat() if summary.crypto_last_update else None,
+        "last_update": summary.crypto_last_update.isoformat()
+        if summary.crypto_last_update
+        else None,
         "analysis": [_serialize_analysis(a) for a in summary.crypto_analysis],
         "fear_greed": summary.crypto_fear_greed,
         "fear_greed_label": summary.crypto_fear_greed_label,
@@ -129,12 +139,12 @@ async def get_crypto_summary():
 async def refresh_all(background_tasks: BackgroundTasks):
     """Trigger a refresh of all monitors."""
     orch = get_orchestrator()
-    
+
     async def run_refresh():
         await orch.run_all_monitors()
-    
+
     background_tasks.add_task(run_refresh)
-    
+
     return {"status": "refresh_started", "monitors": ["etf", "crypto", "savings"]}
 
 
@@ -143,11 +153,13 @@ async def get_savings_summary():
     """Get savings accounts summary."""
     orch = get_orchestrator()
     summary = orch.get_summary()
-    
+
     return {
         "total_balance": summary.savings_total_balance,
         "yearly_interest": summary.savings_yearly_interest,
-        "last_update": summary.savings_last_update.isoformat() if summary.savings_last_update else None,
+        "last_update": summary.savings_last_update.isoformat()
+        if summary.savings_last_update
+        else None,
         "analysis": [_serialize_analysis(a) for a in summary.savings_analysis],
     }
 
@@ -157,7 +169,7 @@ async def get_alerts():
     """Get upcoming scheduled alerts (next 5 days)."""
     orch = get_orchestrator()
     summary = orch.get_summary()
-    
+
     return {
         "upcoming": [_serialize_alert(a) for a in summary.upcoming_alerts],
         "count": len(summary.upcoming_alerts),
@@ -169,14 +181,14 @@ async def refresh_monitor(monitor_name: str, background_tasks: BackgroundTasks):
     """Trigger a refresh of a specific monitor."""
     if monitor_name not in ["etf", "crypto"]:
         raise HTTPException(status_code=404, detail=f"Unknown monitor: {monitor_name}")
-    
+
     orch = get_orchestrator()
-    
+
     async def run_refresh():
         await orch.run_monitor(monitor_name)
-    
+
     background_tasks.add_task(run_refresh)
-    
+
     return {"status": "refresh_started", "monitor": monitor_name}
 
 
@@ -186,12 +198,11 @@ async def get_schedule():
     orch = get_orchestrator()
     schedule = orch.get_schedule()
     next_runs = orch.get_next_run_times()
-    
+
     return {
         "schedule": schedule,
         "next_runs": {
-            name: ts.isoformat() if ts else None
-            for name, ts in next_runs.items()
+            name: ts.isoformat() if ts else None for name, ts in next_runs.items()
         },
     }
 
@@ -211,17 +222,17 @@ async def reload_config():
 async def test_notification():
     """Send a test notification to verify Telegram setup."""
     from notifier import TelegramNotifier
-    
+
     notifier = TelegramNotifier()
-    
+
     if not notifier.enabled:
         raise HTTPException(
             status_code=503,
             detail="Notifications disabled — missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID",
         )
-    
+
     result = notifier.send_test()
-    
+
     if result.success:
         return {"status": "sent", "message": result.message}
     else:
@@ -232,9 +243,9 @@ async def test_notification():
 async def notification_status():
     """Get the notification system status."""
     from notifier import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TelegramNotifier
-    
+
     notifier = TelegramNotifier()
-    
+
     return {
         "enabled": notifier.enabled,
         "telegram_configured": bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID),
@@ -251,10 +262,12 @@ async def health_check():
     """Health check endpoint."""
     orch = get_orchestrator()
     state = orch.get_state()
-    
+
     return {
         "online": True,
         "service": "portfolio-monitor",
         "last_etf_run": state.last_etf_run.isoformat() if state.last_etf_run else None,
-        "last_crypto_run": state.last_crypto_run.isoformat() if state.last_crypto_run else None,
+        "last_crypto_run": state.last_crypto_run.isoformat()
+        if state.last_crypto_run
+        else None,
     }

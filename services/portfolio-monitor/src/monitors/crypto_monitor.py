@@ -28,7 +28,9 @@ _MARKETS_URL = (
     "https://api.coingecko.com/api/v3/coins/markets"
     "?vs_currency=eur&ids={ids}&price_change_percentage=14d,30d"
 )
-_OHLC_URL = "https://api.coingecko.com/api/v3/coins/{id}/ohlc?vs_currency=eur&days={days}"
+_OHLC_URL = (
+    "https://api.coingecko.com/api/v3/coins/{id}/ohlc?vs_currency=eur&days={days}"
+)
 _FG_URL = "https://api.alternative.me/fng/?limit=1"
 
 
@@ -41,7 +43,9 @@ def _get(url: str) -> requests.Response:
     for attempt in range(1, _RETRIES + 1):
         r = requests.get(url, timeout=_TIMEOUT)
         if r.status_code == 429:
-            logger.debug(f"Rate limited, retrying in {delay:.0f}s (attempt {attempt}/{_RETRIES})")
+            logger.debug(
+                f"Rate limited, retrying in {delay:.0f}s (attempt {attempt}/{_RETRIES})"
+            )
             time.sleep(delay)
             delay *= 2
             continue
@@ -55,7 +59,7 @@ def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
     """Fetch price, 24h change, ATH, 14d and 30d changes for all coins."""
     if not coingecko_ids:
         return {}
-    
+
     ids = ",".join(dict.fromkeys(coingecko_ids))
     try:
         rows = _get(_MARKETS_URL.format(ids=ids)).json()
@@ -113,14 +117,14 @@ def next_distribution_in(pos: dict[str, Any]) -> int | None:
     """Return days until the next staking reward distribution."""
     if "next_distribution" not in pos:
         return None
-    
+
     today = datetime.now(timezone.utc).date()
     nd = datetime.fromisoformat(pos["next_distribution"]).date()
     freq = pos.get("distribution_freq_days", 1)
-    
+
     while nd < today:
         nd += timedelta(days=freq)
-    
+
     return (nd - today).days
 
 
@@ -145,31 +149,39 @@ def compute_signals(
     """Compute signals for a position."""
     signals: list[Signal] = []
     level = AlertLevel.OK
-    
+
     cg_id = pos.get("coingecko_id", "")
     price_info = price_data.get(cg_id, {})
-    
+
     change_24h = price_info.get("eur_24h_change", 0)
     ath_pct = price_info.get("ath_change_pct")
     change_30d = price_info.get("price_change_30d")
-    
+
     thr = CRYPTO_THRESHOLDS
-    
+
     # Fear & Greed signals
     if fear_greed_val is not None:
         if fear_greed_val >= thr["fg_extreme_greed"]:
-            signals.append(Signal("", t("crypto.fg_extreme_greed", val=fear_greed_val), "DANGER"))
+            signals.append(
+                Signal("", t("crypto.fg_extreme_greed", val=fear_greed_val), "DANGER")
+            )
             level = level.escalate(AlertLevel.DANGER)
         elif fear_greed_val >= thr["fg_high_greed"]:
-            signals.append(Signal("", t("crypto.fg_high_greed", val=fear_greed_val), "WARN"))
+            signals.append(
+                Signal("", t("crypto.fg_high_greed", val=fear_greed_val), "WARN")
+            )
             level = level.escalate(AlertLevel.WARN)
         elif fear_greed_val <= thr["fg_extreme_fear"]:
-            signals.append(Signal("", t("crypto.fg_extreme_fear", val=fear_greed_val), "OK"))
-    
+            signals.append(
+                Signal("", t("crypto.fg_extreme_fear", val=fear_greed_val), "OK")
+            )
+
     # 24h price change signals
     if change_24h is not None:
         if change_24h <= thr["change_24h_danger"]:
-            signals.append(Signal("", t("crypto.drop_danger", pct=change_24h), "DANGER"))
+            signals.append(
+                Signal("", t("crypto.drop_danger", pct=change_24h), "DANGER")
+            )
             level = level.escalate(AlertLevel.DANGER)
         elif change_24h <= thr["change_24h_warn"]:
             signals.append(Signal("", t("crypto.drop_warn", pct=change_24h), "WARN"))
@@ -177,7 +189,7 @@ def compute_signals(
         elif change_24h >= thr["change_24h_pump"]:
             # Strong surge is informational, not a warning - could be good news
             signals.append(Signal("", t("crypto.pump_warn", pct=change_24h), "INFO"))
-    
+
     # ATH proximity signals - informational, not actionable
     # Being near ATH can indicate strong momentum, not necessarily a sell signal
     if ath_pct is not None:
@@ -186,7 +198,7 @@ def compute_signals(
             # Don't escalate level - ATH proximity is informational
         elif ath_pct >= thr["ath_warn_pct"]:
             signals.append(Signal("", t("crypto.ath_warn", pct=abs(ath_pct)), "INFO"))
-    
+
     # 30-day momentum signals
     if change_30d is not None:
         if change_30d <= thr["change_30d_bear"]:
@@ -194,7 +206,7 @@ def compute_signals(
             level = level.escalate(AlertLevel.WARN)
         elif change_30d >= thr["change_30d_bull"]:
             signals.append(Signal("", t("crypto.bull_30d", pct=change_30d), "OK"))
-    
+
     return signals, level
 
 
@@ -204,20 +216,20 @@ def compute_signals(
 @register_monitor
 class CryptoMonitor(BaseMonitor):
     """Crypto staking monitor."""
-    
+
     name = "crypto"
-    
+
     def __init__(self):
         self._last_update: datetime | None = None
         self._level = AlertLevel.OK
         self._results: list[CryptoAnalysis] = []
         self._fear_greed: int | None = None
         self._fear_greed_label: str | None = None
-    
+
     async def run(self) -> dict[str, Any]:
         """Execute the crypto monitor."""
         logger.info("Starting crypto monitor...")
-        
+
         if not CRYPTO_POSITIONS:
             logger.info("No crypto positions configured.")
             return {
@@ -229,42 +241,44 @@ class CryptoMonitor(BaseMonitor):
                 "fear_greed_label": None,
                 "last_update": None,
             }
-        
+
         # Fetch Fear & Greed
         logger.info("  → Fetching Fear & Greed...")
         self._fear_greed, self._fear_greed_label = fetch_fear_greed()
-        
+
         # Fetch market data for all positions
-        coingecko_ids = [p["coingecko_id"] for p in CRYPTO_POSITIONS if "coingecko_id" in p]
+        coingecko_ids = [
+            p["coingecko_id"] for p in CRYPTO_POSITIONS if "coingecko_id" in p
+        ]
         logger.info(f"  → Fetching market data for {len(coingecko_ids)} coins...")
         market_data = fetch_market_batch(coingecko_ids)
-        
+
         results: list[CryptoAnalysis] = []
         overall_level = AlertLevel.OK
         total_value = 0.0
         total_daily_gain = 0.0
-        
+
         for pos in CRYPTO_POSITIONS:
             cg_id = pos.get("coingecko_id", "")
             symbol = pos.get("symbol", "")
             logger.info(f"  → Processing {symbol}...")
-            
+
             try:
                 price_info = market_data.get(cg_id, {})
                 price_eur = price_info.get("eur", 0)
-                
+
                 amount = pos.get("amount", 0)
                 apy = pos.get("apy", 0)
-                
+
                 # Calculate values
                 current_value = price_eur * amount
                 daily_gain = current_value * (apy / 100 / 365)
                 days = days_staked(pos)
                 accumulated_gain = daily_gain * days
-                
+
                 # Signals
                 signals, level = compute_signals(pos, market_data, self._fear_greed)
-                
+
                 analysis = CryptoAnalysis(
                     symbol=symbol,
                     name=pos.get("name", symbol),
@@ -293,22 +307,22 @@ class CryptoMonitor(BaseMonitor):
                     level=level,
                     ohlc=fetch_ohlc(cg_id, 30),
                 )
-                
+
                 results.append(analysis)
                 overall_level = overall_level.escalate(level)
                 total_value += current_value
                 total_daily_gain += daily_gain
-                
+
             except Exception as e:
                 logger.error(f"Error processing {symbol}: {e}")
                 continue
-        
+
         self._results = results
         self._level = overall_level
         self._last_update = datetime.now(timezone.utc)
-        
+
         logger.info(f"Crypto monitor complete. {len(results)} positions processed.")
-        
+
         return {
             "analysis": results,
             "total_value": total_value,
@@ -318,15 +332,15 @@ class CryptoMonitor(BaseMonitor):
             "fear_greed_label": self._fear_greed_label,
             "last_update": self._last_update,
         }
-    
+
     def get_level(self) -> AlertLevel:
         return self._level
-    
+
     def get_last_update(self) -> datetime | None:
         return self._last_update
-    
+
     def get_results(self) -> list[CryptoAnalysis]:
         return self._results
-    
+
     def get_fear_greed(self) -> tuple[int | None, str | None]:
         return self._fear_greed, self._fear_greed_label

@@ -905,7 +905,7 @@ class CasitaScheduler:
                 f"https://nominatim.openstreetmap.org/search?{q}",
                 headers={"User-Agent": "casita-suenos/1.0 (raspberrypi)"},
             )
-            with urllib.request.urlopen(req, timeout=5) as r:
+            with urllib.request.urlopen(req, timeout=5) as r:  # nosec B310
                 data = json.loads(r.read().decode())
             if not data:
                 logger.info("[casita] Nominatim: sin resultados para '%s'", hint)

@@ -32,8 +32,8 @@ _DEFAULT_CONFIG: dict[str, Any] = {
     "etf": {"funds": [], "plan": {}, "thresholds": {}},
     "crypto": {"positions": [], "thresholds": {}},
     "schedule": {
-        "etf_time": "18:00",      # After European markets close
-        "crypto_time": "09:00",   # Morning check
+        "etf_time": "18:00",  # After European markets close
+        "crypto_time": "09:00",  # Morning check
     },
 }
 
@@ -42,7 +42,7 @@ def _load_settings() -> dict[str, Any]:
     """Load settings from TOML file, or return defaults if not found."""
     if not SETTINGS_PATH.exists():
         return _DEFAULT_CONFIG.copy()
-    
+
     with open(SETTINGS_PATH, "rb") as f:
         return tomllib.load(f)
 
@@ -64,7 +64,9 @@ _S = _load_settings()
 
 # General
 LANG: str = os.environ.get("MONITOR_LANG", _get(_S, "general.lang", "es")).lower()
-LOG_LEVEL: str = os.environ.get("LOG_LEVEL", _get(_S, "general.log_level", "INFO")).upper()
+LOG_LEVEL: str = os.environ.get(
+    "LOG_LEVEL", _get(_S, "general.log_level", "INFO")
+).upper()
 
 # Schedule
 SCHEDULE = {
@@ -107,11 +109,11 @@ _milestones = _get(_S, "etf.plan.milestones", {})
 
 # Default IRPF brackets for 2025 (Ley 7/2024) - base liquidable del ahorro
 _DEFAULT_TAX_BRACKETS = [
-    (6_000, 0.19),       # 0 - 6.000€: 19%
-    (50_000, 0.21),      # 6.000 - 50.000€: 21%
-    (200_000, 0.23),     # 50.000 - 200.000€: 23%
-    (300_000, 0.27),     # 200.000 - 300.000€: 27%
-    (float("inf"), 0.30) # +300.000€: 30% (nuevo tramo 2025)
+    (6_000, 0.19),  # 0 - 6.000€: 19%
+    (50_000, 0.21),  # 6.000 - 50.000€: 21%
+    (200_000, 0.23),  # 50.000 - 200.000€: 23%
+    (300_000, 0.27),  # 200.000 - 300.000€: 27%
+    (float("inf"), 0.30),  # +300.000€: 30% (nuevo tramo 2025)
 ]
 
 _raw_brackets = _get(_S, "etf.tax.brackets", [])
@@ -123,7 +125,9 @@ ETF_PLAN: dict[str, Any] = {
     "tax_brackets": [
         (float("inf") if limit >= 999_999_999 else float(limit), rate)
         for limit, rate in _raw_brackets
-    ] if _raw_brackets else _DEFAULT_TAX_BRACKETS,
+    ]
+    if _raw_brackets
+    else _DEFAULT_TAX_BRACKETS,
 }
 
 # ETF Thresholds
@@ -147,8 +151,8 @@ CRYPTO_POSITIONS: list[dict[str, Any]] = _get(_S, "crypto.positions", [])
 _crypto_thr = _get(_S, "crypto.thresholds", {})
 CRYPTO_THRESHOLDS = {
     "fg_extreme_greed": _crypto_thr.get("fg_extreme_greed", 75),  # Adjusted from 80
-    "fg_high_greed": _crypto_thr.get("fg_high_greed", 60),        # Adjusted from 65
-    "fg_extreme_fear": _crypto_thr.get("fg_extreme_fear", 25),    # Adjusted from 20
+    "fg_high_greed": _crypto_thr.get("fg_high_greed", 60),  # Adjusted from 65
+    "fg_extreme_fear": _crypto_thr.get("fg_extreme_fear", 25),  # Adjusted from 20
     "change_24h_danger": _crypto_thr.get("change_24h_danger", -10),
     "change_24h_warn": _crypto_thr.get("change_24h_warn", -5),
     "change_24h_pump": _crypto_thr.get("change_24h_pump", 10),
@@ -182,14 +186,14 @@ def reload_config() -> dict[str, Any]:
     global _S, ETF_PORTFOLIO, ETF_FUND_IDS, ETF_PLAN, CRYPTO_POSITIONS
     global SAVINGS_ACCOUNTS, SCHEDULED_ALERTS
     _S = _load_settings()
-    
+
     ETF_PORTFOLIO = {
         fund["id"]: _build_fund_entry(fund)
         for fund in _get(_S, "etf.funds", [])
         if "id" in fund
     }
     ETF_FUND_IDS = list(ETF_PORTFOLIO.keys())
-    
+
     _plan_raw = _get(_S, "etf.plan", {})
     _milestones = _get(_S, "etf.plan.milestones", {})
     ETF_PLAN = {
@@ -202,9 +206,9 @@ def reload_config() -> dict[str, Any]:
             for limit, rate in _get(_S, "etf.tax.brackets", [])
         ],
     }
-    
+
     CRYPTO_POSITIONS = _get(_S, "crypto.positions", [])
     SAVINGS_ACCOUNTS = _get(_S, "savings.accounts", [])
     SCHEDULED_ALERTS = _get(_S, "alerts.scheduled", [])
-    
+
     return _S

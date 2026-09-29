@@ -70,7 +70,7 @@ class SavingsMonitor(BaseMonitor):
                 apy = account.get("apy", 0)
                 monthly, yearly = calculate_interest(balance, apy)
                 days = days_since_start(account.get("start_date", ""))
-                
+
                 # Estimate accumulated interest (simplified)
                 accumulated = (yearly / 365) * days
 

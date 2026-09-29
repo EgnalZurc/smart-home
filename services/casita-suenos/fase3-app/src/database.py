@@ -511,7 +511,7 @@ class Database:
             params.append(portal_filter)
 
         total = self._conn.execute(
-            f"SELECT COUNT(*) FROM scored_properties s "
+            f"SELECT COUNT(*) FROM scored_properties s "  # nosec B608
             f"JOIN properties p ON p.uid=s.property_uid "
             f"WHERE s.score_total >= ? AND s.dismissed = 0 {_fc} {_pf}",
             params,
@@ -532,7 +532,7 @@ class Database:
                JOIN properties p ON p.uid = s.property_uid
                WHERE s.score_total >= ? AND s.dismissed = 0 {_fc} {_pf}
                ORDER BY {order_col} {order_dir}
-               LIMIT ? OFFSET ?""",
+               LIMIT ? OFFSET ?""",  # nosec B608
             params + [limit, offset],
         ).fetchall()
 

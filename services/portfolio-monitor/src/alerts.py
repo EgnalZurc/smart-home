@@ -46,7 +46,7 @@ def get_upcoming_alerts(days: int = 5) -> list[ScheduledAlert]:
     """Get alerts scheduled within the next N days."""
     today = datetime.now(timezone.utc).date()
     cutoff = today + timedelta(days=days)
-    
+
     upcoming = []
     for alert in get_all_alerts():
         try:
@@ -55,7 +55,7 @@ def get_upcoming_alerts(days: int = 5) -> list[ScheduledAlert]:
                 upcoming.append(alert)
         except (ValueError, TypeError):
             continue
-    
+
     # Sort by date
     upcoming.sort(key=lambda a: a.date)
     return upcoming
@@ -74,10 +74,10 @@ def check_and_trigger_alerts(notifier: Any) -> list[ScheduledAlert]:
     """
     due_alerts = get_alerts_due_today()
     triggered = []
-    
+
     for alert in due_alerts:
         logger.info(f"Alert due today: {alert.title}")
-        
+
         # Send notification
         result = notifier.send_scheduled_alert(alert)
         if result.success:
@@ -86,7 +86,7 @@ def check_and_trigger_alerts(notifier: Any) -> list[ScheduledAlert]:
             logger.info(f"  → Notification sent for {alert.alert_id}")
         else:
             logger.error(f"  → Failed to send: {result.message}")
-    
+
     return triggered
 
 
@@ -97,37 +97,41 @@ def generate_next_recurring_alerts() -> list[dict[str, Any]]:
     """
     today = datetime.now(timezone.utc).date()
     new_alerts = []
-    
+
     for alert in get_all_alerts():
         if not alert.recurring:
             continue
-        
+
         try:
             alert_date = datetime.fromisoformat(alert.date).date()
-            
+
             # If alert date has passed, generate next occurrence
             if alert_date < today:
                 if alert.recurring == "monthly":
                     # Next month, same day
                     if alert_date.month == 12:
-                        next_date = alert_date.replace(year=alert_date.year + 1, month=1)
+                        next_date = alert_date.replace(
+                            year=alert_date.year + 1, month=1
+                        )
                     else:
                         next_date = alert_date.replace(month=alert_date.month + 1)
-                    
-                    new_alerts.append({
-                        "id": f"{alert.alert_id}_{next_date.isoformat()}",
-                        "date": next_date.isoformat(),
-                        "action": alert.action,
-                        "symbol": alert.symbol,
-                        "title": alert.title,
-                        "description": alert.description,
-                        "priority": alert.priority,
-                        "recurring": alert.recurring,
-                    })
-                    
+
+                    new_alerts.append(
+                        {
+                            "id": f"{alert.alert_id}_{next_date.isoformat()}",
+                            "date": next_date.isoformat(),
+                            "action": alert.action,
+                            "symbol": alert.symbol,
+                            "title": alert.title,
+                            "description": alert.description,
+                            "priority": alert.priority,
+                            "recurring": alert.recurring,
+                        }
+                    )
+
         except (ValueError, TypeError):
             continue
-    
+
     return new_alerts
 
 

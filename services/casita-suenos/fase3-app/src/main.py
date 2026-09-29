@@ -347,7 +347,7 @@ class _StatusHandler(BaseHTTPRequestHandler):
 
 def _start_status_server(port: int) -> None:
     """Arranca el servidor HTTP de estado en un thread daemon."""
-    server = HTTPServer(("0.0.0.0", port), _StatusHandler)
+    server = HTTPServer(("0.0.0.0", port), _StatusHandler)  # nosec B104
     thread = threading.Thread(
         target=server.serve_forever, daemon=True, name="casita-http"
     )

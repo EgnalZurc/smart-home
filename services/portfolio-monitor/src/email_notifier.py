@@ -33,7 +33,9 @@ logger = logging.getLogger(__name__)
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER", os.environ.get("AUTH_SMTP_USER", ""))
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", os.environ.get("AUTH_SMTP_PASSWORD", ""))
+SMTP_PASSWORD = os.environ.get(
+    "SMTP_PASSWORD", os.environ.get("AUTH_SMTP_PASSWORD", "")
+)
 ALERT_EMAIL = os.environ.get("ALERT_EMAIL", SMTP_USER)
 
 
@@ -138,7 +140,9 @@ def _build_html_summary(
 """
 
     # ETF Section
-    etf_alerts = [e for e in etf_results if e.level in (AlertLevel.WARN, AlertLevel.DANGER)]
+    etf_alerts = [
+        e for e in etf_results if e.level in (AlertLevel.WARN, AlertLevel.DANGER)
+    ]
     if etf_alerts:
         html += """
             <div class="section">
@@ -170,15 +174,21 @@ def _build_html_summary(
 """
 
     # Crypto Section
-    crypto_alerts = [c for c in crypto_results if c.level in (AlertLevel.WARN, AlertLevel.DANGER)]
+    crypto_alerts = [
+        c for c in crypto_results if c.level in (AlertLevel.WARN, AlertLevel.DANGER)
+    ]
     if crypto_alerts or fear_greed is not None:
         html += """
             <div class="section">
                 <div class="section-title">🪙 Crypto</div>
 """
         if fear_greed is not None:
-            fg_class = "low" if fear_greed < 30 else "medium" if fear_greed < 60 else "high"
-            fg_label = "Fear" if fear_greed < 30 else "Neutral" if fear_greed < 60 else "Greed"
+            fg_class = (
+                "low" if fear_greed < 30 else "medium" if fear_greed < 60 else "high"
+            )
+            fg_label = (
+                "Fear" if fear_greed < 30 else "Neutral" if fear_greed < 60 else "Greed"
+            )
             html += f"""
                 <div style="margin-bottom: 12px;">
                     Fear & Greed Index: <span class="fear-greed {fg_class}">{fear_greed} ({fg_label})</span>
@@ -197,7 +207,9 @@ def _build_html_summary(
                         Precio: {_format_price(crypto.price_eur)} · 24h: {crypto.change_24h:+.1f}%
                     </div>
 """
-            danger_signals = [s for s in crypto.signals if s.level in ("DANGER", "WARN")]
+            danger_signals = [
+                s for s in crypto.signals if s.level in ("DANGER", "WARN")
+            ]
             if danger_signals:
                 html += f"""
                     <div class="signal">{danger_signals[0].body[:100]}</div>
@@ -349,7 +361,9 @@ class EmailNotifier:
         if self._enabled:
             logger.info("[email] Notifier initialized (recipient: %s)", self._recipient)
         else:
-            logger.warning("[email] Notifier disabled — missing SMTP_USER or SMTP_PASSWORD")
+            logger.warning(
+                "[email] Notifier disabled — missing SMTP_USER or SMTP_PASSWORD"
+            )
 
     @property
     def enabled(self) -> bool:
@@ -452,7 +466,7 @@ class EmailNotifier:
 <body style="font-family: sans-serif; padding: 20px;">
     <h2>✅ Email Notifications Working</h2>
     <p>Portfolio Monitor email notifications are configured correctly.</p>
-    <p><small>{datetime.now().strftime('%d/%m/%Y %H:%M')}</small></p>
+    <p><small>{datetime.now().strftime("%d/%m/%Y %H:%M")}</small></p>
 </body>
 </html>
 """
