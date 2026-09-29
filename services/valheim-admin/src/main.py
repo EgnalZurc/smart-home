@@ -19,6 +19,7 @@ Endpoints:
                                - Valheim 1.0: single .zip of the world folder
                                - Legacy/backup: .db + .fwl pair
 """
+
 import os
 import re
 import shutil
@@ -35,12 +36,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-ENV_FILE    = Path(os.environ.get("VALHEIM_ENV_FILE",    "/config/.env"))
-WORLDS_DIR  = Path(os.environ.get("VALHEIM_WORLDS_DIR",  "/server_data/worlds_local"))
-LOGS_DIR    = Path(os.environ.get("VALHEIM_LOGS_DIR",    "/server_data/logs"))
+ENV_FILE = Path(os.environ.get("VALHEIM_ENV_FILE", "/config/.env"))
+WORLDS_DIR = Path(os.environ.get("VALHEIM_WORLDS_DIR", "/server_data/worlds_local"))
+LOGS_DIR = Path(os.environ.get("VALHEIM_LOGS_DIR", "/server_data/logs"))
 
 # docker-socket-proxy — same one the smart-home backend uses
-DOCKER_PROXY   = "http://docker-socket-proxy:2375/v1.41"
+DOCKER_PROXY = "http://docker-socket-proxy:2375/v1.41"
 GAME_CONTAINER = "valheim-server"
 
 # Valid extensions in a Valheim 1.0 world folder
@@ -51,6 +52,7 @@ WORLD_LEGACY_EXTS = {".db", ".fwl"}
 MAX_UPLOAD_BYTES = 600 * 1024 * 1024
 
 app = FastAPI(title="Valheim Admin", version="1.0.0")
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def read_env() -> dict[str, str]:
@@ -117,15 +119,15 @@ async def recreate_game_container() -> str:
     import socket as _socket
 
     compose_file = os.environ.get("VALHEIM_COMPOSE_FILE", "/compose/docker-compose.yml")
-    compose_dir  = str(Path(compose_file).parent)
-    sock_path    = "/var/run/docker.sock"
+    compose_dir = str(Path(compose_file).parent)
+    sock_path = "/var/run/docker.sock"
 
     def _docker_api(method: str, path: str, body: bytes = b"") -> tuple[int, bytes]:
         """Minimal raw Docker API call via Unix socket."""
         with _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM) as s:
             s.connect(sock_path)
             content_header = f"Content-Length: {len(body)}\r\n" if body else ""
-            content_type   = "Content-Type: application/json\r\n" if body else ""
+            content_type = "Content-Type: application/json\r\n" if body else ""
             req = (
                 f"{method} {path} HTTP/1.1\r\n"
                 f"Host: localhost\r\n"
@@ -146,7 +148,9 @@ async def recreate_game_container() -> str:
         _docker_api("POST", f"/v1.41/containers/{GAME_CONTAINER}/stop?t=15")
 
         # 2. Remove
-        rc, body = _docker_api("DELETE", f"/v1.41/containers/{GAME_CONTAINER}?force=true")
+        rc, body = _docker_api(
+            "DELETE", f"/v1.41/containers/{GAME_CONTAINER}?force=true"
+        )
         if rc not in (204, 200):
             raise RuntimeError(f"rm failed: {rc} {body[:200]}")
 
@@ -154,7 +158,9 @@ async def recreate_game_container() -> str:
         result = subprocess.run(
             ["docker", "compose", "-f", compose_file, "up", "-d", GAME_CONTAINER],
             cwd=compose_dir,
-            capture_output=True, text=True, timeout=90
+            capture_output=True,
+            text=True,
+            timeout=90,
         )
         if result.returncode == 0:
             return "recreated"
@@ -182,16 +188,16 @@ def latest_log_file() -> Path | None:
 
 def parse_join_code(log_lines: str) -> str | None:
     """Extract 6-digit join code from Valheim server logs."""
-    match = re.search(r'with join code\s+(\d{6})\b', log_lines, re.IGNORECASE)
+    match = re.search(r"with join code\s+(\d{6})\b", log_lines, re.IGNORECASE)
     if match:
         return match.group(1)
-    match = re.search(r'join code[:\s]+(\d{6})\b', log_lines, re.IGNORECASE)
+    match = re.search(r"join code[:\s]+(\d{6})\b", log_lines, re.IGNORECASE)
     return match.group(1) if match else None
 
 
 def parse_players(log_lines: str) -> int:
-    connects    = len(re.findall(r'Got handshake from client', log_lines))
-    disconnects = len(re.findall(r'Closing socket.*ZDOID', log_lines))
+    connects = len(re.findall(r"Got handshake from client", log_lines))
+    disconnects = len(re.findall(r"Closing socket.*ZDOID", log_lines))
     return max(0, connects - disconnects)
 
 
@@ -205,14 +211,17 @@ def _world_format(world_path: Path) -> str:
 
 
 def _sanitize_name(name: str) -> str:
-    return re.sub(r'[^a-zA-Z0-9_\-]', '', name.strip())
+    return re.sub(r"[^a-zA-Z0-9_\-]", "", name.strip())
 
 
 # ── Valheim binary validators ─────────────────────────────────────────────────
 # Valheim 1.0 uses a binary protocol version tag (int32 LE = 41 = 0x29)
 # as the first meaningful integer in all world files.
 VALHEIM_V1_VERSION = 41
-VALHEIM_V1_VERSION_BYTES = VALHEIM_V1_VERSION.to_bytes(4, "little")  # b'\x29\x00\x00\x00'
+VALHEIM_V1_VERSION_BYTES = VALHEIM_V1_VERSION.to_bytes(
+    4, "little"
+)  # b'\x29\x00\x00\x00'
+
 
 def _validate_fwl2(data: bytes, expected_world_name: str) -> str | None:
     """Validate a .fwl2 file. Returns None if valid, error string if invalid.
@@ -232,7 +241,7 @@ def _validate_fwl2(data: bytes, expected_world_name: str) -> str | None:
         name_len = data[8]
         if 9 + name_len > len(data):
             return "Longitud de nombre de mundo inválida en .fwl2."
-        world_name_in_file = data[9:9 + name_len].decode("utf-8")
+        world_name_in_file = data[9 : 9 + name_len].decode("utf-8")
         if world_name_in_file != expected_world_name:
             return (
                 f"El nombre del mundo en .fwl2 ('{world_name_in_file}') "
@@ -255,14 +264,18 @@ def _validate_db2(data: bytes) -> str | None:
         return "Fichero .db2 demasiado pequeño para ser válido."
     version = int.from_bytes(data[0:4], "little")
     if version != VALHEIM_V1_VERSION:
-        return f"Versión de .db2 inesperada ({version}), se esperaba {VALHEIM_V1_VERSION}."
+        return (
+            f"Versión de .db2 inesperada ({version}), se esperaba {VALHEIM_V1_VERSION}."
+        )
     return None
 
 
 def _validate_ok(data: bytes) -> str | None:
     """Validate a .ok file. Must be exactly 4 bytes = protocol version."""
     if len(data) != 4:
-        return f"Fichero .ok tiene tamaño inesperado ({len(data)} bytes, se esperaban 4)."
+        return (
+            f"Fichero .ok tiene tamaño inesperado ({len(data)} bytes, se esperaban 4)."
+        )
     version = int.from_bytes(data, "little")
     if version != VALHEIM_V1_VERSION:
         return f"Fichero .ok con versión inesperada ({version})."
@@ -287,8 +300,8 @@ def _validate_world_files(dest: Path, world_name: str) -> list[str]:
     fatal: list[str] = []
 
     fwl2_files = list(dest.glob("*.fwl2"))
-    db2_files  = list(dest.glob("*.db2"))
-    ok_files   = list(dest.glob("*.ok"))
+    db2_files = list(dest.glob("*.db2"))
+    ok_files = list(dest.glob("*.ok"))
     chunk_files = list(dest.glob("*.chunk"))
 
     # Must have at least one .fwl2 and one .db2
@@ -344,7 +357,8 @@ async def get_network():
     try:
         fib = Path("/proc/net/fib_trie").read_text()
         import re as _re
-        candidates = _re.findall(r'(\d+\.\d+\.\d+\.\d+)', fib)
+
+        candidates = _re.findall(r"(\d+\.\d+\.\d+\.\d+)", fib)
         seen = set()
         for ip in candidates:
             if ip in seen:
@@ -371,33 +385,37 @@ async def serve_index():
     path = Path(__file__).parent / "static" / "index.html"
     content = path.read_text(encoding="utf-8")
     content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")
-    return HTMLResponse(content=content, headers={
-        "Cache-Control": "no-cache, no-store, must-revalidate"
-    })
+    return HTMLResponse(
+        content=content,
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
 @app.get("/api/status")
 async def get_status():
     env = read_env()
     status = {
-        "running":        False,
-        "world":          env.get("WORLD_NAME", "—"),
-        "server_name":    env.get("SERVER_NAME", "—"),
-        "crossplay":      env.get("CROSSPLAY", "0") == "true",
-        "join_code":      None,
-        "players":        0,
+        "running": False,
+        "world": env.get("WORLD_NAME", "—"),
+        "server_name": env.get("SERVER_NAME", "—"),
+        "crossplay": env.get("CROSSPLAY", "0") == "true",
+        "join_code": None,
+        "players": 0,
         "uptime_seconds": None,
     }
     try:
-        data  = await docker_get(f"/containers/{GAME_CONTAINER}/json")
+        data = await docker_get(f"/containers/{GAME_CONTAINER}/json")
         state = data.get("State", {})
         status["running"] = state.get("Status") == "running"
         started = state.get("StartedAt", "")
         if started and status["running"]:
             from datetime import datetime, timezone
+
             try:
                 dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
-                status["uptime_seconds"] = int((datetime.now(timezone.utc) - dt).total_seconds())
+                status["uptime_seconds"] = int(
+                    (datetime.now(timezone.utc) - dt).total_seconds()
+                )
             except Exception:
                 pass
     except Exception:
@@ -405,10 +423,10 @@ async def get_status():
     log = latest_log_file()
     if log and log.exists():
         try:
-            lines  = log.read_text(errors="replace").splitlines()
+            lines = log.read_text(errors="replace").splitlines()
             recent = "\n".join(lines[-500:])
             status["join_code"] = parse_join_code(recent)
-            status["players"]   = parse_players(recent)
+            status["players"] = parse_players(recent)
         except Exception:
             pass
     return status
@@ -418,24 +436,24 @@ async def get_status():
 def get_config():
     env = read_env()
     return {
-        "server_name":   env.get("SERVER_NAME", ""),
-        "world_name":    env.get("WORLD_NAME", ""),
-        "server_pass":   env.get("SERVER_PASS", ""),
+        "server_name": env.get("SERVER_NAME", ""),
+        "world_name": env.get("WORLD_NAME", ""),
+        "server_pass": env.get("SERVER_PASS", ""),
         "server_public": env.get("SERVER_PUBLIC", "0") == "1",
-        "crossplay":     env.get("CROSSPLAY", "false") == "true",
+        "crossplay": env.get("CROSSPLAY", "false") == "true",
         "save_interval": int(env.get("SAVE_INTERVAL", "1800")),
-        "backups":       int(env.get("BACKUPS", "4")),
+        "backups": int(env.get("BACKUPS", "4")),
     }
 
 
 class ConfigUpdate(BaseModel):
-    server_name:   str
-    world_name:    str
-    server_pass:   str
+    server_name: str
+    world_name: str
+    server_pass: str
     server_public: bool = False
-    crossplay:     bool = False
-    save_interval: int  = 1800
-    backups:       int  = 4
+    crossplay: bool = False
+    save_interval: int = 1800
+    backups: int = 4
 
 
 @app.post("/api/config")
@@ -445,13 +463,13 @@ async def update_config(cfg: ConfigUpdate):
     if not cfg.world_name.strip():
         raise HTTPException(400, "World name cannot be empty")
     env = read_env()
-    env["SERVER_NAME"]   = cfg.server_name
-    env["WORLD_NAME"]    = cfg.world_name
-    env["SERVER_PASS"]   = cfg.server_pass
+    env["SERVER_NAME"] = cfg.server_name
+    env["WORLD_NAME"] = cfg.world_name
+    env["SERVER_PASS"] = cfg.server_pass
     env["SERVER_PUBLIC"] = "1" if cfg.server_public else "0"
-    env["CROSSPLAY"]     = "true" if cfg.crossplay else "false"
+    env["CROSSPLAY"] = "true" if cfg.crossplay else "false"
     env["SAVE_INTERVAL"] = str(cfg.save_interval)
-    env["BACKUPS"]       = str(cfg.backups)
+    env["BACKUPS"] = str(cfg.backups)
     write_env(env)
     await recreate_game_container()
     return {"status": "ok", "message": "Config saved, server restarting…"}
@@ -462,22 +480,24 @@ def list_worlds():
     """List available world folders."""
     if not WORLDS_DIR.exists():
         return {"worlds": [], "active": None}
-    env    = read_env()
+    env = read_env()
     active = env.get("WORLD_NAME", "")
     worlds = []
     for p in sorted(WORLDS_DIR.iterdir()):
         if not p.is_dir():
             continue
         # Skip backup folders created by the game engine
-        if re.search(r'_backup_(auto|20\d{6})', p.name, re.IGNORECASE):
+        if re.search(r"_backup_(auto|20\d{6})", p.name, re.IGNORECASE):
             continue
         fmt = _world_format(p)
-        worlds.append({
-            "name":     p.name,
-            "active":   p.name == active,
-            "has_data": fmt != "empty",
-            "format":   fmt,   # 'v1' | 'legacy' | 'empty'
-        })
+        worlds.append(
+            {
+                "name": p.name,
+                "active": p.name == active,
+                "has_data": fmt != "empty",
+                "format": fmt,  # 'v1' | 'legacy' | 'empty'
+            }
+        )
     return {"worlds": worlds, "active": active}
 
 
@@ -493,7 +513,11 @@ async def create_world(world_name: str = Form(...)):
     if world_path.exists():
         raise HTTPException(400, f"World '{safe}' already exists")
     world_path.mkdir(parents=True, exist_ok=True)
-    return {"status": "ok", "world": safe, "message": f"World '{safe}' created. Activate it to start playing."}
+    return {
+        "status": "ok",
+        "world": safe,
+        "message": f"World '{safe}' created. Activate it to start playing.",
+    }
 
 
 @app.post("/api/worlds/activate")
@@ -505,8 +529,11 @@ async def activate_world(world_name: str = Form(...)):
     env["WORLD_NAME"] = world_name
     write_env(env)
     action = await recreate_game_container()
-    return {"status": "ok", "action": action,
-            "message": f"Switched to {world_name}, server {action}…"}
+    return {
+        "status": "ok",
+        "action": action,
+        "message": f"Switched to {world_name}, server {action}…",
+    }
 
 
 @app.post("/api/worlds/upload")
@@ -537,18 +564,23 @@ async def upload_world(file: UploadFile = File(...)):
         raise HTTPException(
             400,
             "Sube un fichero .zip con la carpeta del mundo (formato Valheim 1.0). "
-            "Si tienes un save antiguo (.db + .fwl), usa la opción 'Subir backup legacy'."
+            "Si tienes un save antiguo (.db + .fwl), usa la opción 'Subir backup legacy'.",
         )
 
     content = await file.read()
     if len(content) < 10:
         raise HTTPException(400, "El fichero zip está vacío.")
     if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(400, f"El fichero supera el límite de {MAX_UPLOAD_BYTES // (1024*1024)} MB.")
+        raise HTTPException(
+            400,
+            f"El fichero supera el límite de {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+        )
 
     # ── Validate zip and extract world name ──────────────────────────────────
     try:
-        with zipfile.ZipFile(tempfile.SpooledTemporaryFile(max_size=MAX_UPLOAD_BYTES)) as _test:
+        with zipfile.ZipFile(
+            tempfile.SpooledTemporaryFile(max_size=MAX_UPLOAD_BYTES)
+        ) as _test:
             pass
     except Exception:
         pass
@@ -572,14 +604,14 @@ async def upload_world(file: UploadFile = File(...)):
 
             # Check for Valheim 1.0 files anywhere in the zip
             all_exts = {Path(n).suffix.lower() for n in names}
-            has_v1   = bool(all_exts & {".db2", ".fwl2"})
+            has_v1 = bool(all_exts & {".db2", ".fwl2"})
             has_legacy = bool(all_exts & {".db", ".fwl"})
 
             if not has_v1 and not has_legacy:
                 raise HTTPException(
                     400,
                     "El zip no contiene ficheros de save de Valheim. "
-                    "Debe incluir ficheros .db2/.fwl2 (formato 1.0) o .db/.fwl (backup)."
+                    "Debe incluir ficheros .db2/.fwl2 (formato 1.0) o .db/.fwl (backup).",
                 )
 
             # Determine world name from zip structure
@@ -591,12 +623,14 @@ async def upload_world(file: UploadFile = File(...)):
                     if Path(n).suffix.lower() in (".fwl2", ".fwl"):
                         stem = Path(n).stem
                         # Remove Valheim internal prefix _main.N
-                        stem = re.sub(r'^_main\.\d+', '', stem).strip(".")
+                        stem = re.sub(r"^_main\.\d+", "", stem).strip(".")
                         if stem:
                             world_name = stem
                             break
                 else:
-                    raise HTTPException(400, "No se pudo determinar el nombre del mundo desde el zip.")
+                    raise HTTPException(
+                        400, "No se pudo determinar el nombre del mundo desde el zip."
+                    )
             else:
                 raise HTTPException(400, "Estructura de zip no reconocida.")
 
@@ -604,12 +638,14 @@ async def upload_world(file: UploadFile = File(...)):
             world_name = _sanitize_name(world_name)
             if not world_name:
                 raise HTTPException(400, "Nombre de mundo inválido en el zip.")
-            if not re.match(r'^[a-zA-Z0-9_\-]+$', world_name):
+            if not re.match(r"^[a-zA-Z0-9_\-]+$", world_name):
                 raise HTTPException(400, f"Nombre de mundo inválido: '{world_name}'.")
 
             dest = WORLDS_DIR / world_name
             if dest.exists():
-                raise HTTPException(400, f"El mundo '{world_name}' ya existe. Bórralo primero.")
+                raise HTTPException(
+                    400, f"El mundo '{world_name}' ya existe. Bórralo primero."
+                )
 
             # Extract
             dest.mkdir(parents=True, exist_ok=True)
@@ -650,13 +686,17 @@ async def upload_world(file: UploadFile = File(...)):
                 raise
 
         return {
-            "status":   "ok",
-            "world":    world_name,
-            "format":   fmt,
-            "files":    file_count,
+            "status": "ok",
+            "world": world_name,
+            "format": fmt,
+            "files": file_count,
             "warnings": validation_warnings,
-            "message":  f"Mundo '{world_name}' importado ({file_count} ficheros, formato {fmt})."
-                        + (f" ⚠️ {len(validation_warnings)} aviso(s)." if validation_warnings else ""),
+            "message": f"Mundo '{world_name}' importado ({file_count} ficheros, formato {fmt})."
+            + (
+                f" ⚠️ {len(validation_warnings)} aviso(s)."
+                if validation_warnings
+                else ""
+            ),
         }
 
     except HTTPException:
@@ -678,19 +718,26 @@ async def upload_world_legacy(files: list[UploadFile] = File(...)):
     Used for pre-1.0 saves and backup files generated by the Valheim server.
     """
     if len(files) != 2:
-        raise HTTPException(400, f"Se esperan 2 ficheros (.db y .fwl), se recibieron {len(files)}.")
+        raise HTTPException(
+            400, f"Se esperan 2 ficheros (.db y .fwl), se recibieron {len(files)}."
+        )
 
     exts = sorted(Path(f.filename).suffix.lower() for f in files)
     if exts != [".db", ".fwl"]:
-        raise HTTPException(400, f"Se esperan un .db y un .fwl. Recibido: {', '.join(exts)}.")
+        raise HTTPException(
+            400, f"Se esperan un .db y un .fwl. Recibido: {', '.join(exts)}."
+        )
 
     base_names = {Path(f.filename).stem for f in files}
     if len(base_names) != 1:
         names_str = " y ".join(f'"{n}"' for n in sorted(base_names))
-        raise HTTPException(400, f"Los dos ficheros deben tener el mismo nombre de mundo. Encontrado: {names_str}.")
+        raise HTTPException(
+            400,
+            f"Los dos ficheros deben tener el mismo nombre de mundo. Encontrado: {names_str}.",
+        )
 
     world_name = _sanitize_name(next(iter(base_names)))
-    if not world_name or not re.match(r'^[a-zA-Z0-9_\-]+$', world_name):
+    if not world_name or not re.match(r"^[a-zA-Z0-9_\-]+$", world_name):
         raise HTTPException(400, f"Nombre de mundo inválido: '{world_name}'.")
 
     dest = WORLDS_DIR / world_name
@@ -703,7 +750,10 @@ async def upload_world_legacy(files: list[UploadFile] = File(...)):
         if len(content) < 10:
             raise HTTPException(400, f"El fichero '{f.filename}' está vacío.")
         if len(content) > MAX_UPLOAD_BYTES:
-            raise HTTPException(400, f"El fichero '{f.filename}' supera el límite de {MAX_UPLOAD_BYTES // (1024*1024)} MB.")
+            raise HTTPException(
+                400,
+                f"El fichero '{f.filename}' supera el límite de {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+            )
         file_contents.append((f.filename, content))
 
     dest.mkdir(parents=True, exist_ok=True)
@@ -712,16 +762,23 @@ async def upload_world_legacy(files: list[UploadFile] = File(...)):
         (dest / filename).write_bytes(content)
         saved.append(filename)
 
-    return {"status": "ok", "world": world_name, "files": saved,
-            "message": f"Mundo '{world_name}' importado (backup legacy)."}
+    return {
+        "status": "ok",
+        "world": world_name,
+        "files": saved,
+        "message": f"Mundo '{world_name}' importado (backup legacy).",
+    }
 
 
 @app.delete("/api/worlds/{world_name}")
 async def delete_world(world_name: str):
-    env    = read_env()
+    env = read_env()
     active = env.get("WORLD_NAME", "")
     if world_name == active:
-        raise HTTPException(400, f"No puedes borrar el mundo activo '{world_name}'. Activa otro primero.")
+        raise HTTPException(
+            400,
+            f"No puedes borrar el mundo activo '{world_name}'. Activa otro primero.",
+        )
     world_path = WORLDS_DIR / world_name
     if not world_path.exists():
         raise HTTPException(404, f"Mundo '{world_name}' no encontrado.")
