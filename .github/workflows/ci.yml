@@ -1,18 +1,16 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-# Smart Home - Build, Test and Deploy Pipeline
+# Smart Home - CI/CD Pipeline
 # 
 # Flow:
-#   1. Build: detect changes, lint, build Docker images
-#   2. Test: run unit tests for changed services
-#   3. Deploy: manual approval, then deploy changed services to Pi
+#   1. Prepare: detect changes, build service matrix
+#   2. Lint & Test: ruff, bandit, hadolint, then pytest if all pass
+#   3. Quality Gate: verify all checks passed
+#   4. Deploy: build Docker images and deploy to Pi
 #
 # Manual trigger:
 #   gh workflow run ci.yml --repo EgnalZurc/smart-home                        # auto-detect changes
 #   gh workflow run ci.yml -f service=all --repo EgnalZurc/smart-home         # all services
 #   gh workflow run ci.yml -f service=dashboard --repo EgnalZurc/smart-home   # single service
-#
-# Deploy approval:
-#   gh run review <run-id> --approve --repo EgnalZurc/smart-home
 # ═══════════════════════════════════════════════════════════════════════════════
 
 name: Build, Test and Deploy
@@ -51,9 +49,9 @@ env:
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
-  # Build: detect changes, lint, build Docker images
+  # Prepare: detect changes, build service matrix
   # ─────────────────────────────────────────────────────────────────────────────
-  build:
+  prepare:
     runs-on: ubuntu-24.04
     outputs:
       dashboard: ${{ steps.changes.outputs.dashboard }}
@@ -67,12 +65,14 @@ jobs:
       nginx: ${{ steps.changes.outputs.nginx }}
       compose: ${{ steps.changes.outputs.compose }}
       any-service: ${{ steps.changes.outputs.any-service }}
+      any-python: ${{ steps.changes.outputs.any-python }}
+      any-docker: ${{ steps.changes.outputs.any-docker }}
       services-matrix: ${{ steps.matrix.outputs.services }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       # ── Detect changes ──
-      - uses: dorny/paths-filter@v4
+      - uses: dorny/paths-filter@v3
         id: filter
         if: ${{ github.event.inputs.service == 'auto' || github.event.inputs.service == '' }}
         with:
@@ -101,27 +101,31 @@ jobs:
               - 'infrastructure/**'
               - 'docker-compose*.yml'
 
-      - name: Determine services to build
+      - name: Determine services to process
         id: changes
         run: |
           SERVICE="${{ github.event.inputs.service }}"
           FORCE_DEPLOY="${{ github.event.inputs.force_deploy }}"
           
-          DASHBOARD=false; AC_SERVICE=false; BABY_GIFTS=false; PORTFOLIO_MONITOR=false; VACACIONES=false; CASITA=false; VAULTWARDEN=false; VALHEIM_ADMIN=false; NGINX=false; COMPOSE=false
+          DASHBOARD=false; AC_SERVICE=false; BABY_GIFTS=false; PORTFOLIO_MONITOR=false
+          VACACIONES=false; CASITA=false; VAULTWARDEN=false; VALHEIM_ADMIN=false
+          NGINX=false; COMPOSE=false
           
           case "$SERVICE" in
             all)
-              echo "🔄 Building ALL services"
-              DASHBOARD=true; AC_SERVICE=true; BABY_GIFTS=true; PORTFOLIO_MONITOR=true; VACACIONES=true; CASITA=true; VAULTWARDEN=true; VALHEIM_ADMIN=true; NGINX=true; COMPOSE=true
+              echo "🔄 Processing ALL services"
+              DASHBOARD=true; AC_SERVICE=true; BABY_GIFTS=true; PORTFOLIO_MONITOR=true
+              VACACIONES=true; CASITA=true; VAULTWARDEN=true; VALHEIM_ADMIN=true
+              NGINX=true; COMPOSE=true
               ;;
-            dashboard)         echo "🎯 Building: dashboard";         DASHBOARD=true ;;
-            ac-service)        echo "🎯 Building: ac-service";        AC_SERVICE=true ;;
-            baby-gifts)        echo "🎯 Building: baby-gifts";        BABY_GIFTS=true ;;
-            portfolio-monitor) echo "🎯 Building: portfolio-monitor"; PORTFOLIO_MONITOR=true ;;
-            vacaciones)        echo "🎯 Building: vacaciones";        VACACIONES=true ;;
-            casita)            echo "🎯 Building: casita";            CASITA=true ;;
-            vaultwarden)       echo "🎯 Building: vaultwarden";       VAULTWARDEN=true ;;
-            valheim-admin)     echo "🎯 Building: valheim-admin";     VALHEIM_ADMIN=true ;;
+            dashboard)         echo "🎯 Processing: dashboard";         DASHBOARD=true ;;
+            ac-service)        echo "🎯 Processing: ac-service";        AC_SERVICE=true ;;
+            baby-gifts)        echo "🎯 Processing: baby-gifts";        BABY_GIFTS=true ;;
+            portfolio-monitor) echo "🎯 Processing: portfolio-monitor"; PORTFOLIO_MONITOR=true ;;
+            vacaciones)        echo "🎯 Processing: vacaciones";        VACACIONES=true ;;
+            casita)            echo "🎯 Processing: casita";            CASITA=true ;;
+            vaultwarden)       echo "🎯 Processing: vaultwarden";       VAULTWARDEN=true ;;
+            valheim-admin)     echo "🎯 Processing: valheim-admin";     VALHEIM_ADMIN=true ;;
             *)
               echo "🔍 Auto-detecting changed services"
               DASHBOARD=${{ steps.filter.outputs.dashboard }}
@@ -137,6 +141,7 @@ jobs:
               ;;
           esac
           
+          # Output individual service flags
           echo "dashboard=$DASHBOARD" >> $GITHUB_OUTPUT
           echo "ac-service=$AC_SERVICE" >> $GITHUB_OUTPUT
           echo "baby-gifts=$BABY_GIFTS" >> $GITHUB_OUTPUT
@@ -148,17 +153,37 @@ jobs:
           echo "nginx=$NGINX" >> $GITHUB_OUTPUT
           echo "compose=$COMPOSE" >> $GITHUB_OUTPUT
           
+          # Check if any service changed
           if [[ "$DASHBOARD" == "true" ]] || [[ "$AC_SERVICE" == "true" ]] || \
              [[ "$BABY_GIFTS" == "true" ]] || [[ "$PORTFOLIO_MONITOR" == "true" ]] || \
-             [[ "$VACACIONES" == "true" ]] || \
-             [[ "$CASITA" == "true" ]] || [[ "$VAULTWARDEN" == "true" ]] || \
-             [[ "$VALHEIM_ADMIN" == "true" ]] || [[ "$NGINX" == "true" ]] || \
-             [[ "$COMPOSE" == "true" ]] || \
+             [[ "$VACACIONES" == "true" ]] || [[ "$CASITA" == "true" ]] || \
+             [[ "$VAULTWARDEN" == "true" ]] || [[ "$VALHEIM_ADMIN" == "true" ]] || \
+             [[ "$NGINX" == "true" ]] || [[ "$COMPOSE" == "true" ]] || \
              [[ "${{ steps.filter.outputs.infrastructure }}" == "true" ]] || \
              [[ "$FORCE_DEPLOY" == "true" ]]; then
             echo "any-service=true" >> $GITHUB_OUTPUT
           else
             echo "any-service=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Check if any Python service changed (for ruff/bandit)
+          if [[ "$DASHBOARD" == "true" ]] || [[ "$AC_SERVICE" == "true" ]] || \
+             [[ "$BABY_GIFTS" == "true" ]] || [[ "$PORTFOLIO_MONITOR" == "true" ]] || \
+             [[ "$VACACIONES" == "true" ]] || [[ "$CASITA" == "true" ]] || \
+             [[ "$VALHEIM_ADMIN" == "true" ]]; then
+            echo "any-python=true" >> $GITHUB_OUTPUT
+          else
+            echo "any-python=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Check if any Dockerfile changed (for hadolint)
+          if [[ "$DASHBOARD" == "true" ]] || [[ "$AC_SERVICE" == "true" ]] || \
+             [[ "$BABY_GIFTS" == "true" ]] || [[ "$PORTFOLIO_MONITOR" == "true" ]] || \
+             [[ "$VACACIONES" == "true" ]] || [[ "$CASITA" == "true" ]] || \
+             [[ "$VAULTWARDEN" == "true" ]] || [[ "$VALHEIM_ADMIN" == "true" ]]; then
+            echo "any-docker=true" >> $GITHUB_OUTPUT
+          else
+            echo "any-docker=false" >> $GITHUB_OUTPUT
           fi
 
       # ── Build matrix for deploy ──
@@ -194,68 +219,10 @@ jobs:
           echo "services=$SERVICES" >> $GITHUB_OUTPUT
           echo "Deploy matrix: $SERVICES"
 
-      # ── Setup Python for linting ──
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-
-      - name: Install ruff
-        run: pip install ruff
-
-      # ── Lint changed services ──
-      - name: Lint dashboard
-        if: ${{ steps.changes.outputs.dashboard == 'true' }}
+      # ── Prepare summary ──
+      - name: Prepare Summary
         run: |
-          echo "::group::Lint dashboard"
-          ruff check dashboard/src --output-format=github || true
-          ruff format dashboard/src --check --diff || true
-          echo "::endgroup::"
-
-      - name: Lint ac-service
-        if: ${{ steps.changes.outputs.ac-service == 'true' }}
-        run: |
-          echo "::group::Lint ac-service"
-          ruff check services/ac-service/src --output-format=github || true
-          ruff format services/ac-service/src --check --diff || true
-          echo "::endgroup::"
-
-      - name: Lint baby-gifts-service
-        if: ${{ steps.changes.outputs.baby-gifts == 'true' }}
-        run: |
-          echo "::group::Lint baby-gifts-service"
-          ruff check services/baby-gifts-service/src --output-format=github || true
-          ruff format services/baby-gifts-service/src --check --diff || true
-          echo "::endgroup::"
-
-      - name: Lint portfolio-monitor
-        if: ${{ steps.changes.outputs.portfolio-monitor == 'true' }}
-        run: |
-          echo "::group::Lint portfolio-monitor"
-          ruff check services/portfolio-monitor/src --output-format=github || true
-          ruff format services/portfolio-monitor/src --check --diff || true
-          echo "::endgroup::"
-
-      - name: Lint vacaciones-service
-        if: ${{ steps.changes.outputs.vacaciones == 'true' }}
-        run: |
-          echo "::group::Lint vacaciones-service"
-          ruff check services/vacaciones-service/src --output-format=github || true
-          ruff format services/vacaciones-service/src --check --diff || true
-          echo "::endgroup::"
-
-      - name: Lint casita-suenos
-        if: ${{ steps.changes.outputs.casita == 'true' }}
-        run: |
-          echo "::group::Lint casita-suenos"
-          ruff check services/casita-suenos/fase3-app/src --output-format=github || true
-          ruff format services/casita-suenos/fase3-app/src --check --diff || true
-          echo "::endgroup::"
-
-      # ── Build summary ──
-      - name: Build Summary
-        run: |
-          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 📋 Prepare Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Service | Changed |" >> $GITHUB_STEP_SUMMARY
           echo "|---------|---------|" >> $GITHUB_STEP_SUMMARY
@@ -271,246 +238,301 @@ jobs:
           echo "| compose | ${{ steps.changes.outputs.compose }} |" >> $GITHUB_STEP_SUMMARY
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Test Dashboard
+  # Lint & Test: ruff + bandit + hadolint + pytest
   # ─────────────────────────────────────────────────────────────────────────────
-  test-dashboard:
-    needs: build
-    if: ${{ needs.build.outputs.dashboard == 'true' }}
+  lint-and-test:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.any-service == 'true' }}
     runs-on: ubuntu-24.04
+    outputs:
+      ruff-passed: ${{ steps.ruff.outputs.passed }}
+      bandit-passed: ${{ steps.bandit.outputs.passed }}
+      hadolint-passed: ${{ steps.hadolint.outputs.passed }}
+      tests-passed: ${{ steps.tests.outputs.passed }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: 'dashboard/requirements.txt'
-      - name: Install dependencies
-        run: |
-          pip install -r dashboard/requirements.txt
-          pip install pytest pytest-asyncio
-      - name: Run tests
-        run: cd dashboard && python -m pytest tests/ -v --tb=short
-        env:
-          PYTHONPATH: src
+      - uses: actions/checkout@v4
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Test AC Service
-  # ─────────────────────────────────────────────────────────────────────────────
-  test-ac-service:
-    needs: build
-    if: ${{ needs.build.outputs.ac-service == 'true' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: 'services/ac-service/requirements.txt'
-      - name: Install dependencies
-        run: |
-          pip install -r services/ac-service/requirements.txt
-          pip install pytest pytest-asyncio
-      - name: Run tests
-        run: cd services/ac-service && python -m pytest tests/ -v --tb=short || echo "No tests found"
-        env:
-          PYTHONPATH: src
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Test Baby Gifts Service
-  # ─────────────────────────────────────────────────────────────────────────────
-  test-baby-gifts:
-    needs: build
-    if: ${{ needs.build.outputs.baby-gifts == 'true' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: 'services/baby-gifts-service/requirements.txt'
-      - name: Install dependencies
-        run: |
-          pip install -r services/baby-gifts-service/requirements.txt
-          pip install pytest pytest-asyncio
-      - name: Run tests
-        run: cd services/baby-gifts-service && python -m pytest tests/ -v --tb=short || echo "No tests found"
-        env:
-          PYTHONPATH: src
+      - name: Install lint tools
+        run: pip install ruff bandit
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Test Portfolio Monitor Service
-  # ─────────────────────────────────────────────────────────────────────────────
-  test-portfolio-monitor:
-    needs: build
-    if: ${{ needs.build.outputs.portfolio-monitor == 'true' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: 'services/portfolio-monitor/requirements.txt'
-      - name: Install dependencies
+      - name: Install Hadolint
         run: |
-          pip install -r services/portfolio-monitor/requirements.txt
-          pip install pytest pytest-asyncio
-      - name: Run tests
-        run: cd services/portfolio-monitor && python -m pytest tests/ -v --tb=short || echo "No tests found"
-        env:
-          PYTHONPATH: src
+          wget -qO /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          chmod +x /usr/local/bin/hadolint
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Test Vacaciones Service
-  # ─────────────────────────────────────────────────────────────────────────────
-  test-vacaciones:
-    needs: build
-    if: ${{ needs.build.outputs.vacaciones == 'true' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: 'services/vacaciones-service/requirements.txt'
-      - name: Install dependencies
+      # ── Ruff (linting + formatting) ──
+      - name: Ruff - Code Quality
+        id: ruff
+        if: ${{ needs.prepare.outputs.any-python == 'true' }}
         run: |
-          pip install -r services/vacaciones-service/requirements.txt
-          pip install pytest pytest-asyncio
-      - name: Run tests
-        run: cd services/vacaciones-service && python -m pytest tests/ -v --tb=short || echo "No tests found"
-        env:
-          PYTHONPATH: src
+          echo "::group::Ruff Lint & Format Check"
+          FAILED=false
+          
+          check_ruff() {
+            local name=$1
+            local path=$2
+            local changed=$3
+            if [[ "$changed" != "true" ]]; then return; fi
+            echo "=== $name ==="
+            ruff check "$path" --output-format=github || FAILED=true
+            ruff format "$path" --check --diff || FAILED=true
+          }
+          
+          check_ruff "Dashboard" "dashboard/src" "${{ needs.prepare.outputs.dashboard }}"
+          check_ruff "AC Service" "services/ac-service/src" "${{ needs.prepare.outputs.ac-service }}"
+          check_ruff "Baby Gifts" "services/baby-gifts-service/src" "${{ needs.prepare.outputs.baby-gifts }}"
+          check_ruff "Portfolio Monitor" "services/portfolio-monitor/src" "${{ needs.prepare.outputs.portfolio-monitor }}"
+          check_ruff "Vacaciones" "services/vacaciones-service/src" "${{ needs.prepare.outputs.vacaciones }}"
+          check_ruff "Casita" "services/casita-suenos/fase3-app/src" "${{ needs.prepare.outputs.casita }}"
+          check_ruff "Valheim Admin" "services/valheim-admin/src" "${{ needs.prepare.outputs.valheim-admin }}"
+          
+          echo "::endgroup::"
+          
+          if [[ "$FAILED" == "true" ]]; then
+            echo "passed=false" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "passed=true" >> $GITHUB_OUTPUT
+          fi
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Test Casita Sueños
-  # ─────────────────────────────────────────────────────────────────────────────
-  test-casita:
-    needs: build
-    if: ${{ needs.build.outputs.casita == 'true' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: 'services/casita-suenos/fase3-app/requirements.txt'
-      - name: Install dependencies
+      # ── Bandit (security) ──
+      - name: Bandit - Security Check
+        id: bandit
+        if: ${{ needs.prepare.outputs.any-python == 'true' && (success() || failure()) }}
         run: |
-          pip install -r services/casita-suenos/fase3-app/requirements.txt
-          pip install pytest pytest-asyncio
-      - name: Run tests
-        run: cd services/casita-suenos/fase3-app && python -m pytest tests/ -v --tb=short || echo "No tests found"
-        env:
-          PYTHONPATH: src
+          echo "::group::Bandit Security Scan"
+          FAILED=false
+          
+          check_bandit() {
+            local name=$1
+            local path=$2
+            local changed=$3
+            if [[ "$changed" != "true" ]]; then return; fi
+            echo "=== $name ==="
+            bandit -r "$path" -ll -ii --format txt || FAILED=true
+          }
+          
+          check_bandit "Dashboard" "dashboard/src" "${{ needs.prepare.outputs.dashboard }}"
+          check_bandit "AC Service" "services/ac-service/src" "${{ needs.prepare.outputs.ac-service }}"
+          check_bandit "Baby Gifts" "services/baby-gifts-service/src" "${{ needs.prepare.outputs.baby-gifts }}"
+          check_bandit "Portfolio Monitor" "services/portfolio-monitor/src" "${{ needs.prepare.outputs.portfolio-monitor }}"
+          check_bandit "Vacaciones" "services/vacaciones-service/src" "${{ needs.prepare.outputs.vacaciones }}"
+          check_bandit "Casita" "services/casita-suenos/fase3-app/src" "${{ needs.prepare.outputs.casita }}"
+          check_bandit "Valheim Admin" "services/valheim-admin/src" "${{ needs.prepare.outputs.valheim-admin }}"
+          
+          echo "::endgroup::"
+          
+          if [[ "$FAILED" == "true" ]]; then
+            echo "passed=false" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "passed=true" >> $GITHUB_OUTPUT
+          fi
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Test Vaultwarden (Dockerfile config tests only - no runtime tests)
-  # ─────────────────────────────────────────────────────────────────────────────
-  test-vaultwarden:
-    needs: build
-    if: ${{ needs.build.outputs.vaultwarden == 'true' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
+      # ── Hadolint (Dockerfile best practices) ──
+      - name: Hadolint - Dockerfile Check
+        id: hadolint
+        if: ${{ needs.prepare.outputs.any-docker == 'true' && (success() || failure()) }}
+        run: |
+          echo "::group::Hadolint Dockerfile Check"
+          FAILED=false
+          
+          check_hadolint() {
+            local name=$1
+            local dockerfile=$2
+            local changed=$3
+            if [[ "$changed" != "true" ]]; then return; fi
+            if [[ ! -f "$dockerfile" ]]; then return; fi
+            echo "=== $name ==="
+            hadolint "$dockerfile" || FAILED=true
+          }
+          
+          check_hadolint "Dashboard" "dashboard/Dockerfile" "${{ needs.prepare.outputs.dashboard }}"
+          check_hadolint "AC Service" "services/ac-service/Dockerfile" "${{ needs.prepare.outputs.ac-service }}"
+          check_hadolint "Baby Gifts" "services/baby-gifts-service/Dockerfile" "${{ needs.prepare.outputs.baby-gifts }}"
+          check_hadolint "Portfolio Monitor" "services/portfolio-monitor/Dockerfile" "${{ needs.prepare.outputs.portfolio-monitor }}"
+          check_hadolint "Vacaciones" "services/vacaciones-service/Dockerfile" "${{ needs.prepare.outputs.vacaciones }}"
+          check_hadolint "Casita" "services/casita-suenos/fase3-app/Dockerfile" "${{ needs.prepare.outputs.casita }}"
+          check_hadolint "Vaultwarden" "services/vaultwarden/Dockerfile" "${{ needs.prepare.outputs.vaultwarden }}"
+          check_hadolint "Valheim Admin" "services/valheim-admin/Dockerfile" "${{ needs.prepare.outputs.valheim-admin }}"
+          
+          echo "::endgroup::"
+          
+          if [[ "$FAILED" == "true" ]]; then
+            echo "passed=false" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "passed=true" >> $GITHUB_OUTPUT
+          fi
+
+      # ── Pytest (only if lint checks passed) ──
       - name: Install test dependencies
-        run: pip install pytest
-      - name: Run Dockerfile tests
-        run: cd services/vaultwarden && python -m pytest tests/test_dockerfile.py -v --tb=short
+        if: ${{ steps.ruff.outputs.passed == 'true' && steps.bandit.outputs.passed == 'true' && steps.hadolint.outputs.passed == 'true' }}
+        run: pip install pytest pytest-asyncio httpx
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Test Valheim Admin
-  # ─────────────────────────────────────────────────────────────────────────────
-  test-valheim-admin:
-    needs: build
-    if: ${{ needs.build.outputs.valheim-admin == 'true' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: 'services/valheim-admin/requirements.txt'
-      - name: Install dependencies
+      - name: Run Tests
+        id: tests
+        if: ${{ steps.ruff.outputs.passed == 'true' && steps.bandit.outputs.passed == 'true' && steps.hadolint.outputs.passed == 'true' }}
         run: |
-          pip install -r services/valheim-admin/requirements.txt
-          pip install pytest pytest-asyncio
-      - name: Run tests
-        run: cd services/valheim-admin && python -m pytest tests/ -v --tb=short
-        env:
-          PYTHONPATH: src
+          echo "::group::Pytest"
+          FAILED=false
+          
+          run_tests() {
+            local name=$1
+            local path=$2
+            local changed=$3
+            if [[ "$changed" != "true" ]]; then return; fi
+            if [[ ! -d "$path/tests" ]]; then
+              echo "⏭️  $name - no tests directory"
+              return
+            fi
+            echo "=== $name ==="
+            pip install -r "$path/requirements.txt" --quiet 2>/dev/null || true
+            cd "$path" && PYTHONPATH=src python -m pytest tests/ -v --tb=short && cd - > /dev/null || FAILED=true
+          }
+          
+          run_tests "Dashboard" "dashboard" "${{ needs.prepare.outputs.dashboard }}"
+          run_tests "AC Service" "services/ac-service" "${{ needs.prepare.outputs.ac-service }}"
+          run_tests "Baby Gifts" "services/baby-gifts-service" "${{ needs.prepare.outputs.baby-gifts }}"
+          run_tests "Portfolio Monitor" "services/portfolio-monitor" "${{ needs.prepare.outputs.portfolio-monitor }}"
+          run_tests "Vacaciones" "services/vacaciones-service" "${{ needs.prepare.outputs.vacaciones }}"
+          run_tests "Casita" "services/casita-suenos/fase3-app" "${{ needs.prepare.outputs.casita }}"
+          run_tests "Vaultwarden" "services/vaultwarden" "${{ needs.prepare.outputs.vaultwarden }}"
+          run_tests "Valheim Admin" "services/valheim-admin" "${{ needs.prepare.outputs.valheim-admin }}"
+          
+          echo "::endgroup::"
+          
+          if [[ "$FAILED" == "true" ]]; then
+            echo "passed=false" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "passed=true" >> $GITHUB_OUTPUT
+          fi
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Test Summary - gate for deploy
+  # Quality Gate: verify all checks passed
   # ─────────────────────────────────────────────────────────────────────────────
-  test-summary:
-    needs: [build, test-dashboard, test-ac-service, test-baby-gifts, test-portfolio-monitor, test-vacaciones, test-casita, test-vaultwarden, test-valheim-admin]
+  quality-gate:
+    needs: [prepare, lint-and-test]
     if: always()
     runs-on: ubuntu-24.04
     steps:
-      - name: Check test results
+      - name: Check Quality Results
         run: |
-          echo "=== Test Summary ==="
+          echo "## 🚦 Quality Gate" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          RUFF="${{ needs.lint-and-test.outputs.ruff-passed }}"
+          BANDIT="${{ needs.lint-and-test.outputs.bandit-passed }}"
+          HADOLINT="${{ needs.lint-and-test.outputs.hadolint-passed }}"
+          TESTS="${{ needs.lint-and-test.outputs.tests-passed }}"
+          JOB_RESULT="${{ needs.lint-and-test.result }}"
+          
+          # Handle skipped job (no changes)
+          if [[ "$JOB_RESULT" == "skipped" ]]; then
+            echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+            echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+            echo "| All checks | ⏭️ Skipped (no changes) |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ No services changed - nothing to check" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          
           FAILED=false
-          for result in "${{ needs.test-dashboard.result }}" "${{ needs.test-ac-service.result }}" \
-                        "${{ needs.test-baby-gifts.result }}" "${{ needs.test-portfolio-monitor.result }}" \
-                        "${{ needs.test-vacaciones.result }}" \
-                        "${{ needs.test-casita.result }}" "${{ needs.test-vaultwarden.result }}" \
-                        "${{ needs.test-valheim-admin.result }}"; do
-            [[ "$result" == "failure" ]] && FAILED=true
-          done
+          
+          # Ruff
+          if [[ "$RUFF" == "true" ]]; then
+            echo "| Ruff (lint) | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          elif [[ "$RUFF" == "false" ]]; then
+            echo "| Ruff (lint) | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            FAILED=true
+          else
+            echo "| Ruff (lint) | ⏭️ Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Bandit
+          if [[ "$BANDIT" == "true" ]]; then
+            echo "| Bandit (security) | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          elif [[ "$BANDIT" == "false" ]]; then
+            echo "| Bandit (security) | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            FAILED=true
+          else
+            echo "| Bandit (security) | ⏭️ Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Hadolint
+          if [[ "$HADOLINT" == "true" ]]; then
+            echo "| Hadolint (Docker) | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          elif [[ "$HADOLINT" == "false" ]]; then
+            echo "| Hadolint (Docker) | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            FAILED=true
+          else
+            echo "| Hadolint (Docker) | ⏭️ Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Tests
+          if [[ "$TESTS" == "true" ]]; then
+            echo "| Pytest (tests) | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          elif [[ "$TESTS" == "false" ]]; then
+            echo "| Pytest (tests) | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            FAILED=true
+          else
+            echo "| Pytest (tests) | ⏭️ Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
           
           if [[ "$FAILED" == "true" ]]; then
-            echo "❌ Some tests failed"
+            echo "❌ **Quality gate failed** - fix issues before deploy" >> $GITHUB_STEP_SUMMARY
             exit 1
           else
-            echo "✅ All tests passed (or skipped)"
+            echo "✅ **Quality gate passed** - ready for deploy" >> $GITHUB_STEP_SUMMARY
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Deploy - matrix strategy with single approval
   # ─────────────────────────────────────────────────────────────────────────────
   deploy:
-    needs: [build, test-summary]
+    needs: [prepare, quality-gate]
     if: |
       always() &&
-      needs.test-summary.result == 'success' &&
-      needs.build.outputs.any-service == 'true' &&
-      needs.build.outputs.services-matrix != '[]' &&
+      needs.quality-gate.result == 'success' &&
+      needs.prepare.outputs.any-service == 'true' &&
+      needs.prepare.outputs.services-matrix != '[]' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment: production
     strategy:
       matrix:
-        service: ${{ fromJson(needs.build.outputs.services-matrix) }}
+        service: ${{ fromJson(needs.prepare.outputs.services-matrix) }}
       fail-fast: false
     
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v3
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@v3
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v4
+        uses: docker/login-action@v3
         with:
           username: egnal
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push ${{ matrix.service.name }}
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.service.context }}
           push: true
@@ -520,14 +542,13 @@ jobs:
           platforms: linux/arm64
 
       - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@v2
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
 
       - name: Deploy ${{ matrix.service.name }} to Pi
-        id: deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.PI_SSH_HOST }}
@@ -539,8 +560,6 @@ jobs:
             echo "=== Deploying ${{ matrix.service.name }} ==="
             docker compose pull ${{ matrix.service.name }}
             
-            # Always force-recreate to ensure new image is used
-            # Even if digest matches, container might be running old cached layers
             if docker compose ps ${{ matrix.service.name }} --status running -q | grep -q .; then
               docker compose up -d --force-recreate ${{ matrix.service.name }}
               echo "✅ Service recreated with new image"
@@ -548,27 +567,26 @@ jobs:
               echo "⏸️ Service was stopped - image updated but not started"
             fi
             
-            echo "=== Done ==="
             docker ps --filter "name=${{ matrix.service.name }}" --format "table {{.Names}}\t{{.Status}}"
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Deploy nginx config - sync infrastructure files to Pi
+  # Deploy nginx config
   # ─────────────────────────────────────────────────────────────────────────────
   deploy-nginx:
-    needs: [build, test-summary]
+    needs: [prepare, quality-gate]
     if: |
       always() &&
-      needs.test-summary.result == 'success' &&
-      needs.build.outputs.nginx == 'true' &&
+      needs.quality-gate.result == 'success' &&
+      needs.prepare.outputs.nginx == 'true' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment: production
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@v2
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -592,32 +610,28 @@ jobs:
           key: ${{ secrets.PI_SSH_KEY }}
           timeout: 30s
           script: |
-            echo "=== Testing nginx config ==="
             docker exec nginx-reverse-proxy nginx -t
-            
-            echo "=== Reloading nginx ==="
             docker exec nginx-reverse-proxy nginx -s reload
-            
             echo "✅ nginx config deployed and reloaded"
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Deploy docker-compose.prod.yml to Pi
+  # Deploy docker-compose.prod.yml
   # ─────────────────────────────────────────────────────────────────────────────
   deploy-compose:
-    needs: [build, test-summary]
+    needs: [prepare, quality-gate]
     if: |
       always() &&
-      needs.test-summary.result == 'success' &&
-      needs.build.outputs.compose == 'true' &&
+      needs.quality-gate.result == 'success' &&
+      needs.prepare.outputs.compose == 'true' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment: production
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@v2
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -642,23 +656,19 @@ jobs:
           timeout: 30s
           script: |
             cd ~/smart-home-prod
-            echo "=== Updating docker-compose.yml ==="
             mv docker-compose.prod.yml docker-compose.yml
-            echo "✅ docker-compose.yml updated"
-            
-            # Validate the new compose file
-            docker compose config --quiet && echo "✅ Compose file valid" || echo "⚠️ Compose file has warnings"
+            docker compose config --quiet && echo "✅ Compose file valid"
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Verify - check all deployed services are healthy (via SSH to Pi)
+  # Verify - check deployed services are healthy
   # ─────────────────────────────────────────────────────────────────────────────
   verify:
-    needs: [build, deploy, deploy-nginx, deploy-compose]
+    needs: [prepare, deploy, deploy-nginx, deploy-compose]
     if: always() && (needs.deploy.result == 'success' || needs.deploy-nginx.result == 'success' || needs.deploy-compose.result == 'success')
     runs-on: ubuntu-24.04
     steps:
       - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@v2
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -667,17 +677,17 @@ jobs:
       - name: Wait for services to start
         run: sleep 20
 
-      - name: Verify deployed services via SSH
+      - name: Verify deployed services
         uses: appleboy/ssh-action@v1.0.3
         env:
-          DASHBOARD_CHANGED: ${{ needs.build.outputs.dashboard }}
-          AC_CHANGED: ${{ needs.build.outputs.ac-service }}
-          BABYGIFTS_CHANGED: ${{ needs.build.outputs.baby-gifts }}
-          PORTFOLIO_CHANGED: ${{ needs.build.outputs.portfolio-monitor }}
-          VACACIONES_CHANGED: ${{ needs.build.outputs.vacaciones }}
-          CASITA_CHANGED: ${{ needs.build.outputs.casita }}
-          VAULTWARDEN_CHANGED: ${{ needs.build.outputs.vaultwarden }}
-          VALHEIM_ADMIN_CHANGED: ${{ needs.build.outputs.valheim-admin }}
+          DASHBOARD_CHANGED: ${{ needs.prepare.outputs.dashboard }}
+          AC_CHANGED: ${{ needs.prepare.outputs.ac-service }}
+          BABYGIFTS_CHANGED: ${{ needs.prepare.outputs.baby-gifts }}
+          PORTFOLIO_CHANGED: ${{ needs.prepare.outputs.portfolio-monitor }}
+          VACACIONES_CHANGED: ${{ needs.prepare.outputs.vacaciones }}
+          CASITA_CHANGED: ${{ needs.prepare.outputs.casita }}
+          VAULTWARDEN_CHANGED: ${{ needs.prepare.outputs.vaultwarden }}
+          VALHEIM_ADMIN_CHANGED: ${{ needs.prepare.outputs.valheim-admin }}
         with:
           host: ${{ secrets.PI_SSH_HOST }}
           username: ${{ secrets.PI_SSH_USER }}
@@ -698,59 +708,29 @@ jobs:
                 return
               fi
               
-              # Retry up to 3 times with 5s delay for transient failures
               for attempt in 1 2 3; do
                 HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "$BASE_URL$endpoint" || echo "000")
                 if [[ "$HTTP_CODE" == "200" ]]; then
-                  echo "✅ $name ($endpoint) - OK"
-                  return
-                elif [[ "$HTTP_CODE" =~ ^0+$ ]] || [[ "$HTTP_CODE" == "502" ]] || [[ "$HTTP_CODE" == "503" ]]; then
-                  if [[ $attempt -lt 3 ]]; then
-                    echo "⏳ $name ($endpoint) - HTTP $HTTP_CODE, retrying in 5s..."
-                    sleep 5
-                  else
-                    echo "⚠️  $name ($endpoint) - Service not responding after 3 attempts"
-                  fi
-                else
-                  echo "❌ $name ($endpoint) - HTTP $HTTP_CODE"
-                  FAILED=true
+                  echo "✅ $name - OK"
                   return
                 fi
+                sleep 5
               done
+              echo "❌ $name - HTTP $HTTP_CODE"
+              FAILED=true
             }
             
-            echo "=== Health Check Results (from Pi) ==="
-            # All health checks go through dashboard proxy at /api/health/*
-            check_health "Dashboard" "/api/health" "$DASHBOARD_CHANGED"
+            check_health "Dashboard" "/api/health/backend" "$DASHBOARD_CHANGED"
             check_health "AC Service" "/api/health/ac" "$AC_CHANGED"
             check_health "Baby Gifts" "/api/health/baby-gifts" "$BABYGIFTS_CHANGED"
-            check_health "Portfolio Monitor" "/api/health/portfolio" "$PORTFOLIO_CHANGED"
+            check_health "Portfolio" "/api/health/portfolio" "$PORTFOLIO_CHANGED"
             check_health "Vacaciones" "/api/health/vacaciones" "$VACACIONES_CHANGED"
             check_health "Casita" "/api/health/casita" "$CASITA_CHANGED"
             check_health "Vaultwarden" "/passwords/" "$VAULTWARDEN_CHANGED"
-            check_health "Valheim Admin" "/valheim-admin/health" "$VALHEIM_ADMIN_CHANGED"
-            echo "======================================="
+            check_health "Valheim Admin" "/api/health/valheim" "$VALHEIM_ADMIN_CHANGED"
             
             if [[ "$FAILED" == "true" ]]; then
-              echo "❌ Some services failed health check with unexpected errors"
+              echo "⚠️ Some health checks failed"
               exit 1
             fi
-            echo "✅ Health check complete!"
-
-      - name: Deploy Summary
-        if: always()
-        run: |
-          echo "## 🚀 Deploy Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Service | Deployed |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|----------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Dashboard | ${{ needs.build.outputs.dashboard }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| AC Service | ${{ needs.build.outputs.ac-service }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Baby Gifts | ${{ needs.build.outputs.baby-gifts }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Portfolio Monitor | ${{ needs.build.outputs.portfolio-monitor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Vacaciones | ${{ needs.build.outputs.vacaciones }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Casita | ${{ needs.build.outputs.casita }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Vaultwarden | ${{ needs.build.outputs.vaultwarden }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Valheim Admin | ${{ needs.build.outputs.valheim-admin }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| nginx | ${{ needs.build.outputs.nginx }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| compose | ${{ needs.build.outputs.compose }} |" >> $GITHUB_STEP_SUMMARY
+            echo "✅ All deployed services healthy"
