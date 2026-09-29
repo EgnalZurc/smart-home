@@ -50,6 +50,38 @@
             gap: 1rem;
         }
         
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .home-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: 1px solid rgba(51, 65, 85, 0.5);
+            background: rgba(30, 41, 59, 0.4);
+            transition: all 0.15s;
+            flex-shrink: 0;
+            text-decoration: none;
+        }
+        
+        .home-btn:hover {
+            border-color: rgba(71, 85, 105, 1);
+            background: rgba(51, 65, 85, 0.4);
+        }
+        
+        .home-btn img {
+            width: 20px;
+            height: 20px;
+            object-fit: contain;
+            border-radius: 4px;
+        }
+        
         h1 {
             font-size: 1.5rem;
             font-weight: 600;
@@ -365,7 +397,12 @@
 <body>
     <div class="container">
         <header>
-            <h1>📊 Portfolio Monitor</h1>
+            <div class="header-left">
+                <a href="/smart-home" class="home-btn" aria-label="Dashboard" title="Cuchi Casa">
+                    <img src="/static/portfolio/icono-cuchi-casa.png" alt="Home">
+                </a>
+                <h1>📊 Portfolio Monitor</h1>
+            </div>
             <div class="header-actions">
                 <span id="lastUpdate" class="last-update"></span>
                 <button id="refreshBtn" class="btn btn-primary" onclick="refreshAll()">
