@@ -4,6 +4,7 @@ Fetches data from CoinGecko and tracks staking positions.
 """
 
 import logging
+import os
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -24,6 +25,9 @@ _TIMEOUT = 10
 _RETRIES = 4
 _BACKOFF = 2.0
 
+# CoinGecko API key (Demo plan: 30 calls/min, 10k/month)
+_CG_API_KEY = os.environ.get("COINGECKO_API_KEY", "")
+
 _MARKETS_URL = (
     "https://api.coingecko.com/api/v3/coins/markets"
     "?vs_currency=eur&ids={ids}&price_change_percentage=14d,30d"
@@ -37,14 +41,19 @@ _FG_URL = "https://api.alternative.me/fng/?limit=1"
 # ─────────────────────────────────────────────────────────────────────────────
 # API Helpers
 # ─────────────────────────────────────────────────────────────────────────────
-def _get(url: str) -> requests.Response:
-    """GET with exponential backoff retry on 429."""
+def _get(url: str, use_cg_key: bool = True) -> requests.Response:
+    """GET with exponential backoff retry on 429/403."""
+    headers = {}
+    if use_cg_key and _CG_API_KEY and "coingecko.com" in url:
+        headers["x-cg-demo-api-key"] = _CG_API_KEY
+
     delay = _BACKOFF
     for attempt in range(1, _RETRIES + 1):
-        r = requests.get(url, timeout=_TIMEOUT)
-        if r.status_code == 429:
+        r = requests.get(url, headers=headers, timeout=_TIMEOUT)
+        if r.status_code in (429, 403):
             logger.debug(
-                f"Rate limited, retrying in {delay:.0f}s (attempt {attempt}/{_RETRIES})"
+                f"Rate limited ({r.status_code}), retrying in {delay:.0f}s "
+                f"(attempt {attempt}/{_RETRIES})"
             )
             time.sleep(delay)
             delay *= 2
