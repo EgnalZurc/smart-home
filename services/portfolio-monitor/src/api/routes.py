@@ -37,7 +37,9 @@ def _serialize_analysis(obj: Any) -> dict:
             elif hasattr(value, "__dataclass_fields__"):
                 result[field_name] = _serialize_analysis(value)
             else:
-                result[field_name] = _safe_float(value) if isinstance(value, float) else value
+                result[field_name] = (
+                    _safe_float(value) if isinstance(value, float) else value
+                )
         return result
     return _safe_float(obj) if isinstance(obj, float) else obj
 
