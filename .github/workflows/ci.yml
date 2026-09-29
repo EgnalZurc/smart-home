@@ -248,11 +248,11 @@ jobs:
 
       - name: Run Tests
         run: |
-          if [[ -d "dashboard/tests" ]]; then
+          if [[ -d "dashboard/tests" ]] && find dashboard/tests -name "test_*.py" | grep -q .; then
             pip install -r dashboard/requirements.txt --quiet 2>/dev/null || true
             cd dashboard && PYTHONPATH=src python -m pytest tests/ -v --tb=short
           else
-            echo "⏭️ No tests directory"
+            echo "⏭️ No tests found"
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -288,11 +288,11 @@ jobs:
 
       - name: Run Tests
         run: |
-          if [[ -d "services/ac-service/tests" ]]; then
+          if [[ -d "services/ac-service/tests" ]] && find services/ac-service/tests -name "test_*.py" | grep -q .; then
             pip install -r services/ac-service/requirements.txt --quiet 2>/dev/null || true
             cd services/ac-service && PYTHONPATH=src python -m pytest tests/ -v --tb=short
           else
-            echo "⏭️ No tests directory"
+            echo "⏭️ No tests found"
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -328,11 +328,11 @@ jobs:
 
       - name: Run Tests
         run: |
-          if [[ -d "services/baby-gifts-service/tests" ]]; then
+          if [[ -d "services/baby-gifts-service/tests" ]] && find services/baby-gifts-service/tests -name "test_*.py" | grep -q .; then
             pip install -r services/baby-gifts-service/requirements.txt --quiet 2>/dev/null || true
             cd services/baby-gifts-service && PYTHONPATH=src python -m pytest tests/ -v --tb=short
           else
-            echo "⏭️ No tests directory"
+            echo "⏭️ No tests found"
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -368,11 +368,11 @@ jobs:
 
       - name: Run Tests
         run: |
-          if [[ -d "services/portfolio-monitor/tests" ]]; then
+          if [[ -d "services/portfolio-monitor/tests" ]] && find services/portfolio-monitor/tests -name "test_*.py" | grep -q .; then
             pip install -r services/portfolio-monitor/requirements.txt --quiet 2>/dev/null || true
             cd services/portfolio-monitor && PYTHONPATH=src python -m pytest tests/ -v --tb=short
           else
-            echo "⏭️ No tests directory"
+            echo "⏭️ No tests found"
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -408,11 +408,11 @@ jobs:
 
       - name: Run Tests
         run: |
-          if [[ -d "services/vacaciones-service/tests" ]]; then
+          if [[ -d "services/vacaciones-service/tests" ]] && find services/vacaciones-service/tests -name "test_*.py" | grep -q .; then
             pip install -r services/vacaciones-service/requirements.txt --quiet 2>/dev/null || true
             cd services/vacaciones-service && PYTHONPATH=src python -m pytest tests/ -v --tb=short
           else
-            echo "⏭️ No tests directory"
+            echo "⏭️ No tests found"
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -448,11 +448,11 @@ jobs:
 
       - name: Run Tests
         run: |
-          if [[ -d "services/casita-suenos/fase3-app/tests" ]]; then
+          if [[ -d "services/casita-suenos/fase3-app/tests" ]] && find services/casita-suenos/fase3-app/tests -name "test_*.py" | grep -q .; then
             pip install -r services/casita-suenos/fase3-app/requirements.txt --quiet 2>/dev/null || true
             cd services/casita-suenos/fase3-app && PYTHONPATH=src python -m pytest tests/ -v --tb=short
           else
-            echo "⏭️ No tests directory"
+            echo "⏭️ No tests found"
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -506,11 +506,11 @@ jobs:
 
       - name: Run Tests
         run: |
-          if [[ -d "services/valheim-admin/tests" ]]; then
+          if [[ -d "services/valheim-admin/tests" ]] && find services/valheim-admin/tests -name "test_*.py" | grep -q .; then
             pip install -r services/valheim-admin/requirements.txt --quiet 2>/dev/null || true
             cd services/valheim-admin && PYTHONPATH=src python -m pytest tests/ -v --tb=short
           else
-            echo "⏭️ No tests directory"
+            echo "⏭️ No tests found"
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────

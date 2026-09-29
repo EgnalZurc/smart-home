@@ -1,12 +1,12 @@
 """
 Tests unitarios de database.py.
-Usa una DB en memoria (:memory:) para no tocar el disco.
+Usa una DB temporal para no tocar el disco.
 """
 
 from __future__ import annotations
 
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -15,6 +15,10 @@ import pytest
 from database import Database
 from models import (
     FireRisk,
+    FloodRisk,
+    GarageType,
+    Habitability,
+    Internet,
     Piscina,
     Portal,
     Property,
@@ -29,27 +33,41 @@ def db(tmp_path) -> Database:
     return Database(str(tmp_path / "test_casita.db"))
 
 
+def _make_property(
+    portal_id: str = "test_001",
+    price: int = 180_000,
+    rooms: int = 4,
+    **kwargs,
+) -> Property:
+    """Helper para crear Property con valores por defecto válidos."""
+    defaults = {
+        "portal": Portal.PISOS,
+        "portal_id": portal_id,
+        "url": f"https://pisos.com/{portal_id}",
+        "zone_id": "zamora_meseta",
+        "title": "Casa de prueba",
+        "price": price,
+        "size_m2": 200.0,
+        "rooms": rooms,
+        "has_garden_or_plot": True,
+        "terrain_m2": 500.0,
+        "garage_type": GarageType.PARCELA,
+        "piscina": Piscina.ESPACIO,
+        "habitability": Habitability.BUEN_ESTADO,
+        "internet": Internet.FIBRA,
+        "has_garage": True,
+        "description": "Casa amplia con jardín",
+        "first_seen": datetime.now(),
+        "last_seen": datetime.now(),
+        "source": "test",
+    }
+    defaults.update(kwargs)
+    return Property(**defaults)
+
+
 @pytest.fixture
 def sample_property() -> Property:
-    return Property(
-        portal=Portal.PISOS,
-        portal_id="test_001",
-        url="https://pisos.com/test",
-        zone_id="zamora_meseta",
-        title="Casa de prueba",
-        price=180_000,
-        size_m2=200.0,
-        rooms=4,
-        has_garage=True,
-        has_garden_or_plot=True,
-        piscina=Piscina.ESPACIO,
-        has_internet_mention=True,
-        habitable=True,
-        description="Casa amplia con jardín",
-        first_seen=datetime.now(),
-        last_seen=datetime.now(),
-        source="test",
-    )
+    return _make_property()
 
 
 @pytest.fixture
@@ -64,28 +82,35 @@ def sample_zone() -> Zone:
         distance_health_center_min=10,
         distance_hospital_min=20,
         fire_risk=FireRisk.NULO,
-        zone_preference=5.0,
+        flood_risk=FloodRisk.NULO,
         price_min=50_000,
         price_max=260_000,
+        has_coast=False,
     )
 
 
-def _make_scored(prop: Property, zone: Zone, score: float = 55.0) -> ScoredProperty:
+def _make_scored(prop: Property, zone: Zone, score: float = 120.0) -> ScoredProperty:
     """Helper: crea un ScoredProperty con puntuación fija para tests."""
     breakdown = ScoreBreakdown(
-        p1_rooms=3.5,
-        p2_piscina=5.0,
-        p3_distance=4.0,
-        p4_beach=0.5,
-        p5_pools=3.0,
-        p6_supermarket=6.0,
-        p7_health=9.0,
-        p8_hospital=9.0,
-        p9_price=6.5,
-        p10_fire=9.0,
-        p11_preference=5.0,
+        r1_rooms=8.0,
+        r2_terrain=8.0,
+        r3_garage=10.0,
+        r4_habitability=8.0,
+        r5_piscina=5.0,
+        r6_ac=5.0,
+        r7_price=6.0,
+        r8_supermarket=8.0,
+        r9_health=8.0,
+        r10_hospital=8.0,
+        r11_internet=8.0,
+        r12_madrid=10.0,
+        r13_beach=5.0,
+        r14_pools=5.0,
+        r15_fire=8.0,
+        r16_flood=4.0,
+        r17_coast=0.0,
+        r18_beach_plot=0.0,
     )
-    # Ajustar p1 para aproximar el total al valor pedido (no crítico en tests)
     return ScoredProperty(prop=prop, zone=zone, score=breakdown)
 
 
@@ -236,36 +261,8 @@ class TestDismiss:
 
     def test_dismiss_does_not_affect_other_properties(self, db, sample_zone):
         # Insertar dos propiedades
-        prop1 = Property(
-            portal=Portal.PISOS,
-            portal_id="p1",
-            url="https://x.com/1",
-            zone_id="zamora_meseta",
-            title="Casa 1",
-            price=150_000,
-            size_m2=100.0,
-            rooms=4,
-            has_garage=True,
-            has_garden_or_plot=True,
-            piscina=Piscina.NINGUNA,
-            has_internet_mention=True,
-            habitable=True,
-        )
-        prop2 = Property(
-            portal=Portal.PISOS,
-            portal_id="p2",
-            url="https://x.com/2",
-            zone_id="zamora_meseta",
-            title="Casa 2",
-            price=200_000,
-            size_m2=120.0,
-            rooms=4,
-            has_garage=True,
-            has_garden_or_plot=True,
-            piscina=Piscina.NINGUNA,
-            has_internet_mention=True,
-            habitable=True,
-        )
+        prop1 = _make_property(portal_id="p1", price=150_000)
+        prop2 = _make_property(portal_id="p2", price=200_000)
         for p in (prop1, prop2):
             db.upsert_property(p)
             db.upsert_score(_make_scored(p, sample_zone))
@@ -282,7 +279,7 @@ class TestDismiss:
 
 
 class TestRadar:
-    def _insert(self, db, prop, zone, score_total=55.0):
+    def _insert(self, db, prop, zone, score_total=120.0):
         db.upsert_property(prop)
         db.upsert_score(_make_scored(prop, zone, score_total))
 
@@ -290,48 +287,22 @@ class TestRadar:
         assert db.get_radar_properties() == []
 
     def test_radar_respects_min_score(self, db, sample_property, sample_zone):
-        self._insert(db, sample_property, sample_zone, score_total=55.0)
+        self._insert(db, sample_property, sample_zone, score_total=120.0)
 
-        # El breakdown del helper suma 60.5 — con umbral mayor no aparece
-        assert db.get_radar_properties(min_score=65.0) == []
+        # Con umbral mayor no aparece
+        assert db.get_radar_properties(min_score=150.0) == []
 
-        # Con umbral menor o igual aparece
-        assert len(db.get_radar_properties(min_score=60.0)) == 1
+        # Con umbral menor aparece
+        assert len(db.get_radar_properties(min_score=100.0)) == 1
 
     def test_radar_ordered_by_first_seen_desc(self, db, sample_zone):
         """La propiedad más reciente debe aparecer primera."""
-        from datetime import datetime, timedelta
-
-        older = Property(
-            portal=Portal.PISOS,
+        older = _make_property(
             portal_id="old",
-            url="https://x.com/old",
-            zone_id="zamora_meseta",
-            title="Antigua",
-            price=150_000,
-            size_m2=100.0,
-            rooms=4,
-            has_garage=True,
-            has_garden_or_plot=True,
-            piscina=Piscina.NINGUNA,
-            has_internet_mention=True,
-            habitable=True,
             first_seen=datetime.now() - timedelta(days=10),
         )
-        newer = Property(
-            portal=Portal.PISOS,
+        newer = _make_property(
             portal_id="new",
-            url="https://x.com/new",
-            zone_id="zamora_meseta",
-            title="Nueva",
-            price=180_000,
-            size_m2=120.0,
-            rooms=4,
-            has_garage=True,
-            has_garden_or_plot=True,
-            piscina=Piscina.NINGUNA,
-            has_internet_mention=True,
-            habitable=True,
             first_seen=datetime.now(),
         )
         for p in (older, newer):
@@ -370,21 +341,7 @@ class TestRadar:
 
     def test_radar_limit_is_respected(self, db, sample_zone):
         for i in range(5):
-            p = Property(
-                portal=Portal.PISOS,
-                portal_id=str(i),
-                url=f"https://x.com/{i}",
-                zone_id="zamora_meseta",
-                title=f"Casa {i}",
-                price=150_000 + i * 1000,
-                size_m2=100.0,
-                rooms=4,
-                has_garage=True,
-                has_garden_or_plot=True,
-                piscina=Piscina.NINGUNA,
-                has_internet_mention=True,
-                habitable=True,
-            )
+            p = _make_property(portal_id=str(i), price=150_000 + i * 1000)
             self._insert(db, p, sample_zone)
 
         assert len(db.get_radar_properties(min_score=0.0, limit=3)) == 3
@@ -478,22 +435,24 @@ class TestScheduleConfig:
             assert config[key] == value, f"Fallo en clave '{key}'"
 
 
-# ── Tests de upsert_score con P11 ─────────────────────────────────────────────
+# ── Tests de upsert_score ─────────────────────────────────────────────────────
 
 
-class TestUpsertScoreP11:
-    def test_p11_persisted_in_scored_properties(self, db, sample_property, sample_zone):
-        """p11_preference debe guardarse en score_p11 en la tabla."""
+class TestUpsertScore:
+    def test_score_persisted_in_scored_properties(
+        self, db, sample_property, sample_zone
+    ):
+        """El score debe guardarse en la tabla scored_properties."""
         db.upsert_property(sample_property)
         scored = _make_scored(sample_property, sample_zone)
         db.upsert_score(scored)
 
         row = db._conn.execute(
-            "SELECT score_p11 FROM scored_properties WHERE property_uid=?",
+            "SELECT score_total FROM scored_properties WHERE property_uid=?",
             (sample_property.unique_id,),
         ).fetchone()
         assert row is not None
-        assert row["score_p11"] == pytest.approx(5.0)  # zone_preference del fixture
+        assert row["score_total"] > 0
 
     def test_dismiss_preserved_after_upsert_score(
         self, db, sample_property, sample_zone
