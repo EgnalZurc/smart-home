@@ -158,6 +158,10 @@ services:
     environment:
       - TZ=Europe/Madrid
       - MONITOR_LANG=es
+      # Email alerts (reuse dashboard SMTP config)
+      - SMTP_USER=${AUTH_SMTP_USER}
+      - SMTP_PASSWORD=${AUTH_SMTP_PASSWORD}
+      - ALERT_EMAIL=${AUTH_SMTP_USER}
     networks:
       - smart-home
       - cuchi-casa

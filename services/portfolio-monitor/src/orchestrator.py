@@ -1,7 +1,7 @@
 """
 Portfolio Monitor — Monitor Orchestrator.
 Manages scheduled execution of monitors and maintains state.
-Sends Telegram alerts when WARN or DANGER signals are detected.
+Sends email alerts when WARN or DANGER signals are detected.
 """
 
 import asyncio
@@ -12,7 +12,7 @@ from typing import Any
 
 from config import DATA_DIR, SCHEDULE, reload_config
 from models import AlertLevel, MonitorState, PortfolioSummary
-from notifier import TelegramNotifier
+from email_notifier import EmailNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class Orchestrator:
         self._state = MonitorState()
         self._summary = PortfolioSummary()
         self._monitors: dict[str, Any] = {}
-        self._notifier = TelegramNotifier()
+        self._notifier = EmailNotifier()
         self._running = False
         self._scheduler_task: asyncio.Task | None = None
         self._load_state()
@@ -149,7 +149,7 @@ class Orchestrator:
             logger.info(f"Triggered {len(triggered)} scheduled alerts")
     
     async def _send_alerts_if_needed(self):
-        """Send Telegram alerts if there are warnings or dangers."""
+        """Send email alerts if there are warnings or dangers."""
         # Calculate overall level
         overall_level = AlertLevel.OK
         if self._summary.etf_level:
@@ -167,12 +167,13 @@ class Orchestrator:
             crypto_results=self._summary.crypto_analysis or [],
             overall_level=overall_level,
             fear_greed=self._summary.crypto_fear_greed,
+            savings_results=self._summary.savings_analysis or [],
         )
         
         if result.success:
-            logger.info(f"Alert sent to Telegram: {result.message}")
+            logger.info(f"Alert email sent: {result.message}")
         else:
-            logger.error(f"Failed to send Telegram alert: {result.message}")
+            logger.error(f"Failed to send alert email: {result.message}")
     
     def get_summary(self) -> PortfolioSummary:
         """Get the current portfolio summary."""
