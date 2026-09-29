@@ -220,7 +220,14 @@ def _analyse_moving_averages(
         signals.append(
             Signal(
                 t("signal.mm_ok.title"),
-                t("signal.mm_ok.body", price=price, mm50=ma50, mm200=ma200, pct50=pct_diff_50, pct200=pct_diff_200),
+                t(
+                    "signal.mm_ok.body",
+                    price=price,
+                    mm50=ma50,
+                    mm200=ma200,
+                    pct50=pct_diff_50,
+                    pct200=pct_diff_200,
+                ),
                 "OK",
             )
         )
