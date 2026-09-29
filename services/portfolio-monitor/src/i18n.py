@@ -68,21 +68,21 @@ _CATALOGUE: dict[str, dict[str, str]] = {
     # ── ETF signals ───────────────────────────────────────────────────────────
     "signal.mm200.title": {"es": "⚠️ Precio bajo MM200", "en": "⚠️ Price below MA200"},
     "signal.mm200.body": {
-        "es": "Precio ({price:.2f}) bajo MM200 ({mm:.2f}). Tendencia bajista.",
-        "en": "Price ({price:.2f}) below MA200 ({mm:.2f}). Bearish trend.",
+        "es": "Precio ({price:.2f}) bajo MM200 ({mm:.2f}) <span class=\"negative\">({pct:+.2f}%)</span>. Tendencia bajista.",
+        "en": "Price ({price:.2f}) below MA200 ({mm:.2f}) <span class=\"negative\">({pct:+.2f}%)</span>. Bearish trend.",
     },
     "signal.mm50.title": {"es": "📉 Precio bajo MM50", "en": "📉 Price below MA50"},
     "signal.mm50.body": {
-        "es": "Precio ({price:.2f}) bajo MM50 ({mm:.2f}). Corrección a corto plazo.",
-        "en": "Price ({price:.2f}) below MA50 ({mm:.2f}). Short-term correction.",
+        "es": "Precio ({price:.2f}) bajo MM50 ({mm:.2f}) <span class=\"negative\">({pct:+.2f}%)</span>. Corrección a corto plazo.",
+        "en": "Price ({price:.2f}) below MA50 ({mm:.2f}) <span class=\"negative\">({pct:+.2f}%)</span>. Short-term correction.",
     },
     "signal.mm_ok.title": {
         "es": "✅ Precio sobre ambas medias",
         "en": "✅ Price above both MAs",
     },
     "signal.mm_ok.body": {
-        "es": "Precio ({price:.2f}) sobre MM50 ({mm50:.2f}) y MM200 ({mm200:.2f}).",
-        "en": "Price ({price:.2f}) above MA50 ({mm50:.2f}) and MA200 ({mm200:.2f}).",
+        "es": "Precio ({price:.2f}) sobre MM50 <span class=\"positive\">({pct50:+.2f}%)</span> y MM200 <span class=\"positive\">({pct200:+.2f}%)</span>.",
+        "en": "Price ({price:.2f}) above MA50 <span class=\"positive\">({pct50:+.2f}%)</span> and MA200 <span class=\"positive\">({pct200:+.2f}%)</span>.",
     },
     # NOTE: Golden/Death Cross are lagging indicators - best for trend confirmation, not entry triggers
     "signal.golden.title": {"es": "🟡 Golden Cross", "en": "🟡 Golden Cross"},

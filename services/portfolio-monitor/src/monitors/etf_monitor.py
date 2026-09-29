@@ -195,28 +195,32 @@ def _analyse_moving_averages(
 
     # Price vs MAs
     if price < ma200:
+        pct_diff = ((price - ma200) / ma200) * 100
         signals.append(
             Signal(
                 t("signal.mm200.title"),
-                t("signal.mm200.body", price=price, mm=ma200),
+                t("signal.mm200.body", price=price, mm=ma200, pct=pct_diff),
                 "WARN",
             )
         )
         level = level.escalate(AlertLevel.WARN)
     elif price < ma50:
+        pct_diff = ((price - ma50) / ma50) * 100
         signals.append(
             Signal(
                 t("signal.mm50.title"),
-                t("signal.mm50.body", price=price, mm=ma50),
+                t("signal.mm50.body", price=price, mm=ma50, pct=pct_diff),
                 "INFO",
             )
         )
         level = level.escalate(AlertLevel.INFO)
     else:
+        pct_diff_50 = ((price - ma50) / ma50) * 100
+        pct_diff_200 = ((price - ma200) / ma200) * 100
         signals.append(
             Signal(
                 t("signal.mm_ok.title"),
-                t("signal.mm_ok.body", price=price, mm50=ma50, mm200=ma200),
+                t("signal.mm_ok.body", price=price, mm50=ma50, mm200=ma200, pct50=pct_diff_50, pct200=pct_diff_200),
                 "OK",
             )
         )
