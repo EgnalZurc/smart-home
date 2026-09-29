@@ -21,15 +21,15 @@ Endpoints:
 """
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import time
 import zipfile
-import shutil
-import tempfile
-import subprocess
-import httpx
 from pathlib import Path
-from typing import Optional
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+
+import httpx
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -166,13 +166,13 @@ async def recreate_game_container() -> str:
     except Exception as exc:
         # Last resort: plain restart via proxy
         try:
-            code = await docker_post(f"/containers/{GAME_CONTAINER}/restart?t=15")
+            await docker_post(f"/containers/{GAME_CONTAINER}/restart?t=15")
             return f"restarted_fallback (recreate failed: {exc})"
         except Exception:
             raise HTTPException(500, f"Failed to recreate container: {exc}")
 
 
-def latest_log_file() -> Optional[Path]:
+def latest_log_file() -> Path | None:
     """Return the most recent log file in the logs directory."""
     if not LOGS_DIR.exists():
         return None
@@ -180,7 +180,7 @@ def latest_log_file() -> Optional[Path]:
     return logs[0] if logs else None
 
 
-def parse_join_code(log_lines: str) -> Optional[str]:
+def parse_join_code(log_lines: str) -> str | None:
     """Extract 6-digit join code from Valheim server logs."""
     match = re.search(r'with join code\s+(\d{6})\b', log_lines, re.IGNORECASE)
     if match:
@@ -214,7 +214,7 @@ def _sanitize_name(name: str) -> str:
 VALHEIM_V1_VERSION = 41
 VALHEIM_V1_VERSION_BYTES = VALHEIM_V1_VERSION.to_bytes(4, "little")  # b'\x29\x00\x00\x00'
 
-def _validate_fwl2(data: bytes, expected_world_name: str) -> Optional[str]:
+def _validate_fwl2(data: bytes, expected_world_name: str) -> str | None:
     """Validate a .fwl2 file. Returns None if valid, error string if invalid.
 
     fwl2 binary layout (little-endian):
@@ -244,7 +244,7 @@ def _validate_fwl2(data: bytes, expected_world_name: str) -> Optional[str]:
     return None
 
 
-def _validate_db2(data: bytes) -> Optional[str]:
+def _validate_db2(data: bytes) -> str | None:
     """Validate a .db2 file. Returns None if valid, error string if invalid.
 
     db2 binary layout:
@@ -259,7 +259,7 @@ def _validate_db2(data: bytes) -> Optional[str]:
     return None
 
 
-def _validate_ok(data: bytes) -> Optional[str]:
+def _validate_ok(data: bytes) -> str | None:
     """Validate a .ok file. Must be exactly 4 bytes = protocol version."""
     if len(data) != 4:
         return f"Fichero .ok tiene tamaño inesperado ({len(data)} bytes, se esperaban 4)."
@@ -269,7 +269,7 @@ def _validate_ok(data: bytes) -> Optional[str]:
     return None
 
 
-def _validate_chunk(data: bytes) -> Optional[str]:
+def _validate_chunk(data: bytes) -> str | None:
     """Validate a .chunk file. First 2 bytes should be 0x29 0x00."""
     if len(data) < 4:
         return f"Fichero .chunk demasiado pequeño ({len(data)} bytes)."
