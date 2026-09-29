@@ -1,7 +1,11 @@
 FROM python:3.12-slim
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 WORKDIR /app
 
 # Install docker CLI + docker compose plugin (for force-recreate on world switch)
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl gnupg lsb-release \
     && install -m 0755 -d /etc/apt/keyrings \
