@@ -42,8 +42,7 @@ def scheduler() -> CasitaScheduler:
         notifier=notifier,
         apify=apify,
         gmail_address="test@gmail.com",
-        gmail_credentials_path="/tmp/creds.json",
-        gmail_token_path="/tmp/token.json",
+        gmail_app_password="test_app_password",
     )
 
 
@@ -155,45 +154,53 @@ class TestZoneInference:
 
 class TestGmailCheck:
     def test_gmail_check_with_no_urls(self, scheduler):
-        with patch("idealista_email_parser.fetch_new_alert_urls", return_value=[]):
+        with patch(
+            "idealista_email_parser.fetch_new_alerts", return_value=([], [], None)
+        ):
             scheduler._run_gmail_check()
             scheduler._apify.scrape_property_url.assert_not_called()
 
     def test_gmail_check_with_url_below_threshold(self, scheduler):
-        from datetime import datetime as dt
+        """Verifica que un alerta de Gmail se procesa incluso con score bajo."""
+        from idealista_email_parser import IdealistaAlert
 
-        from models import Piscina, Portal, Property
-
-        low_score_prop = Property(
-            portal=Portal.IDEALISTA,
-            portal_id="111",
+        mock_alert = IdealistaAlert(
             url="https://www.idealista.com/inmueble/111/",
-            zone_id="zamora_meseta",
-            title="Casa pequeña",
-            price=310_000,  # cerca del límite → score bajo
-            size_m2=60.0,
+            property_id="111",
+            email_id="12345",
+            folder="INBOX",
+            location_hint="zamora",
+            price=310_000,
             rooms=3,
-            has_garage=True,
-            has_garden_or_plot=True,
-            piscina=Piscina.NINGUNA,
-            has_internet_mention=True,
-            habitable=True,
-            description="",
-            first_seen=dt.now(),
-            last_seen=dt.now(),
+            size_m2=60.0,
+            title="Casa pequeña",
         )
 
-        scheduler._apify.scrape_property_url.return_value = low_score_prop
+        mock_imap = MagicMock()
+        mock_imap.close.return_value = None
+        mock_imap.logout.return_value = None
 
-        with patch(
-            "idealista_email_parser.fetch_new_alert_urls",
-            return_value=["https://www.idealista.com/inmueble/111/"],
+        with (
+            patch(
+                "idealista_email_parser.fetch_new_alerts",
+                return_value=([mock_alert], [], mock_imap),
+            ),
+            patch(
+                "idealista_email_parser.delete_processed_emails",
+                return_value=None,
+            ),
+            patch("httpx.Client") as mock_client,
         ):
+            # Simular respuesta 403 de Idealista (bloquea scraping)
+            mock_response = MagicMock()
+            mock_response.status_code = 403
+            mock_response.text = ""
+            mock_client.return_value.__enter__.return_value.get.return_value = (
+                mock_response
+            )
+
             scheduler._run_gmail_check()
-            # Debe haber procesado pero no alertado (score bajo)
+
+            # Debe haber insertado la propiedad usando fallback del email
             scheduler._db.upsert_property.assert_called()
-            # La notificación de nueva propiedad NO debe haberse enviado
-            # (ya que el score no supera el umbral con esos datos)
-            # No podemos garantizar el threshold sin calcular el score exacto,
-            # pero sí podemos verificar que el flujo se ejecutó
-            scheduler._apify.scrape_property_url.assert_called_once()
+            scheduler._db.upsert_score.assert_called()

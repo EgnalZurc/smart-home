@@ -46,6 +46,8 @@ def base_zone() -> Zone:
         fire_risk=FireRisk.NULO,
         flood_risk=FloodRisk.NULO,
         has_coast=True,
+        price_min=50_000,
+        price_max=300_000,
     )
 
 
@@ -62,11 +64,11 @@ def base_property(base_zone: Zone) -> Property:
         size_m2=180.0,
         rooms=4,
         garage_type=GarageType.EDIFICIO,
-        has_garden=True,
+        has_garden_or_plot=True,
         terrain_m2=500.0,
         piscina=Piscina.ESPACIO,
         internet=Internet.FIBRA,
-        habitability=Habitability.BUEN_ESTADO,
+        habitability=Habitability.BUENO,
         has_ac=True,
         description="Casa amplia con jardín y garaje. Parcela grande.",
         first_seen=datetime.now(),
@@ -138,7 +140,8 @@ class TestPropertyModel:
             size_m2=None,
             rooms=None,
             garage_type=GarageType.NINGUNO,
-            has_garden=False,
+            has_garden_or_plot=False,
+            terrain_m2=None,
             piscina=Piscina.NINGUNA,
             internet=Internet.NINGUNO,
             habitability=Habitability.DESCONOCIDO,

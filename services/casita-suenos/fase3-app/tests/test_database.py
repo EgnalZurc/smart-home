@@ -53,7 +53,7 @@ def _make_property(
         "terrain_m2": 500.0,
         "garage_type": GarageType.EDIFICIO,
         "piscina": Piscina.ESPACIO,
-        "habitability": Habitability.BUEN_ESTADO,
+        "habitability": Habitability.BUENO,
         "internet": Internet.FIBRA,
         "has_garage": True,
         "description": "Casa amplia con jardín",
@@ -198,12 +198,12 @@ class TestDismiss:
 
         # Antes de descartar aparece en el radar
         radar = db.get_radar_properties(min_score=0.0)
-        assert any(p["uid"] == uid for p in radar)
+        assert any(p["uid"] == uid for p in radar["items"])
 
         # Después de descartar no aparece
         db.dismiss(uid)
         radar = db.get_radar_properties(min_score=0.0)
-        assert not any(p["uid"] == uid for p in radar)
+        assert not any(p["uid"] == uid for p in radar["items"])
 
     def test_dismissed_property_in_get_dismissed(
         self, db, sample_property, sample_zone
@@ -225,11 +225,11 @@ class TestDismiss:
 
         db.dismiss(uid)
         assert len(db.get_dismissed()) == 1
-        assert len(db.get_radar_properties(min_score=0.0)) == 0
+        assert len(db.get_radar_properties(min_score=0.0)["items"]) == 0
 
         db.undismiss(uid)
         assert len(db.get_dismissed()) == 0
-        assert len(db.get_radar_properties(min_score=0.0)) == 1
+        assert len(db.get_radar_properties(min_score=0.0)["items"]) == 1
 
     def test_dismissed_at_is_set_on_dismiss(self, db, sample_property, sample_zone):
         self._insert_scored(db, sample_property, sample_zone)
@@ -270,7 +270,7 @@ class TestDismiss:
         db.dismiss(prop1.unique_id)
 
         radar = db.get_radar_properties(min_score=0.0)
-        uids = [p["uid"] for p in radar]
+        uids = [p["uid"] for p in radar["items"]]
         assert prop1.unique_id not in uids
         assert prop2.unique_id in uids
 
@@ -284,19 +284,19 @@ class TestRadar:
         db.upsert_score(_make_scored(prop, zone, score_total))
 
     def test_radar_empty_by_default(self, db):
-        assert db.get_radar_properties() == []
+        assert db.get_radar_properties()["items"] == []
 
     def test_radar_respects_min_score(self, db, sample_property, sample_zone):
         self._insert(db, sample_property, sample_zone, score_total=120.0)
 
         # Con umbral mayor no aparece
-        assert db.get_radar_properties(min_score=150.0) == []
+        assert db.get_radar_properties(min_score=150.0)["items"] == []
 
         # Con umbral menor aparece
-        assert len(db.get_radar_properties(min_score=100.0)) == 1
+        assert len(db.get_radar_properties(min_score=100.0)["items"]) == 1
 
-    def test_radar_ordered_by_first_seen_desc(self, db, sample_zone):
-        """La propiedad más reciente debe aparecer primera."""
+    def test_radar_ordered_by_date_desc(self, db, sample_zone):
+        """Con sort_by='date', la propiedad más reciente aparece primera."""
         older = _make_property(
             portal_id="old",
             first_seen=datetime.now() - timedelta(days=10),
@@ -308,15 +308,15 @@ class TestRadar:
         for p in (older, newer):
             self._insert(db, p, sample_zone)
 
-        radar = db.get_radar_properties(min_score=0.0)
+        radar = db.get_radar_properties(min_score=0.0, sort_by="date")["items"]
         assert radar[0]["uid"] == newer.unique_id
         assert radar[1]["uid"] == older.unique_id
 
     def test_radar_returns_expected_fields(self, db, sample_property, sample_zone):
         self._insert(db, sample_property, sample_zone)
-        props = db.get_radar_properties(min_score=0.0)
-        assert len(props) == 1
-        p = props[0]
+        result = db.get_radar_properties(min_score=0.0)
+        assert len(result["items"]) == 1
+        p = result["items"][0]
         # Campos de propiedad
         for field in (
             "uid",
@@ -337,14 +337,14 @@ class TestRadar:
     def test_radar_excludes_dismissed(self, db, sample_property, sample_zone):
         self._insert(db, sample_property, sample_zone)
         db.dismiss(sample_property.unique_id)
-        assert db.get_radar_properties(min_score=0.0) == []
+        assert db.get_radar_properties(min_score=0.0)["items"] == []
 
     def test_radar_limit_is_respected(self, db, sample_zone):
         for i in range(5):
             p = _make_property(portal_id=str(i), price=150_000 + i * 1000)
             self._insert(db, p, sample_zone)
 
-        assert len(db.get_radar_properties(min_score=0.0, limit=3)) == 3
+        assert len(db.get_radar_properties(min_score=0.0, limit=3)["items"]) == 3
 
 
 # ── Tests del resumen semanal ─────────────────────────────────────────────────
