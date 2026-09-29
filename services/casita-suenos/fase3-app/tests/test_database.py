@@ -51,7 +51,7 @@ def _make_property(
         "rooms": rooms,
         "has_garden_or_plot": True,
         "terrain_m2": 500.0,
-        "garage_type": GarageType.PARCELA,
+        "garage_type": GarageType.EDIFICIO,
         "piscina": Piscina.ESPACIO,
         "habitability": Habitability.BUEN_ESTADO,
         "internet": Internet.FIBRA,

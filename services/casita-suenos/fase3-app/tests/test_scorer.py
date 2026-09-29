@@ -61,7 +61,7 @@ def base_property(base_zone: Zone) -> Property:
         price=200_000,
         size_m2=180.0,
         rooms=4,
-        garage_type=GarageType.PARCELA,
+        garage_type=GarageType.EDIFICIO,
         has_garden=True,
         terrain_m2=500.0,
         piscina=Piscina.ESPACIO,
