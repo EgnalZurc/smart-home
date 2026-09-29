@@ -11,8 +11,8 @@ from datetime import datetime, time, timezone
 from typing import Any
 
 from config import DATA_DIR, SCHEDULE, reload_config
-from models import AlertLevel, MonitorState, PortfolioSummary
 from email_notifier import EmailNotifier
+from models import AlertLevel, MonitorState, PortfolioSummary
 
 logger = logging.getLogger(__name__)
 
