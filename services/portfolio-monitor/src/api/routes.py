@@ -2,6 +2,7 @@
 Portfolio Monitor — API Routes.
 """
 
+import math
 from datetime import datetime
 from typing import Any
 
@@ -10,6 +11,13 @@ from models import AlertLevel
 from orchestrator import get_orchestrator
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
+
+
+def _safe_float(value: Any) -> Any:
+    """Convert NaN/Inf floats to None for JSON compliance."""
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+        return None
+    return value
 
 
 def _serialize_analysis(obj: Any) -> dict:
@@ -22,14 +30,16 @@ def _serialize_analysis(obj: Any) -> dict:
                 result[field_name] = value.name
             elif isinstance(value, datetime):
                 result[field_name] = value.isoformat()
+            elif isinstance(value, float):
+                result[field_name] = _safe_float(value)
             elif isinstance(value, list):
                 result[field_name] = [_serialize_analysis(item) for item in value]
             elif hasattr(value, "__dataclass_fields__"):
                 result[field_name] = _serialize_analysis(value)
             else:
-                result[field_name] = value
+                result[field_name] = _safe_float(value) if isinstance(value, float) else value
         return result
-    return obj
+    return _safe_float(obj) if isinstance(obj, float) else obj
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -43,10 +53,10 @@ async def get_summary():
 
     return {
         "etf": {
-            "total_value": summary.etf_total_value,
-            "total_invested": summary.etf_total_invested,
-            "total_gain_loss": summary.etf_total_gain_loss,
-            "total_gain_loss_pct": summary.etf_total_gain_loss_pct,
+            "total_value": _safe_float(summary.etf_total_value),
+            "total_invested": _safe_float(summary.etf_total_invested),
+            "total_gain_loss": _safe_float(summary.etf_total_gain_loss),
+            "total_gain_loss_pct": _safe_float(summary.etf_total_gain_loss_pct),
             "level": summary.etf_level.name,
             "last_update": summary.etf_last_update.isoformat()
             if summary.etf_last_update
@@ -56,19 +66,19 @@ async def get_summary():
             "phase_months_remaining": summary.phase_months_remaining,
         },
         "crypto": {
-            "total_value": summary.crypto_total_value,
-            "total_daily_gain": summary.crypto_total_daily_gain,
+            "total_value": _safe_float(summary.crypto_total_value),
+            "total_daily_gain": _safe_float(summary.crypto_total_daily_gain),
             "level": summary.crypto_level.name,
             "last_update": summary.crypto_last_update.isoformat()
             if summary.crypto_last_update
             else None,
             "analysis": [_serialize_analysis(a) for a in summary.crypto_analysis],
-            "fear_greed": summary.crypto_fear_greed,
+            "fear_greed": _safe_float(summary.crypto_fear_greed),
             "fear_greed_label": summary.crypto_fear_greed_label,
         },
         "savings": {
-            "total_balance": summary.savings_total_balance,
-            "yearly_interest": summary.savings_yearly_interest,
+            "total_balance": _safe_float(summary.savings_total_balance),
+            "yearly_interest": _safe_float(summary.savings_yearly_interest),
             "last_update": summary.savings_last_update.isoformat()
             if summary.savings_last_update
             else None,
@@ -99,10 +109,10 @@ async def get_etf_summary():
     summary = orch.get_summary()
 
     return {
-        "total_value": summary.etf_total_value,
-        "total_invested": summary.etf_total_invested,
-        "total_gain_loss": summary.etf_total_gain_loss,
-        "total_gain_loss_pct": summary.etf_total_gain_loss_pct,
+        "total_value": _safe_float(summary.etf_total_value),
+        "total_invested": _safe_float(summary.etf_total_invested),
+        "total_gain_loss": _safe_float(summary.etf_total_gain_loss),
+        "total_gain_loss_pct": _safe_float(summary.etf_total_gain_loss_pct),
         "level": summary.etf_level.name,
         "last_update": summary.etf_last_update.isoformat()
         if summary.etf_last_update
@@ -120,14 +130,14 @@ async def get_crypto_summary():
     summary = orch.get_summary()
 
     return {
-        "total_value": summary.crypto_total_value,
-        "total_daily_gain": summary.crypto_total_daily_gain,
+        "total_value": _safe_float(summary.crypto_total_value),
+        "total_daily_gain": _safe_float(summary.crypto_total_daily_gain),
         "level": summary.crypto_level.name,
         "last_update": summary.crypto_last_update.isoformat()
         if summary.crypto_last_update
         else None,
         "analysis": [_serialize_analysis(a) for a in summary.crypto_analysis],
-        "fear_greed": summary.crypto_fear_greed,
+        "fear_greed": _safe_float(summary.crypto_fear_greed),
         "fear_greed_label": summary.crypto_fear_greed_label,
     }
 
@@ -155,8 +165,8 @@ async def get_savings_summary():
     summary = orch.get_summary()
 
     return {
-        "total_balance": summary.savings_total_balance,
-        "yearly_interest": summary.savings_yearly_interest,
+        "total_balance": _safe_float(summary.savings_total_balance),
+        "yearly_interest": _safe_float(summary.savings_yearly_interest),
         "last_update": summary.savings_last_update.isoformat()
         if summary.savings_last_update
         else None,
