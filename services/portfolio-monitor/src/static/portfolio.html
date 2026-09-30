@@ -793,7 +793,6 @@
                         <span class="status-badge status-${statusClass}">${statusText}</span>
                     </div>
                     <div class="fund-card-body">
-                        ${pos.ohlc?.length ? `<div class="sparkline-container"><canvas class="sparkline" data-ohlc='${JSON.stringify(pos.ohlc)}'></canvas></div>` : ''}
                         <div class="fund-stats">
                             <div class="fund-stat">
                                 <span class="fund-stat-label">Cantidad</span>
@@ -845,9 +844,6 @@
                     </div>
                 </div>
             `}).join('');
-            
-            // Render sparklines
-            renderSparklines();
         }
         
         // Render Savings tab
