@@ -19,8 +19,9 @@ Higher numbers = less permission needed (more users can access).
 Example: an app with view_level=5 is visible even to guests; view_level=1 requires a power user.
 Built-in profiles
 -----------------
-SUPER          → sees and does everything (both types, all levels)
+SUPER             → sees and does everything (both types, all levels)
 FAMILIA_PRINCIPAL → standard apps only, levels 1+ (sees all current apps, full edit)
+GAMER             → config apps only, levels 2+ (currently only valheim)
 Database
 --------
 Table ``user_profiles`` in auth.db:
@@ -50,6 +51,13 @@ PROFILES: dict[str, dict] = {
         "can_view_level": 1,
         "can_edit_level": 1,
         "show_config_apps": False,
+    },
+    "GAMER": {
+        # Restricted profile: only sees config apps with view_level >= 2.
+        # Currently only valheim qualifies.
+        "can_view_level": 2,
+        "can_edit_level": 2,
+        "show_config_apps": True,
     },
 }
 _DEFAULT_PROFILE = "FAMILIA_PRINCIPAL"
@@ -106,11 +114,12 @@ APP_REGISTRY: list[dict] = [
         "edit_level": 1,
     },
     {
-        # Valheim game server — config app, only visible to SUPER users.
+        # Valheim game server — config app, visible to SUPER and GAMER profiles.
+        # view_level=2 allows GAMER (can_view_level=2) to see it.
         "key": "valheim",
         "type": "config",
-        "view_level": 1,
-        "edit_level": 1,
+        "view_level": 2,
+        "edit_level": 2,
     },
     {
         # Portfolio Monitor — ETF and crypto portfolio tracking.
