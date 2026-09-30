@@ -900,8 +900,8 @@
                                 <span class="fund-stat-value positive">+${formatEur(acc.yearly_interest)}</span>
                             </div>
                             <div class="fund-stat">
-                                <span class="fund-stat-label">Días activa</span>
-                                <span class="fund-stat-value">${acc.days_active} días</span>
+                                <span class="fund-stat-label">Próximo pago</span>
+                                <span class="fund-stat-value">${acc.days_until_payment === 0 ? '¡Hoy!' : acc.days_until_payment === 1 ? 'Mañana' : 'En ' + acc.days_until_payment + ' días'} (día ${acc.payment_day})</span>
                             </div>
                         </div>
                     </div>
@@ -917,7 +917,12 @@
             }
             
             const priorityEmoji = { high: '🔴', medium: '🟡', low: '🔵' };
-            const actionEmoji = { sell_crypto: '💰', buy_etf: '📈', review: '👀' };
+            const actionEmoji = { 
+                sell_crypto: '💰', 
+                stop_etf: '🛑', 
+                modify_etf: '✏️', 
+                review: '👀' 
+            };
             
             document.getElementById('alerts-list').innerHTML = alerts.map(alert => {
                 const daysUntil = Math.ceil((new Date(alert.date) - new Date()) / (1000 * 60 * 60 * 24));

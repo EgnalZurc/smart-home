@@ -7,7 +7,7 @@ Sends email alerts when WARN or DANGER signals are detected.
 import asyncio
 import json
 import logging
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Any
 
 from config import DATA_DIR, SCHEDULE, reload_config
@@ -213,8 +213,9 @@ class Orchestrator:
             next_run = datetime.combine(today, scheduled_time, tzinfo=timezone.utc)
             if next_run <= now:
                 # Already passed today, schedule for tomorrow
+                tomorrow = today + timedelta(days=1)
                 next_run = datetime.combine(
-                    today.replace(day=today.day + 1),
+                    tomorrow,
                     scheduled_time,
                     tzinfo=timezone.utc,
                 )

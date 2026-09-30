@@ -22,14 +22,38 @@ def calculate_interest(balance: float, apy: float) -> tuple[float, float]:
     return monthly, yearly
 
 
-def days_since_start(start_date: str) -> int:
-    """Return days since account was opened."""
+def days_until_next_payment(payment_day: int = 25) -> int:
+    """Return days until next interest payment (default: day 25 of month)."""
+    today = datetime.now(timezone.utc).date()
+
+    # This month's payment day
     try:
-        start = datetime.fromisoformat(start_date).date()
-        today = datetime.now(timezone.utc).date()
-        return (today - start).days
-    except (ValueError, TypeError):
-        return 0
+        this_month_payment = today.replace(day=payment_day)
+    except ValueError:
+        # If payment_day > days in month, use last day
+        import calendar
+
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        this_month_payment = today.replace(day=min(payment_day, last_day))
+
+    if today <= this_month_payment:
+        return (this_month_payment - today).days
+
+    # Next month's payment day
+    if today.month == 12:
+        next_month = today.replace(year=today.year + 1, month=1, day=1)
+    else:
+        next_month = today.replace(month=today.month + 1, day=1)
+
+    try:
+        next_payment = next_month.replace(day=payment_day)
+    except ValueError:
+        import calendar
+
+        last_day = calendar.monthrange(next_month.year, next_month.month)[1]
+        next_payment = next_month.replace(day=min(payment_day, last_day))
+
+    return (next_payment - today).days
 
 
 @register_monitor
@@ -69,10 +93,8 @@ class SavingsMonitor(BaseMonitor):
                 balance = account.get("balance", 0)
                 apy = account.get("apy", 0)
                 monthly, yearly = calculate_interest(balance, apy)
-                days = days_since_start(account.get("start_date", ""))
-
-                # Estimate accumulated interest (simplified)
-                accumulated = (yearly / 365) * days
+                payment_day = account.get("payment_day", 25)
+                days_to_payment = days_until_next_payment(payment_day)
 
                 analysis = SavingsAnalysis(
                     account_id=account_id,
@@ -84,8 +106,8 @@ class SavingsMonitor(BaseMonitor):
                     start_date=account.get("start_date", ""),
                     monthly_interest=monthly,
                     yearly_interest=yearly,
-                    days_active=days,
-                    accumulated_interest=accumulated,
+                    days_until_payment=days_to_payment,
+                    payment_day=payment_day,
                     level=AlertLevel.OK,
                 )
 

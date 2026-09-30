@@ -144,8 +144,8 @@ class SavingsAnalysis:
     # Calculated values
     monthly_interest: float = 0.0
     yearly_interest: float = 0.0
-    days_active: int = 0
-    accumulated_interest: float = 0.0
+    days_until_payment: int = 0
+    payment_day: int = 25
 
     # Level (always OK for savings)
     level: AlertLevel = AlertLevel.OK
@@ -157,7 +157,7 @@ class ScheduledAlert:
 
     alert_id: str
     date: str  # ISO format YYYY-MM-DD
-    action: str  # "buy_etf", "sell_crypto", "review"
+    action: str  # "sell_crypto", "stop_etf", "modify_etf", "review" (NO buy_etf - automated)
     symbol: str
     title: str
     description: str
