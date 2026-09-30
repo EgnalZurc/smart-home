@@ -491,18 +491,35 @@ async function loadInvitations() {
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
-function renderGifts() {
-    // Gifts come pre-sorted from the API (visible by price desc, then hidden by price desc)
-    // For admin view, we need to sort them here
-    let sorted = [...gifts];
-    if (isAdmin) {
-        sorted.sort((a, b) => {
-            if (a.reserved_by && !b.reserved_by) return 1;
-            if (!a.reserved_by && b.reserved_by) return -1;
-            return a.name.localeCompare(b.name);
-        });
+
+// Helper function to parse price for sorting
+function parsePrice(priceStr) {
+    if (!priceStr) return 0;
+    // Remove currency symbols and spaces, find numbers
+    const numbers = priceStr.replace(',', '.').match(/[\d.]+/g);
+    if (numbers && numbers.length > 0) {
+        // If there's a range (e.g., "100-150"), use the average
+        if (numbers.length >= 2) {
+            return (parseFloat(numbers[0]) + parseFloat(numbers[numbers.length - 1])) / 2;
+        }
+        return parseFloat(numbers[0]) || 0;
     }
-    // For users/guests, the API already sorted them
+    return 0;
+}
+
+function renderGifts() {
+    // Sort: visible gifts by price descending, then hidden gifts by price descending
+    // This applies to ALL views (admin, familia, guests)
+    let visible = gifts.filter(g => !g.hidden);
+    let hidden = gifts.filter(g => g.hidden);
+    
+    // Sort visible by price descending
+    visible.sort((a, b) => parsePrice(b.price_range) - parsePrice(a.price_range));
+    // Sort hidden by price descending
+    hidden.sort((a, b) => parsePrice(b.price_range) - parsePrice(a.price_range));
+    
+    // Visible first, then hidden at the end
+    let sorted = [...visible, ...hidden];
     
     if (sorted.length === 0) {
         document.getElementById('gifts-list').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🎁</div><div class="empty-state-text">No hay regalos en la lista</div></div>';
@@ -541,24 +558,19 @@ function renderGifts() {
             </div>`;
         }
         
-        // Assigned person section - don't show who reserved for hidden gifts (unless it's me)
+        // Assigned person section - HIDDEN gifts should NOT show availability section at all
         let assignedHtml = '';
-        if (reserved) {
-            let assignedName = '';
-            let showReservedBy = true;
-            
-            if (reservedByMe) {
-                assignedName = 'Tú';
-            } else if (isHidden) {
-                // For hidden gifts, don't show who reserved
-                showReservedBy = false;
-            } else if (gift.reserved_by_name) {
-                assignedName = gift.reserved_by_name;
-            } else {
-                assignedName = 'Alguien';
-            }
-            
-            if (showReservedBy) {
+        if (!isHidden) {
+            // Only show availability/reservation info for visible gifts
+            if (reserved) {
+                let assignedName = '';
+                if (reservedByMe) {
+                    assignedName = 'Tú';
+                } else if (gift.reserved_by_name) {
+                    assignedName = gift.reserved_by_name;
+                } else {
+                    assignedName = 'Alguien';
+                }
                 const initial = assignedName.charAt(0).toUpperCase();
                 assignedHtml = `
                     <div style="margin-top:12px; display:flex; align-items:center; gap:10px; padding:10px 12px; background:rgba(34,197,94,0.15); border-radius:10px;">
@@ -570,45 +582,45 @@ function renderGifts() {
                     </div>
                 `;
             } else {
-                // Hidden gift reserved by someone else - just show reserved status
                 assignedHtml = `
-                    <div style="margin-top:12px; display:flex; align-items:center; gap:10px; padding:10px 12px; background:rgba(139,92,246,0.15); border-radius:10px;">
-                        <div style="width:32px; height:32px; background:linear-gradient(135deg, #8b5cf6, #a855f7); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; color:white;">✓</div>
+                    <div style="margin-top:12px; display:flex; align-items:center; gap:10px; padding:10px 12px; background:rgba(99,102,241,0.1); border-radius:10px;">
+                        <div style="width:32px; height:32px; background:linear-gradient(135deg, #6366f1, #8b5cf6); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; color:white;">?</div>
                         <div>
-                            <div style="font-size:14px; font-weight:600; color:#c4b5fd;">Reservado</div>
+                            <div style="font-size:14px; font-weight:600; color:#818cf8;">Disponible</div>
+                            <div style="font-size:12px; color:#64748b;">¡Puedes reservarlo!</div>
                         </div>
                     </div>
                 `;
             }
-        } else {
-            assignedHtml = `
-                <div style="margin-top:12px; display:flex; align-items:center; gap:10px; padding:10px 12px; background:rgba(99,102,241,0.1); border-radius:10px;">
-                    <div style="width:32px; height:32px; background:linear-gradient(135deg, #6366f1, #8b5cf6); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; color:white;">?</div>
-                    <div>
-                        <div style="font-size:14px; font-weight:600; color:#818cf8;">Disponible</div>
-                        <div style="font-size:12px; color:#64748b;">¡Puedes reservarlo!</div>
-                    </div>
-                </div>
-            `;
         }
+        // Hidden gifts: no assignedHtml (no availability section)
         
-        // Action buttons - Edit/Delete only for admin (SUPER users)
+        // Action buttons
         let actions = '';
         if (isAdmin) {
-            // Admins get edit/delete buttons, plus visibility toggle if FAMILIA
+            // Admins get visibility toggle (if FAMILIA) + edit/delete buttons
+            // Hidden gifts are NOT reservable, so no reserve button for hidden
             const visibilityBtn = isFamilia ? `<button class="btn visibility-toggle btn-sm ${isHidden ? 'active' : ''}" onclick="event.stopPropagation(); toggleVisibility('${gift.id}')">${isHidden ? '👁️ Mostrar' : '🙈 Ocultar'}</button>` : '';
             actions = `
                 <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
                     ${visibilityBtn}
                     <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); editGift('${gift.id}')">✏️ Editar</button>
-                    ${reserved ? `<button class="btn btn-warning btn-sm" onclick="event.stopPropagation(); adminUnreserve('${gift.id}')">↩️ Liberar</button>` : ''}
+                    ${!isHidden && reserved ? `<button class="btn btn-warning btn-sm" onclick="event.stopPropagation(); adminUnreserve('${gift.id}')">↩️ Liberar</button>` : ''}
                     <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteGift('${gift.id}')">🗑️</button>
                 </div>
             `;
         } else if (isFamilia) {
-            // FAMILIA users can toggle visibility and reserve
+            // FAMILIA users can toggle visibility
+            // Hidden gifts are NOT reservable
             const visibilityBtn = `<button class="btn visibility-toggle btn-sm ${isHidden ? 'active' : ''}" onclick="event.stopPropagation(); toggleVisibility('${gift.id}')">${isHidden ? '👁️ Mostrar a todos' : '🙈 Ocultar'}</button>`;
-            if (!reserved) {
+            if (isHidden) {
+                // Hidden: only visibility toggle, no reserve
+                actions = `
+                    <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+                        ${visibilityBtn}
+                    </div>
+                `;
+            } else if (!reserved) {
                 actions = `
                     <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
                         ${visibilityBtn}
@@ -630,6 +642,7 @@ function renderGifts() {
                 `;
             }
         } else if (!reserved) {
+            // Regular users/guests - only visible gifts shown anyway
             actions = `
                 <div style="margin-top:14px;">
                     <button class="btn btn-success" onclick="event.stopPropagation(); reserveGift('${gift.id}')" style="width:100%;">🎁 Reservar este regalo</button>
