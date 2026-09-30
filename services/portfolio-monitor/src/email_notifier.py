@@ -292,7 +292,20 @@ def _build_html_scheduled_alert(alert) -> str:
     date_str = datetime.now().strftime("%d/%m/%Y %H:%M")
 
     # Header text
-    header_text = "⏰ Alerta Programada — ¡HOY!" if not is_overdue else "⚠️ Alerta Vencida — ACCIÓN PENDIENTE"
+    header_text = (
+        "⏰ Alerta Programada — ¡HOY!"
+        if not is_overdue
+        else "⚠️ Alerta Vencida — ACCIÓN PENDIENTE"
+    )
+
+    # Overdue banner HTML
+    overdue_banner = ""
+    if is_overdue:
+        overdue_banner = (
+            '<div class="overdue-banner">⚠️ Esta alerta estaba programada para el '
+            + alert.date
+            + " y aún no se ha completado.</div>"
+        )
 
     return f"""
 <!DOCTYPE html>
@@ -324,7 +337,7 @@ def _build_html_scheduled_alert(alert) -> str:
             <div class="date">{date_str}</div>
         </div>
         <div class="content">
-            {'<div class="overdue-banner">⚠️ Esta alerta estaba programada para el ' + alert.date + ' y aún no se ha completado.</div>' if is_overdue else ''}
+            {overdue_banner}
             <div class="title">{action_emoji} {alert.title}</div>
             <div class="description">{alert.description}</div>
             <div class="meta">
