@@ -301,10 +301,6 @@
         <div class="guest-name">¡Hola, <span id="guest-name-display"></span>!</div>
         <div class="guest-hint">Pulsa en un regalo para reservarlo</div>
     </div>
-    <!-- Note about orientative links -->
-    <div style="text-align:center; margin-bottom:16px; padding:8px 12px; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); border-radius:8px; font-size:12px; color:#fcd34d;">
-        &#128161; Los enlaces y precios son orientativos - puedes comprar donde prefieras
-    </div>
     <!-- Gift list -->
     <div id="gifts-list"></div>
 </div>
@@ -448,6 +444,13 @@ async function loadAdminData() {
     const data = await res.json();
     categories = data.categories || [];
     gifts = data.gifts || [];
+    isFamilia = data.is_familia || false;
+    // Show welcome for admin users
+    if (data.user_name) {
+        guestName = data.user_name;
+        document.getElementById('guest-welcome').style.display = 'block';
+        document.getElementById('guest-name-display').textContent = guestName;
+    }
     renderGifts();
     await loadInvitations();
 }
@@ -592,8 +595,11 @@ function renderGifts() {
         // Action buttons - Edit/Delete only for admin (SUPER users)
         let actions = '';
         if (isAdmin) {
+            // Admins get edit/delete buttons, plus visibility toggle if FAMILIA
+            const visibilityBtn = isFamilia ? `<button class="btn visibility-toggle btn-sm ${isHidden ? 'active' : ''}" onclick="event.stopPropagation(); toggleVisibility('${gift.id}')">${isHidden ? '👁️ Mostrar' : '🙈 Ocultar'}</button>` : '';
             actions = `
                 <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+                    ${visibilityBtn}
                     <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); editGift('${gift.id}')">✏️ Editar</button>
                     ${reserved ? `<button class="btn btn-warning btn-sm" onclick="event.stopPropagation(); adminUnreserve('${gift.id}')">↩️ Liberar</button>` : ''}
                     <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteGift('${gift.id}')">🗑️</button>
