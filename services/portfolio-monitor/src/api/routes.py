@@ -14,10 +14,20 @@ router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
 
 def _safe_float(value: Any) -> Any:
-    """Convert NaN/Inf floats to None for JSON compliance."""
-    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+    """Convert NaN/Inf floats to None for JSON compliance.
+
+    Handles both Python float and numpy float types.
+    """
+    if value is None:
         return None
-    return value
+    try:
+        # Convert to Python float first (handles np.float64, etc.)
+        fval = float(value)
+        if math.isnan(fval) or math.isinf(fval):
+            return None
+        return fval
+    except (TypeError, ValueError):
+        return value
 
 
 def _serialize_analysis(obj: Any) -> dict:
@@ -30,18 +40,27 @@ def _serialize_analysis(obj: Any) -> dict:
                 result[field_name] = value.name
             elif isinstance(value, datetime):
                 result[field_name] = value.isoformat()
-            elif isinstance(value, float):
+            elif isinstance(value, (int, float)) or (
+                hasattr(value, "__float__") and not isinstance(value, (str, bool))
+            ):
+                # Handle any numeric type including numpy floats
                 result[field_name] = _safe_float(value)
             elif isinstance(value, list):
-                result[field_name] = [_serialize_analysis(item) for item in value]
+                result[field_name] = [
+                    _safe_float(item)
+                    if isinstance(item, (int, float)) or hasattr(item, "__float__")
+                    else _serialize_analysis(item)
+                    for item in value
+                ]
             elif hasattr(value, "__dataclass_fields__"):
                 result[field_name] = _serialize_analysis(value)
             else:
-                result[field_name] = (
-                    _safe_float(value) if isinstance(value, float) else value
-                )
+                result[field_name] = value
         return result
-    return _safe_float(obj) if isinstance(obj, float) else obj
+    # Handle non-dataclass values
+    if isinstance(obj, (int, float)) or hasattr(obj, "__float__"):
+        return _safe_float(obj)
+    return obj
 
 
 # ─────────────────────────────────────────────────────────────────────────────
