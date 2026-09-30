@@ -333,15 +333,16 @@ def get_gifts_for_user(request: Request):
         else:
             gift["reserved_by_me"] = False
         filtered_gifts.append(gift)
-    
+
     # Sort function to parse price for ordering
     def parse_price(price_str):
         """Extract numeric value from price string for sorting."""
         if not price_str:
             return 0
         import re
+
         # Remove currency symbols and spaces, find numbers
-        numbers = re.findall(r'[\d,\.]+', price_str.replace(',', '.'))
+        numbers = re.findall(r"[\d,\.]+", price_str.replace(",", "."))
         if numbers:
             try:
                 # If there's a range (e.g., "100-150"), use the average
@@ -351,16 +352,18 @@ def get_gifts_for_user(request: Request):
             except ValueError:
                 return 0
         return 0
-    
+
     # Sort: visible gifts by price descending, then hidden gifts by price descending
     visible_gifts = [g for g in filtered_gifts if not g.get("hidden", False)]
     hidden_gifts = [g for g in filtered_gifts if g.get("hidden", False)]
-    
-    visible_gifts.sort(key=lambda g: parse_price(g.get("price_range", "")), reverse=True)
+
+    visible_gifts.sort(
+        key=lambda g: parse_price(g.get("price_range", "")), reverse=True
+    )
     hidden_gifts.sort(key=lambda g: parse_price(g.get("price_range", "")), reverse=True)
-    
+
     sorted_gifts = visible_gifts + hidden_gifts
-    
+
     return {
         "user_name": username,
         "is_familia": user_is_familia,
@@ -408,11 +411,15 @@ def user_toggle_visibility(gift_id: str, request: Request):
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
     if not is_familia_user(username):
-        raise HTTPException(status_code=403, detail="No tienes permiso para esta acción")
+        raise HTTPException(
+            status_code=403, detail="No tienes permiso para esta acción"
+        )
     result = toggle_gift_visibility(gift_id)
     if result["status"] == "error":
         raise HTTPException(status_code=404, detail=result["message"])
-    logger.info(f"Gift visibility toggled: {gift_id} by {username}, hidden={result['hidden']}")
+    logger.info(
+        f"Gift visibility toggled: {gift_id} by {username}, hidden={result['hidden']}"
+    )
     return result
 
 
@@ -452,15 +459,16 @@ def get_gifts_for_guest(token: str, request: Request):
         else:
             gift["reserved_by_me"] = False
         filtered_gifts.append(gift)
-    
+
     # Sort function to parse price for ordering
     def parse_price(price_str):
         """Extract numeric value from price string for sorting."""
         if not price_str:
             return 0
         import re
+
         # Remove currency symbols and spaces, find numbers
-        numbers = re.findall(r'[\d,\.]+', price_str.replace(',', '.'))
+        numbers = re.findall(r"[\d,\.]+", price_str.replace(",", "."))
         if numbers:
             try:
                 # If there's a range (e.g., "100-150"), use the average
@@ -470,10 +478,12 @@ def get_gifts_for_guest(token: str, request: Request):
             except ValueError:
                 return 0
         return 0
-    
+
     # Sort by price descending
-    filtered_gifts.sort(key=lambda g: parse_price(g.get("price_range", "")), reverse=True)
-    
+    filtered_gifts.sort(
+        key=lambda g: parse_price(g.get("price_range", "")), reverse=True
+    )
+
     return {
         "guest_name": guest["name"],
         "gifts": filtered_gifts,
