@@ -131,6 +131,38 @@
             background: linear-gradient(90deg, #22c55e, #4ade80);
             opacity: 1;
         }
+        .gift-card.hidden-gift {
+            background: linear-gradient(145deg, rgba(139,92,246,0.15), rgba(88,28,135,0.2));
+            border-color: rgba(139,92,246,0.4);
+        }
+        .gift-card.hidden-gift::before {
+            background: linear-gradient(90deg, #8b5cf6, #a855f7);
+            opacity: 1;
+        }
+        .hidden-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            background: rgba(139,92,246,0.3);
+            border: 1px solid rgba(139,92,246,0.5);
+            border-radius: 6px;
+            font-size: 10px;
+            color: #c4b5fd;
+            font-weight: 600;
+        }
+        .visibility-toggle {
+            background: rgba(139,92,246,0.2);
+            border: 1px solid rgba(139,92,246,0.4);
+            color: #c4b5fd;
+        }
+        .visibility-toggle:hover {
+            background: rgba(139,92,246,0.3);
+        }
+        .visibility-toggle.active {
+            background: rgba(139,92,246,0.4);
+            border-color: rgba(139,92,246,0.6);
+        }
         .gift-name {
             font-size: 18px;
             font-weight: 700;
@@ -372,6 +404,7 @@
 <script>
 var isAdmin = !!window.AUTH_USER;  // Authenticated users are admins
 var isAuthUser = !!window.AUTH_USER;
+var isFamilia = false;  // Set from API response
 var guestToken = window.GUEST_TOKEN;
 var authUser = window.AUTH_USER;
 var guestName = '';
@@ -428,6 +461,7 @@ async function loadAuthUserData() {
     const data = await res.json();
     categories = data.categories || [];
     gifts = data.gifts || [];
+    isFamilia = data.is_familia || false;
     renderGifts();
 }
 
@@ -455,12 +489,18 @@ async function loadInvitations() {
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 function renderGifts() {
-    // Sort: available first, then by name
-    let sorted = [...gifts].sort((a, b) => {
-        if (a.reserved_by && !b.reserved_by) return 1;
-        if (!a.reserved_by && b.reserved_by) return -1;
-        return a.name.localeCompare(b.name);
-    });
+    // Gifts come pre-sorted from the API (visible by price desc, then hidden by price desc)
+    // For admin view, we need to sort them here
+    let sorted = [...gifts];
+    if (isAdmin) {
+        sorted.sort((a, b) => {
+            if (a.reserved_by && !b.reserved_by) return 1;
+            if (!a.reserved_by && b.reserved_by) return -1;
+            return a.name.localeCompare(b.name);
+        });
+    }
+    // For users/guests, the API already sorted them
+    
     if (sorted.length === 0) {
         document.getElementById('gifts-list').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🎁</div><div class="empty-state-text">No hay regalos en la lista</div></div>';
         return;
@@ -468,18 +508,24 @@ function renderGifts() {
     document.getElementById('gifts-list').innerHTML = sorted.map(gift => {
         const reserved = gift.reserved_by;
         const reservedByMe = gift.reserved_by_me;
+        const isHidden = gift.hidden || false;
         let cardClass = 'gift-card';
-        if (reserved) cardClass += reservedByMe ? ' reserved-by-me' : ' reserved';
+        if (isHidden) {
+            cardClass += ' hidden-gift';
+        } else if (reserved) {
+            cardClass += reservedByMe ? ' reserved-by-me' : ' reserved';
+        }
         
         // Gift name - clickable if has URL
         let nameHtml = '';
+        const hiddenBadge = isHidden ? '<span class="hidden-badge">👁️ Oculto</span>' : '';
         if (gift.url) {
-            nameHtml = `<a href="${gift.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:17px; font-weight:600; color:#f1f5f9; text-decoration:none; display:flex; align-items:center; gap:8px;">
-                <span>🎁</span> ${escapeHtml(gift.name)} <span style="font-size:12px; color:#6366f1;">↗</span>
+            nameHtml = `<a href="${gift.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:17px; font-weight:600; color:#f1f5f9; text-decoration:none; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <span>🎁</span> ${escapeHtml(gift.name)} <span style="font-size:12px; color:#6366f1;">↗</span> ${hiddenBadge}
             </a>`;
         } else {
-            nameHtml = `<div style="font-size:17px; font-weight:600; display:flex; align-items:center; gap:8px;">
-                <span>🎁</span> ${escapeHtml(gift.name)}
+            nameHtml = `<div style="font-size:17px; font-weight:600; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <span>🎁</span> ${escapeHtml(gift.name)} ${hiddenBadge}
             </div>`;
         }
         
@@ -492,27 +538,45 @@ function renderGifts() {
             </div>`;
         }
         
-        // Assigned person section
+        // Assigned person section - don't show who reserved for hidden gifts (unless it's me)
         let assignedHtml = '';
         if (reserved) {
             let assignedName = '';
+            let showReservedBy = true;
+            
             if (reservedByMe) {
                 assignedName = 'Tú';
+            } else if (isHidden) {
+                // For hidden gifts, don't show who reserved
+                showReservedBy = false;
             } else if (gift.reserved_by_name) {
                 assignedName = gift.reserved_by_name;
             } else {
                 assignedName = 'Alguien';
             }
-            const initial = assignedName.charAt(0).toUpperCase();
-            assignedHtml = `
-                <div style="margin-top:12px; display:flex; align-items:center; gap:10px; padding:10px 12px; background:rgba(34,197,94,0.15); border-radius:10px;">
-                    <div style="width:32px; height:32px; background:linear-gradient(135deg, #22c55e, #16a34a); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; color:white; font-weight:600;">${escapeHtml(initial)}</div>
-                    <div>
-                        <div style="font-size:12px; color:#86efac;">Reservado por</div>
-                        <div style="font-size:14px; font-weight:600; color:#4ade80;">${escapeHtml(assignedName)}</div>
+            
+            if (showReservedBy) {
+                const initial = assignedName.charAt(0).toUpperCase();
+                assignedHtml = `
+                    <div style="margin-top:12px; display:flex; align-items:center; gap:10px; padding:10px 12px; background:rgba(34,197,94,0.15); border-radius:10px;">
+                        <div style="width:32px; height:32px; background:linear-gradient(135deg, #22c55e, #16a34a); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; color:white; font-weight:600;">${escapeHtml(initial)}</div>
+                        <div>
+                            <div style="font-size:12px; color:#86efac;">Reservado por</div>
+                            <div style="font-size:14px; font-weight:600; color:#4ade80;">${escapeHtml(assignedName)}</div>
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
+            } else {
+                // Hidden gift reserved by someone else - just show reserved status
+                assignedHtml = `
+                    <div style="margin-top:12px; display:flex; align-items:center; gap:10px; padding:10px 12px; background:rgba(139,92,246,0.15); border-radius:10px;">
+                        <div style="width:32px; height:32px; background:linear-gradient(135deg, #8b5cf6, #a855f7); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; color:white;">✓</div>
+                        <div>
+                            <div style="font-size:14px; font-weight:600; color:#c4b5fd;">Reservado</div>
+                        </div>
+                    </div>
+                `;
+            }
         } else {
             assignedHtml = `
                 <div style="margin-top:12px; display:flex; align-items:center; gap:10px; padding:10px 12px; background:rgba(99,102,241,0.1); border-radius:10px;">
@@ -535,6 +599,30 @@ function renderGifts() {
                     <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteGift('${gift.id}')">🗑️</button>
                 </div>
             `;
+        } else if (isFamilia) {
+            // FAMILIA users can toggle visibility and reserve
+            const visibilityBtn = `<button class="btn visibility-toggle btn-sm ${isHidden ? 'active' : ''}" onclick="event.stopPropagation(); toggleVisibility('${gift.id}')">${isHidden ? '👁️ Mostrar a todos' : '🙈 Ocultar'}</button>`;
+            if (!reserved) {
+                actions = `
+                    <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+                        ${visibilityBtn}
+                        <button class="btn btn-success" onclick="event.stopPropagation(); reserveGift('${gift.id}')">🎁 Reservar</button>
+                    </div>
+                `;
+            } else if (reservedByMe) {
+                actions = `
+                    <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+                        ${visibilityBtn}
+                        <button class="btn btn-secondary" onclick="event.stopPropagation(); unreserveGift('${gift.id}')">↩️ Cancelar reserva</button>
+                    </div>
+                `;
+            } else {
+                actions = `
+                    <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+                        ${visibilityBtn}
+                    </div>
+                `;
+            }
         } else if (!reserved) {
             actions = `
                 <div style="margin-top:14px;">
@@ -746,6 +834,22 @@ async function unreserveGift(id) {
         }
     } catch (e) {
         showToast('Error cancelando reserva', 'error');
+    }
+}
+
+// ── Visibility toggle (FAMILIA users) ─────────────────────────────────────────
+async function toggleVisibility(id) {
+    try {
+        const res = await fetch(`/api/baby-gifts/user/toggle-visibility/${id}`, { method: 'POST' });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Error');
+        }
+        const data = await res.json();
+        showToast(data.hidden ? 'Regalo oculto para otros' : 'Regalo visible para todos', 'success');
+        await loadAuthUserData();
+    } catch (e) {
+        showToast(e.message || 'Error cambiando visibilidad', 'error');
     }
 }
 

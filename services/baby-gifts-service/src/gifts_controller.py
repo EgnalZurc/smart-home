@@ -15,6 +15,7 @@ Gift structure:
     "reserved_by": null,  # invitation token, "user:username", or null
     "reserved_by_name": null,  # guest name or username
     "reserved_at": null,  # ISO timestamp
+    "hidden": false,  # if true, only FAMILIA users can see it
 }
 
 Invitation structure (SQLite):
@@ -46,6 +47,7 @@ _lock = threading.Lock()
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 INVITATION_EXPIRY_DAYS = 180  # 6 months
+FAMILIA_USERS = {"egnal", "virchu"}  # Users with FAMILIA permission
 
 
 # ── Database setup ────────────────────────────────────────────────────────────
@@ -165,6 +167,7 @@ def add_gift(gift: dict) -> dict:
             "reserved_by": None,
             "reserved_by_name": None,
             "reserved_at": None,
+            "hidden": gift.get("hidden", False),
         }
         data["gifts"].append(new_gift)
         _save_gifts(data)
@@ -185,6 +188,7 @@ def update_gift(gift_id: str, updates: dict) -> dict | None:
                     "price_range",
                     "category",
                     "priority",
+                    "hidden",
                 ]:
                     if key in updates:
                         gift[key] = updates[key]
@@ -265,6 +269,24 @@ def update_categories(categories: list) -> dict:
         data["categories"] = categories
         _save_gifts(data)
         return {"status": "ok", "categories": categories}
+
+
+def toggle_gift_visibility(gift_id: str) -> dict:
+    """Toggle a gift's hidden status (FAMILIA users only)."""
+    with _lock:
+        data = _load_gifts()
+        for i, gift in enumerate(data.get("gifts", [])):
+            if gift["id"] == gift_id:
+                gift["hidden"] = not gift.get("hidden", False)
+                data["gifts"][i] = gift
+                _save_gifts(data)
+                return {"status": "ok", "gift": gift, "hidden": gift["hidden"]}
+        return {"status": "error", "message": "Regalo no encontrado"}
+
+
+def is_familia_user(username: str) -> bool:
+    """Check if a user has FAMILIA permission."""
+    return username.lower() in FAMILIA_USERS
 
 
 # ── Invitations ───────────────────────────────────────────────────────────────

@@ -44,10 +44,12 @@ from gifts_controller import (
     delete_gift,
     delete_invitation,
     get_gifts_data,
+    is_familia_user,
     is_healthy,
     list_invitations,
     reserve_gift,
     revoke_invitation,
+    toggle_gift_visibility,
     unreserve_gift,
     update_categories,
     update_gift,
@@ -297,15 +299,23 @@ def revoke_inv(token: str):
 # ?????? Authenticated User API (protected by nginx auth_request) ??????????????????????????????????????????????????????
 @app.get("/api/baby-gifts/user")
 def get_gifts_for_user(request: Request):
-    """Get gifts for an authenticated user. Shows what's reserved but not by whom (except own)."""
+    """Get gifts for an authenticated user. Shows what's reserved but not by whom (except own).
+    FAMILIA users (egnal, virchu) can see hidden gifts.
+    Gifts are sorted: visible first by price descending, then hidden by price descending.
+    """
     username = _get_auth_user(request)
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
     # User token format: "user:username"
     user_token = f"user:{username}"
+    user_is_familia = is_familia_user(username)
     # Get gifts and filter reservation info
     data = get_gifts_data(include_admin=False)
+    filtered_gifts = []
     for gift in data.get("gifts", []):
+        # Filter hidden gifts for non-FAMILIA users
+        if gift.get("hidden", False) and not user_is_familia:
+            continue
         if gift.get("reserved_by"):
             if gift["reserved_by"] == user_token:
                 # User's own reservation
@@ -313,13 +323,48 @@ def get_gifts_for_user(request: Request):
             else:
                 # Someone else's reservation - hide details
                 gift["reserved_by_me"] = False
-                gift["reserved_by"] = "otro"
-                gift["reserved_by_name"] = "Alguien"
+                # For hidden gifts, don't show who reserved
+                if gift.get("hidden", False):
+                    gift["reserved_by"] = "oculto"
+                    gift["reserved_by_name"] = None
+                else:
+                    gift["reserved_by"] = "otro"
+                    gift["reserved_by_name"] = "Alguien"
         else:
             gift["reserved_by_me"] = False
+        filtered_gifts.append(gift)
+    
+    # Sort function to parse price for ordering
+    def parse_price(price_str):
+        """Extract numeric value from price string for sorting."""
+        if not price_str:
+            return 0
+        import re
+        # Remove currency symbols and spaces, find numbers
+        numbers = re.findall(r'[\d,\.]+', price_str.replace(',', '.'))
+        if numbers:
+            try:
+                # If there's a range (e.g., "100-150"), use the average
+                if len(numbers) >= 2:
+                    return (float(numbers[0]) + float(numbers[-1])) / 2
+                return float(numbers[0])
+            except ValueError:
+                return 0
+        return 0
+    
+    # Sort: visible gifts by price descending, then hidden gifts by price descending
+    visible_gifts = [g for g in filtered_gifts if not g.get("hidden", False)]
+    hidden_gifts = [g for g in filtered_gifts if g.get("hidden", False)]
+    
+    visible_gifts.sort(key=lambda g: parse_price(g.get("price_range", "")), reverse=True)
+    hidden_gifts.sort(key=lambda g: parse_price(g.get("price_range", "")), reverse=True)
+    
+    sorted_gifts = visible_gifts + hidden_gifts
+    
     return {
         "user_name": username,
-        "gifts": data.get("gifts", []),
+        "is_familia": user_is_familia,
+        "gifts": sorted_gifts,
         "categories": data.get("categories", []),
     }
 
@@ -356,10 +401,28 @@ def user_unreserve(gift_id: str, request: Request):
     return result
 
 
+@app.post("/api/baby-gifts/user/toggle-visibility/{gift_id}")
+def user_toggle_visibility(gift_id: str, request: Request):
+    """Toggle gift visibility (FAMILIA users only: egnal, virchu)."""
+    username = _get_auth_user(request)
+    if not username:
+        raise HTTPException(status_code=401, detail="Usuario no autenticado")
+    if not is_familia_user(username):
+        raise HTTPException(status_code=403, detail="No tienes permiso para esta acción")
+    result = toggle_gift_visibility(gift_id)
+    if result["status"] == "error":
+        raise HTTPException(status_code=404, detail=result["message"])
+    logger.info(f"Gift visibility toggled: {gift_id} by {username}, hidden={result['hidden']}")
+    return result
+
+
 # ?????? Guest API (public, token-based) ?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 @app.get("/api/baby-gifts/guest/{token}")
 def get_gifts_for_guest(token: str, request: Request):
-    """Get gifts for a guest. Shows what's reserved but not by whom (except own)."""
+    """Get gifts for a guest. Shows what's reserved but not by whom (except own).
+    Hidden gifts are not shown to guests.
+    Gifts are sorted by price descending.
+    """
     # Rate limit
     client_ip = _get_client_ip(request)
     if not check_rate_limit(client_ip):
@@ -372,7 +435,11 @@ def get_gifts_for_guest(token: str, request: Request):
         raise HTTPException(status_code=401, detail="Token inv??lido o expirado")
     # Get gifts and filter reservation info
     data = get_gifts_data(include_admin=False)
+    filtered_gifts = []
     for gift in data.get("gifts", []):
+        # Filter out hidden gifts for guests
+        if gift.get("hidden", False):
+            continue
         if gift.get("reserved_by"):
             if gift["reserved_by"] == token:
                 # Guest's own reservation - show their name
@@ -384,9 +451,32 @@ def get_gifts_for_guest(token: str, request: Request):
                 gift["reserved_by_name"] = "Alguien"
         else:
             gift["reserved_by_me"] = False
+        filtered_gifts.append(gift)
+    
+    # Sort function to parse price for ordering
+    def parse_price(price_str):
+        """Extract numeric value from price string for sorting."""
+        if not price_str:
+            return 0
+        import re
+        # Remove currency symbols and spaces, find numbers
+        numbers = re.findall(r'[\d,\.]+', price_str.replace(',', '.'))
+        if numbers:
+            try:
+                # If there's a range (e.g., "100-150"), use the average
+                if len(numbers) >= 2:
+                    return (float(numbers[0]) + float(numbers[-1])) / 2
+                return float(numbers[0])
+            except ValueError:
+                return 0
+        return 0
+    
+    # Sort by price descending
+    filtered_gifts.sort(key=lambda g: parse_price(g.get("price_range", "")), reverse=True)
+    
     return {
         "guest_name": guest["name"],
-        "gifts": data.get("gifts", []),
+        "gifts": filtered_gifts,
         "categories": data.get("categories", []),
     }
 
