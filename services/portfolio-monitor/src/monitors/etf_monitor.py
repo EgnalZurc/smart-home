@@ -193,30 +193,36 @@ def _analyse_moving_averages(
     if not (ma50 and ma200):
         return signals, level
 
-    # Price vs MAs
-    if price < ma200:
-        pct_diff = ((price - ma200) / ma200) * 100
+    # Calculate percentage differences
+    pct_diff_50 = ((price - ma50) / ma50) * 100
+    pct_diff_200 = ((price - ma200) / ma200) * 100
+
+    # Thresholds to filter noise (based on Moving Average Envelope best practices)
+    # -3% for MA200: proven to reduce whipsaws from 27 to 4 signals (StockCharts study)
+    # -2% for MA50: standard minimum envelope for ETFs
+    MA200_THRESHOLD = -3.0
+    MA50_THRESHOLD = -2.0
+
+    # Price vs MAs (only signal if below threshold to filter noise)
+    if pct_diff_200 <= MA200_THRESHOLD:
         signals.append(
             Signal(
                 t("signal.mm200.title"),
-                t("signal.mm200.body", price=price, mm=ma200, pct=pct_diff),
+                t("signal.mm200.body", price=price, mm=ma200, pct=pct_diff_200),
                 "WARN",
             )
         )
         level = level.escalate(AlertLevel.WARN)
-    elif price < ma50:
-        pct_diff = ((price - ma50) / ma50) * 100
+    elif pct_diff_50 <= MA50_THRESHOLD:
         signals.append(
             Signal(
                 t("signal.mm50.title"),
-                t("signal.mm50.body", price=price, mm=ma50, pct=pct_diff),
+                t("signal.mm50.body", price=price, mm=ma50, pct=pct_diff_50),
                 "INFO",
             )
         )
         level = level.escalate(AlertLevel.INFO)
     else:
-        pct_diff_50 = ((price - ma50) / ma50) * 100
-        pct_diff_200 = ((price - ma200) / ma200) * 100
         signals.append(
             Signal(
                 t("signal.mm_ok.title"),
