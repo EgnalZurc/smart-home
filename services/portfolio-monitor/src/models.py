@@ -163,7 +163,9 @@ class ScheduledAlert:
     description: str
     priority: str = "medium"  # "high", "medium", "low"
     recurring: str | None = None  # "monthly", "weekly", None
-    triggered: bool = False
+    triggered: bool = False  # Email notification was sent
+    completed: bool = False  # User marked the action as done
+    completed_at: str | None = None  # ISO timestamp when completed
 
 
 @dataclass

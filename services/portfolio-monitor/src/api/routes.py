@@ -111,16 +111,9 @@ async def get_summary():
 
 def _serialize_alert(alert) -> dict:
     """Convert alert to serializable dict."""
-    return {
-        "id": alert.alert_id,
-        "date": alert.date,
-        "action": alert.action,
-        "symbol": alert.symbol,
-        "title": alert.title,
-        "description": alert.description,
-        "priority": alert.priority,
-        "recurring": alert.recurring,
-    }
+    from alerts import serialize_alert
+
+    return serialize_alert(alert)
 
 
 @router.get("/etf")
@@ -197,7 +190,7 @@ async def get_savings_summary():
 
 @router.get("/alerts")
 async def get_alerts():
-    """Get upcoming scheduled alerts (next 5 days)."""
+    """Get upcoming scheduled alerts (next 5 days + overdue)."""
     orch = get_orchestrator()
     summary = orch.get_summary()
 
@@ -205,6 +198,30 @@ async def get_alerts():
         "upcoming": [_serialize_alert(a) for a in summary.upcoming_alerts],
         "count": len(summary.upcoming_alerts),
     }
+
+
+@router.post("/alerts/{alert_id}/complete")
+async def complete_alert(alert_id: str):
+    """
+    Mark an alert as completed.
+
+    Only allowed if the alert date has arrived (today or past).
+    """
+    from alerts import mark_alert_completed
+
+    success = mark_alert_completed(alert_id)
+
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot complete alert — either not found or date hasn't arrived",
+        )
+
+    # Reload alerts in summary
+    orch = get_orchestrator()
+    orch._load_upcoming_alerts()
+
+    return {"status": "completed", "alert_id": alert_id}
 
 
 @router.post("/refresh/{monitor_name}")

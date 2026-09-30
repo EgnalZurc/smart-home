@@ -261,11 +261,26 @@ def _build_html_summary(
 
 def _build_html_scheduled_alert(alert) -> str:
     """Build HTML email for a scheduled alert."""
+    from datetime import datetime as dt
+
+    # Check if overdue
+    is_overdue = False
+    try:
+        alert_date = dt.fromisoformat(alert.date).date()
+        today = dt.now().date()
+        is_overdue = alert_date < today
+    except (ValueError, TypeError):
+        pass
+
     priority_color = {
         "high": "#dc3545",
         "medium": "#ffc107",
         "low": "#17a2b8",
     }.get(alert.priority, "#6c757d")
+
+    # If overdue, use red
+    if is_overdue:
+        priority_color = "#dc3545"
 
     priority_emoji = {
         "high": "🔴",
@@ -275,11 +290,15 @@ def _build_html_scheduled_alert(alert) -> str:
 
     action_emoji = {
         "sell_crypto": "💰",
-        "buy_etf": "📈",
+        "stop_etf": "🛑",
+        "modify_etf": "✏️",
         "review": "👀",
     }.get(alert.action, "📋")
 
     date_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    # Header text
+    header_text = "⏰ Alerta Programada — ¡HOY!" if not is_overdue else "⚠️ Alerta Vencida — ACCIÓN PENDIENTE"
 
     return f"""
 <!DOCTYPE html>
@@ -299,6 +318,7 @@ def _build_html_scheduled_alert(alert) -> str:
         .meta-row {{ display: flex; justify-content: space-between; margin-bottom: 6px; }}
         .meta-row:last-child {{ margin-bottom: 0; }}
         .meta-label {{ color: #666; }}
+        .overdue-banner {{ background: #fff3cd; border-left: 4px solid #ffc107; padding: 10px 15px; margin-bottom: 15px; color: #856404; }}
         .footer {{ padding: 15px 20px; background: #f8f9fa; text-align: center; font-size: 13px; color: #666; }}
         .footer a {{ color: #007bff; text-decoration: none; }}
     </style>
@@ -306,15 +326,16 @@ def _build_html_scheduled_alert(alert) -> str:
 <body>
     <div class="container">
         <div class="header">
-            <h1>{priority_emoji} Alerta Programada</h1>
+            <h1>{header_text}</h1>
             <div class="date">{date_str}</div>
         </div>
         <div class="content">
+            {'<div class="overdue-banner">⚠️ Esta alerta estaba programada para el ' + alert.date + ' y aún no se ha completado.</div>' if is_overdue else ''}
             <div class="title">{action_emoji} {alert.title}</div>
             <div class="description">{alert.description}</div>
             <div class="meta">
                 <div class="meta-row">
-                    <span class="meta-label">📅 Fecha</span>
+                    <span class="meta-label">📅 Fecha programada</span>
                     <span>{alert.date}</span>
                 </div>
                 <div class="meta-row">
@@ -328,7 +349,7 @@ def _build_html_scheduled_alert(alert) -> str:
             </div>
         </div>
         <div class="footer">
-            <a href="https://raspberrypi.tailaa37cd.ts.net/smart-home/portfolio">Ver Dashboard →</a>
+            <a href="https://raspberrypi.tailaa37cd.ts.net/smart-home/portfolio">Ver Dashboard y Marcar como Completada →</a>
         </div>
     </div>
 </body>

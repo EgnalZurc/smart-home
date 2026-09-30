@@ -921,16 +921,54 @@
             };
             
             document.getElementById('alerts-list').innerHTML = alerts.map(alert => {
-                const daysUntil = Math.ceil((new Date(alert.date) - new Date()) / (1000 * 60 * 60 * 24));
-                const urgency = daysUntil <= 1 ? 'danger' : daysUntil <= 3 ? 'warn' : 'info';
+                const daysUntil = alert.days_until ?? Math.ceil((new Date(alert.date) - new Date()) / (1000 * 60 * 60 * 24));
+                const isOverdue = daysUntil < 0;
+                const isDueToday = daysUntil === 0;
+                const isActionable = alert.is_actionable || (daysUntil <= 0 && !alert.completed);
+                
+                // Determine urgency styling
+                let urgency, urgencyText;
+                if (alert.completed) {
+                    urgency = 'ok';
+                    urgencyText = '✅ Completada';
+                } else if (isOverdue) {
+                    urgency = 'danger';
+                    urgencyText = `⚠️ Vencida (${Math.abs(daysUntil)}d)`;
+                } else if (isDueToday) {
+                    urgency = 'danger';
+                    urgencyText = '¡HOY!';
+                } else if (daysUntil === 1) {
+                    urgency = 'warn';
+                    urgencyText = 'Mañana';
+                } else if (daysUntil <= 3) {
+                    urgency = 'warn';
+                    urgencyText = `En ${daysUntil}d`;
+                } else {
+                    urgency = 'info';
+                    urgencyText = `En ${daysUntil}d`;
+                }
+                
+                const completeBtn = isActionable && !alert.completed ? `
+                    <button class="btn btn-primary" onclick="completeAlert('${alert.id}')" style="margin-top: 1rem; width: 100%;">
+                        ✅ Marcar como completada
+                    </button>
+                ` : '';
+                
+                const completedInfo = alert.completed && alert.completed_at ? `
+                    <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--accent-green);">
+                        ✅ Completada el ${new Date(alert.completed_at).toLocaleDateString('es-ES')}
+                    </div>
+                ` : '';
+                
+                const cardOpacity = alert.completed ? 'opacity: 0.6;' : '';
                 
                 return `
-                    <div class="fund-card">
+                    <div class="fund-card" style="${cardOpacity}">
                         <div class="fund-card-header">
                             <div class="fund-card-title">
                                 ${priorityEmoji[alert.priority] || '⚪'} ${alert.title}
                             </div>
-                            <span class="status-badge status-${urgency}">${daysUntil === 0 ? '¡HOY!' : daysUntil === 1 ? 'Mañana' : 'En ' + daysUntil + 'd'}</span>
+                            <span class="status-badge status-${urgency}">${urgencyText}</span>
                         </div>
                         <div class="fund-card-body">
                             <div class="fund-stats">
@@ -954,10 +992,31 @@
                             <div style="margin-top: 1rem; padding: 0.75rem; background: var(--bg-card); border-radius: 0.5rem;">
                                 ${alert.description}
                             </div>
+                            ${completedInfo}
+                            ${completeBtn}
                         </div>
                     </div>
                 `;
             }).join('');
+        }
+        
+        // Complete an alert
+        async function completeAlert(alertId) {
+            try {
+                const res = await fetch(`/api/portfolio/alerts/${alertId}/complete`, { method: 'POST' });
+                if (res.ok) {
+                    // Refresh data to update UI
+                    await fetchData();
+                    // Show feedback
+                    alert('✅ Alerta marcada como completada');
+                } else {
+                    const err = await res.json();
+                    alert('❌ Error: ' + (err.detail || 'No se pudo completar la alerta'));
+                }
+            } catch (e) {
+                console.error('Error completing alert:', e);
+                alert('❌ Error de conexión');
+            }
         }
         
         // Render sparklines using canvas

@@ -144,19 +144,23 @@ class Orchestrator:
         return results
 
     def _load_upcoming_alerts(self):
-        """Load alerts scheduled in the next 5 days."""
+        """Load alerts scheduled in the next 5 days (includes overdue)."""
         from alerts import get_upcoming_alerts
 
         self._summary.upcoming_alerts = get_upcoming_alerts(days=5)
-        logger.info(f"Loaded {len(self._summary.upcoming_alerts)} upcoming alerts")
+        overdue = [a for a in self._summary.upcoming_alerts if not a.completed]
+        logger.info(
+            f"Loaded {len(self._summary.upcoming_alerts)} alerts "
+            f"({len([a for a in overdue if a.date <= datetime.now(timezone.utc).date().isoformat()])} overdue/due)"
+        )
 
     def _check_scheduled_alerts(self):
-        """Check for alerts due today and send notifications."""
+        """Check for alerts due today (or overdue) and send notifications."""
         from alerts import check_and_trigger_alerts
 
         triggered = check_and_trigger_alerts(self._notifier)
         if triggered:
-            logger.info(f"Triggered {len(triggered)} scheduled alerts")
+            logger.info(f"Sent notifications for {len(triggered)} scheduled alerts")
 
     async def _send_alerts_if_needed(self):
         """Send email alerts if there are warnings or dangers."""
