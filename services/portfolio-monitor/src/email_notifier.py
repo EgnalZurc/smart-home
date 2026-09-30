@@ -282,12 +282,6 @@ def _build_html_scheduled_alert(alert) -> str:
     if is_overdue:
         priority_color = "#dc3545"
 
-    priority_emoji = {
-        "high": "🔴",
-        "medium": "🟡",
-        "low": "🔵",
-    }.get(alert.priority, "⚪")
-
     action_emoji = {
         "sell_crypto": "💰",
         "stop_etf": "🛑",
