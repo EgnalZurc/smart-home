@@ -157,7 +157,7 @@ def compute_signals(
 ) -> tuple[list[Signal], AlertLevel]:
     """
     Compute signals for a position.
-    
+
     Logic optimized for HODL strategy:
     - Fear & Greed: informational only (sentiment indicator)
     - ATH proximity: informational (momentum indicator)
