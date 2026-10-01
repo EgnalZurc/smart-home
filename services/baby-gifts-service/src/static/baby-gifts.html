@@ -672,7 +672,29 @@ function renderInvitations() {
         return;
     }
     const baseUrl = window.location.origin;
-    document.getElementById('invitations-list').innerHTML = invitations.map(inv => {
+    // Get gift stats from first invitation (all have the same values)
+    const visibleGifts = invitations.length > 0 ? (invitations[0].visible_gifts || 0) : 0;
+    const availableGifts = invitations.length > 0 ? (invitations[0].available_gifts || 0) : 0;
+    // Summary header with gift counts
+    const summaryHtml = `
+        <div style="display:flex; gap:12px; margin-bottom:16px; padding:12px; background:rgba(15,23,42,0.6); border-radius:10px; border:1px solid rgba(51,65,85,0.5);">
+            <div style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:16px;">📦</span>
+                <div>
+                    <div style="font-size:11px; color:#64748b;">Visibles</div>
+                    <div style="font-size:16px; font-weight:600; color:#a5b4fc;">${visibleGifts}</div>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:16px;">✅</span>
+                <div>
+                    <div style="font-size:11px; color:#64748b;">Disponibles</div>
+                    <div style="font-size:16px; font-weight:600; color:#86efac;">${availableGifts}</div>
+                </div>
+            </div>
+        </div>
+    `;
+    const invitationsHtml = invitations.map(inv => {
         let statusBadge = '';
         if (inv.revoked) {
             statusBadge = '<span class="inv-badge revoked">Revocada</span>';
@@ -711,6 +733,7 @@ function renderInvitations() {
             </div>
         `;
     }).join('');
+    document.getElementById('invitations-list').innerHTML = summaryHtml + invitationsHtml;
 }
 
 // ── Invitations Popup ─────────────────────────────────────────────────────────

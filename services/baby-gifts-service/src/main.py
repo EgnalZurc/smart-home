@@ -249,16 +249,28 @@ def admin_unreserve(gift_id: str):
 def get_invitations():
     """List all invitations (admin only)."""
     invitations = list_invitations()
-    # Count reservations per guest
+    # Count reservations per guest and compute gift stats
     gifts_data = get_gifts_data(include_admin=True)
+    all_gifts = gifts_data.get("gifts", [])
     reservation_counts = {}
-    for gift in gifts_data.get("gifts", []):
+    for gift in all_gifts:
         if gift.get("reserved_by"):
             token = gift["reserved_by"]
             reservation_counts[token] = reservation_counts.get(token, 0) + 1
-    # Add reservation count to each invitation
+
+    # Compute visible_gifts and available_gifts counts
+    visible_gifts = sum(1 for g in all_gifts if not g.get("hidden", False))
+    available_gifts = sum(
+        1
+        for g in all_gifts
+        if not g.get("hidden", False) and not g.get("reserved_by")
+    )
+
+    # Add reservation count and gift stats to each invitation
     for inv in invitations:
         inv["reservations"] = reservation_counts.get(inv["token"], 0)
+        inv["visible_gifts"] = visible_gifts
+        inv["available_gifts"] = available_gifts
     return {"invitations": invitations}
 
 

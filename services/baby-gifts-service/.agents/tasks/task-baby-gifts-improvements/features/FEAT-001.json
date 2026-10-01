@@ -1,0 +1,25 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Add visible_gifts and available_gifts counts to the 'Gestionar Invitados' popup. The GET /api/baby-gifts/invitations endpoint should return per-invitation counts: visible_gifts (count of non-hidden gifts) and available_gifts (count of non-hidden, non-reserved gifts). The frontend renderInvitations() function should display these as badges next to each guest.",
+  "status": "completed",
+  "steps": [
+    "1. Modify get_invitations() in c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\baby-gifts-service\\src\\main.py: After fetching invitations and reservation_counts, compute visible_gifts = count of gifts where hidden is False, available_gifts = count of gifts where hidden is False AND reserved_by is None. Add these to each invitation dict before returning.",
+    "2. Update renderInvitations() function in c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\baby-gifts-service\\src\\static\\baby-gifts.html: Add display of inv.visible_gifts (e.g., '📦 X') and inv.available_gifts (e.g., '✅ Y disponibles') near the existing '🎁 N' reservations badge.",
+    "3. Add test in c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\baby-gifts-service\\tests\\test_api.py: TestInvitationEndpoints class - test_invitations_include_gift_stats() that creates some gifts (some hidden, some reserved), creates an invitation, and verifies the invitations response includes correct visible_gifts and available_gifts counts."
+  ],
+  "acceptance_criteria": [
+    "GET /api/baby-gifts/invitations response includes visible_gifts and available_gifts for each invitation",
+    "visible_gifts count equals number of gifts where hidden=False",
+    "available_gifts count equals number of gifts where hidden=False AND reserved_by=None",
+    "Frontend popup displays both counts visibly for each guest",
+    "All existing tests continue to pass",
+    "New test for invitation stats passes"
+  ],
+  "verification": [
+    "Run tests: Set-Location -Path c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\baby-gifts-service\\src; & \"C:\\Users\\acmls\\AppData\\Local\\Python\\bin\\python3.exe\" -m pytest ../tests -v --tb=short",
+    "Run lint: & \"C:\\Users\\acmls\\AppData\\Local\\Python\\bin\\python3.exe\" -m ruff check c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\baby-gifts-service\\src c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\baby-gifts-service\\tests"
+  ],
+  "blocked_reason": null,
+  "findings": "Frontend displays gift stats in a summary header at the top of the invitations list showing both visible_gifts (📦) and available_gifts (✅) counts. These values are global (same for all invitations) since they reflect the total gift state."
+}

@@ -161,6 +161,46 @@ class TestInvitationEndpoints:
         revoked = next(inv for inv in invitations if inv["token"] == token)
         assert revoked["revoked"] is True
 
+    def test_invitations_include_gift_stats(self, client, sample_invitation_name):
+        """GET /api/baby-gifts/invitations should include visible_gifts and available_gifts."""
+        # Create some gifts: 2 visible (1 reserved, 1 not), 1 hidden
+        gift1_resp = client.post("/api/baby-gifts", json={"name": "Visible Gift 1"})
+        gift1_id = gift1_resp.json()["gift"]["id"]
+        
+        client.post("/api/baby-gifts", json={"name": "Visible Gift 2"})
+        
+        hidden_resp = client.post("/api/baby-gifts", json={"name": "Hidden Gift"})
+        hidden_id = hidden_resp.json()["gift"]["id"]
+        
+        # Create invitation
+        inv_resp = client.post(
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name}
+        )
+        token = inv_resp.json()["token"]
+        
+        # Reserve one visible gift as guest
+        client.post(f"/api/baby-gifts/guest/{token}/reserve/{gift1_id}")
+        
+        # Hide one gift via user endpoint (requires X-Auth-User header)
+        client.post(
+            f"/api/baby-gifts/user/toggle-visibility/{hidden_id}",
+            headers={"X-Auth-User": "egnal"}
+        )
+        
+        # Get invitations and verify stats
+        response = client.get("/api/baby-gifts/invitations")
+        assert response.status_code == 200
+        data = response.json()
+        
+        assert len(data["invitations"]) == 1
+        inv = data["invitations"][0]
+        
+        # visible_gifts = gifts where hidden=False (2: Visible Gift 1, Visible Gift 2)
+        assert inv["visible_gifts"] == 2
+        # available_gifts = visible gifts without reservation (1: Visible Gift 2)
+        assert inv["available_gifts"] == 1
+
 
 class TestGuestEndpoints:
     """Tests for guest API endpoints."""
