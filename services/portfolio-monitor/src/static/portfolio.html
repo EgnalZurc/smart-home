@@ -779,9 +779,14 @@
             // Position cards
             document.getElementById('crypto-positions').innerHTML = crypto.analysis.map(pos => {
                 const posGain = formatGainSmart(pos.daily_gain || 0);
-                const hasLowYield = (pos.daily_gain || 0) < 0.001 && pos.apy < 1;
-                const statusClass = pos.level === 'WARN' ? 'warn-muted' : getLevelClass(pos.level);
-                const statusText = pos.level === 'WARN' ? '⚡ Atención' : getLevelText(pos.level);
+                // Don't show low yield warning for liquidating positions or intentional HODL
+                const isLiquidating = pos.position_type === 'liquidating' || (pos.product || '').toLowerCase().includes('liquidando');
+                const isHodl = (pos.product || '').toLowerCase().includes('hodl');
+                const hasLowYield = (pos.daily_gain || 0) < 0.001 && pos.apy < 1 && !isLiquidating && !isHodl;
+                // Don't show warning status for liquidating/HODL positions with 0% APY
+                const effectiveLevel = (isLiquidating || isHodl) && pos.level === 'WARN' ? 'INFO' : pos.level;
+                const statusClass = effectiveLevel === 'WARN' ? 'warn-muted' : effectiveLevel === 'INFO' ? 'info' : getLevelClass(effectiveLevel);
+                const statusText = isLiquidating ? '⏳ Liquidando' : isHodl ? '💎 HODL' : effectiveLevel === 'WARN' ? '⚡ Atención' : getLevelText(effectiveLevel);
                 
                 return `
                 <div class="fund-card">
@@ -808,7 +813,7 @@
                             </div>
                             <div class="fund-stat">
                                 <span class="fund-stat-label">APY</span>
-                                <span class="fund-stat-value ${pos.apy >= 1 ? 'positive' : 'warning'}">${pos.apy}%</span>
+                                <span class="fund-stat-value ${(isLiquidating || isHodl) ? 'neutral' : pos.apy >= 1 ? 'positive' : 'warning'}">${pos.apy}%</span>
                             </div>
                             <div class="fund-stat">
                                 <span class="fund-stat-label">Ganancia/${posGain.period}</span>
