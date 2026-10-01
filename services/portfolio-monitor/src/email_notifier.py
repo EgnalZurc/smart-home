@@ -173,11 +173,11 @@ def _build_html_summary(
             </div>
 """
 
-    # Crypto Section
+    # Crypto Section - only show if there are actual WARN/DANGER alerts
     crypto_alerts = [
         c for c in crypto_results if c.level in (AlertLevel.WARN, AlertLevel.DANGER)
     ]
-    if crypto_alerts or fear_greed is not None:
+    if crypto_alerts:
         html += """
             <div class="section">
                 <div class="section-title">🪙 Crypto</div>
