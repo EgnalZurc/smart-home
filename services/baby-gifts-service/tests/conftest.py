@@ -17,31 +17,31 @@ os.environ["DATA_DIR"] = tempfile.mkdtemp()
 @pytest.fixture
 def tmp_data_dir(tmp_path):
     """Provide a temporary data directory for tests.
-    
+
     This fixture ensures complete isolation between tests by:
     1. Using a fresh temp directory for each test
     2. Resetting module-level variables
     3. Deleting any existing data files
     """
     import gifts_controller
-    
+
     original_data_dir = gifts_controller.DATA_DIR
     original_gifts_file = gifts_controller.GIFTS_FILE
     original_db_file = gifts_controller.DB_FILE
-    
+
     # Set new paths for this test
     gifts_controller.DATA_DIR = tmp_path
     gifts_controller.GIFTS_FILE = tmp_path / "gifts.json"
     gifts_controller.DB_FILE = tmp_path / "baby_gifts.db"
-    
+
     # Ensure no leftover data
     if gifts_controller.GIFTS_FILE.exists():
         gifts_controller.GIFTS_FILE.unlink()
     if gifts_controller.DB_FILE.exists():
         gifts_controller.DB_FILE.unlink()
-    
+
     yield tmp_path
-    
+
     gifts_controller.DATA_DIR = original_data_dir
     gifts_controller.GIFTS_FILE = original_gifts_file
     gifts_controller.DB_FILE = original_db_file
@@ -52,7 +52,7 @@ def client(tmp_data_dir):
     """Create a test client with isolated data directory."""
     from fastapi.testclient import TestClient
     from main import app
-    
+
     return TestClient(app)
 
 

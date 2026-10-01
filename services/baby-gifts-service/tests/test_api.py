@@ -1,14 +1,13 @@
 """Unit tests for FastAPI endpoints."""
 
 
-
 class TestHealthEndpoints:
     """Tests for health check endpoints."""
 
     def test_health_returns_online(self, client):
         """Health endpoint should return online status."""
         response = client.get("/health")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["online"] is True
@@ -17,7 +16,7 @@ class TestHealthEndpoints:
     def test_health_alias_returns_online(self, client):
         """Health alias endpoint should return online status."""
         response = client.get("/api/health/baby-gifts")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["online"] is True
@@ -29,7 +28,7 @@ class TestAdminGiftEndpoints:
     def test_get_all_gifts_empty(self, client):
         """GET /api/baby-gifts should return empty list initially."""
         response = client.get("/api/baby-gifts")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "gifts" in data
@@ -38,7 +37,7 @@ class TestAdminGiftEndpoints:
     def test_create_gift(self, client, sample_gift):
         """POST /api/baby-gifts should create a gift."""
         response = client.post("/api/baby-gifts", json=sample_gift)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
@@ -50,24 +49,20 @@ class TestAdminGiftEndpoints:
         # Create a gift first
         create_resp = client.post("/api/baby-gifts", json=sample_gift)
         gift_id = create_resp.json()["gift"]["id"]
-        
+
         # Update it
         response = client.put(
-            f"/api/baby-gifts/{gift_id}",
-            json={"name": "Updated Name"}
+            f"/api/baby-gifts/{gift_id}", json={"name": "Updated Name"}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["gift"]["name"] == "Updated Name"
 
     def test_update_nonexistent_gift_404(self, client):
         """PUT /api/baby-gifts/{id} should return 404 for non-existent gift."""
-        response = client.put(
-            "/api/baby-gifts/nonexistent",
-            json={"name": "New Name"}
-        )
-        
+        response = client.put("/api/baby-gifts/nonexistent", json={"name": "New Name"})
+
         assert response.status_code == 404
 
     def test_delete_gift(self, client, sample_gift):
@@ -75,12 +70,12 @@ class TestAdminGiftEndpoints:
         # Create a gift first
         create_resp = client.post("/api/baby-gifts", json=sample_gift)
         gift_id = create_resp.json()["gift"]["id"]
-        
+
         # Delete it
         response = client.delete(f"/api/baby-gifts/{gift_id}")
-        
+
         assert response.status_code == 200
-        
+
         # Verify it's gone
         all_gifts = client.get("/api/baby-gifts").json()
         gift_ids = [g["id"] for g in all_gifts["gifts"]]
@@ -89,7 +84,7 @@ class TestAdminGiftEndpoints:
     def test_delete_nonexistent_gift_404(self, client):
         """DELETE /api/baby-gifts/{id} should return 404."""
         response = client.delete("/api/baby-gifts/nonexistent")
-        
+
         assert response.status_code == 404
 
 
@@ -99,7 +94,7 @@ class TestInvitationEndpoints:
     def test_list_invitations_empty(self, client):
         """GET /api/baby-gifts/invitations should return empty list initially."""
         response = client.get("/api/baby-gifts/invitations")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "invitations" in data
@@ -108,10 +103,9 @@ class TestInvitationEndpoints:
     def test_create_invitation(self, client, sample_invitation_name):
         """POST /api/baby-gifts/invitations should create invitation."""
         response = client.post(
-            "/api/baby-gifts/invitations",
-            json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
@@ -120,41 +114,36 @@ class TestInvitationEndpoints:
 
     def test_create_invitation_empty_name_fails(self, client):
         """POST /api/baby-gifts/invitations with empty name should fail."""
-        response = client.post(
-            "/api/baby-gifts/invitations",
-            json={"name": "   "}
-        )
-        
+        response = client.post("/api/baby-gifts/invitations", json={"name": "   "})
+
         assert response.status_code == 400
 
     def test_delete_invitation(self, client, sample_invitation_name):
         """DELETE /api/baby-gifts/invitations/{token} should delete invitation."""
         # Create first
         create_resp = client.post(
-            "/api/baby-gifts/invitations",
-            json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
         )
         token = create_resp.json()["token"]
-        
+
         # Delete
         response = client.delete(f"/api/baby-gifts/invitations/{token}")
-        
+
         assert response.status_code == 200
 
     def test_revoke_invitation(self, client, sample_invitation_name):
         """POST /api/baby-gifts/invitations/{token}/revoke should revoke."""
         # Create first
         create_resp = client.post(
-            "/api/baby-gifts/invitations",
-            json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
         )
         token = create_resp.json()["token"]
-        
+
         # Revoke
         response = client.post(f"/api/baby-gifts/invitations/{token}/revoke")
-        
+
         assert response.status_code == 200
-        
+
         # Check it's revoked
         invitations = client.get("/api/baby-gifts/invitations").json()["invitations"]
         revoked = next(inv for inv in invitations if inv["token"] == token)
@@ -165,36 +154,35 @@ class TestInvitationEndpoints:
         # Create some gifts: 2 visible (1 reserved, 1 not), 1 hidden
         gift1_resp = client.post("/api/baby-gifts", json={"name": "Visible Gift 1"})
         gift1_id = gift1_resp.json()["gift"]["id"]
-        
+
         client.post("/api/baby-gifts", json={"name": "Visible Gift 2"})
-        
+
         hidden_resp = client.post("/api/baby-gifts", json={"name": "Hidden Gift"})
         hidden_id = hidden_resp.json()["gift"]["id"]
-        
+
         # Create invitation
         inv_resp = client.post(
-            "/api/baby-gifts/invitations",
-            json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
         )
         token = inv_resp.json()["token"]
-        
+
         # Reserve one visible gift as guest
         client.post(f"/api/baby-gifts/guest/{token}/reserve/{gift1_id}")
-        
+
         # Hide one gift via user endpoint (requires X-Auth-User header)
         client.post(
             f"/api/baby-gifts/user/toggle-visibility/{hidden_id}",
-            headers={"X-Auth-User": "egnal"}
+            headers={"X-Auth-User": "egnal"},
         )
-        
+
         # Get invitations and verify stats
         response = client.get("/api/baby-gifts/invitations")
         assert response.status_code == 200
         data = response.json()
-        
+
         assert len(data["invitations"]) == 1
         inv = data["invitations"][0]
-        
+
         # visible_gifts = gifts where hidden=False (2: Visible Gift 1, Visible Gift 2)
         assert inv["visible_gifts"] == 2
         # available_gifts = visible gifts without reservation (1: Visible Gift 2)
@@ -207,24 +195,25 @@ class TestGuestEndpoints:
     def test_guest_get_gifts_invalid_token(self, client):
         """GET /api/baby-gifts/guest/{token} with invalid token should return 401."""
         response = client.get("/api/baby-gifts/guest/invalid_token")
-        
+
         assert response.status_code == 401
 
-    def test_guest_get_gifts_valid_token(self, client, sample_gift, sample_invitation_name):
+    def test_guest_get_gifts_valid_token(
+        self, client, sample_gift, sample_invitation_name
+    ):
         """GET /api/baby-gifts/guest/{token} with valid token should return gifts."""
         # Create invitation
         inv_resp = client.post(
-            "/api/baby-gifts/invitations",
-            json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
         )
         token = inv_resp.json()["token"]
-        
+
         # Create a gift
         client.post("/api/baby-gifts", json=sample_gift)
-        
+
         # Get as guest
         response = client.get(f"/api/baby-gifts/guest/{token}")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "gifts" in data
@@ -234,38 +223,38 @@ class TestGuestEndpoints:
         """POST /api/baby-gifts/guest/{token}/reserve/{id} should reserve gift."""
         # Create invitation
         inv_resp = client.post(
-            "/api/baby-gifts/invitations",
-            json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
         )
         token = inv_resp.json()["token"]
-        
+
         # Create a gift
         gift_resp = client.post("/api/baby-gifts", json=sample_gift)
         gift_id = gift_resp.json()["gift"]["id"]
-        
+
         # Reserve as guest
         response = client.post(f"/api/baby-gifts/guest/{token}/reserve/{gift_id}")
-        
+
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
 
-    def test_guest_unreserve_own_gift(self, client, sample_gift, sample_invitation_name):
+    def test_guest_unreserve_own_gift(
+        self, client, sample_gift, sample_invitation_name
+    ):
         """POST /api/baby-gifts/guest/{token}/unreserve/{id} should unreserve own gift."""
         # Create invitation
         inv_resp = client.post(
-            "/api/baby-gifts/invitations",
-            json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
         )
         token = inv_resp.json()["token"]
-        
+
         # Create and reserve a gift
         gift_resp = client.post("/api/baby-gifts", json=sample_gift)
         gift_id = gift_resp.json()["gift"]["id"]
         client.post(f"/api/baby-gifts/guest/{token}/reserve/{gift_id}")
-        
+
         # Unreserve
         response = client.post(f"/api/baby-gifts/guest/{token}/unreserve/{gift_id}")
-        
+
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
 
@@ -273,19 +262,18 @@ class TestGuestEndpoints:
         """Guests should not see hidden gifts."""
         # Create invitation
         inv_resp = client.post(
-            "/api/baby-gifts/invitations",
-            json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
         )
         _token = inv_resp.json()["token"]
-        
+
         # Create a visible gift
         visible_resp = client.post("/api/baby-gifts", json={"name": "Visible Gift"})
         _visible_id = visible_resp.json()["gift"]["id"]
-        
+
         # Create a hidden gift
         hidden_resp = client.post("/api/baby-gifts", json={"name": "Hidden Gift"})
         _hidden_id = hidden_resp.json()["gift"]["id"]
-        
+
         # Hide it via admin unreserve endpoint won't work, we need direct access
         # Using the toggle visibility would require user endpoint
         # For now, verify both are visible in admin view
