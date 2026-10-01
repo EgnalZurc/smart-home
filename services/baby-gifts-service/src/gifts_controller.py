@@ -141,7 +141,8 @@ def add_gift(gift: dict) -> dict:
     """Add a new gift (admin only)."""
     with _lock:
         data = _load_gifts()
-        gift_id = f"g_{int(datetime.now().timestamp() * 1000)}"
+        # Use timestamp + random suffix to ensure unique IDs even in rapid succession
+        gift_id = f"g_{int(datetime.now().timestamp() * 1000)}_{secrets.token_hex(4)}"
         new_gift = {
             "id": gift_id,
             "name": gift.get("name", ""),
