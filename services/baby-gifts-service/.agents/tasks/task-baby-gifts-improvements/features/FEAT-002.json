@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Send Telegram notifications when a guest or authenticated user selects or deselects a gift. The notification should indicate the gift name, the person's name, and the action (seleccionó/deseleccionó). Messages must be in Spanish. Does NOT apply to admin unreserve actions.",
+  "status": "completed",
+  "steps": [
+    "1. Add httpx>=0.27.0 to c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\baby-gifts-service\\requirements.txt (httpx is already available in the environment but should be declared as a dependency).",
+    "2. Create c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\baby-gifts-service\\src\\notifier.py following the pattern in c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\portfolio-monitor\\src\\notifier.py. Implement send_gift_notification(gift_name: str, person_name: str, action: str) where action is 'reserved' or 'unreserved'. Message format: '🎁 *{person_name}* ha seleccionado: _{gift_name}_' for reserved, '↩️ *{person_name}* ha deseleccionado: _{gift_name}_' for unreserved. Use TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID env vars. Log warning and skip silently if credentials missing.",
+    "3. Modify c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\baby-gifts-service\\src\\main.py: Import send_gift_notification from notifier. In guest_reserve(), after successful reserve, get gift name from result['gift']['name'] and call send_gift_notification(gift_name, guest['name'], 'reserved'). In guest_unreserve(), need to get gift name before unreserve (call get_gift()), then after success call send_gift_notification(gift_name, guest['name'], 'unreserved'). Same pattern for user_reserve() and user_unreserve() using username. Do NOT add to admin_unreserve().",
+    "4. Create c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\baby-gifts-service\\tests\\test_notifier.py with tests: test_notification_skipped_when_credentials_missing (verify no error when env vars not set), test_notification_message_format_reserved (mock httpx, verify message format), test_notification_message_format_unreserved (mock httpx, verify message format), test_notification_sends_to_telegram (mock httpx.post, verify correct URL and payload)."
+  ],
+  "acceptance_criteria": [
+    "httpx is declared in requirements.txt",
+    "notifier.py module exists with send_gift_notification function",
+    "Reserving a gift as guest sends Telegram notification with format '🎁 *{name}* ha seleccionado: _{gift}_'",
+    "Unreserving a gift as guest sends Telegram notification with format '↩️ *{name}* ha deseleccionado: _{gift}_'",
+    "Same notifications work for authenticated users",
+    "Admin unreserve does NOT send notification",
+    "If TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set, no error occurs (silent skip with log)",
+    "All tests pass including new notifier tests"
+  ],
+  "verification": [
+    "Run tests: Set-Location -Path c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\baby-gifts-service\\src; & \"C:\\Users\\acmls\\AppData\\Local\\Python\\bin\\python3.exe\" -m pytest ../tests -v --tb=short",
+    "Run lint: & \"C:\\Users\\acmls\\AppData\\Local\\Python\\bin\\python3.exe\" -m ruff check c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\baby-gifts-service\\src c:\\Users\\acmls\\Documents\\Development\\smart-home\\services\\baby-gifts-service\\tests"
+  ],
+  "blocked_reason": null,
+  "findings": "Implemented notifier.py with send_gift_notification function. Added 6 tests covering: credentials missing, message formats for reserve/unreserve, successful send to Telegram, API error handling, and timeout handling. Added get_gift import to main.py for fetching gift name before unreserve operations."
+}

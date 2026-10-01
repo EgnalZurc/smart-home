@@ -42,6 +42,7 @@ from gifts_controller import (
     create_invitation,
     delete_gift,
     delete_invitation,
+    get_gift,
     get_gifts_data,
     is_familia_user,
     is_healthy,
@@ -53,6 +54,7 @@ from gifts_controller import (
     update_gift,
     validate_invitation,
 )
+from notifier import send_gift_notification
 from pydantic import BaseModel
 
 logging.basicConfig(
@@ -389,6 +391,9 @@ def user_reserve(gift_id: str, request: Request):
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
     logger.info(f"Gift reserved: {gift_id} by user {username}")
+    # Send Telegram notification
+    gift_name = result["gift"]["name"]
+    send_gift_notification(gift_name, username, "reserved")
     return result
 
 
@@ -400,11 +405,16 @@ def user_unreserve(gift_id: str, request: Request):
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
     # User token format: "user:username"
     user_token = f"user:{username}"
+    # Get gift name before unreserving
+    gift = get_gift(gift_id)
+    gift_name = gift["name"] if gift else "Unknown"
     # Unreserve (only own)
     result = unreserve_gift(gift_id, user_token, is_admin=False)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
     logger.info(f"Gift unreserved: {gift_id} by user {username}")
+    # Send Telegram notification
+    send_gift_notification(gift_name, username, "unreserved")
     return result
 
 
@@ -512,6 +522,9 @@ def guest_reserve(token: str, gift_id: str, request: Request):
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
     logger.info(f"Gift reserved: {gift_id} by {guest['name']}")
+    # Send Telegram notification
+    gift_name = result["gift"]["name"]
+    send_gift_notification(gift_name, guest["name"], "reserved")
     return result
 
 
@@ -528,11 +541,16 @@ def guest_unreserve(token: str, gift_id: str, request: Request):
     guest = validate_invitation(token)
     if not guest:
         raise HTTPException(status_code=401, detail="Token inv??lido o expirado")
+    # Get gift name before unreserving
+    gift = get_gift(gift_id)
+    gift_name = gift["name"] if gift else "Unknown"
     # Unreserve (only own)
     result = unreserve_gift(gift_id, token, is_admin=False)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
     logger.info(f"Gift unreserved: {gift_id} by {guest['name']}")
+    # Send Telegram notification
+    send_gift_notification(gift_name, guest["name"], "unreserved")
     return result
 
 
