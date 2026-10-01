@@ -268,15 +268,15 @@ async def reload_config():
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/notifications/test")
 async def test_notification():
-    """Send a test notification to verify Telegram setup."""
-    from notifier import TelegramNotifier
+    """Send a test notification to verify email setup."""
+    from email_notifier import EmailNotifier
 
-    notifier = TelegramNotifier()
+    notifier = EmailNotifier()
 
     if not notifier.enabled:
         raise HTTPException(
             status_code=503,
-            detail="Notifications disabled — missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID",
+            detail="Email notifications disabled — missing SMTP configuration",
         )
 
     result = notifier.send_test()
@@ -290,15 +290,13 @@ async def test_notification():
 @router.get("/notifications/status")
 async def notification_status():
     """Get the notification system status."""
-    from notifier import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TelegramNotifier
+    from email_notifier import EmailNotifier
 
-    notifier = TelegramNotifier()
+    notifier = EmailNotifier()
 
     return {
         "enabled": notifier.enabled,
-        "telegram_configured": bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID),
-        "bot_token_set": bool(TELEGRAM_BOT_TOKEN),
-        "chat_id_set": bool(TELEGRAM_CHAT_ID),
+        "type": "email",
     }
 
 

@@ -138,7 +138,7 @@ class Orchestrator:
         # Check and send scheduled alerts due today
         self._check_scheduled_alerts()
 
-        # Send Telegram alert if there are WARN or DANGER signals
+        # Send email alert if there are WARN or DANGER signals
         await self._send_alerts_if_needed()
 
         return results
