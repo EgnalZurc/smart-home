@@ -51,7 +51,6 @@ def sample_gift():
         "description": "Preferiblemente ligero y plegable",
         "url": "https://example.com/carrito",
         "price_range": "€€€",
-        "category": "transporte",
         "priority": 1,
     }
 

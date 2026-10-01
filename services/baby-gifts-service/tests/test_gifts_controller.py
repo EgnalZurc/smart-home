@@ -13,7 +13,7 @@ class TestGiftsCRUD:
         """add_gift should create a unique gift ID."""
         from gifts_controller import add_gift
         
-        gift = add_gift({"name": "Test Gift", "category": "otros"})
+        gift = add_gift({"name": "Test Gift"})
         
         assert gift["id"].startswith("g_")
         assert gift["name"] == "Test Gift"
@@ -28,7 +28,6 @@ class TestGiftsCRUD:
         assert gift["description"] == ""
         assert gift["url"] == ""
         assert gift["price_range"] == ""
-        assert gift["category"] == "otros"
         assert gift["priority"] == 2
         assert gift["hidden"] is False
 
@@ -218,30 +217,3 @@ class TestFamiliaUsers:
         
         assert is_familia_user("guest") is False
         assert is_familia_user("admin") is False
-
-
-class TestCategories:
-    """Tests for category management."""
-
-    def test_default_categories_exist(self, tmp_data_dir):
-        """Default categories should be available."""
-        from gifts_controller import _default_categories
-        
-        categories = _default_categories()
-        
-        assert len(categories) >= 5
-        category_ids = [c["id"] for c in categories]
-        assert "ropa" in category_ids
-        assert "transporte" in category_ids
-        assert "otros" in category_ids
-
-    def test_update_categories_replaces_all(self, tmp_data_dir):
-        """update_categories should replace all categories."""
-        from gifts_controller import get_gifts_data, update_categories
-        
-        new_cats = [{"id": "custom", "name": "Custom", "icon": "🎯"}]
-        result = update_categories(new_cats)
-        
-        assert result["status"] == "ok"
-        data = get_gifts_data()
-        assert data["categories"] == new_cats

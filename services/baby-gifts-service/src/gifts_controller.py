@@ -10,7 +10,6 @@ Gift structure:
     "description": "Preferiblemente ligero y plegable",
     "url": "https://...",  # optional link
     "price_range": "€€€",  # €, €€, €€€ or empty
-    "category": "transporte",
     "priority": 1,  # 1=alta, 2=media, 3=baja
     "reserved_by": null,  # invitation token, "user:username", or null
     "reserved_by_name": null,  # guest name or username
@@ -101,12 +100,12 @@ def _get_db():
 def _load_gifts() -> dict:
     """Load gifts data from JSON file."""
     if not GIFTS_FILE.exists():
-        return {"gifts": [], "categories": _default_categories()}
+        return {"gifts": []}
     try:
         return json.loads(GIFTS_FILE.read_text(encoding="utf-8"))
     except Exception as e:
         logger.error(f"Error loading gifts: {e}")
-        return {"gifts": [], "categories": _default_categories()}
+        return {"gifts": []}
 
 
 def _save_gifts(data: dict):
@@ -115,19 +114,6 @@ def _save_gifts(data: dict):
     GIFTS_FILE.write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-
-
-def _default_categories() -> list:
-    """Default gift categories."""
-    return [
-        {"id": "ropa", "name": "Ropa", "icon": "👕"},
-        {"id": "transporte", "name": "Transporte", "icon": "🚗"},
-        {"id": "alimentacion", "name": "Alimentación", "icon": "🍼"},
-        {"id": "higiene", "name": "Higiene", "icon": "🛁"},
-        {"id": "dormitorio", "name": "Dormitorio", "icon": "🛏️"},
-        {"id": "juguetes", "name": "Juguetes", "icon": "🧸"},
-        {"id": "otros", "name": "Otros", "icon": "🎁"},
-    ]
 
 
 def get_gifts_data(include_admin: bool = False) -> dict:
@@ -162,7 +148,6 @@ def add_gift(gift: dict) -> dict:
             "description": gift.get("description", ""),
             "url": gift.get("url", ""),
             "price_range": gift.get("price_range", ""),
-            "category": gift.get("category", "otros"),
             "priority": gift.get("priority", 2),
             "reserved_by": None,
             "reserved_by_name": None,
@@ -186,7 +171,6 @@ def update_gift(gift_id: str, updates: dict) -> dict | None:
                     "description",
                     "url",
                     "price_range",
-                    "category",
                     "priority",
                     "hidden",
                 ]:
@@ -260,15 +244,6 @@ def unreserve_gift(gift_id: str, token: str, is_admin: bool = False) -> dict:
                 _save_gifts(data)
                 return {"status": "ok", "gift": gift}
         return {"status": "error", "message": "Regalo no encontrado"}
-
-
-def update_categories(categories: list) -> dict:
-    """Update categories (admin only)."""
-    with _lock:
-        data = _load_gifts()
-        data["categories"] = categories
-        _save_gifts(data)
-        return {"status": "ok", "categories": categories}
 
 
 def toggle_gift_visibility(gift_id: str) -> dict:

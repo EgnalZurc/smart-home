@@ -34,7 +34,6 @@ class TestAdminGiftEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert "gifts" in data
-        assert "categories" in data
         assert isinstance(data["gifts"], list)
 
     def test_create_gift(self, client, sample_gift):
@@ -253,28 +252,3 @@ class TestGuestEndpoints:
         # For now, verify both are visible in admin view
         admin_gifts = client.get("/api/baby-gifts").json()["gifts"]
         assert len(admin_gifts) == 2
-
-
-class TestCategoryEndpoints:
-    """Tests for category management endpoints."""
-
-    def test_update_categories(self, client):
-        """PUT /api/baby-gifts/categories should update categories."""
-        # First create a gift so there's data in the system
-        client.post("/api/baby-gifts", json={"name": "Test Gift"})
-        
-        new_categories = [
-            {"id": "custom", "name": "Custom Category", "icon": "🎯"}
-        ]
-        
-        response = client.put(
-            "/api/baby-gifts/categories",
-            json={"categories": new_categories}
-        )
-        
-        assert response.status_code == 200
-        
-        # Verify - categories are returned in the data
-        gifts_data = client.get("/api/baby-gifts").json()
-        assert len(gifts_data["categories"]) == 1
-        assert gifts_data["categories"][0]["id"] == "custom"
