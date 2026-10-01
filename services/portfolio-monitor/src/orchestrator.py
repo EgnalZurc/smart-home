@@ -165,7 +165,7 @@ class Orchestrator:
     async def _send_alerts_if_needed(self):
         """
         Send email alerts for market conditions (ETF/Crypto).
-        
+
         Only sends if there are actual WARN or DANGER signals.
         This is separate from scheduled alerts (which are handled by check_and_trigger_alerts).
         """
@@ -186,16 +186,20 @@ class Orchestrator:
 
         # Count actual WARN/DANGER positions
         etf_alerts = [
-            e for e in (self._summary.etf_analysis or [])
+            e
+            for e in (self._summary.etf_analysis or [])
             if e.level in (AlertLevel.WARN, AlertLevel.DANGER)
         ]
         crypto_alerts = [
-            c for c in (self._summary.crypto_analysis or [])
+            c
+            for c in (self._summary.crypto_analysis or [])
             if c.level in (AlertLevel.WARN, AlertLevel.DANGER)
         ]
 
         if not etf_alerts and not crypto_alerts:
-            logger.info("Overall level is elevated but no individual positions have warnings")
+            logger.info(
+                "Overall level is elevated but no individual positions have warnings"
+            )
             return
 
         logger.info(
