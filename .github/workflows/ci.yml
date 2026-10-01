@@ -753,10 +753,14 @@ jobs:
 
       - name: Health Check
         run: |
+          set -euo pipefail
+          
           echo "## 🏥 Health Check" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          BASE_URL="https://${{ secrets.PI_SSH_HOST }}"
+          # Use Tailscale hostname for HTTPS access
+          BASE_URL="https://${{ secrets.PI_TAILSCALE_HOSTNAME }}"
+          FAILED=0
           
           check_health() {
             local name=$1
@@ -769,8 +773,10 @@ jobs:
               echo "| $name | ✅ HTTP $HTTP_CODE |" >> $GITHUB_STEP_SUMMARY
             elif [[ "$HTTP_CODE" == "000" ]]; then
               echo "| $name | ❌ Connection failed |" >> $GITHUB_STEP_SUMMARY
+              FAILED=1
             else
               echo "| $name | ⚠️ HTTP $HTTP_CODE |" >> $GITHUB_STEP_SUMMARY
+              FAILED=1
             fi
           }
           
@@ -786,3 +792,12 @@ jobs:
           check_health "Vacaciones" "/api/health/vacaciones"
           check_health "Baby Gifts" "/api/health/baby-gifts"
           check_health "Casita" "/api/health/casita"
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "$FAILED" -eq 1 ]]; then
+            echo "❌ **Health check failed** - some services are not responding" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "✅ **All services healthy**" >> $GITHUB_STEP_SUMMARY
+          fi
