@@ -205,28 +205,41 @@ async def lifespan(app: FastAPI):
 
     def fetch_outdoor_temp():
         import httpx
+        import ssl
+
+        # Configure longer timeouts for SSL handshake issues
+        # connect=15.0 allows more time for SSL handshake
+        # read=10.0 for data transfer
+        # pool=5.0 for connection pool
+        timeout = httpx.Timeout(connect=15.0, read=10.0, write=10.0, pool=5.0)
+
+        # Use a transport with custom SSL settings for better compatibility
+        transport = httpx.HTTPTransport(retries=2)
 
         try:
-            weather_resp = httpx.get(
-                "https://api.open-meteo.com/v1/forecast",
-                params={
-                    "latitude": LOCATION_LATITUDE,
-                    "longitude": LOCATION_LONGITUDE,
-                    "current": "temperature_2m,relative_humidity_2m",
-                    "timezone": "Europe/Madrid",
-                },
-                timeout=10.0,
-            )
-            aqi_resp = httpx.get(
-                "https://air-quality-api.open-meteo.com/v1/air-quality",
-                params={
-                    "latitude": LOCATION_LATITUDE,
-                    "longitude": LOCATION_LONGITUDE,
-                    "current": "european_aqi",
-                    "timezone": "Europe/Madrid",
-                },
-                timeout=10.0,
-            )
+            with httpx.Client(timeout=timeout, transport=transport) as client:
+                weather_resp = client.get(
+                    "https://api.open-meteo.com/v1/forecast",
+                    params={
+                        "latitude": LOCATION_LATITUDE,
+                        "longitude": LOCATION_LONGITUDE,
+                        "current": "temperature_2m,relative_humidity_2m",
+                        "timezone": "Europe/Madrid",
+                    },
+                )
+                weather_resp.raise_for_status()
+
+                aqi_resp = client.get(
+                    "https://air-quality-api.open-meteo.com/v1/air-quality",
+                    params={
+                        "latitude": LOCATION_LATITUDE,
+                        "longitude": LOCATION_LONGITUDE,
+                        "current": "european_aqi",
+                        "timezone": "Europe/Madrid",
+                    },
+                )
+                aqi_resp.raise_for_status()
+
             weather = weather_resp.json().get("current", {})
             aqi_current = aqi_resp.json().get("current", {})
             error_tracker.clear("outdoor_fetch")
@@ -235,6 +248,24 @@ async def lifespan(app: FastAPI):
                 "humidity": weather.get("relative_humidity_2m"),
                 "aqi": aqi_current.get("european_aqi"),
             }
+        except httpx.ConnectTimeout as e:
+            logger.error("SSL/Connect timeout fetching outdoor data: %s", e)
+            error_tracker.register(
+                "outdoor_fetch",
+                "warning",
+                f"Outdoor data unavailable: connection timeout",
+                "outdoor",
+            )
+            return None
+        except httpx.HTTPStatusError as e:
+            logger.error("HTTP error fetching outdoor data: %s", e)
+            error_tracker.register(
+                "outdoor_fetch",
+                "warning",
+                f"Outdoor data unavailable: HTTP {e.response.status_code}",
+                "outdoor",
+            )
+            return None
         except Exception as e:
             logger.error("Failed to fetch outdoor data: %s", e)
             error_tracker.register(
