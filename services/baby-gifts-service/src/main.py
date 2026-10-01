@@ -263,9 +263,7 @@ def get_invitations():
     # Compute visible_gifts and available_gifts counts
     visible_gifts = sum(1 for g in all_gifts if not g.get("hidden", False))
     available_gifts = sum(
-        1
-        for g in all_gifts
-        if not g.get("hidden", False) and not g.get("reserved_by")
+        1 for g in all_gifts if not g.get("hidden", False) and not g.get("reserved_by")
     )
 
     # Add reservation count and gift stats to each invitation

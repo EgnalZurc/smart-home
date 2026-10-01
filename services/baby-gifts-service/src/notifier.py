@@ -52,7 +52,9 @@ def send_gift_notification(gift_name: str, person_name: str, action: str) -> boo
 
         data = resp.json()
         if data.get("ok"):
-            logger.info(f"[telegram] Notification sent: {action} '{gift_name}' by {person_name}")
+            logger.info(
+                f"[telegram] Notification sent: {action} '{gift_name}' by {person_name}"
+            )
             return True
         else:
             error = data.get("description", "Unknown error")
