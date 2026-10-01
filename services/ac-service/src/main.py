@@ -205,7 +205,6 @@ async def lifespan(app: FastAPI):
 
     def fetch_outdoor_temp():
         import httpx
-        import ssl
 
         # Configure longer timeouts for SSL handshake issues
         # connect=15.0 allows more time for SSL handshake
@@ -253,7 +252,7 @@ async def lifespan(app: FastAPI):
             error_tracker.register(
                 "outdoor_fetch",
                 "warning",
-                f"Outdoor data unavailable: connection timeout",
+                "Outdoor data unavailable: connection timeout",
                 "outdoor",
             )
             return None
