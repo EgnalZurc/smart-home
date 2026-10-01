@@ -218,9 +218,17 @@ _CATALOGUE: dict[str, dict[str, str]] = {
         "es": "🟡 Caída de {pct:.1f}% en 24h.",
         "en": "🟡 Drop of {pct:.1f}% in 24h.",
     },
+    "crypto.drop_info": {
+        "es": "📉 Volatilidad normal: {pct:.1f}% en 24h.",
+        "en": "📉 Normal volatility: {pct:.1f}% in 24h.",
+    },
     "crypto.pump_warn": {
         "es": "📈 Subida fuerte +{pct:.1f}% en 24h.",
         "en": "📈 Strong surge +{pct:.1f}% in 24h.",
+    },
+    "crypto.pump_info": {
+        "es": "📈 Subida de +{pct:.1f}% en 24h. Buen momentum.",
+        "en": "📈 Up +{pct:.1f}% in 24h. Good momentum.",
     },
     "crypto.ath_danger": {
         "es": "📈 A solo {pct:.1f}% del ATH. Zona de máximos históricos.",
@@ -230,9 +238,25 @@ _CATALOGUE: dict[str, dict[str, str]] = {
         "es": "📈 A {pct:.1f}% del ATH. Acercándose a máximos.",
         "en": "📈 {pct:.1f}% from ATH. Approaching highs.",
     },
+    "crypto.ath_near": {
+        "es": "🎯 A solo {pct:.1f}% del ATH. Cerca de máximos históricos.",
+        "en": "🎯 Only {pct:.1f}% from ATH. Near all-time high.",
+    },
+    "crypto.ath_approaching": {
+        "es": "📈 A {pct:.1f}% del ATH. Acercándose a máximos.",
+        "en": "📈 {pct:.1f}% from ATH. Approaching highs.",
+    },
     "crypto.bear_30d": {
-        "es": "🟡 Bajada del {pct:.1f}% en 30 días. Tendencia bajista sostenida.",
-        "en": "🟡 Down {pct:.1f}% in 30 days. Sustained bearish trend.",
+        "es": "🐻 Bear market: {pct:.1f}% en 30 días. Tendencia bajista confirmada.",
+        "en": "🐻 Bear market: {pct:.1f}% in 30 days. Confirmed bearish trend.",
+    },
+    "crypto.correction_30d": {
+        "es": "📉 Corrección: {pct:.1f}% en 30 días. Normal en ciclos crypto.",
+        "en": "📉 Correction: {pct:.1f}% in 30 days. Normal in crypto cycles.",
+    },
+    "crypto.crash_30d": {
+        "es": "🔴 Crash severo: {pct:.1f}% en 30 días. Revisar posiciones.",
+        "en": "🔴 Severe crash: {pct:.1f}% in 30 days. Review positions.",
     },
     "crypto.bull_30d": {
         "es": "🟢 Subida del +{pct:.1f}% en 30 días. Tendencia alcista fuerte.",

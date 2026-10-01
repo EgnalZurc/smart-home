@@ -134,7 +134,7 @@ class TestCryptoSignalLevels:
         price_data = {
             "solana": {
                 "eur": 100,
-                "eur_24h_change": -12.0,  # Significant drop
+                "eur_24h_change": -16.0,  # Flash crash (>15%)
                 "ath_change_pct": -60,
                 "price_change_30d": -25,
             }
@@ -142,8 +142,8 @@ class TestCryptoSignalLevels:
 
         signals, level = compute_signals(pos, price_data, fear_greed_val=50)
 
-        # This should trigger a danger signal
-        assert level == AlertLevel.DANGER, "Significant drop should trigger DANGER"
+        # This should trigger a danger signal (24h drop > 15%)
+        assert level == AlertLevel.DANGER, "Flash crash should trigger DANGER"
 
     def test_fear_greed_extreme_values(self):
         """Test Fear & Greed at extreme values - should be informational only."""

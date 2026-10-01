@@ -155,7 +155,16 @@ def compute_signals(
     price_data: dict[str, Any],
     fear_greed_val: int | None,
 ) -> tuple[list[Signal], AlertLevel]:
-    """Compute signals for a position."""
+    """
+    Compute signals for a position.
+    
+    Logic optimized for HODL strategy:
+    - Fear & Greed: informational only (sentiment indicator)
+    - ATH proximity: informational (momentum indicator)
+    - Price pumps: informational (could be rally start)
+    - 24h drops: only escalate on significant moves (crypto is volatile)
+    - 30d drops: only escalate on severe bear markets
+    """
     signals: list[Signal] = []
     level = AlertLevel.OK
 
@@ -168,53 +177,92 @@ def compute_signals(
 
     thr = CRYPTO_THRESHOLDS
 
-    # Fear & Greed signals - informational only, don't escalate level
-    # These are market sentiment indicators, not actionable warnings
+    # ─────────────────────────────────────────────────────────────────────────
+    # Fear & Greed - INFORMATIONAL ONLY
+    # This is market sentiment, not actionable for HODLers
+    # ─────────────────────────────────────────────────────────────────────────
     if fear_greed_val is not None:
-        if fear_greed_val >= thr["fg_extreme_greed"]:
+        if fear_greed_val >= thr.get("fg_extreme_greed", 75):
             signals.append(
                 Signal("", t("crypto.fg_extreme_greed", val=fear_greed_val), "INFO")
             )
-            # Don't escalate - extreme greed is informational
-        elif fear_greed_val >= thr["fg_high_greed"]:
+        elif fear_greed_val >= thr.get("fg_high_greed", 60):
             signals.append(
                 Signal("", t("crypto.fg_high_greed", val=fear_greed_val), "INFO")
             )
-            # Don't escalate - high greed is informational
-        elif fear_greed_val <= thr["fg_extreme_fear"]:
+        elif fear_greed_val <= thr.get("fg_extreme_fear", 25):
+            # Extreme fear = potential buying opportunity for HODLers
             signals.append(
                 Signal("", t("crypto.fg_extreme_fear", val=fear_greed_val), "OK")
             )
 
-    # 24h price change signals
+    # ─────────────────────────────────────────────────────────────────────────
+    # 24h price change - adjusted for crypto volatility
+    # Normal crypto volatility is ±5%, only alert on significant moves
+    # ─────────────────────────────────────────────────────────────────────────
     if change_24h is not None:
-        if change_24h <= thr["change_24h_danger"]:
+        danger_threshold = thr.get("change_24h_danger", -15)
+        warn_threshold = thr.get("change_24h_warn", -10)
+        info_threshold = thr.get("change_24h_info", -5)
+        pump_threshold = thr.get("change_24h_pump", 10)
+
+        if change_24h <= danger_threshold:
+            # Flash crash - rare, serious event
             signals.append(
                 Signal("", t("crypto.drop_danger", pct=change_24h), "DANGER")
             )
             level = level.escalate(AlertLevel.DANGER)
-        elif change_24h <= thr["change_24h_warn"]:
+        elif change_24h <= warn_threshold:
+            # Significant drop - worth attention
             signals.append(Signal("", t("crypto.drop_warn", pct=change_24h), "WARN"))
             level = level.escalate(AlertLevel.WARN)
-        elif change_24h >= thr["change_24h_pump"]:
-            # Strong surge is informational, not a warning - could be good news
-            signals.append(Signal("", t("crypto.pump_warn", pct=change_24h), "INFO"))
+        elif change_24h <= info_threshold:
+            # Normal volatility - informational only
+            signals.append(Signal("", t("crypto.drop_info", pct=change_24h), "INFO"))
+        elif change_24h >= pump_threshold:
+            # Strong surge - informational (could be rally start)
+            signals.append(Signal("", t("crypto.pump_info", pct=change_24h), "INFO"))
 
-    # ATH proximity signals - informational, not actionable
-    # Being near ATH can indicate strong momentum, not necessarily a sell signal
+    # ─────────────────────────────────────────────────────────────────────────
+    # ATH proximity - INFORMATIONAL ONLY
+    # Being near ATH is not bad - crypto makes new ATHs in bull markets
+    # ─────────────────────────────────────────────────────────────────────────
     if ath_pct is not None:
-        if ath_pct >= thr["ath_danger_pct"]:
-            signals.append(Signal("", t("crypto.ath_danger", pct=abs(ath_pct)), "INFO"))
-            # Don't escalate level - ATH proximity is informational
-        elif ath_pct >= thr["ath_warn_pct"]:
-            signals.append(Signal("", t("crypto.ath_warn", pct=abs(ath_pct)), "INFO"))
+        ath_near = thr.get("ath_danger_pct", -5)
+        ath_approaching = thr.get("ath_warn_pct", -15)
 
-    # 30-day momentum signals
+        if ath_pct >= ath_near:
+            signals.append(Signal("", t("crypto.ath_near", pct=abs(ath_pct)), "INFO"))
+        elif ath_pct >= ath_approaching:
+            signals.append(
+                Signal("", t("crypto.ath_approaching", pct=abs(ath_pct)), "INFO")
+            )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 30-day momentum - adjusted for crypto cycles
+    # -20% in 30 days is a normal correction, not a crisis
+    # ─────────────────────────────────────────────────────────────────────────
     if change_30d is not None:
-        if change_30d <= thr["change_30d_bear"]:
+        bear_danger = thr.get("change_30d_danger", -50)
+        bear_warn = thr.get("change_30d_warn", -35)
+        bear_info = thr.get("change_30d_bear", -20)
+        bull_threshold = thr.get("change_30d_bull", 20)
+
+        if change_30d <= bear_danger:
+            # Severe crash - very rare (2022 Luna, FTX level)
+            signals.append(Signal("", t("crypto.crash_30d", pct=change_30d), "DANGER"))
+            level = level.escalate(AlertLevel.DANGER)
+        elif change_30d <= bear_warn:
+            # Bear market confirmed
             signals.append(Signal("", t("crypto.bear_30d", pct=change_30d), "WARN"))
             level = level.escalate(AlertLevel.WARN)
-        elif change_30d >= thr["change_30d_bull"]:
+        elif change_30d <= bear_info:
+            # Normal correction - informational for HODLers
+            signals.append(
+                Signal("", t("crypto.correction_30d", pct=change_30d), "INFO")
+            )
+        elif change_30d >= bull_threshold:
+            # Bull momentum - positive signal
             signals.append(Signal("", t("crypto.bull_30d", pct=change_30d), "OK"))
 
     return signals, level
