@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@v5
 
       # ── Detect changes ──
-      - uses: dorny/paths-filter@v4
+      - uses: dorny/paths-filter@v3
         id: filter
         if: ${{ github.event.inputs.service == 'auto' || github.event.inputs.service == '' }}
         with:
@@ -626,7 +626,7 @@ jobs:
           tags: tag:ci
 
       - name: Deploy ${{ matrix.service.name }} to Pi
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.PI_SSH_HOST }}
           username: ${{ secrets.PI_SSH_USER }}
@@ -670,7 +670,7 @@ jobs:
           tags: tag:ci
 
       - name: Sync nginx config to Pi
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.PI_SSH_HOST }}
           username: ${{ secrets.PI_SSH_USER }}
@@ -680,7 +680,7 @@ jobs:
           strip_components: 0
 
       - name: Reload nginx
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.PI_SSH_HOST }}
           username: ${{ secrets.PI_SSH_USER }}
@@ -715,7 +715,7 @@ jobs:
           tags: tag:ci
 
       - name: Sync docker-compose.prod.yml to Pi
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.PI_SSH_HOST }}
           username: ${{ secrets.PI_SSH_USER }}
@@ -725,7 +725,7 @@ jobs:
           strip_components: 0
 
       - name: Rename to docker-compose.yml on Pi
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.PI_SSH_HOST }}
           username: ${{ secrets.PI_SSH_USER }}
@@ -762,10 +762,13 @@ jobs:
             local name=$1
             local endpoint=$2
             
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$BASE_URL$endpoint" || echo "000")
+            # Use --fail-with-body to get proper exit codes, capture both code and body
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 --connect-timeout 10 "$BASE_URL$endpoint" 2>/dev/null) || HTTP_CODE="000"
             
             if [[ "$HTTP_CODE" == "200" ]]; then
-              echo "| $name | ✅ Healthy |" >> $GITHUB_STEP_SUMMARY
+              echo "| $name | ✅ HTTP $HTTP_CODE |" >> $GITHUB_STEP_SUMMARY
+            elif [[ "$HTTP_CODE" == "000" ]]; then
+              echo "| $name | ❌ Connection failed |" >> $GITHUB_STEP_SUMMARY
             else
               echo "| $name | ⚠️ HTTP $HTTP_CODE |" >> $GITHUB_STEP_SUMMARY
             fi
@@ -774,8 +777,12 @@ jobs:
           echo "| Service | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
           
+          # Wait a bit for services to fully start after deploy
+          sleep 5
+          
           check_health "Dashboard" "/api/health"
           check_health "AC Service" "/api/health/ac"
           check_health "Portfolio" "/api/health/portfolio"
           check_health "Vacaciones" "/api/health/vacaciones"
           check_health "Baby Gifts" "/api/health/baby-gifts"
+          check_health "Casita" "/api/health/casita"
