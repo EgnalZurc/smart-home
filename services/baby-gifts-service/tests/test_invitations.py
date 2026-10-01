@@ -202,10 +202,11 @@ class TestReservationCounting:
         inv = create_invitation("Counting Guest")
         token = inv["token"]
         
-        # Reserve 3 gifts
+        # Reserve 3 gifts and verify each reservation succeeds
         for i in range(3):
             gift = add_gift({"name": f"Gift {i}"})
-            reserve_gift(gift["id"], token, "Guest")
+            result = reserve_gift(gift["id"], token, "Guest")
+            assert result["status"] == "ok", f"Failed to reserve gift {i}: {result}"
         
         count = get_invitation_reservations(token)
         assert count == 3
