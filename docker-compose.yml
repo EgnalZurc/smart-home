@@ -134,6 +134,8 @@ services:
       - 8004
     volumes:
       - ./data/baby-gifts-service:/app/data
+    env_file:
+      - .env
     environment:
       - TZ=Europe/Madrid
     networks:
