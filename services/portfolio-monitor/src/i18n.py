@@ -127,7 +127,7 @@ _CATALOGUE: dict[str, dict[str, str]] = {
         "es": "{pct:.1%} bajo precio medio ({avg:.2f}€).",
         "en": "{pct:.1%} below average cost ({avg:.2f}€).",
     },
-    "signal.profit.title": {"es": "✅ En beneficio", "en": "✅ In profit"},
+    "signal.profit.title": {"es": "En beneficio", "en": "In profit"},
     "signal.profit.body": {
         "es": "+{pct:.1%} sobre precio medio ({avg:.2f}€).",
         "en": "+{pct:.1%} above average cost ({avg:.2f}€).",
