@@ -163,17 +163,45 @@ class Orchestrator:
             logger.info(f"Sent notifications for {len(triggered)} scheduled alerts")
 
     async def _send_alerts_if_needed(self):
-        """Send email alerts if there are warnings or dangers."""
-        # Calculate overall level
+        """
+        Send email alerts for market conditions (ETF/Crypto).
+        
+        Only sends if there are actual WARN or DANGER signals.
+        This is separate from scheduled alerts (which are handled by check_and_trigger_alerts).
+        """
+        # Calculate overall level from actual market signals
         overall_level = AlertLevel.OK
         if self._summary.etf_level:
             overall_level = overall_level.escalate(self._summary.etf_level)
         if self._summary.crypto_level:
             overall_level = overall_level.escalate(self._summary.crypto_level)
 
+        # Only send if there are actual market warnings
         if overall_level not in (AlertLevel.WARN, AlertLevel.DANGER):
-            logger.info("No alerts to send — portfolio status is OK")
+            logger.info(
+                f"No market alerts to send — ETF: {self._summary.etf_level}, "
+                f"Crypto: {self._summary.crypto_level}, Overall: OK"
+            )
             return
+
+        # Count actual WARN/DANGER positions
+        etf_alerts = [
+            e for e in (self._summary.etf_analysis or [])
+            if e.level in (AlertLevel.WARN, AlertLevel.DANGER)
+        ]
+        crypto_alerts = [
+            c for c in (self._summary.crypto_analysis or [])
+            if c.level in (AlertLevel.WARN, AlertLevel.DANGER)
+        ]
+
+        if not etf_alerts and not crypto_alerts:
+            logger.info("Overall level is elevated but no individual positions have warnings")
+            return
+
+        logger.info(
+            f"Sending market alert — {len(etf_alerts)} ETF alerts, "
+            f"{len(crypto_alerts)} crypto alerts"
+        )
 
         # Send summary alert
         result = self._notifier.send_summary_alert(
@@ -185,9 +213,9 @@ class Orchestrator:
         )
 
         if result.success:
-            logger.info(f"Alert email sent: {result.message}")
+            logger.info(f"Market alert email sent: {result.message}")
         else:
-            logger.error(f"Failed to send alert email: {result.message}")
+            logger.error(f"Failed to send market alert email: {result.message}")
 
     def get_summary(self) -> PortfolioSummary:
         """Get the current portfolio summary."""
