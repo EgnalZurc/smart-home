@@ -146,7 +146,7 @@ class TestCryptoSignalLevels:
         assert level == AlertLevel.DANGER, "Significant drop should trigger DANGER"
 
     def test_fear_greed_extreme_values(self):
-        """Test Fear & Greed at extreme values."""
+        """Test Fear & Greed at extreme values - should be informational only."""
         from monitors.crypto_monitor import compute_signals
 
         pos = {"coingecko_id": "bitcoin"}
@@ -159,11 +159,14 @@ class TestCryptoSignalLevels:
             }
         }
 
-        # Extreme greed (80+)
+        # Extreme greed (80+) - should generate signal but NOT escalate level
         signals, level = compute_signals(pos, price_data, fear_greed_val=85)
         fg_signals = [s for s in signals if "Fear" in s.body or "Greed" in s.body]
         assert len(fg_signals) > 0, "Should generate F&G signal at extreme greed"
-        assert level == AlertLevel.DANGER
+        # F&G is informational, should NOT escalate level
+        assert level == AlertLevel.OK, "F&G should be informational, not escalate level"
+        # Signal should be INFO level
+        assert fg_signals[0].level == "INFO", "F&G signal should be INFO"
 
         # Extreme fear (below 25)
         signals, level = compute_signals(pos, price_data, fear_greed_val=15)
