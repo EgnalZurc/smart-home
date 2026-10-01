@@ -168,18 +168,19 @@ def compute_signals(
 
     thr = CRYPTO_THRESHOLDS
 
-    # Fear & Greed signals
+    # Fear & Greed signals - informational only, don't escalate level
+    # These are market sentiment indicators, not actionable warnings
     if fear_greed_val is not None:
         if fear_greed_val >= thr["fg_extreme_greed"]:
             signals.append(
-                Signal("", t("crypto.fg_extreme_greed", val=fear_greed_val), "DANGER")
+                Signal("", t("crypto.fg_extreme_greed", val=fear_greed_val), "INFO")
             )
-            level = level.escalate(AlertLevel.DANGER)
+            # Don't escalate - extreme greed is informational
         elif fear_greed_val >= thr["fg_high_greed"]:
             signals.append(
-                Signal("", t("crypto.fg_high_greed", val=fear_greed_val), "WARN")
+                Signal("", t("crypto.fg_high_greed", val=fear_greed_val), "INFO")
             )
-            level = level.escalate(AlertLevel.WARN)
+            # Don't escalate - high greed is informational
         elif fear_greed_val <= thr["fg_extreme_fear"]:
             signals.append(
                 Signal("", t("crypto.fg_extreme_fear", val=fear_greed_val), "OK")
