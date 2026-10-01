@@ -396,6 +396,26 @@
         </div>
     </div>
 </div>
+<!-- Modal: Reminder for guests to mark gifts as reserved -->
+<div class="modal-overlay" id="reminder-modal">
+    <div class="modal" style="max-width:360px;">
+        <div class="modal-header">
+            <span class="modal-title">ℹ️ ¡Importante!</span>
+            <button class="modal-close" onclick="closeReminderModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:14px; color:#e2e8f0; line-height:1.6; text-align:center;">
+                Recuerda <strong style="color:#86efac;">marcar como reservado</strong> cualquier regalo que vayas a comprar para evitar duplicados.
+            </p>
+            <p style="font-size:13px; color:#94a3b8; margin-top:12px; text-align:center;">
+                ¡Gracias por tu colaboración! 🎁
+            </p>
+        </div>
+        <div class="modal-footer" style="justify-content:center;">
+            <button class="btn btn-primary" onclick="closeReminderModal()">Entendido</button>
+        </div>
+    </div>
+</div>
 <div id="loading-overlay"><div class="spinner"></div></div>
 <script>
 var isAdmin = !!window.AUTH_USER;  // Authenticated users are admins
@@ -481,6 +501,8 @@ async function loadGuestData() {
     document.getElementById('guest-welcome').style.display = 'block';
     document.getElementById('guest-name-display').textContent = guestName;
     renderGifts();
+    // Show reminder modal for first-time guests in this session
+    showReminderModal();
 }
 
 async function loadInvitations() {
@@ -976,6 +998,26 @@ async function deleteInv(token) {
     } catch (e) {
         showToast('Error eliminando', 'error');
     }
+}
+
+// ── Reminder Modal (for guests) ───────────────────────────────────────────────
+var REMINDER_STORAGE_KEY = 'baby-gifts-reminder-seen';
+
+function shouldShowReminderModal() {
+    // Only show for guests (not admin, not authenticated users)
+    if (isAdmin || isAuthUser) return false;
+    // Only show once per session
+    return !sessionStorage.getItem(REMINDER_STORAGE_KEY);
+}
+
+function showReminderModal() {
+    if (!shouldShowReminderModal()) return;
+    sessionStorage.setItem(REMINDER_STORAGE_KEY, 'true');
+    document.getElementById('reminder-modal').classList.add('open');
+}
+
+function closeReminderModal() {
+    document.getElementById('reminder-modal').classList.remove('open');
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
