@@ -1,6 +1,5 @@
 """Unit tests for rate limiting functionality."""
 
-import pytest
 
 
 class TestRateLimiting:

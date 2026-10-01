@@ -1,6 +1,5 @@
 """Unit tests for FastAPI endpoints."""
 
-import pytest
 
 
 class TestHealthEndpoints:
@@ -277,15 +276,15 @@ class TestGuestEndpoints:
             "/api/baby-gifts/invitations",
             json={"name": sample_invitation_name}
         )
-        token = inv_resp.json()["token"]
+        _token = inv_resp.json()["token"]
         
         # Create a visible gift
         visible_resp = client.post("/api/baby-gifts", json={"name": "Visible Gift"})
-        visible_id = visible_resp.json()["gift"]["id"]
+        _visible_id = visible_resp.json()["gift"]["id"]
         
         # Create a hidden gift
         hidden_resp = client.post("/api/baby-gifts", json={"name": "Hidden Gift"})
-        hidden_id = hidden_resp.json()["gift"]["id"]
+        _hidden_id = hidden_resp.json()["gift"]["id"]
         
         # Hide it via admin unreserve endpoint won't work, we need direct access
         # Using the toggle visibility would require user endpoint

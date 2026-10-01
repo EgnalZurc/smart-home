@@ -1,9 +1,6 @@
 """Unit tests for gifts_controller module."""
 
-import json
-from datetime import datetime, timedelta
 
-import pytest
 
 
 class TestGiftsCRUD:

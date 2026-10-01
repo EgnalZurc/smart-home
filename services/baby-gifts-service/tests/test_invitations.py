@@ -1,8 +1,6 @@
 """Unit tests for invitation management."""
 
-from datetime import datetime, timedelta
-
-import pytest
+from datetime import datetime
 
 
 class TestInvitationCreation:
@@ -21,7 +19,7 @@ class TestInvitationCreation:
 
     def test_create_invitation_sets_expiry(self, tmp_data_dir):
         """create_invitation should set expiry to 6 months."""
-        from gifts_controller import create_invitation, INVITATION_EXPIRY_DAYS
+        from gifts_controller import INVITATION_EXPIRY_DAYS, create_invitation
         
         result = create_invitation("Expiring Guest")
         
@@ -68,8 +66,9 @@ class TestInvitationValidation:
 
     def test_validate_updates_last_access(self, tmp_data_dir):
         """validate_invitation should update last_access timestamp."""
-        from gifts_controller import create_invitation, validate_invitation
         import time
+
+        from gifts_controller import create_invitation, validate_invitation
         
         created = create_invitation("Access Guest")
         first_access = validate_invitation(created["token"])
@@ -80,7 +79,11 @@ class TestInvitationValidation:
 
     def test_validate_revoked_invitation_fails(self, tmp_data_dir):
         """validate_invitation should return None for revoked invitation."""
-        from gifts_controller import create_invitation, revoke_invitation, validate_invitation
+        from gifts_controller import (
+            create_invitation,
+            revoke_invitation,
+            validate_invitation,
+        )
         
         created = create_invitation("Revoked Guest")
         revoke_invitation(created["token"])
@@ -110,8 +113,9 @@ class TestInvitationListing:
 
     def test_list_invitations_ordered_by_date(self, tmp_data_dir):
         """list_invitations should be ordered by created_at desc."""
-        from gifts_controller import create_invitation, list_invitations
         import time
+
+        from gifts_controller import create_invitation, list_invitations
         
         create_invitation("First")
         time.sleep(0.05)
@@ -127,7 +131,11 @@ class TestInvitationListing:
 
     def test_list_shows_revoked_status(self, tmp_data_dir):
         """list_invitations should show revoked status."""
-        from gifts_controller import create_invitation, list_invitations, revoke_invitation
+        from gifts_controller import (
+            create_invitation,
+            list_invitations,
+            revoke_invitation,
+        )
         
         created = create_invitation("To Revoke")
         revoke_invitation(created["token"])
@@ -143,7 +151,11 @@ class TestInvitationDeletion:
 
     def test_delete_invitation_removes_it(self, tmp_data_dir):
         """delete_invitation should remove the invitation."""
-        from gifts_controller import create_invitation, delete_invitation, list_invitations
+        from gifts_controller import (
+            create_invitation,
+            delete_invitation,
+            list_invitations,
+        )
         
         created = create_invitation("To Delete")
         result = delete_invitation(created["token"])
@@ -167,7 +179,11 @@ class TestInvitationRevocation:
 
     def test_revoke_marks_revoked(self, tmp_data_dir):
         """revoke_invitation should mark invitation as revoked."""
-        from gifts_controller import create_invitation, list_invitations, revoke_invitation
+        from gifts_controller import (
+            create_invitation,
+            list_invitations,
+            revoke_invitation,
+        )
         
         created = create_invitation("To Revoke")
         result = revoke_invitation(created["token"])
