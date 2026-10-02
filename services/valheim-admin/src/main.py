@@ -65,7 +65,9 @@ async def _post(path: str, data: dict | None = None) -> dict:
     """POST request to pc-agent."""
     try:
         async with httpx.AsyncClient(timeout=PC_AGENT_TIMEOUT) as client:
-            r = await client.post(f"{PC_AGENT_URL}{path}", headers=_headers(), data=data)
+            r = await client.post(
+                f"{PC_AGENT_URL}{path}", headers=_headers(), data=data
+            )
             r.raise_for_status()
             return r.json()
     except httpx.ConnectError:
@@ -171,15 +173,18 @@ async def update_config(
     backups: int = Form(4),
 ):
     """Update Valheim server configuration."""
-    return await _post("/valheim/config", {
-        "server_name": server_name,
-        "world_name": world_name,
-        "server_pass": server_pass,
-        "server_public": server_public,
-        "crossplay": crossplay,
-        "save_interval": save_interval,
-        "backups": backups,
-    })
+    return await _post(
+        "/valheim/config",
+        {
+            "server_name": server_name,
+            "world_name": world_name,
+            "server_pass": server_pass,
+            "server_public": server_public,
+            "crossplay": crossplay,
+            "save_interval": save_interval,
+            "backups": backups,
+        },
+    )
 
 
 # ── Logs ──────────────────────────────────────────────────────────────────────

@@ -444,12 +444,14 @@ def list_worlds(x_api_token: str = Header(None, alias="X-Api-Token")):
         if re.search(r"_backup_(auto|20\d{6})", p.name, re.IGNORECASE):
             continue
         fmt = _world_format(p)
-        worlds.append({
-            "name": p.name,
-            "active": p.name == active,
-            "has_data": fmt != "empty",
-            "format": fmt,
-        })
+        worlds.append(
+            {
+                "name": p.name,
+                "active": p.name == active,
+                "has_data": fmt != "empty",
+                "format": fmt,
+            }
+        )
 
     return {"worlds": worlds, "active": active}
 
@@ -608,4 +610,5 @@ def set_power_mode(mode: str, x_api_token: str = Header(None, alias="X-Api-Token
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8090)
