@@ -133,56 +133,15 @@ async def get_passwords_health():
 
 @router.get("/health/valheim", tags=["Health"])
 async def get_valheim_health():
-    """Health check for Valheim dedicated server.
+    """Health check for Valheim Admin service.
 
-    Two-level check to avoid false positives:
-    1. Container must be in 'running' state (via docker-socket-proxy)
-    2. valheim-admin /api/status must confirm running=true
+    The dashboard controls valheim-admin (the management UI).
+    valheim-admin in turn controls valheim-server (the game).
 
-    This prevents showing "online" during the 3-5 min startup window
-    when the container is running but the game has not loaded yet,
-    and avoids false positives when the container restarts after an OOM.
+    This endpoint checks if valheim-admin is running.
+    To see if the game server itself is running, use valheim-admin's UI
+    or call /health/valheim-server.
     """
-    # Level 1: container state
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get(
-                "http://docker-socket-proxy:2375/v1.41/containers/valheim-server/json"
-            )
-            if r.status_code != 200:
-                return {"online": False}
-            state = r.json().get("State", {})
-            if state.get("Status") != "running":
-                return {"online": False}
-    except Exception:
-        return {"online": False}
-
-    # Level 2: confirm via valheim-admin that the game itself has loaded
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get("http://valheim-admin:8080/api/status")
-            if r.status_code == 200:
-                data = r.json()
-                # running=True means valheim-admin also confirmed the container is up
-                # join_code present means the game fully initialized and registered with PlayFab
-                running = data.get("running", False)
-                join_code = data.get("join_code")
-                online = running and join_code is not None
-                return {
-                    "online": online,
-                    "join_code": join_code,
-                    "players": data.get("players", 0),
-                }
-    except Exception:
-        pass
-
-    # Container running but game not yet loaded (starting up)
-    return {"online": False}
-
-
-@router.get("/health/valheim-admin", tags=["Health"])
-async def get_valheim_admin_health():
-    """Health check for Valheim Admin web app."""
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
             r = await client.get("http://valheim-admin:8080/health")
@@ -190,6 +149,36 @@ async def get_valheim_admin_health():
             return {"online": data.get("online", False)}
     except Exception:
         return {"online": False}
+
+
+@router.get("/health/valheim-server", tags=["Health"])
+async def get_valheim_server_health():
+    """Health check for the actual Valheim game server.
+
+    Queries valheim-admin to get the status of valheim-server container
+    and whether the game has fully loaded (join code available).
+
+    Use this to see if the game is actually playable, not just if the
+    admin UI is running.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get("http://valheim-admin:8080/api/status")
+            if r.status_code == 200:
+                data = r.json()
+                running = data.get("running", False)
+                join_code = data.get("join_code")
+                # Game is "online" only if container running AND game fully loaded
+                online = running and join_code is not None
+                return {
+                    "online": online,
+                    "running": running,
+                    "join_code": join_code,
+                    "players": data.get("players", 0),
+                }
+    except Exception:
+        pass
+    return {"online": False, "running": False}
 
 
 # ── Casita Sueños proxy routes ───────────────────────────────────────────────
@@ -375,7 +364,7 @@ CONTROLLABLE_CONTAINERS: dict[str, list[str]] = {
     "casita": ["casita-suenos"],
     "photos": ["immich_postgres", "immich_redis", "immich_server"],
     "passwords": ["vaultwarden"],
-    "valheim": ["valheim-server"],
+    "valheim": ["valheim-admin"],  # Dashboard controls valheim-admin; admin controls valheim-server
     "babygifts": ["baby-gifts-service"],
     "portfolio": ["portfolio-monitor"],
 }
