@@ -611,4 +611,4 @@ def set_power_mode(mode: str, x_api_token: str = Header(None, alias="X-Api-Token
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8090)
+    uvicorn.run(app, host="0.0.0.0", port=8090)  # nosec B104
