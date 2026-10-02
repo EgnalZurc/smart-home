@@ -140,6 +140,21 @@
         .user-menu.open { display:block; }
         .user-menu-item { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:7px; font-size:0.8125rem; color:#94a3b8; cursor:pointer; transition:background .15s, color .15s; border:none; background:none; width:100%; text-align:left; }
         .user-menu-item:hover { background:rgba(239,68,68,.1); color:#f87171; }
+
+        /* PC mode buttons */
+        .pc-mode-btn {
+            font-size: 10px; font-weight: 600;
+            padding: 5px 10px; border-radius: 8px;
+            border: 1px solid rgba(51,65,85,.5);
+            background: rgba(30,41,59,.5);
+            color: #94a3b8; cursor: pointer;
+            transition: all .15s ease;
+            white-space: nowrap;
+        }
+        .pc-mode-btn:hover { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.4); color: #a5b4fc; }
+        .pc-mode-btn:active { transform: scale(0.95); }
+        .pc-mode-btn.active { background: rgba(34,197,94,.15); border-color: rgba(34,197,94,.5); color: #86efac; }
+        .pc-mode-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
@@ -217,6 +232,24 @@
         </div>
     </section>
 
+    <!-- SECTION 1.5: Egnal PC (SUPER only) -->
+    <section class="mb-7" id="pc-section" style="display:none">
+        <p id="pc-label" class="section-label mb-2 px-1">Egnal PC</p>
+        <div class="core-bar px-4 py-3">
+            <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <span id="pc-status-dot" class="core-dot bg-slate-600"></span>
+                    <span id="pc-status-text" class="text-xs text-slate-400">—</span>
+                </div>
+                <div class="flex items-center gap-2" id="pc-mode-btns">
+                    <button class="pc-mode-btn" data-mode="balanced" onclick="setPcMode('balanced')">⚡ Balanced</button>
+                    <button class="pc-mode-btn" data-mode="gaming" onclick="setPcMode('gaming')">🎮 Gaming</button>
+                    <button class="pc-mode-btn" data-mode="servidor" onclick="setPcMode('servidor')">🖥️ Servidor</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- SECTION 2: Services -->
     <section id="services-section" style="display:none">
         <p id="apps-label" class="section-label mb-3 px-1">Servicios</p>
@@ -247,6 +280,7 @@ const T = {
         valheim_name: 'Valheim', valheim_desc: 'Servidor de Valheim',
         babygifts_name: 'Lista Regalos Bebé', babygifts_desc: 'Lista de regalos para el bebé',
         portfolio_name: 'Monitor Cartera', portfolio_desc: 'Monitorización de ETFs y crypto',
+        pc_section: 'Egnal PC', pc_online: 'Online', pc_offline: 'Offline', pc_changing: 'Cambiando...',
     },
     en: {
         title: 'Cuchi Casa', infrastructure: 'Infrastructure', services: 'Services',
@@ -265,6 +299,7 @@ const T = {
         valheim_name: 'Valheim', valheim_desc: 'Valheim server',
         babygifts_name: 'Baby Gift List', babygifts_desc: 'Baby gift registry',
         portfolio_name: 'Portfolio Monitor', portfolio_desc: 'ETF and crypto monitoring',
+        pc_section: 'Egnal PC', pc_online: 'Online', pc_offline: 'Offline', pc_changing: 'Changing...',
     },
 };
 
@@ -300,6 +335,7 @@ function applyLang() {
     document.querySelectorAll('.lang-option').forEach(o => o.classList.toggle('active', o.dataset.lang === currentLang));
     document.getElementById('title').textContent      = t('title');
     document.getElementById('core-label').textContent = t('infrastructure');
+    document.getElementById('pc-label').textContent   = t('pc_section');
     document.getElementById('apps-label').textContent = t('services');
     document.getElementById('res-title').textContent  = t('res_title');
     const logoutText = document.getElementById('logout-text');
@@ -327,6 +363,77 @@ function renderCore() {
             : `<div class="core-item">${inner}</div>`;
     }).join('');
     document.getElementById('core-section').style.display = 'block';
+}
+
+// PC Control (SUPER only)
+let currentPcMode = null;
+
+async function loadPcStatus() {
+    if (!isSuper()) return;
+    document.getElementById('pc-section').style.display = 'block';
+    
+    const dot = document.getElementById('pc-status-dot');
+    const text = document.getElementById('pc-status-text');
+    
+    try {
+        const [statusRes, modeRes] = await Promise.all([
+            fetch('/api/pc/status').then(r => r.json()),
+            fetch('/api/pc/mode').then(r => r.json())
+        ]);
+        
+        const online = statusRes.online === true;
+        dot.className = `core-dot ${online ? 'bg-green-500' : 'bg-red-400'}`;
+        
+        if (online && modeRes.mode && modeRes.mode !== 'unknown') {
+            currentPcMode = modeRes.mode;
+            text.textContent = `${t('pc_online')} · ${modeRes.mode}`;
+            updatePcModeButtons(modeRes.mode);
+        } else if (online) {
+            text.textContent = t('pc_online');
+        } else {
+            text.textContent = t('pc_offline');
+            currentPcMode = null;
+            updatePcModeButtons(null);
+        }
+    } catch {
+        dot.className = 'core-dot bg-red-400';
+        text.textContent = t('pc_offline');
+        currentPcMode = null;
+        updatePcModeButtons(null);
+    }
+}
+
+function updatePcModeButtons(activeMode) {
+    document.querySelectorAll('.pc-mode-btn').forEach(btn => {
+        const mode = btn.dataset.mode;
+        btn.classList.toggle('active', mode === activeMode);
+        btn.disabled = false;
+    });
+}
+
+async function setPcMode(mode) {
+    if (!isSuper()) return;
+    const text = document.getElementById('pc-status-text');
+    const prevText = text.textContent;
+    
+    // Disable all buttons during change
+    document.querySelectorAll('.pc-mode-btn').forEach(btn => btn.disabled = true);
+    text.textContent = t('pc_changing');
+    
+    try {
+        const r = await fetch(`/api/pc/mode/${mode}`, { method: 'POST' });
+        if (r.ok) {
+            currentPcMode = mode;
+            text.textContent = `${t('pc_online')} · ${mode}`;
+            updatePcModeButtons(mode);
+        } else {
+            text.textContent = prevText;
+            updatePcModeButtons(currentPcMode);
+        }
+    } catch {
+        text.textContent = prevText;
+        updatePcModeButtons(currentPcMode);
+    }
 }
 
 // Service cards
@@ -582,6 +689,9 @@ async function loadUser() {
     setTimeout(() => { overlay.style.display = 'none'; }, 400);
     setInterval(loadStatus, 10000);
     setInterval(() => { if (isSuper()) loadContainerStates(); }, 30000);
+    // PC status polling (SUPER only)
+    loadPcStatus();
+    setInterval(() => { if (isSuper()) loadPcStatus(); }, 30000);
 })();
 </script>
 </body>
