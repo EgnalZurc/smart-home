@@ -775,7 +775,7 @@ jobs:
           target: "~/smart-home-prod/"
           strip_components: 0
 
-      - name: Rename to docker-compose.yml on Pi
+      - name: Apply compose changes on Pi
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.PI_SSH_HOST }}
@@ -787,15 +787,10 @@ jobs:
             mv docker-compose.prod.yml docker-compose.yml
             docker compose config --quiet && echo "✅ Compose file valid"
             
-            # Recreate all running services to apply config changes (env_file, volumes, etc.)
-            echo "🔄 Recreating services to apply config changes..."
-            RUNNING_SERVICES=$(docker compose ps --status running --format '{{.Service}}' | tr '\n' ' ')
-            if [[ -n "$RUNNING_SERVICES" ]]; then
-              docker compose up -d --force-recreate $RUNNING_SERVICES
-              echo "✅ Services recreated: $RUNNING_SERVICES"
-            else
-              echo "⏸️ No running services to recreate"
-            fi
+            # Apply changes - Docker Compose will only recreate services whose config changed
+            echo "🔄 Applying compose changes (only affected services will restart)..."
+            docker compose up -d
+            echo "✅ Compose changes applied"
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Deploy pc-agent to Windows PC (self-hosted runner)
