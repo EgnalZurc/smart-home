@@ -257,8 +257,8 @@ services:
     image: egnal/smart-home-valheim-admin:latest
     container_name: valheim-admin
     restart: on-failure:5
-    mem_limit: 48m
-    memswap_limit: 48m
+    mem_limit: 72m
+    memswap_limit: 72m
     expose:
       - 8080
     env_file:
