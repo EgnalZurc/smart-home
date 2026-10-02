@@ -820,8 +820,6 @@ jobs:
           Write-Host "Deploying pc-agent..."
 
       - uses: actions/checkout@v5
-        with:
-          sparse-checkout: tools/pc-agent
 
       - name: Deploy pc-agent
         run: |
@@ -833,47 +831,47 @@ jobs:
           
           # Create deploy dir if not exists
           if (-not (Test-Path $DEPLOY_DIR)) {
-            New-Item -ItemType Directory -Path $DEPLOY_DIR -Force
-            New-Item -ItemType Directory -Path "$DEPLOY_DIR\src" -Force
+            New-Item -ItemType Directory -Path $DEPLOY_DIR -Force | Out-Null
+          }
+          if (-not (Test-Path "$DEPLOY_DIR\src")) {
+            New-Item -ItemType Directory -Path "$DEPLOY_DIR\src" -Force | Out-Null
           }
           
           # Try to stop service (may fail if runner lacks permissions - that's OK)
           if (Test-Path "$DEPLOY_DIR\nssm\nssm.exe") {
             Write-Host "Attempting to stop pc-agent service..."
-            $stopResult = & "$DEPLOY_DIR\nssm\nssm.exe" stop pc-agent 2>&1
+            $null = & "$DEPLOY_DIR\nssm\nssm.exe" stop pc-agent 2>&1
             if ($LASTEXITCODE -ne 0) {
               Write-Host "⚠️ Could not stop service (runner may lack permissions) - continuing anyway"
             }
             Start-Sleep -Seconds 2
           }
           
-          # Copy files (preserve .env and nssm)
-          Write-Host "Copying files..."
-          if (-not (Test-Path "$DEPLOY_DIR\src")) {
-            New-Item -ItemType Directory -Path "$DEPLOY_DIR\src" -Force
-          }
+          # Copy source files (required)
+          Write-Host "Copying source files..."
           Copy-Item "$SOURCE_DIR\src\*" "$DEPLOY_DIR\src\" -Force -Recurse
           Copy-Item "$SOURCE_DIR\requirements.txt" "$DEPLOY_DIR\" -Force
-          Copy-Item "$SOURCE_DIR\run.bat" "$DEPLOY_DIR\" -Force
-          Copy-Item "$SOURCE_DIR\install-service.ps1" "$DEPLOY_DIR\" -Force
-          Copy-Item "$SOURCE_DIR\README.md" "$DEPLOY_DIR\" -Force
           
-          # Create venv if not exists (use system Python)
-          if (-not (Test-Path "$DEPLOY_DIR\venv\Scripts\python.exe")) {
-            Write-Host "Creating virtual environment..."
-            python -m venv "$DEPLOY_DIR\venv"
+          # Copy optional files (ignore if missing)
+          Copy-Item "$SOURCE_DIR\run.bat" "$DEPLOY_DIR\" -Force -ErrorAction SilentlyContinue
+          Copy-Item "$SOURCE_DIR\install-service.ps1" "$DEPLOY_DIR\" -Force -ErrorAction SilentlyContinue
+          Copy-Item "$SOURCE_DIR\README.md" "$DEPLOY_DIR\" -Force -ErrorAction SilentlyContinue
+          
+          # Update dependencies using existing venv
+          if (Test-Path "$DEPLOY_DIR\venv\Scripts\pip.exe") {
+            Write-Host "Installing dependencies..."
+            & "$DEPLOY_DIR\venv\Scripts\pip.exe" install -r "$DEPLOY_DIR\requirements.txt" --quiet 2>&1 | Out-Null
+          } else {
+            Write-Host "⚠️ venv not found - run install-service.ps1 to set up"
           }
-          
-          Write-Host "Installing dependencies..."
-          & "$DEPLOY_DIR\venv\Scripts\pip.exe" install -r "$DEPLOY_DIR\requirements.txt" --quiet
           
           # Try to start service (may fail if runner lacks permissions)
           if (Test-Path "$DEPLOY_DIR\nssm\nssm.exe") {
-            Write-Host "Attempting to start pc-agent service..."
-            $startResult = & "$DEPLOY_DIR\nssm\nssm.exe" start pc-agent 2>&1
+            Write-Host "Attempting to restart pc-agent service..."
+            $null = & "$DEPLOY_DIR\nssm\nssm.exe" restart pc-agent 2>&1
             if ($LASTEXITCODE -ne 0) {
-              Write-Host "⚠️ Could not start service (runner may lack permissions)"
-              Write-Host "   Service will start on next PC reboot, or run manually: nssm start pc-agent"
+              Write-Host "⚠️ Could not restart service (runner may lack permissions)"
+              Write-Host "   Restart manually: E:\pc-agent\nssm\nssm.exe restart pc-agent"
             }
             Start-Sleep -Seconds 3
           } else {
