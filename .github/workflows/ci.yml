@@ -823,11 +823,6 @@ jobs:
         with:
           sparse-checkout: tools/pc-agent
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-
       - name: Deploy pc-agent
         run: |
           $DEPLOY_DIR = "E:\pc-agent"
@@ -841,24 +836,26 @@ jobs:
             New-Item -ItemType Directory -Path "$DEPLOY_DIR\src" -Force
           }
           
-          # Stop service if running
-          $service = Get-Service -Name "pc-agent" -ErrorAction SilentlyContinue
-          if ($service -and $service.Status -eq "Running") {
+          # Stop service if running (use nssm if available)
+          if (Test-Path "$DEPLOY_DIR\nssm\nssm.exe") {
             Write-Host "Stopping pc-agent service..."
-            Stop-Service -Name "pc-agent" -Force
+            & "$DEPLOY_DIR\nssm\nssm.exe" stop pc-agent 2>$null
             Start-Sleep -Seconds 2
           }
           
-          # Copy files (preserve .env)
+          # Copy files (preserve .env and nssm)
           Write-Host "Copying files..."
+          if (-not (Test-Path "$DEPLOY_DIR\src")) {
+            New-Item -ItemType Directory -Path "$DEPLOY_DIR\src" -Force
+          }
           Copy-Item "$SOURCE_DIR\src\*" "$DEPLOY_DIR\src\" -Force -Recurse
           Copy-Item "$SOURCE_DIR\requirements.txt" "$DEPLOY_DIR\" -Force
           Copy-Item "$SOURCE_DIR\run.bat" "$DEPLOY_DIR\" -Force
           Copy-Item "$SOURCE_DIR\install-service.ps1" "$DEPLOY_DIR\" -Force
           Copy-Item "$SOURCE_DIR\README.md" "$DEPLOY_DIR\" -Force
           
-          # Update venv if requirements changed
-          if (-not (Test-Path "$DEPLOY_DIR\venv")) {
+          # Create venv if not exists (use system Python)
+          if (-not (Test-Path "$DEPLOY_DIR\venv\Scripts\python.exe")) {
             Write-Host "Creating virtual environment..."
             python -m venv "$DEPLOY_DIR\venv"
           }
@@ -866,15 +863,13 @@ jobs:
           Write-Host "Installing dependencies..."
           & "$DEPLOY_DIR\venv\Scripts\pip.exe" install -r "$DEPLOY_DIR\requirements.txt" --quiet
           
-          # Start service if it was running (or exists)
-          if ($service) {
+          # Start service if nssm is installed
+          if (Test-Path "$DEPLOY_DIR\nssm\nssm.exe") {
             Write-Host "Starting pc-agent service..."
-            Start-Service -Name "pc-agent"
+            & "$DEPLOY_DIR\nssm\nssm.exe" start pc-agent
             Start-Sleep -Seconds 3
-            $status = (Get-Service -Name "pc-agent").Status
-            Write-Host "Service status: $status"
           } else {
-            Write-Host "⚠️ pc-agent service not installed. Run install-service.ps1 manually first time."
+            Write-Host "⚠️ NSSM not found - service not started. Run install-service.ps1 first."
           }
           
           Write-Host "✅ pc-agent deployed to $DEPLOY_DIR"
