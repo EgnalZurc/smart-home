@@ -15,6 +15,13 @@
 
 name: Build, Test and Deploy
 
+# Serialize runs per branch so two pushes to main cannot deploy to the Pi
+# at the same time. Never cancel a run mid-flight: cancelling a deploy halfway
+# could leave a container in an inconsistent state.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 on:
   push:
     branches: [main]
@@ -584,6 +591,7 @@ jobs:
       needs.quality-gate.result == 'success' &&
       needs.prepare.outputs.any-service == 'true' &&
       needs.prepare.outputs.services-matrix != '[]' &&
+      github.event_name != 'pull_request' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
@@ -655,6 +663,7 @@ jobs:
       always() &&
       needs.quality-gate.result == 'success' &&
       needs.prepare.outputs.nginx == 'true' &&
+      github.event_name != 'pull_request' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
@@ -700,6 +709,7 @@ jobs:
       always() &&
       needs.quality-gate.result == 'success' &&
       needs.prepare.outputs.compose == 'true' &&
+      github.event_name != 'pull_request' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
