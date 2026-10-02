@@ -31,10 +31,11 @@ if ($Uninstall) {
 # Download NSSM if not present
 if (-not (Test-Path "$NssmDir\nssm.exe")) {
     Write-Host "Downloading NSSM..."
+    New-Item -ItemType Directory -Path $NssmDir -Force | Out-Null
     $zipPath = "$AgentDir\nssm.zip"
     Invoke-WebRequest -Uri $NssmUrl -OutFile $zipPath
     Expand-Archive -Path $zipPath -DestinationPath $AgentDir -Force
-    Move-Item "$AgentDir\nssm-2.24\win64\nssm.exe" "$NssmDir\nssm.exe" -Force
+    Copy-Item "$AgentDir\nssm-2.24\win64\nssm.exe" "$NssmDir\nssm.exe" -Force
     Remove-Item "$AgentDir\nssm-2.24" -Recurse -Force
     Remove-Item $zipPath -Force
     Write-Host "NSSM installed to $NssmDir"
