@@ -879,6 +879,7 @@ jobs:
           }
           
           Write-Host "✅ pc-agent deployed to $DEPLOY_DIR"
+          exit 0
 
       - name: Health Check
         run: |
