@@ -825,6 +825,7 @@ jobs:
 
       - name: Deploy pc-agent
         run: |
+          $ErrorActionPreference = "Continue"
           $DEPLOY_DIR = "E:\pc-agent"
           $SOURCE_DIR = "tools\pc-agent"
           
@@ -836,10 +837,13 @@ jobs:
             New-Item -ItemType Directory -Path "$DEPLOY_DIR\src" -Force
           }
           
-          # Stop service if running (use nssm if available)
+          # Try to stop service (may fail if runner lacks permissions - that's OK)
           if (Test-Path "$DEPLOY_DIR\nssm\nssm.exe") {
-            Write-Host "Stopping pc-agent service..."
-            & "$DEPLOY_DIR\nssm\nssm.exe" stop pc-agent 2>$null
+            Write-Host "Attempting to stop pc-agent service..."
+            $stopResult = & "$DEPLOY_DIR\nssm\nssm.exe" stop pc-agent 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "⚠️ Could not stop service (runner may lack permissions) - continuing anyway"
+            }
             Start-Sleep -Seconds 2
           }
           
@@ -863,10 +867,14 @@ jobs:
           Write-Host "Installing dependencies..."
           & "$DEPLOY_DIR\venv\Scripts\pip.exe" install -r "$DEPLOY_DIR\requirements.txt" --quiet
           
-          # Start service if nssm is installed
+          # Try to start service (may fail if runner lacks permissions)
           if (Test-Path "$DEPLOY_DIR\nssm\nssm.exe") {
-            Write-Host "Starting pc-agent service..."
-            & "$DEPLOY_DIR\nssm\nssm.exe" start pc-agent
+            Write-Host "Attempting to start pc-agent service..."
+            $startResult = & "$DEPLOY_DIR\nssm\nssm.exe" start pc-agent 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "⚠️ Could not start service (runner may lack permissions)"
+              Write-Host "   Service will start on next PC reboot, or run manually: nssm start pc-agent"
+            }
             Start-Sleep -Seconds 3
           } else {
             Write-Host "⚠️ NSSM not found - service not started. Run install-service.ps1 first."
