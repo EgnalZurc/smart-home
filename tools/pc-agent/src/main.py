@@ -40,7 +40,6 @@ logger = logging.getLogger(__name__)
 
 API_TOKEN = os.environ.get("PC_AGENT_TOKEN", "")
 VALHEIM_CONTAINER = os.environ.get("VALHEIM_CONTAINER", "valheim-server")
-SCRIPTS_DIR = Path(os.environ.get("SCRIPTS_DIR", r"C:\Users\acmls\Documents\Scripts"))
 
 # Valheim server paths (on Windows PC)
 VALHEIM_SERVER_DIR = Path(os.environ.get("VALHEIM_SERVER_DIR", r"E:\valheim-server"))
@@ -48,11 +47,11 @@ VALHEIM_ENV_FILE = VALHEIM_SERVER_DIR / ".env"
 VALHEIM_WORLDS_DIR = VALHEIM_SERVER_DIR / "server_data" / "worlds_local"
 VALHEIM_LOGS_DIR = VALHEIM_SERVER_DIR / "server_data" / "logs"
 
-# Power profile script mapping
-POWER_SCRIPTS = {
-    "gaming": "ModoGaming.ps1",
-    "servidor": "ModoServidor.ps1",
-    "balanced": "ModoBalanced.ps1",
+# Power profile GUIDs (from powercfg /list)
+POWER_PROFILES = {
+    "gaming": "cfd582e3-13dc-41bf-82c3-f576249cc8d2",
+    "servidor": "9095b64b-d0ef-4962-983f-5726c8569206",
+    "balanced": "381b4222-f694-41f0-9685-ff5bb260df2e",
 }
 
 # Max upload size: 600 MB
@@ -576,32 +575,30 @@ def get_power_mode(x_api_token: str = Header(None, alias="X-Api-Token")):
 
 @app.post("/system/mode/{mode}")
 def set_power_mode(mode: str, x_api_token: str = Header(None, alias="X-Api-Token")):
-    """Set power profile."""
+    """Set power profile using powercfg directly."""
     require_auth(x_api_token)
 
-    if mode not in POWER_SCRIPTS:
-        raise HTTPException(400, f"Invalid mode. Valid: {list(POWER_SCRIPTS.keys())}")
+    if mode not in POWER_PROFILES:
+        raise HTTPException(400, f"Invalid mode. Valid: {list(POWER_PROFILES.keys())}")
 
-    script_path = SCRIPTS_DIR / POWER_SCRIPTS[mode]
-    if not script_path.exists():
-        raise HTTPException(404, f"Script not found: {script_path}")
+    guid = POWER_PROFILES[mode]
 
     try:
         result = subprocess.run(
-            ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(script_path)],
+            ["powercfg", "/setactive", guid],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=10,
         )
 
         if result.returncode != 0:
-            raise HTTPException(500, f"Script failed: {result.stderr.strip()}")
+            raise HTTPException(500, f"powercfg failed: {result.stderr.strip()}")
 
-        logger.info("Power mode changed to: %s", mode)
+        logger.info("Power mode changed to: %s (GUID: %s)", mode, guid)
         return {"status": "ok", "mode": mode}
 
     except subprocess.TimeoutExpired:
-        raise HTTPException(500, "Script timeout")
+        raise HTTPException(500, "powercfg timeout")
     except Exception as e:
         raise HTTPException(500, f"Failed: {e}")
 
