@@ -364,7 +364,8 @@ CONTROLLABLE_CONTAINERS: dict[str, list[str]] = {
     "casita": ["casita-suenos"],
     "photos": ["immich_postgres", "immich_redis", "immich_server"],
     "passwords": ["vaultwarden"],
-    "valheim": ["valheim-admin"],  # Dashboard controls valheim-admin; admin controls valheim-server
+    # Dashboard controls valheim-admin; admin controls valheim-server
+    "valheim": ["valheim-admin"],
     "babygifts": ["baby-gifts-service"],
     "portfolio": ["portfolio-monitor"],
 }
