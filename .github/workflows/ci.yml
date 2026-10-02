@@ -45,6 +45,7 @@ on:
           - casita
           - vaultwarden
           - valheim-admin
+          - pc-agent
       force_deploy:
         description: 'Enable deploy even without detected changes'
         required: false
@@ -69,6 +70,7 @@ jobs:
       casita: ${{ steps.changes.outputs.casita }}
       vaultwarden: ${{ steps.changes.outputs.vaultwarden }}
       valheim-admin: ${{ steps.changes.outputs.valheim-admin }}
+      pc-agent: ${{ steps.changes.outputs.pc-agent }}
       nginx: ${{ steps.changes.outputs.nginx }}
       compose: ${{ steps.changes.outputs.compose }}
       any-service: ${{ steps.changes.outputs.any-service }}
@@ -98,6 +100,8 @@ jobs:
               - 'services/vaultwarden/**'
             valheim-admin:
               - 'services/valheim-admin/**'
+            pc-agent:
+              - 'tools/pc-agent/**'
             nginx:
               - 'infrastructure/nginx/**'
             compose:
@@ -114,14 +118,14 @@ jobs:
           
           DASHBOARD=false; AC_SERVICE=false; BABY_GIFTS=false; PORTFOLIO_MONITOR=false
           VACACIONES=false; CASITA=false; VAULTWARDEN=false; VALHEIM_ADMIN=false
-          NGINX=false; COMPOSE=false
+          PC_AGENT=false; NGINX=false; COMPOSE=false
           
           case "$SERVICE" in
             all)
               echo "🔄 Processing ALL services"
               DASHBOARD=true; AC_SERVICE=true; BABY_GIFTS=true; PORTFOLIO_MONITOR=true
               VACACIONES=true; CASITA=true; VAULTWARDEN=true; VALHEIM_ADMIN=true
-              NGINX=true; COMPOSE=true
+              PC_AGENT=true; NGINX=true; COMPOSE=true
               ;;
             dashboard)         echo "🎯 Processing: dashboard";         DASHBOARD=true ;;
             ac-service)        echo "🎯 Processing: ac-service";        AC_SERVICE=true ;;
@@ -131,6 +135,7 @@ jobs:
             casita)            echo "🎯 Processing: casita";            CASITA=true ;;
             vaultwarden)       echo "🎯 Processing: vaultwarden";       VAULTWARDEN=true ;;
             valheim-admin)     echo "🎯 Processing: valheim-admin";     VALHEIM_ADMIN=true ;;
+            pc-agent)          echo "🎯 Processing: pc-agent";          PC_AGENT=true ;;
             *)
               echo "🔍 Auto-detecting changed services"
               DASHBOARD=${{ steps.filter.outputs.dashboard }}
@@ -141,6 +146,7 @@ jobs:
               CASITA=${{ steps.filter.outputs.casita }}
               VAULTWARDEN=${{ steps.filter.outputs.vaultwarden }}
               VALHEIM_ADMIN=${{ steps.filter.outputs.valheim-admin }}
+              PC_AGENT=${{ steps.filter.outputs.pc-agent }}
               NGINX=${{ steps.filter.outputs.nginx }}
               COMPOSE=${{ steps.filter.outputs.compose }}
               ;;
@@ -155,10 +161,11 @@ jobs:
           echo "casita=$CASITA" >> $GITHUB_OUTPUT
           echo "vaultwarden=$VAULTWARDEN" >> $GITHUB_OUTPUT
           echo "valheim-admin=$VALHEIM_ADMIN" >> $GITHUB_OUTPUT
+          echo "pc-agent=$PC_AGENT" >> $GITHUB_OUTPUT
           echo "nginx=$NGINX" >> $GITHUB_OUTPUT
           echo "compose=$COMPOSE" >> $GITHUB_OUTPUT
           
-          # Check if any service changed
+          # Check if any service changed (pc-agent excluded from Pi deploys)
           if [[ "$DASHBOARD" == "true" ]] || [[ "$AC_SERVICE" == "true" ]] || \
              [[ "$BABY_GIFTS" == "true" ]] || [[ "$PORTFOLIO_MONITOR" == "true" ]] || \
              [[ "$VACACIONES" == "true" ]] || [[ "$CASITA" == "true" ]] || \
@@ -521,6 +528,38 @@ jobs:
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Lint & Test - PC Agent (no Dockerfile, runs natively on Windows)
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint-and-test-pc-agent:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.pc-agent == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install tools
+        run: pip install ruff bandit pytest pytest-asyncio httpx
+
+      - name: Ruff - Code Quality
+        run: |
+          ruff check tools/pc-agent/src --output-format=github
+          ruff format tools/pc-agent/src --check --diff
+
+      - name: Bandit - Security Check
+        run: bandit -r tools/pc-agent/src -ll -ii --format txt
+
+      - name: Run Tests
+        run: |
+          if [[ -d "tools/pc-agent/tests" ]] && find tools/pc-agent/tests -name "test_*.py" | grep -q .; then
+            pip install -r tools/pc-agent/requirements.txt --quiet 2>/dev/null || true
+            cd tools/pc-agent && PYTHONPATH=src python -m pytest tests/ -v --tb=short
+          else
+            echo "⏭️ No tests found"
+          fi
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Quality Gate: verify all lint-and-test-* jobs passed
   # ─────────────────────────────────────────────────────────────────────────────
   quality-gate:
@@ -534,6 +573,7 @@ jobs:
       - lint-and-test-casita
       - lint-and-test-vaultwarden
       - lint-and-test-valheim-admin
+      - lint-and-test-pc-agent
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -571,6 +611,7 @@ jobs:
           check_job "Casita" "${{ needs.lint-and-test-casita.result }}" "${{ needs.prepare.outputs.casita }}"
           check_job "Vaultwarden" "${{ needs.lint-and-test-vaultwarden.result }}" "${{ needs.prepare.outputs.vaultwarden }}"
           check_job "Valheim Admin" "${{ needs.lint-and-test-valheim-admin.result }}" "${{ needs.prepare.outputs.valheim-admin }}"
+          check_job "PC Agent" "${{ needs.lint-and-test-pc-agent.result }}" "${{ needs.prepare.outputs.pc-agent }}"
           
           echo "" >> $GITHUB_STEP_SUMMARY
           
@@ -757,10 +798,139 @@ jobs:
             fi
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Deploy pc-agent to Windows PC (self-hosted runner)
+  # NOTE: This job is non-blocking. If the PC runner is offline, it will warn
+  # but not fail the pipeline. The deploy will happen next time the runner comes online.
+  # ─────────────────────────────────────────────────────────────────────────────
+  deploy-pc-agent:
+    needs: [prepare, quality-gate]
+    if: |
+      always() &&
+      needs.quality-gate.result == 'success' &&
+      needs.prepare.outputs.pc-agent == 'true' &&
+      github.event_name != 'pull_request' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, windows, gaming-pc]
+    environment: gaming-pc
+    continue-on-error: true
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Runner Available
+        run: |
+          Write-Host "✅ Gaming PC runner is online"
+          Write-Host "Deploying pc-agent..."
+
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: tools/pc-agent
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Deploy pc-agent
+        run: |
+          $DEPLOY_DIR = "E:\pc-agent"
+          $SOURCE_DIR = "tools\pc-agent"
+          
+          Write-Host "=== Deploying pc-agent to $DEPLOY_DIR ==="
+          
+          # Create deploy dir if not exists
+          if (-not (Test-Path $DEPLOY_DIR)) {
+            New-Item -ItemType Directory -Path $DEPLOY_DIR -Force
+            New-Item -ItemType Directory -Path "$DEPLOY_DIR\src" -Force
+          }
+          
+          # Stop service if running
+          $service = Get-Service -Name "pc-agent" -ErrorAction SilentlyContinue
+          if ($service -and $service.Status -eq "Running") {
+            Write-Host "Stopping pc-agent service..."
+            Stop-Service -Name "pc-agent" -Force
+            Start-Sleep -Seconds 2
+          }
+          
+          # Copy files (preserve .env)
+          Write-Host "Copying files..."
+          Copy-Item "$SOURCE_DIR\src\*" "$DEPLOY_DIR\src\" -Force -Recurse
+          Copy-Item "$SOURCE_DIR\requirements.txt" "$DEPLOY_DIR\" -Force
+          Copy-Item "$SOURCE_DIR\run.bat" "$DEPLOY_DIR\" -Force
+          Copy-Item "$SOURCE_DIR\install-service.ps1" "$DEPLOY_DIR\" -Force
+          Copy-Item "$SOURCE_DIR\README.md" "$DEPLOY_DIR\" -Force
+          
+          # Update venv if requirements changed
+          if (-not (Test-Path "$DEPLOY_DIR\venv")) {
+            Write-Host "Creating virtual environment..."
+            python -m venv "$DEPLOY_DIR\venv"
+          }
+          
+          Write-Host "Installing dependencies..."
+          & "$DEPLOY_DIR\venv\Scripts\pip.exe" install -r "$DEPLOY_DIR\requirements.txt" --quiet
+          
+          # Start service if it was running (or exists)
+          if ($service) {
+            Write-Host "Starting pc-agent service..."
+            Start-Service -Name "pc-agent"
+            Start-Sleep -Seconds 3
+            $status = (Get-Service -Name "pc-agent").Status
+            Write-Host "Service status: $status"
+          } else {
+            Write-Host "⚠️ pc-agent service not installed. Run install-service.ps1 manually first time."
+          }
+          
+          Write-Host "✅ pc-agent deployed to $DEPLOY_DIR"
+
+      - name: Health Check
+        run: |
+          Start-Sleep -Seconds 5
+          try {
+            $response = Invoke-RestMethod -Uri "http://localhost:8090/health" -TimeoutSec 10
+            if ($response.online -eq $true) {
+              Write-Host "✅ pc-agent is healthy"
+            } else {
+              Write-Host "⚠️ pc-agent responded but not online"
+            }
+          } catch {
+            Write-Host "⚠️ Could not reach pc-agent: $_"
+            Write-Host "Service may need manual start: nssm start pc-agent"
+          }
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Check if PC deploy was skipped (runner offline)
+  # ─────────────────────────────────────────────────────────────────────────────
+  check-pc-deploy:
+    needs: [prepare, deploy-pc-agent]
+    if: |
+      always() &&
+      needs.prepare.outputs.pc-agent == 'true' &&
+      github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Report PC Deploy Status
+        run: |
+          if [[ "${{ needs.deploy-pc-agent.result }}" == "success" ]]; then
+            echo "✅ pc-agent deployed successfully" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.deploy-pc-agent.result }}" == "skipped" ]]; then
+            echo "⚠️ **pc-agent deploy skipped** - Gaming PC runner is offline" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The code is ready. Deploy will happen automatically when:" >> $GITHUB_STEP_SUMMARY
+            echo "- The PC is turned on" >> $GITHUB_STEP_SUMMARY
+            echo "- The GitHub Actions runner service is running" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Or trigger manually: \`gh workflow run ci.yml -f service=pc-agent\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **pc-agent deploy failed** - check runner logs" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Verify - check deployed services are healthy
   # ─────────────────────────────────────────────────────────────────────────────
   verify:
-    needs: [prepare, deploy, deploy-nginx, deploy-compose]
+    needs: [prepare, deploy, deploy-nginx, deploy-compose, check-pc-deploy]
     if: always() && (needs.deploy.result == 'success' || needs.deploy-nginx.result == 'success' || needs.deploy-compose.result == 'success')
     runs-on: ubuntu-24.04
     steps:

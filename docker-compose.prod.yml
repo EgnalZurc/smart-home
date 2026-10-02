@@ -251,29 +251,22 @@ services:
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Valheim Admin - Web management UI for Valheim server
+  # Proxies to pc-agent running on Windows PC (192.168.1.164:8090)
   # ─────────────────────────────────────────────────────────────────────────────
   valheim-admin:
     image: egnal/smart-home-valheim-admin:latest
     container_name: valheim-admin
     restart: on-failure:5
-    mem_limit: 80m
-    memswap_limit: 80m
+    mem_limit: 48m
+    memswap_limit: 48m
     expose:
       - 8080
+    env_file:
+      - .env
     environment:
       - TZ=Europe/Madrid
-      - VALHEIM_ENV_FILE=/config/.env
-      - VALHEIM_WORLDS_DIR=/server_data/worlds_local
-      - VALHEIM_LOGS_DIR=/server_data/logs
-      - VALHEIM_COMPOSE_FILE=/compose/docker-compose.yml
-    volumes:
-      # Valheim server config and data (external to smart-home-prod)
-      - /home/pi/projects/valheim-server/.env:/config/.env
-      - /home/pi/projects/valheim-server/server_data:/server_data
-      - /home/pi/projects/valheim-server/docker-compose.yml:/compose/docker-compose.yml:ro
-      - /home/pi/projects/valheim-server/.env:/compose/.env:ro
-      # Docker socket for server control
-      - /var/run/docker.sock:/var/run/docker.sock
+      - PC_AGENT_URL=http://192.168.1.164:8090
+      # PC_AGENT_TOKEN loaded from .env
     networks:
       - smart-home
     healthcheck:
