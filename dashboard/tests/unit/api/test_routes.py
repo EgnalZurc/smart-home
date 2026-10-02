@@ -243,10 +243,11 @@ class TestControllableContainersMapping:
 
         assert CONTROLLABLE_CONTAINERS["passwords"] == ["vaultwarden"]
 
-    def test_valheim_maps_to_valheim_server(self):
+    def test_valheim_maps_to_valheim_admin(self):
+        """Dashboard controls valheim-admin; admin controls valheim-server."""
         from api.routes import CONTROLLABLE_CONTAINERS
 
-        assert CONTROLLABLE_CONTAINERS["valheim"] == ["valheim-server"]
+        assert CONTROLLABLE_CONTAINERS["valheim"] == ["valheim-admin"]
 
     def test_babygifts_maps_to_baby_gifts_service(self):
         from api.routes import CONTROLLABLE_CONTAINERS
