@@ -61,14 +61,46 @@ if not API_TOKEN:
     logger.warning("PC_AGENT_TOKEN not set — API is unprotected!")
 
 # ── Docker client ─────────────────────────────────────────────────────────────
+#
+# Lazy, self-healing connection. The pc-agent starts as a Windows service at
+# boot, often BEFORE the Docker Desktop engine is ready. A one-shot connection
+# at import time would fail permanently in that race. Instead we (re)connect on
+# demand and cache the client only once it pings successfully.
 
-try:
-    docker_client = docker.from_env()
-    docker_client.ping()
-    logger.info("Docker connection established")
-except Exception as e:
-    logger.error("Failed to connect to Docker: %s", e)
-    docker_client = None
+docker_client: "docker.DockerClient | None" = None
+
+
+def get_docker() -> "docker.DockerClient | None":
+    """Return a healthy Docker client, (re)connecting if needed.
+
+    Returns None if the engine is still unreachable (e.g. Docker Desktop not
+    started yet). Callers must handle None.
+    """
+    global docker_client
+
+    # Reuse the cached client only if it still responds.
+    if docker_client is not None:
+        try:
+            docker_client.ping()
+            return docker_client
+        except Exception:
+            logger.warning("Docker connection lost — reconnecting")
+            docker_client = None
+
+    try:
+        client = docker.from_env()
+        client.ping()
+        docker_client = client
+        logger.info("Docker connection established")
+        return docker_client
+    except Exception as e:
+        logger.error("Failed to connect to Docker: %s", e)
+        docker_client = None
+        return None
+
+
+# Best-effort connection at startup; failure is non-fatal and retried per-request.
+get_docker()
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 
@@ -103,12 +135,7 @@ def require_auth(x_api_token: str = Header(None, alias="X-Api-Token")):
 @app.get("/health")
 def health():
     """Health check — no authentication required."""
-    docker_ok = docker_client is not None
-    try:
-        if docker_client:
-            docker_client.ping()
-    except Exception:
-        docker_ok = False
+    docker_ok = get_docker() is not None
 
     return {
         "online": True,
@@ -125,11 +152,12 @@ def valheim_status(x_api_token: str = Header(None, alias="X-Api-Token")):
     """Get Valheim server container status."""
     require_auth(x_api_token)
 
-    if not docker_client:
+    client = get_docker()
+    if not client:
         raise HTTPException(503, "Docker not available")
 
     try:
-        container = docker_client.containers.get(VALHEIM_CONTAINER)
+        container = client.containers.get(VALHEIM_CONTAINER)
         state = container.attrs.get("State", {})
 
         # Calculate uptime
@@ -190,11 +218,12 @@ def valheim_start(x_api_token: str = Header(None, alias="X-Api-Token")):
     """Start Valheim server container."""
     require_auth(x_api_token)
 
-    if not docker_client:
+    client = get_docker()
+    if not client:
         raise HTTPException(503, "Docker not available")
 
     try:
-        container = docker_client.containers.get(VALHEIM_CONTAINER)
+        container = client.containers.get(VALHEIM_CONTAINER)
 
         if container.status == "running":
             return {"status": "already_running", "container": VALHEIM_CONTAINER}
@@ -216,11 +245,12 @@ def valheim_stop(x_api_token: str = Header(None, alias="X-Api-Token")):
     """Stop Valheim server container gracefully."""
     require_auth(x_api_token)
 
-    if not docker_client:
+    client = get_docker()
+    if not client:
         raise HTTPException(503, "Docker not available")
 
     try:
-        container = docker_client.containers.get(VALHEIM_CONTAINER)
+        container = client.containers.get(VALHEIM_CONTAINER)
 
         if container.status != "running":
             return {"status": "already_stopped", "container": VALHEIM_CONTAINER}
@@ -242,11 +272,12 @@ def valheim_restart(x_api_token: str = Header(None, alias="X-Api-Token")):
     """Restart Valheim server container."""
     require_auth(x_api_token)
 
-    if not docker_client:
+    client = get_docker()
+    if not client:
         raise HTTPException(503, "Docker not available")
 
     try:
-        container = docker_client.containers.get(VALHEIM_CONTAINER)
+        container = client.containers.get(VALHEIM_CONTAINER)
         container.restart(timeout=30)
         logger.info("Restarted container: %s", VALHEIM_CONTAINER)
         return {"status": "restarted", "container": VALHEIM_CONTAINER}
@@ -377,9 +408,10 @@ def update_config(
     _write_env(env)
 
     # Restart container to apply new config
-    if docker_client:
+    _dc = get_docker()
+    if _dc:
         try:
-            container = docker_client.containers.get(VALHEIM_CONTAINER)
+            container = _dc.containers.get(VALHEIM_CONTAINER)
             if container.status == "running":
                 container.restart(timeout=30)
                 logger.info("Restarted container after config update")
@@ -493,9 +525,10 @@ def activate_world(
     _write_env(env)
 
     # Restart container
-    if docker_client:
+    _dc = get_docker()
+    if _dc:
         try:
-            container = docker_client.containers.get(VALHEIM_CONTAINER)
+            container = _dc.containers.get(VALHEIM_CONTAINER)
             if container.status == "running":
                 container.restart(timeout=30)
                 logger.info("Restarted container for world switch to %s", world_name)
