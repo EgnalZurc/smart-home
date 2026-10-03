@@ -44,7 +44,15 @@ logger = logging.getLogger(__name__)
 _IDEALISTA_SENDER = "noresponder@idealista.com"
 _IMAP_HOST = "imap.gmail.com"
 _IMAP_PORT = 993
-_SEARCH_FOLDERS = ["INBOX", "[Gmail]/Todos", "[Gmail]/Papelera", "[Gmail]/Spam"]
+# "Casas" es una etiqueta/carpeta personalizada donde el usuario mueve
+# automáticamente los emails de Fotocasa e Idealista con una regla de Gmail.
+_SEARCH_FOLDERS = [
+    "Casas",
+    "INBOX",
+    "[Gmail]/Todos",
+    "[Gmail]/Papelera",
+    "[Gmail]/Spam",
+]
 
 _URL_PATTERN = re.compile(
     r"https://www\.idealista\.com/inmueble/(\d+)/?", re.IGNORECASE
