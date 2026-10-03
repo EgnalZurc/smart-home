@@ -1,0 +1,47 @@
+# Valheim Dedicated Server - Windows PC
+# Image: lloesche/valheim-server (x64)
+#
+# Runs on Egnal's Windows PC, NOT on the Raspberry Pi.
+# Controlled via pc-agent + valheim-admin proxy.
+#
+# Ports: 2456-2458 UDP (forward on router to PC IP)
+#
+# Setup:
+#   1. Copy this file to E:\valheim-server\docker-compose.yml
+#   2. Create .env file with SERVER_PASS (see .env.example)
+#   3. Create data directories: E:\valheim-server\server_files, E:\valheim-server\server_data
+#   4. Run: docker compose up -d
+
+services:
+  valheim-server:
+    image: lloesche/valheim-server:latest
+    container_name: valheim-server
+    restart: "no"
+    stop_grace_period: 120s
+    cap_add:
+      - sys_nice
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
+    env_file:
+      - .env
+    environment:
+      - SERVER_NAME=${SERVER_NAME:-PabloMundo}
+      - WORLD_NAME=${WORLD_NAME:-prueba2}
+      - SERVER_PASS=${SERVER_PASS:-changeme}
+      - SERVER_PUBLIC=${SERVER_PUBLIC:-false}
+      - ENABLE_CROSSPLAY=${CROSSPLAY:-true}
+      - VALHEIM_PLUS=false
+      - BACKUPS=true
+      - BACKUPS_CRON=0 */12 * * *
+      - BACKUPS_MAX_AGE=3
+    ports:
+      - "2456:2456/udp"
+      - "2457:2457/udp"
+      - "2458:2458/udp"
+    volumes:
+      - ./server_files:/opt/valheim
+      - ./server_data:/config
