@@ -7,10 +7,65 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi.responses import JSONResponse
 from models import AlertLevel
 from orchestrator import get_orchestrator
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
+
+
+def _scrub_payload(obj: Any) -> Any:
+    """Recursively replace every NaN/Inf float in a payload with None.
+
+    Final safety net applied to the WHOLE response just before it is
+    serialized. Even if a future field, code path, or serializer leaks a
+    raw NaN/Inf (numpy or Python), this guarantees the payload is strict-JSON
+    compliant, so the endpoint can never again 500 with
+    'Out of range float values are not JSON compliant'.
+    """
+    if isinstance(obj, dict):
+        return {k: _scrub_payload(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_scrub_payload(item) for item in obj]
+    # bool is a subclass of int — leave it untouched.
+    if isinstance(obj, bool):
+        return obj
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    # Catch numpy floats and anything float-like that is not already a str.
+    if not isinstance(obj, (str, int)) and hasattr(obj, "__float__"):
+        try:
+            fval = float(obj)
+        except (TypeError, ValueError):
+            return obj
+        return None if (math.isnan(fval) or math.isinf(fval)) else fval
+    return obj
+
+
+class _SafeJSONResponse(JSONResponse):
+    """JSONResponse that can never emit NaN/Inf.
+
+    ``render`` scrubs the payload recursively (NaN/Inf -> None) and then
+    serializes with ``allow_nan=False``. The scrub removes every non-finite
+    float so the strict dump always succeeds; ``allow_nan=False`` is a
+    belt-and-braces guard that would raise loudly (caught by tests) if a value
+    ever slipped past the scrub, instead of silently emitting invalid JSON.
+    """
+
+    def render(self, content: Any) -> bytes:
+        import json
+
+        return json.dumps(
+            _scrub_payload(content),
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+
+def _safe_json(payload: Any) -> JSONResponse:
+    """Return a response whose body is guaranteed strict-JSON (no NaN/Inf)."""
+    return _SafeJSONResponse(content=payload)
 
 
 def _safe_float(value: Any) -> Any:
@@ -30,36 +85,44 @@ def _safe_float(value: Any) -> Any:
         return value
 
 
-def _serialize_analysis(obj: Any) -> dict:
-    """Convert analysis dataclass to serializable dict."""
+def _serialize_analysis(obj: Any) -> Any:
+    """Convert an analysis dataclass (or any nested value) to a JSON-safe form.
+
+    Recurses through dataclasses, lists and tuples so that NaN/Inf floats are
+    scrubbed to None at ANY depth — including nested lists like ``ohlc``
+    (a list of ``[open, high, low, close]`` rows), where yfinance gaps can
+    leave np.float64(nan) values that break JSON serialization.
+    """
+    # Dataclass → dict, recursing on each field.
     if hasattr(obj, "__dataclass_fields__"):
         result = {}
         for field_name in obj.__dataclass_fields__:
-            value = getattr(obj, field_name)
-            if isinstance(value, AlertLevel):
-                result[field_name] = value.name
-            elif isinstance(value, datetime):
-                result[field_name] = value.isoformat()
-            elif isinstance(value, (int, float)) or (
-                hasattr(value, "__float__") and not isinstance(value, (str, bool))
-            ):
-                # Handle any numeric type including numpy floats
-                result[field_name] = _safe_float(value)
-            elif isinstance(value, list):
-                result[field_name] = [
-                    _safe_float(item)
-                    if isinstance(item, (int, float)) or hasattr(item, "__float__")
-                    else _serialize_analysis(item)
-                    for item in value
-                ]
-            elif hasattr(value, "__dataclass_fields__"):
-                result[field_name] = _serialize_analysis(value)
-            else:
-                result[field_name] = value
+            result[field_name] = _serialize_analysis(getattr(obj, field_name))
         return result
-    # Handle non-dataclass values
+
+    # Enums / datetimes keep their existing representation.
+    if isinstance(obj, AlertLevel):
+        return obj.name
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+
+    # Strings and bools are returned verbatim (bool is a subclass of int, so it
+    # must be checked before the numeric branch).
+    if isinstance(obj, (str, bool)):
+        return obj
+
+    # Lists / tuples → recurse element-wise (handles ohlc = list[list[float]]).
+    if isinstance(obj, (list, tuple)):
+        return [_serialize_analysis(item) for item in obj]
+
+    # Dicts → recurse value-wise.
+    if isinstance(obj, dict):
+        return {k: _serialize_analysis(v) for k, v in obj.items()}
+
+    # Any numeric type, including numpy floats → scrub NaN/Inf.
     if isinstance(obj, (int, float)) or hasattr(obj, "__float__"):
         return _safe_float(obj)
+
     return obj
 
 
@@ -72,41 +135,43 @@ async def get_summary():
     orch = get_orchestrator()
     summary = orch.get_summary()
 
-    return {
-        "etf": {
-            "total_value": _safe_float(summary.etf_total_value),
-            "total_invested": _safe_float(summary.etf_total_invested),
-            "total_gain_loss": _safe_float(summary.etf_total_gain_loss),
-            "total_gain_loss_pct": _safe_float(summary.etf_total_gain_loss_pct),
-            "level": summary.etf_level.name,
-            "last_update": summary.etf_last_update.isoformat()
-            if summary.etf_last_update
-            else None,
-            "analysis": [_serialize_analysis(a) for a in summary.etf_analysis],
-            "phase": summary.phase,
-            "phase_months_remaining": summary.phase_months_remaining,
-        },
-        "crypto": {
-            "total_value": _safe_float(summary.crypto_total_value),
-            "total_daily_gain": _safe_float(summary.crypto_total_daily_gain),
-            "level": summary.crypto_level.name,
-            "last_update": summary.crypto_last_update.isoformat()
-            if summary.crypto_last_update
-            else None,
-            "analysis": [_serialize_analysis(a) for a in summary.crypto_analysis],
-            "fear_greed": _safe_float(summary.crypto_fear_greed),
-            "fear_greed_label": summary.crypto_fear_greed_label,
-        },
-        "savings": {
-            "total_balance": _safe_float(summary.savings_total_balance),
-            "yearly_interest": _safe_float(summary.savings_yearly_interest),
-            "last_update": summary.savings_last_update.isoformat()
-            if summary.savings_last_update
-            else None,
-            "analysis": [_serialize_analysis(a) for a in summary.savings_analysis],
-        },
-        "upcoming_alerts": [_serialize_alert(a) for a in summary.upcoming_alerts],
-    }
+    return _safe_json(
+        {
+            "etf": {
+                "total_value": _safe_float(summary.etf_total_value),
+                "total_invested": _safe_float(summary.etf_total_invested),
+                "total_gain_loss": _safe_float(summary.etf_total_gain_loss),
+                "total_gain_loss_pct": _safe_float(summary.etf_total_gain_loss_pct),
+                "level": summary.etf_level.name,
+                "last_update": summary.etf_last_update.isoformat()
+                if summary.etf_last_update
+                else None,
+                "analysis": [_serialize_analysis(a) for a in summary.etf_analysis],
+                "phase": summary.phase,
+                "phase_months_remaining": summary.phase_months_remaining,
+            },
+            "crypto": {
+                "total_value": _safe_float(summary.crypto_total_value),
+                "total_daily_gain": _safe_float(summary.crypto_total_daily_gain),
+                "level": summary.crypto_level.name,
+                "last_update": summary.crypto_last_update.isoformat()
+                if summary.crypto_last_update
+                else None,
+                "analysis": [_serialize_analysis(a) for a in summary.crypto_analysis],
+                "fear_greed": _safe_float(summary.crypto_fear_greed),
+                "fear_greed_label": summary.crypto_fear_greed_label,
+            },
+            "savings": {
+                "total_balance": _safe_float(summary.savings_total_balance),
+                "yearly_interest": _safe_float(summary.savings_yearly_interest),
+                "last_update": summary.savings_last_update.isoformat()
+                if summary.savings_last_update
+                else None,
+                "analysis": [_serialize_analysis(a) for a in summary.savings_analysis],
+            },
+            "upcoming_alerts": [_serialize_alert(a) for a in summary.upcoming_alerts],
+        }
+    )
 
 
 def _serialize_alert(alert) -> dict:
@@ -122,19 +187,21 @@ async def get_etf_summary():
     orch = get_orchestrator()
     summary = orch.get_summary()
 
-    return {
-        "total_value": _safe_float(summary.etf_total_value),
-        "total_invested": _safe_float(summary.etf_total_invested),
-        "total_gain_loss": _safe_float(summary.etf_total_gain_loss),
-        "total_gain_loss_pct": _safe_float(summary.etf_total_gain_loss_pct),
-        "level": summary.etf_level.name,
-        "last_update": summary.etf_last_update.isoformat()
-        if summary.etf_last_update
-        else None,
-        "analysis": [_serialize_analysis(a) for a in summary.etf_analysis],
-        "phase": summary.phase,
-        "phase_months_remaining": summary.phase_months_remaining,
-    }
+    return _safe_json(
+        {
+            "total_value": _safe_float(summary.etf_total_value),
+            "total_invested": _safe_float(summary.etf_total_invested),
+            "total_gain_loss": _safe_float(summary.etf_total_gain_loss),
+            "total_gain_loss_pct": _safe_float(summary.etf_total_gain_loss_pct),
+            "level": summary.etf_level.name,
+            "last_update": summary.etf_last_update.isoformat()
+            if summary.etf_last_update
+            else None,
+            "analysis": [_serialize_analysis(a) for a in summary.etf_analysis],
+            "phase": summary.phase,
+            "phase_months_remaining": summary.phase_months_remaining,
+        }
+    )
 
 
 @router.get("/crypto")
@@ -143,17 +210,19 @@ async def get_crypto_summary():
     orch = get_orchestrator()
     summary = orch.get_summary()
 
-    return {
-        "total_value": _safe_float(summary.crypto_total_value),
-        "total_daily_gain": _safe_float(summary.crypto_total_daily_gain),
-        "level": summary.crypto_level.name,
-        "last_update": summary.crypto_last_update.isoformat()
-        if summary.crypto_last_update
-        else None,
-        "analysis": [_serialize_analysis(a) for a in summary.crypto_analysis],
-        "fear_greed": _safe_float(summary.crypto_fear_greed),
-        "fear_greed_label": summary.crypto_fear_greed_label,
-    }
+    return _safe_json(
+        {
+            "total_value": _safe_float(summary.crypto_total_value),
+            "total_daily_gain": _safe_float(summary.crypto_total_daily_gain),
+            "level": summary.crypto_level.name,
+            "last_update": summary.crypto_last_update.isoformat()
+            if summary.crypto_last_update
+            else None,
+            "analysis": [_serialize_analysis(a) for a in summary.crypto_analysis],
+            "fear_greed": _safe_float(summary.crypto_fear_greed),
+            "fear_greed_label": summary.crypto_fear_greed_label,
+        }
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -178,14 +247,16 @@ async def get_savings_summary():
     orch = get_orchestrator()
     summary = orch.get_summary()
 
-    return {
-        "total_balance": _safe_float(summary.savings_total_balance),
-        "yearly_interest": _safe_float(summary.savings_yearly_interest),
-        "last_update": summary.savings_last_update.isoformat()
-        if summary.savings_last_update
-        else None,
-        "analysis": [_serialize_analysis(a) for a in summary.savings_analysis],
-    }
+    return _safe_json(
+        {
+            "total_balance": _safe_float(summary.savings_total_balance),
+            "yearly_interest": _safe_float(summary.savings_yearly_interest),
+            "last_update": summary.savings_last_update.isoformat()
+            if summary.savings_last_update
+            else None,
+            "analysis": [_serialize_analysis(a) for a in summary.savings_analysis],
+        }
+    )
 
 
 @router.get("/alerts")
@@ -194,10 +265,12 @@ async def get_alerts():
     orch = get_orchestrator()
     summary = orch.get_summary()
 
-    return {
-        "upcoming": [_serialize_alert(a) for a in summary.upcoming_alerts],
-        "count": len(summary.upcoming_alerts),
-    }
+    return _safe_json(
+        {
+            "upcoming": [_serialize_alert(a) for a in summary.upcoming_alerts],
+            "count": len(summary.upcoming_alerts),
+        }
+    )
 
 
 @router.post("/alerts/{alert_id}/complete")
