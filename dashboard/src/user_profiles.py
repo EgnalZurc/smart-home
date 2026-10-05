@@ -138,7 +138,8 @@ APP_REGISTRY: list[dict] = [
         "edit_level": 1,
     },
     # Note: AI (Local AI) is NOT in APP_REGISTRY because it has its own hero section
-    # in the dashboard. It's controlled by show_config_apps in the frontend directly.
+    # in the dashboard. It's ONLY shown to users with profile_key === 'FAMILIA_ALL'.
+    # This is enforced in dashboard.html, not via show_config_apps.
 ]
 
 
