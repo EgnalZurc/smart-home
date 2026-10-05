@@ -262,6 +262,27 @@ _CATALOGUE: dict[str, dict[str, str]] = {
         "es": "🟢 Subida del +{pct:.1f}% en 30 días. Tendencia alcista fuerte.",
         "en": "🟢 Up +{pct:.1f}% in 30 days. Strong bullish trend.",
     },
+    # ── Crypto staking/exchange risk signals ──────────────────────────────────
+    "crypto.staking_maturity_soon": {
+        "es": "⏰ Staking vence en {days} días ({date}). Decidir: renovar o retirar.",
+        "en": "⏰ Staking matures in {days} days ({date}). Decide: renew or withdraw.",
+    },
+    "crypto.staking_matured": {
+        "es": "🔔 Staking vencido. ETH disponible — renovar o retirar.",
+        "en": "🔔 Staking matured. ETH available — renew or withdraw.",
+    },
+    "crypto.exchange_trust_low": {
+        "es": "⚠️ Trust Score de {exchange} bajo ({score}/10). Considera retirar a wallet.",
+        "en": "⚠️ {exchange} Trust Score low ({score}/10). Consider withdrawing to wallet.",
+    },
+    "crypto.exchange_trust_critical": {
+        "es": "🚨 Trust Score de {exchange} crítico ({score}/10). Retira fondos cuanto antes.",
+        "en": "🚨 {exchange} Trust Score critical ({score}/10). Withdraw funds ASAP.",
+    },
+    "crypto.custody_reminder": {
+        "es": "ℹ️ {amount:.5f} {symbol} en custodia de {exchange}. Sin staking.",
+        "en": "ℹ️ {amount:.5f} {symbol} in {exchange} custody. Not staked.",
+    },
     # ── Status messages ───────────────────────────────────────────────────────
     "status.danger": {
         "es": "⚠️ ACCIÓN RECOMENDADA — Revisa las alertas rojas",

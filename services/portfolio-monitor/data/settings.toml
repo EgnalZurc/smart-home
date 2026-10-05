@@ -1,0 +1,171 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Portfolio Monitor — Configuration File
+# ═══════════════════════════════════════════════════════════════════════════════
+
+[general]
+lang = "es"
+log_level = "INFO"
+
+[schedule]
+etf_time = "18:00"
+crypto_time = "09:00"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ETF MONITOR
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Datos actualizados desde Trade Republic (2026-09-29)
+# Total cartera: 2343,30€
+
+[[etf.funds]]
+id               = "IUIT"
+ticker           = "IUIT.L"
+name             = "iShares S&P 500 IT Sector UCITS ETF"
+isin             = "IE00B3WJKG14"
+# Valor: 1822,2€, Rendimiento: +38%
+# Precio medio calculado: valor_actual / (1 + rendimiento) / participaciones
+# 1822.2 / 1.38 = 1320.43€ invertido → precio_medio = 1320.43 / participaciones
+precio_medio     = 38.88
+participaciones  = 33.9652
+aportacion_mes   = 50.0
+aportacion_dia   = 15
+aportacion_fase2 = 500.0
+inicio           = "2024-01-01"
+color            = "#3A7BD5"
+
+[[etf.funds]]
+id               = "IWDA"
+ticker           = "IWDA.L"
+name             = "iShares Core MSCI World UCITS ETF"
+isin             = "IE00B4L5Y983"
+# Valor: 520,48€, Rendimiento: +4,1%
+# 520.48 / 1.041 = 500€ invertido → precio_medio = 500 / participaciones
+precio_medio     = 140.52
+participaciones  = 3.5581
+aportacion_mes   = 100.0
+aportacion_dia   = 1
+aportacion_fase2 = 1098.0
+inicio           = "2026-06-01"
+color            = "#1A7A4A"
+
+[etf.plan]
+phase_change_date = "2027-03-01"
+
+[etf.plan.milestones]
+1  = [1_800,    1_257]
+2  = [3_352,    3_643]
+3  = [10_812,   17_821]
+4  = [20_090,   33_484]
+5  = [31_627,   50_787]
+6  = [45_975,   69_903]
+7  = [63_818,   91_019]
+8  = [86_007,   114_347]
+9  = [113_602,  140_118]
+10 = [147_918,  168_587]
+
+[etf.tax]
+brackets = [
+    [6_000,        0.19],
+    [50_000,       0.21],
+    [200_000,      0.23],
+    [300_000,      0.27],
+    [999_999_999,  0.30],
+]
+
+[etf.thresholds]
+ma_short            = 50
+ma_long             = 200
+drop_from_high_warn = -0.15
+loss_vs_cost_warn   = -0.10
+critical_threshold  = -0.20
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CRYPTO STAKING MONITOR
+# ═══════════════════════════════════════════════════════════════════════════════
+# Datos actualizados desde Bitvavo (2026-10-05)
+# Total cartera crypto: 1857.80€
+
+[[crypto.positions]]
+symbol                 = "BTC"
+name                   = "Bitcoin"
+amount                 = 0.01827021
+product                = "Custodia Bitvavo"
+apy                    = 0.0
+type                   = "custody"
+exchange               = "bitvavo"
+start_date             = "2026-10-05"
+coingecko_id           = "bitcoin"
+
+[[crypto.positions]]
+symbol                 = "ETH"
+name                   = "Ethereum"
+amount                 = 0.19438211
+product                = "Staking Fijo 30d"
+apy                    = 2.00
+type                   = "fixed"
+exchange               = "bitvavo"
+rescue_days            = 0
+start_date             = "2026-10-05"
+maturity_date          = "2026-11-04"
+coingecko_id           = "ethereum"
+
+[crypto.thresholds]
+fg_extreme_greed  = 75
+fg_high_greed     = 60
+fg_extreme_fear   = 25
+change_24h_danger = -10
+change_24h_warn   = -5
+change_24h_pump   = 10
+change_30d_bear   = -20
+change_30d_bull   = 20
+ath_danger_pct    = -5
+ath_warn_pct      = -15
+# Staking risk thresholds
+staking_maturity_warn_days = 7  # Alert X days before staking maturity
+# Exchange risk monitoring (auto-creates alerts on detection)
+exchange_risk_sources = ["coingecko_trust_score", "news_sentiment"]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SAVINGS ACCOUNT MONITOR (Bankinter)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# TAE actualizado según Bankinter.com (Sept 2026): 2.50% TAE sin nómina, 3% TAE con nómina
+[[savings.accounts]]
+id           = "bankinter"
+name         = "Cuenta Remunerada Bankinter"
+bank         = "Bankinter"
+balance      = 100000.0
+apy          = 2.50
+type         = "remunerada"
+payment_day  = 25
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SCHEDULED ALERTS
+# Actions válidas (solo acciones manuales):
+#   - sell_crypto: vender o cambiar una posición crypto
+#   - stop_etf: dejar de aportar a un ETF
+#   - modify_etf: cambiar cantidad de aportación ETF
+#   - review: revisar algo manualmente
+#   - renew_staking: renovar o retirar staking que vence
+# NO usar buy_etf — las aportaciones están automatizadas en Trade Republic
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ETH staking fijo vence el 4 de noviembre
+[[alerts.scheduled]]
+id          = "eth_staking_maturity"
+date        = "2026-11-01"
+action      = "renew_staking"
+symbol      = "ETH"
+title       = "ETH Staking vence en 3 días"
+description = "El staking fijo de ETH en Bitvavo vence el 4 de noviembre. Decidir: renovar staking fijo (30d), cambiar a flexible, o retirar."
+priority    = "high"
+
+# Verificar KuCoin vacío (migración completada)
+[[alerts.scheduled]]
+id          = "verify_kucoin_empty"
+date        = "2026-10-06"
+action      = "review"
+symbol      = ""
+title       = "Verificar KuCoin vacío"
+description = "Confirmar que la cuenta de KuCoin está vacía después de la migración a Bitvavo."
+priority    = "low"
