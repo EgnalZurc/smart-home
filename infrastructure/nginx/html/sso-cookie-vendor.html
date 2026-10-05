@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Authentication Complete</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            padding: 2rem;
+        }
+        .checkmark {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1rem;
+        }
+        .checkmark circle {
+            fill: #175DDC;
+        }
+        .checkmark path {
+            stroke: white;
+            stroke-width: 3;
+            fill: none;
+        }
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+        p {
+            color: #aaa;
+            margin-bottom: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <svg class="checkmark" viewBox="0 0 52 52">
+            <circle cx="26" cy="26" r="25"/>
+            <path d="M14 27l7 7 16-16"/>
+        </svg>
+        <h1>Authentication Complete</h1>
+        <p>You can close this window and return to the Bitwarden app.</p>
+    </div>
+    <script>
+        // Signal to the mobile app that authentication is complete
+        // The app listens for this via the WebView bridge
+        if (window.opener) {
+            window.opener.postMessage({ command: 'authResult', success: true }, '*');
+        }
+        // For mobile apps using custom URL schemes
+        if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ command: 'authResult', success: true }));
+        }
+        // Auto-close after a short delay (if allowed by browser)
+        setTimeout(() => {
+            window.close();
+        }, 2000);
+    </script>
+</body>
+</html>
