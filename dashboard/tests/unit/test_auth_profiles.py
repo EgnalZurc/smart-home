@@ -33,6 +33,11 @@ class TestProfiles:
 
         assert user_profiles.PROFILES["SUPER"]["show_config_apps"] is True
 
+    def test_familia_all_has_show_config_apps_true(self):
+        import user_profiles
+
+        assert user_profiles.PROFILES["FAMILIA_ALL"]["show_config_apps"] is True
+
     def test_familia_principal_has_show_config_apps_false(self):
         import user_profiles
 
@@ -74,6 +79,12 @@ class TestAppRegistry:
         )
         assert passwords["type"] == "config"
 
+    def test_ai_is_config(self):
+        import user_profiles
+
+        ai = next(a for a in user_profiles.APP_REGISTRY if a["key"] == "ai")
+        assert ai["type"] == "config"
+
     def test_all_keys_unique(self):
         import user_profiles
 
@@ -107,6 +118,36 @@ class TestAppRegistry:
         app_keys = [a["key"] for a in apps]
         assert "zigbee" in app_keys
         assert "passwords" in app_keys
+        assert "ai" in app_keys
+
+    def test_familia_all_sees_ai(self):
+        import user_profiles
+
+        familia_all_profile = user_profiles.PROFILES["FAMILIA_ALL"]
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(user_profiles, "AUTH_DB_PATH", _tmp_db_path(tmp)):
+                with patch.object(
+                    user_profiles, "get_profile", return_value=familia_all_profile
+                ):
+                    apps = user_profiles.app_permissions("virchu")
+        app_keys = [a["key"] for a in apps]
+        assert "ai" in app_keys
+        # FAMILIA_ALL also sees standard apps
+        assert "ac" in app_keys
+        assert "vacaciones" in app_keys
+
+    def test_familia_principal_does_not_see_ai(self):
+        import user_profiles
+
+        familia_profile = user_profiles.PROFILES["FAMILIA_PRINCIPAL"]
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(user_profiles, "AUTH_DB_PATH", _tmp_db_path(tmp)):
+                with patch.object(
+                    user_profiles, "get_profile", return_value=familia_profile
+                ):
+                    apps = user_profiles.app_permissions("guest")
+        app_keys = [a["key"] for a in apps]
+        assert "ai" not in app_keys
 
     def test_standard_apps_visible_to_familia_principal(self):
         import user_profiles
@@ -200,7 +241,11 @@ class TestAuthMeResponse:
         """
         import user_profiles
 
-        for key, expected in [("SUPER", True), ("FAMILIA_PRINCIPAL", False)]:
+        for key, expected in [
+            ("SUPER", True),
+            ("FAMILIA_ALL", True),
+            ("FAMILIA_PRINCIPAL", False),
+        ]:
             profile_def = user_profiles.PROFILES.get(key, {})
             show = profile_def.get("show_config_apps", False)
             assert show is expected, f"{key}: expected {expected}, got {show}"

@@ -20,6 +20,7 @@ Example: an app with view_level=5 is visible even to guests; view_level=1 requir
 Built-in profiles
 -----------------
 SUPER             → sees and does everything (both types, all levels)
+FAMILIA_ALL       → standard + config apps, levels 1+ (family with full access including AI)
 FAMILIA_PRINCIPAL → standard apps only, levels 1+ (sees all current apps, full edit)
 GAMER             → config apps only, levels 2+ (currently only valheim)
 Database
@@ -43,6 +44,13 @@ AUTH_DB_PATH: str = "/app/data/auth.db"
 # ---------------------------------------------------------------------------
 PROFILES: dict[str, dict] = {
     "SUPER": {
+        "can_view_level": 1,
+        "can_edit_level": 1,
+        "show_config_apps": True,
+    },
+    "FAMILIA_ALL": {
+        # Like FAMILIA_PRINCIPAL but can see config apps (e.g., AI).
+        # Intended for family members who want access to all features.
         "can_view_level": 1,
         "can_edit_level": 1,
         "show_config_apps": True,
@@ -125,6 +133,14 @@ APP_REGISTRY: list[dict] = [
         # Portfolio Monitor — ETF and crypto portfolio tracking.
         # Only SUPER users can see financial data.
         "key": "portfolio",
+        "type": "config",
+        "view_level": 1,
+        "edit_level": 1,
+    },
+    {
+        # Local AI — Open WebUI + Ollama on EgnalPC.
+        # Config app: visible to SUPER and FAMILIA_ALL (show_config_apps=True).
+        "key": "ai",
         "type": "config",
         "view_level": 1,
         "edit_level": 1,
