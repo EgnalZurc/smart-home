@@ -303,7 +303,7 @@
         </div>
     </header>
 
-    <!-- SECTION 0: AI Card (FAMILIA_ALL or higher) -->
+    <!-- SECTION 0: AI Card (SUPER or FAMILIA_ALL only) -->
     <section class="mb-5" id="ai-section" style="display:none">
         <a href="https://raspberrypi.tailaa37cd.ts.net:8443/" class="ai-card" id="ai-card" target="_blank" rel="noopener">
             <div class="ai-icon">
@@ -424,6 +424,7 @@ const APP_CATALOGUE = {
 };
 let APPS = [];
 let currentProfile = null;
+let currentProfileKey = null;
 let containerState = {};
 
 // Language
@@ -632,8 +633,8 @@ async function fetchStatus(url) {
     return data;
 }
 async function loadStatus() {
-    // AI card status (if visible)
-    if (currentProfile?.show_config_apps) {
+    // AI card status (if visible - SUPER or FAMILIA_ALL)
+    if (currentProfileKey === 'FAMILIA_ALL' || currentProfileKey === 'SUPER') {
         try {
             const data = await fetchStatus('/api/health/ai');
             const dot = document.getElementById('ai-status-dot');
@@ -789,13 +790,14 @@ async function loadUser() {
         const username = data.username || '';
         if (!username) return;
         currentProfile = data.profile_data || null;
+        currentProfileKey = data.profile || null;
         document.getElementById('user-name').textContent   = username;
         document.getElementById('user-avatar').textContent = username.charAt(0).toUpperCase();
         document.getElementById('user-dropdown').style.display = 'block';
         // Show resources button for SUPER
         if (isSuper()) document.getElementById('res-btn').style.display = 'flex';
-        // Show AI section for users with show_config_apps (FAMILIA_ALL or higher)
-        if (currentProfile?.show_config_apps) {
+        // Show AI section for SUPER or FAMILIA_ALL profiles
+        if (currentProfileKey === 'FAMILIA_ALL' || currentProfileKey === 'SUPER') {
             document.getElementById('ai-section').style.display = 'block';
         }
         APPS = (data.apps || [])
