@@ -209,16 +209,18 @@ def compute_staking_risk_signals(
 
             if days_left <= 0:
                 # Staking already matured
-                signals.append(
-                    Signal("", t("crypto.staking_matured"), "WARN")
-                )
+                signals.append(Signal("", t("crypto.staking_matured"), "WARN"))
                 level = level.escalate(AlertLevel.WARN)
             elif days_left <= maturity_warn_days:
                 # Staking maturing soon
                 signals.append(
                     Signal(
                         "",
-                        t("crypto.staking_maturity_soon", days=days_left, date=maturity_str),
+                        t(
+                            "crypto.staking_maturity_soon",
+                            days=days_left,
+                            date=maturity_str,
+                        ),
                         "INFO",
                     )
                 )
@@ -236,7 +238,11 @@ def compute_staking_risk_signals(
                 signals.append(
                     Signal(
                         "",
-                        t("crypto.exchange_trust_critical", exchange=exchange.title(), score=trust),
+                        t(
+                            "crypto.exchange_trust_critical",
+                            exchange=exchange.title(),
+                            score=trust,
+                        ),
                         "DANGER",
                     )
                 )
@@ -246,7 +252,11 @@ def compute_staking_risk_signals(
                 signals.append(
                     Signal(
                         "",
-                        t("crypto.exchange_trust_low", exchange=exchange.title(), score=trust),
+                        t(
+                            "crypto.exchange_trust_low",
+                            exchange=exchange.title(),
+                            score=trust,
+                        ),
                         "WARN",
                     )
                 )
@@ -438,9 +448,7 @@ class CryptoMonitor(BaseMonitor):
 
         # Fetch exchange trust scores for all exchanges in use
         exchanges_in_use = {
-            p.get("exchange", "").lower()
-            for p in CRYPTO_POSITIONS
-            if p.get("exchange")
+            p.get("exchange", "").lower() for p in CRYPTO_POSITIONS if p.get("exchange")
         }
         exchange_trust: dict[str, int | None] = {}
         for exchange in exchanges_in_use:
