@@ -54,8 +54,11 @@ services:
     ports:
       - 80:80
       # Note: Port 443 is NOT bound here because Tailscale Funnel uses it.
-      # Tailscale proxies :443 -> localhost:8443 (see: tailscale serve status)
+      # Tailscale proxies :443 -> localhost:8443 (dashboard)
       - 8443:8443
+      # AI proxy (Open WebUI) - Tailscale Funnel :8443 -> localhost:8444
+      # Bind to 127.0.0.1 only so Tailscale can use the Tailscale IP
+      - 127.0.0.1:8444:8444
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
