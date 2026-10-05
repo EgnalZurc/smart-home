@@ -148,6 +148,131 @@ def days_staked(pos: dict[str, Any]) -> int:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Exchange Trust Score (CoinGecko)
+# ─────────────────────────────────────────────────────────────────────────────
+_EXCHANGE_IDS = {
+    "bitvavo": "bitvavo",
+    "kucoin": "kucoin",
+    "binance": "binance",
+    "coinbase": "gdax",
+    "kraken": "kraken",
+}
+
+
+def fetch_exchange_trust_score(exchange: str) -> int | None:
+    """Fetch CoinGecko trust score for an exchange (1-10 scale)."""
+    exchange_id = _EXCHANGE_IDS.get(exchange.lower())
+    if not exchange_id:
+        return None
+
+    url = f"https://api.coingecko.com/api/v3/exchanges/{exchange_id}"
+    try:
+        data = _get(url).json()
+        return data.get("trust_score")
+    except Exception as e:
+        logger.warning(f"Could not fetch trust score for {exchange}: {e}")
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Staking & Exchange Risk Analysis
+# ─────────────────────────────────────────────────────────────────────────────
+def compute_staking_risk_signals(
+    pos: dict[str, Any],
+    exchange_trust: dict[str, int | None],
+    maturity_warn_days: int = 7,
+) -> tuple[list[Signal], AlertLevel]:
+    """
+    Compute risk signals specific to staking positions and exchange custody.
+
+    Returns signals for:
+    - Fixed staking approaching maturity
+    - Exchange trust score degradation
+    - Custody reminders for non-staked assets
+    """
+    signals: list[Signal] = []
+    level = AlertLevel.OK
+
+    pos_type = pos.get("type", "flexible")
+    exchange = pos.get("exchange", "")
+    symbol = pos.get("symbol", "")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Fixed Staking Maturity Check
+    # ─────────────────────────────────────────────────────────────────────────
+    if pos_type == "fixed" and pos.get("maturity_date"):
+        maturity_str = pos.get("maturity_date", "")
+        try:
+            maturity = datetime.fromisoformat(maturity_str).date()
+            today = datetime.now(timezone.utc).date()
+            days_left = (maturity - today).days
+
+            if days_left <= 0:
+                # Staking already matured
+                signals.append(
+                    Signal("", t("crypto.staking_matured"), "WARN")
+                )
+                level = level.escalate(AlertLevel.WARN)
+            elif days_left <= maturity_warn_days:
+                # Staking maturing soon
+                signals.append(
+                    Signal(
+                        "",
+                        t("crypto.staking_maturity_soon", days=days_left, date=maturity_str),
+                        "INFO",
+                    )
+                )
+        except (ValueError, TypeError):
+            pass
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Exchange Trust Score Check
+    # ─────────────────────────────────────────────────────────────────────────
+    if exchange:
+        trust = exchange_trust.get(exchange.lower())
+        if trust is not None:
+            if trust <= 4:
+                # Critical - exchange has serious issues
+                signals.append(
+                    Signal(
+                        "",
+                        t("crypto.exchange_trust_critical", exchange=exchange.title(), score=trust),
+                        "DANGER",
+                    )
+                )
+                level = level.escalate(AlertLevel.DANGER)
+            elif trust <= 6:
+                # Warning - trust score degraded
+                signals.append(
+                    Signal(
+                        "",
+                        t("crypto.exchange_trust_low", exchange=exchange.title(), score=trust),
+                        "WARN",
+                    )
+                )
+                level = level.escalate(AlertLevel.WARN)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Custody reminder (non-staked assets)
+    # ─────────────────────────────────────────────────────────────────────────
+    if pos_type == "custody":
+        signals.append(
+            Signal(
+                "",
+                t(
+                    "crypto.custody_reminder",
+                    amount=pos.get("amount", 0),
+                    symbol=symbol,
+                    exchange=exchange.title() if exchange else "exchange",
+                ),
+                "INFO",
+            )
+        )
+
+    return signals, level
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Signal analysis
 # ─────────────────────────────────────────────────────────────────────────────
 def compute_signals(
@@ -311,6 +436,20 @@ class CryptoMonitor(BaseMonitor):
         logger.info(f"  → Fetching market data for {len(coingecko_ids)} coins...")
         market_data = fetch_market_batch(coingecko_ids)
 
+        # Fetch exchange trust scores for all exchanges in use
+        exchanges_in_use = {
+            p.get("exchange", "").lower()
+            for p in CRYPTO_POSITIONS
+            if p.get("exchange")
+        }
+        exchange_trust: dict[str, int | None] = {}
+        for exchange in exchanges_in_use:
+            logger.info(f"  → Fetching trust score for {exchange}...")
+            exchange_trust[exchange] = fetch_exchange_trust_score(exchange)
+
+        # Get maturity warning threshold from config
+        maturity_warn_days = CRYPTO_THRESHOLDS.get("staking_maturity_warn_days", 7)
+
         results: list[CryptoAnalysis] = []
         overall_level = AlertLevel.OK
         total_value = 0.0
@@ -334,8 +473,15 @@ class CryptoMonitor(BaseMonitor):
                 days = days_staked(pos)
                 accumulated_gain = daily_gain * days
 
-                # Signals
+                # Price/market signals
                 signals, level = compute_signals(pos, market_data, self._fear_greed)
+
+                # Staking & exchange risk signals
+                risk_signals, risk_level = compute_staking_risk_signals(
+                    pos, exchange_trust, maturity_warn_days
+                )
+                signals.extend(risk_signals)
+                level = level.escalate(risk_level)
 
                 analysis = CryptoAnalysis(
                     symbol=symbol,
@@ -388,6 +534,7 @@ class CryptoMonitor(BaseMonitor):
             "level": overall_level,
             "fear_greed": self._fear_greed,
             "fear_greed_label": self._fear_greed_label,
+            "exchange_trust": exchange_trust,
             "last_update": self._last_update,
         }
 
