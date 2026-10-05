@@ -17,9 +17,17 @@
             background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9));
             border: 1px solid rgba(51,65,85,0.5);
             backdrop-filter: blur(10px);
-            transition: transform 0.15s ease, border-color 0.2s ease;
+            transition: transform 0.15s ease, border-color 0.2s ease, filter 0.3s ease, opacity 0.3s ease;
             text-decoration: none; display: block;
             border-radius: 16px;
+        }
+        .app-card.offline {
+            filter: grayscale(1);
+            opacity: 0.6;
+        }
+        .app-card.offline:hover {
+            filter: grayscale(0.7);
+            opacity: 0.75;
         }
         .app-card:active { transform: scale(0.97); }
         @media (hover:hover) { .app-card:hover { border-color: rgba(99,102,241,0.4); transform: translateY(-1px); } }
@@ -280,6 +288,7 @@ const T = {
         valheim_name: 'Valheim', valheim_desc: 'Servidor de Valheim',
         babygifts_name: 'Lista Regalos Bebé', babygifts_desc: 'Lista de regalos para el bebé',
         portfolio_name: 'Monitor Cartera', portfolio_desc: 'Monitorización de ETFs y crypto',
+        ai_name: 'IA Local', ai_desc: 'Chat con modelos de lenguaje locales',
         pc_section: 'Egnal PC', pc_online: 'Online', pc_offline: 'Offline', pc_changing: 'Cambiando...',
     },
     en: {
@@ -299,6 +308,7 @@ const T = {
         valheim_name: 'Valheim', valheim_desc: 'Valheim server',
         babygifts_name: 'Baby Gift List', babygifts_desc: 'Baby gift registry',
         portfolio_name: 'Portfolio Monitor', portfolio_desc: 'ETF and crypto monitoring',
+        ai_name: 'Local AI', ai_desc: 'Chat with local language models',
         pc_section: 'Egnal PC', pc_online: 'Online', pc_offline: 'Offline', pc_changing: 'Changing...',
     },
 };
@@ -318,6 +328,7 @@ const APP_CATALOGUE = {
     babygifts: { url: '/smart-home/baby-gifts', nameKey: 'babygifts_name', descKey: 'babygifts_desc', statusUrl: '/api/health/baby-gifts', getStatus: d => d?.online === true },
     valheim:   { url: '/valheim-admin/',                                 nameKey: 'valheim_name',   descKey: 'valheim_desc',     statusUrl: '/api/health/valheim',       getStatus: d => d?.online === true },
     portfolio: { url: '/smart-home/portfolio',                            nameKey: 'portfolio_name', descKey: 'portfolio_desc',   statusUrl: '/api/health/portfolio',     getStatus: d => d?.online === true },
+    ai:        { url: '/ai/',                                                nameKey: 'ai_name',        descKey: 'ai_desc',          statusUrl: '/api/health/ai',            getStatus: d => d?.online === true },
 };
 let APPS = [];
 let currentProfile = null;
@@ -538,8 +549,12 @@ async function loadStatus() {
             const data = await fetchStatus(app.statusUrl);
             const el = document.getElementById('status-' + app.key);
             if (!el) continue;
-            el.querySelector('span:first-child').className = `status-dot w-1.5 h-1.5 rounded-full inline-block ${app.getStatus(data) ? 'bg-green-500' : 'bg-red-400'}`;
-            el.querySelector('span:last-child').textContent = t(app.getStatus(data) ? 'connected' : 'offline');
+            const isOnline = app.getStatus(data);
+            el.querySelector('span:first-child').className = `status-dot w-1.5 h-1.5 rounded-full inline-block ${isOnline ? 'bg-green-500' : 'bg-red-400'}`;
+            el.querySelector('span:last-child').textContent = t(isOnline ? 'connected' : 'offline');
+            // Apply/remove offline class to the card
+            const card = el.closest('.app-card');
+            if (card) card.classList.toggle('offline', !isOnline);
         } catch {}
     }
 }

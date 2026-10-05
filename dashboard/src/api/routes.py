@@ -131,6 +131,19 @@ async def get_passwords_health():
         return {"online": False}
 
 
+@router.get("/health/ai", tags=["Health"])
+async def get_ai_health():
+    """Health check for Local AI (Open WebUI on EgnalPC)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get("http://192.168.1.164:3000/api/health")
+            # Open WebUI returns {"status": true} when healthy
+            data = r.json()
+            return {"online": data.get("status", False) is True}
+    except Exception:
+        return {"online": False}
+
+
 @router.get("/health/valheim", tags=["Health"])
 async def get_valheim_health():
     """Health check for Valheim Admin service.
