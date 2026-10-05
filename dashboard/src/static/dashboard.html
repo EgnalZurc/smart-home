@@ -163,6 +163,105 @@
         .pc-mode-btn:active { transform: scale(0.95); }
         .pc-mode-btn.active { background: rgba(34,197,94,.15); border-color: rgba(34,197,94,.5); color: #86efac; }
         .pc-mode-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* AI Hero Section */
+        .ai-hero {
+            background: linear-gradient(135deg, rgba(124,58,237,0.25) 0%, rgba(59,130,246,0.2) 50%, rgba(16,185,129,0.15) 100%);
+            border: 1px solid rgba(124,58,237,0.3);
+            border-radius: 20px;
+            padding: 20px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            text-decoration: none;
+            position: relative;
+            overflow: hidden;
+        }
+        .ai-hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 30% 50%, rgba(124,58,237,0.15), transparent 60%);
+            pointer-events: none;
+        }
+        .ai-hero:hover {
+            border-color: rgba(124,58,237,0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(124,58,237,0.2);
+        }
+        .ai-hero:active { transform: scale(0.98); }
+        .ai-hero.offline {
+            filter: grayscale(0.8);
+            opacity: 0.6;
+            border-color: rgba(100,116,139,0.3);
+        }
+        .ai-hero.offline:hover {
+            filter: grayscale(0.5);
+            opacity: 0.75;
+        }
+        .ai-icon-wrap {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, rgba(124,58,237,0.3), rgba(59,130,246,0.25));
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            position: relative;
+        }
+        .ai-icon-wrap svg {
+            width: 28px;
+            height: 28px;
+            color: #a78bfa;
+        }
+        .ai-sparkle {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #fbbf24;
+            border-radius: 50%;
+            animation: sparkle 2s ease-in-out infinite;
+        }
+        .ai-sparkle:nth-child(1) { top: -2px; right: 4px; animation-delay: 0s; }
+        .ai-sparkle:nth-child(2) { top: 8px; right: -4px; animation-delay: 0.5s; }
+        .ai-sparkle:nth-child(3) { bottom: 4px; right: 0; animation-delay: 1s; }
+        @keyframes sparkle {
+            0%, 100% { opacity: 0; transform: scale(0.5); }
+            50% { opacity: 1; transform: scale(1); }
+        }
+        .ai-content { flex: 1; min-width: 0; position: relative; z-index: 1; }
+        .ai-title {
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: #e9d5ff;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .ai-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        .ai-desc {
+            font-size: 0.8125rem;
+            color: #94a3b8;
+            line-height: 1.4;
+        }
+        .ai-arrow {
+            color: rgba(167,139,250,0.6);
+            font-size: 1.5rem;
+            transition: transform 0.2s, color 0.2s;
+        }
+        .ai-hero:hover .ai-arrow {
+            transform: translateX(4px);
+            color: rgba(167,139,250,1);
+        }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
@@ -231,6 +330,35 @@
             </div>
         </div>
     </header>
+
+    <!-- SECTION 0: AI Hero (FAMILIA_ALL or higher) -->
+    <section class="mb-7" id="ai-section" style="display:none">
+        <a href="/ai/" class="ai-hero" id="ai-hero">
+            <div class="ai-icon-wrap">
+                <!-- Brain/sparkles icon -->
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2a4 4 0 0 1 4 4c0 1.1-.45 2.1-1.17 2.83L12 12l-2.83-3.17A4 4 0 0 1 12 2z"/>
+                    <path d="M12 12v10"/>
+                    <path d="M8 14c-2.2 0-4-1.8-4-4a4 4 0 0 1 4-4"/>
+                    <path d="M16 14c2.2 0 4-1.8 4-4a4 4 0 0 0-4-4"/>
+                    <path d="M9 18h6"/>
+                    <circle cx="8" cy="6" r="1"/>
+                    <circle cx="16" cy="6" r="1"/>
+                </svg>
+                <span class="ai-sparkle"></span>
+                <span class="ai-sparkle"></span>
+                <span class="ai-sparkle"></span>
+            </div>
+            <div class="ai-content">
+                <div class="ai-title">
+                    <span id="ai-title-text">IA Local</span>
+                    <span id="ai-status-dot" class="ai-status-dot bg-slate-600"></span>
+                </div>
+                <p id="ai-desc-text" class="ai-desc">Chat con modelos de lenguaje locales</p>
+            </div>
+            <span class="ai-arrow">›</span>
+        </a>
+    </section>
 
     <!-- SECTION 1: Core infrastructure (SUPER only) -->
     <section class="mb-7" id="core-section" style="display:none">
@@ -328,7 +456,6 @@ const APP_CATALOGUE = {
     babygifts: { url: '/smart-home/baby-gifts', nameKey: 'babygifts_name', descKey: 'babygifts_desc', statusUrl: '/api/health/baby-gifts', getStatus: d => d?.online === true },
     valheim:   { url: '/valheim-admin/',                                 nameKey: 'valheim_name',   descKey: 'valheim_desc',     statusUrl: '/api/health/valheim',       getStatus: d => d?.online === true },
     portfolio: { url: '/smart-home/portfolio',                            nameKey: 'portfolio_name', descKey: 'portfolio_desc',   statusUrl: '/api/health/portfolio',     getStatus: d => d?.online === true },
-    ai:        { url: '/ai/',                                                nameKey: 'ai_name',        descKey: 'ai_desc',          statusUrl: '/api/health/ai',            getStatus: d => d?.online === true },
 };
 let APPS = [];
 let currentProfile = null;
@@ -351,6 +478,11 @@ function applyLang() {
     document.getElementById('res-title').textContent  = t('res_title');
     const logoutText = document.getElementById('logout-text');
     if (logoutText) logoutText.textContent = t('logout_label');
+    // AI hero section texts
+    const aiTitle = document.getElementById('ai-title-text');
+    const aiDesc = document.getElementById('ai-desc-text');
+    if (aiTitle) aiTitle.textContent = t('ai_name');
+    if (aiDesc) aiDesc.textContent = t('ai_desc');
     saveLang(currentLang);
 }
 function setLang(l) {
@@ -535,6 +667,22 @@ async function fetchStatus(url) {
     return data;
 }
 async function loadStatus() {
+    // AI hero status (if visible)
+    if (currentProfile?.show_config_apps) {
+        try {
+            const data = await fetchStatus('/api/health/ai');
+            const dot = document.getElementById('ai-status-dot');
+            const hero = document.getElementById('ai-hero');
+            const online = data?.online === true;
+            if (dot) dot.className = `ai-status-dot ${online ? 'bg-green-500' : 'bg-red-400'}`;
+            if (hero) hero.classList.toggle('offline', !online);
+        } catch {
+            const dot = document.getElementById('ai-status-dot');
+            const hero = document.getElementById('ai-hero');
+            if (dot) dot.className = 'ai-status-dot bg-red-400';
+            if (hero) hero.classList.add('offline');
+        }
+    }
     for (const svc of CORE_SERVICES) {
         const dot = document.getElementById('core-dot-' + svc.key);
         if (!dot) continue;
@@ -681,6 +829,10 @@ async function loadUser() {
         document.getElementById('user-dropdown').style.display = 'block';
         // Show resources button for SUPER
         if (isSuper()) document.getElementById('res-btn').style.display = 'flex';
+        // Show AI section for users with show_config_apps (FAMILIA_ALL or higher)
+        if (currentProfile?.show_config_apps) {
+            document.getElementById('ai-section').style.display = 'block';
+        }
         APPS = (data.apps || [])
             .filter(p => p.key !== 'zigbee')
             .map(p => ({ key: p.key, ...APP_CATALOGUE[p.key] }))
