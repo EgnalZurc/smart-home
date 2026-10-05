@@ -136,7 +136,7 @@ async def get_ai_health():
     """Health check for Local AI (Open WebUI on EgnalPC)."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get("http://192.168.1.164:3000/api/health")
+            r = await client.get("http://192.168.1.164:3000/health")
             # Open WebUI returns {"status": true} when healthy
             data = r.json()
             return {"online": data.get("status", False) is True}
