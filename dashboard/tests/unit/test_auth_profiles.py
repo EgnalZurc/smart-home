@@ -79,11 +79,12 @@ class TestAppRegistry:
         )
         assert passwords["type"] == "config"
 
-    def test_ai_is_config(self):
+    def test_ai_not_in_registry(self):
+        """AI has its own hero section in the dashboard, not in APP_REGISTRY."""
         import user_profiles
 
-        ai = next(a for a in user_profiles.APP_REGISTRY if a["key"] == "ai")
-        assert ai["type"] == "config"
+        ai_apps = [a for a in user_profiles.APP_REGISTRY if a["key"] == "ai"]
+        assert len(ai_apps) == 0
 
     def test_all_keys_unique(self):
         import user_profiles
@@ -118,9 +119,10 @@ class TestAppRegistry:
         app_keys = [a["key"] for a in apps]
         assert "zigbee" in app_keys
         assert "passwords" in app_keys
-        assert "ai" in app_keys
+        # Note: ai is NOT in APP_REGISTRY, it has its own hero section
 
-    def test_familia_all_sees_ai(self):
+    def test_familia_all_sees_config_apps(self):
+        """FAMILIA_ALL can see config apps (AI is handled separately in frontend)."""
         import user_profiles
 
         familia_all_profile = user_profiles.PROFILES["FAMILIA_ALL"]
@@ -131,12 +133,15 @@ class TestAppRegistry:
                 ):
                     apps = user_profiles.app_permissions("virchu")
         app_keys = [a["key"] for a in apps]
-        assert "ai" in app_keys
-        # FAMILIA_ALL also sees standard apps
+        # FAMILIA_ALL sees standard + config apps
         assert "ac" in app_keys
         assert "vacaciones" in app_keys
+        assert "zigbee" in app_keys  # config app
+        # Note: ai is NOT in APP_REGISTRY, it has its own hero section controlled
+        # by show_config_apps in the frontend directly
 
-    def test_familia_principal_does_not_see_ai(self):
+    def test_familia_principal_does_not_see_config_apps_like_zigbee(self):
+        """FAMILIA_PRINCIPAL cannot see config apps (show_config_apps=False)."""
         import user_profiles
 
         familia_profile = user_profiles.PROFILES["FAMILIA_PRINCIPAL"]
@@ -147,7 +152,11 @@ class TestAppRegistry:
                 ):
                     apps = user_profiles.app_permissions("guest")
         app_keys = [a["key"] for a in apps]
-        assert "ai" not in app_keys
+        # Cannot see config apps
+        assert "zigbee" not in app_keys
+        assert "passwords" not in app_keys
+        # Note: ai visibility is controlled in the frontend by show_config_apps,
+        # not by APP_REGISTRY
 
     def test_standard_apps_visible_to_familia_principal(self):
         import user_profiles

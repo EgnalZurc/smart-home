@@ -137,14 +137,8 @@ APP_REGISTRY: list[dict] = [
         "view_level": 1,
         "edit_level": 1,
     },
-    {
-        # Local AI — Open WebUI + Ollama on EgnalPC.
-        # Config app: visible to SUPER and FAMILIA_ALL (show_config_apps=True).
-        "key": "ai",
-        "type": "config",
-        "view_level": 1,
-        "edit_level": 1,
-    },
+    # Note: AI (Local AI) is NOT in APP_REGISTRY because it has its own hero section
+    # in the dashboard. It's controlled by show_config_apps in the frontend directly.
 ]
 
 
