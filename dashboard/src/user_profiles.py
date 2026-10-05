@@ -129,6 +129,14 @@ APP_REGISTRY: list[dict] = [
         "view_level": 1,
         "edit_level": 1,
     },
+    {
+        # Local AI — Open WebUI + Ollama on EgnalPC.
+        # Only SUPER users can access AI chat.
+        "key": "ai",
+        "type": "config",
+        "view_level": 1,
+        "edit_level": 1,
+    },
 ]
 
 
