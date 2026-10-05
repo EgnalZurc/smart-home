@@ -303,7 +303,7 @@
         </div>
     </header>
 
-    <!-- SECTION 0: AI Card (FAMILIA_ALL or higher) -->
+    <!-- SECTION 0: AI Card (SUPER or FAMILIA_ALL only) -->
     <section class="mb-5" id="ai-section" style="display:none">
         <a href="https://raspberrypi.tailaa37cd.ts.net:8443/" class="ai-card" id="ai-card" target="_blank" rel="noopener">
             <div class="ai-icon">
@@ -633,8 +633,8 @@ async function fetchStatus(url) {
     return data;
 }
 async function loadStatus() {
-    // AI card status (if visible - only FAMILIA_ALL)
-    if (currentProfileKey === 'FAMILIA_ALL') {
+    // AI card status (if visible - SUPER or FAMILIA_ALL)
+    if (currentProfileKey === 'FAMILIA_ALL' || currentProfileKey === 'SUPER') {
         try {
             const data = await fetchStatus('/api/health/ai');
             const dot = document.getElementById('ai-status-dot');
@@ -796,8 +796,8 @@ async function loadUser() {
         document.getElementById('user-dropdown').style.display = 'block';
         // Show resources button for SUPER
         if (isSuper()) document.getElementById('res-btn').style.display = 'flex';
-        // Show AI section only for FAMILIA_ALL profile (includes all family features + AI)
-        if (currentProfileKey === 'FAMILIA_ALL') {
+        // Show AI section for SUPER or FAMILIA_ALL profiles
+        if (currentProfileKey === 'FAMILIA_ALL' || currentProfileKey === 'SUPER') {
             document.getElementById('ai-section').style.display = 'block';
         }
         APPS = (data.apps || [])
