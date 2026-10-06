@@ -590,11 +590,19 @@ def get_power_mode(x_api_token: str = Header(None, alias="X-Api-Token")):
         if "(" in output and ")" in output:
             name = output.split("(")[-1].rstrip(")")
             name_lower = name.lower()
-            if "high" in name_lower or "rendimiento" in name_lower:
+            if (
+                "high" in name_lower
+                or "rendimiento" in name_lower
+                or "gaming" in name_lower
+            ):
                 mode = "gaming"
             elif "balanced" in name_lower or "equilibrado" in name_lower:
                 mode = "balanced"
-            elif "power saver" in name_lower or "economizador" in name_lower:
+            elif (
+                "servidor" in name_lower
+                or "power saver" in name_lower
+                or "economizador" in name_lower
+            ):
                 mode = "servidor"
             else:
                 mode = "custom"
