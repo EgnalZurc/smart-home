@@ -221,8 +221,9 @@ def update_user(
 
     params.append(user_id)
     with _get_db() as conn:
+        # nosec B608 - updates list only contains hardcoded column names, not user input
         cur = conn.execute(
-            f"UPDATE users SET {', '.join(updates)} WHERE id = ?",
+            f"UPDATE users SET {', '.join(updates)} WHERE id = ?",  # nosec B608
             params,
         )
         if cur.rowcount == 0:
