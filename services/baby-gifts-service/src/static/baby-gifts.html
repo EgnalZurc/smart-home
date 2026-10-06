@@ -274,6 +274,11 @@
             margin-top: 16px;
             flex-wrap: wrap;
         }
+        /* Responsive container - wide (data-dense: gift list) */
+        .responsive-wide { width: 100%; max-width: 100%; }
+        @media (min-width: 640px) { .responsive-wide { max-width: 720px; } }
+        @media (min-width: 1024px) { .responsive-wide { max-width: 960px; } }
+        @media (min-width: 1280px) { .responsive-wide { max-width: 1100px; } }
 
     </style>
 </head>
@@ -285,7 +290,7 @@
     window.AUTH_USER = null;
 </script>
 <div id="app-content">
-<div class="max-w-lg mx-auto px-4 pt-6 pb-10 fade-in">
+<div class="responsive-wide mx-auto px-4 pt-6 pb-10 fade-in">
     <!-- Header -->
     <header class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-3">

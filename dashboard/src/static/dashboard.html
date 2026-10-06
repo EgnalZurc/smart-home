@@ -270,6 +270,10 @@
             border-radius: 6px; color: #e2e8f0; padding: 6px 10px; font-size: 13px; cursor: pointer;
         }
         .admin-select:focus { outline: none; border-color: rgba(99,102,241,.5); }
+        /* Responsive container - compact (focused UI: app grid) */
+        .responsive-compact { width: 100%; max-width: 100%; }
+        @media (min-width: 640px) { .responsive-compact { max-width: 540px; } }
+        @media (min-width: 1024px) { .responsive-compact { max-width: 640px; } }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
@@ -425,7 +429,7 @@
 </div>
 
 <div id="dash-content">
-<div class="max-w-md mx-auto px-4 pt-7 pb-12 fade-in">
+<div class="responsive-compact mx-auto px-4 pt-7 pb-12 fade-in">
 
     <!-- Header -->
     <header class="flex items-center justify-between mb-8">

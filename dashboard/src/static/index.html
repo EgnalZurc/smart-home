@@ -126,11 +126,15 @@
         .notification-toast.error   { border-color: rgba(239,68,68,0.5);  background: rgba(239,68,68,0.1); }
         .notification-toast.success { border-color: rgba(34,197,94,0.5);  background: rgba(34,197,94,0.1); }
         .notification-toast.warning { border-color: rgba(251,191,36,0.5); background: rgba(251,191,36,0.1); }
+        /* Responsive container - compact (focused UI: AC control, settings) */
+        .responsive-compact { width: 100%; max-width: 100%; }
+        @media (min-width: 640px) { .responsive-compact { max-width: 540px; } }
+        @media (min-width: 1024px) { .responsive-compact { max-width: 640px; } }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
 <div id="app-content">
-<div id="app" class="max-w-md mx-auto px-4 pt-6 pb-10 fade-in">
+<div id="app" class="responsive-compact mx-auto px-4 pt-6 pb-10 fade-in">
 
     <!-- Header -->
     <header class="flex items-center justify-between mb-6">
