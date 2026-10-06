@@ -39,16 +39,6 @@
         .modal-visible .modal-sheet { transform: translateY(0); }
         .fade-in { animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        /* Language dropdown */
-        .lang-dropdown { position: relative; }
-        .flag-img { width: 24px; height: 16px; object-fit: cover; border-radius: 2px; display: block; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-        .lang-current { padding: 4px; border-radius: 6px; cursor: pointer; border: 2px solid rgba(100,116,139,0.3); background: rgba(30,41,59,0.4); transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; }
-        .lang-current:hover { border-color: rgba(59,130,246,0.5); background: rgba(59,130,246,0.1); transform: scale(1.05); }
-        .lang-menu { position: absolute; top: calc(100% + 8px); right: 0; background: rgba(30,41,59,0.95); border: 1px solid rgba(100,116,139,0.4); border-radius: 8px; padding: 4px; display: none; flex-direction: column; gap: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); backdrop-filter: blur(10px); z-index: 1000; min-width: 50px; }
-        .lang-menu.open { display: flex; }
-        .lang-option { padding: 4px; border-radius: 4px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; border: 2px solid transparent; }
-        .lang-option:hover { background: rgba(59,130,246,0.2); border-color: rgba(59,130,246,0.4); }
-        .lang-option.active { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.5); }
         /* AC State */
         .ac-param-box { cursor: pointer; transition: all 0.2s ease; position: relative; }
         .ac-param-box:hover { background: rgba(59,130,246,0.15) !important; transform: scale(1.02); }
@@ -136,33 +126,15 @@
 <div id="app-content">
 <div id="app" class="responsive-compact mx-auto px-4 pt-6 pb-10 fade-in">
 
-    <!-- Header -->
-    <header class="flex items-center justify-between mb-6">
-        <div class="flex items-center gap-3">
-            <a href="/smart-home" class="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-700/40 transition-all flex-shrink-0" aria-label="Dashboard" title="Cuchi Casa"><img src="/static/icono-cuchi-casa.png" class="w-5 h-5 object-contain rounded" alt="Home"></a>
-            <h1 class="text-lg font-semibold tracking-tight" data-i18n="header.title">Smart Home</h1>
-        </div>
-        <div class="flex items-center gap-3">
-            <div class="lang-dropdown">
-                <div class="lang-current" onclick="toggleLanguageMenu()" id="lang-current">
-                    <img id="current-flag" src="/static/flags/gb.svg" alt="Language" class="flag-img">
-                </div>
-                <div class="lang-menu" id="lang-menu">
-                    <div class="lang-option" onclick="selectLanguage('en')" data-lang="en" title="English">
-                        <img src="/static/flags/gb.svg" alt="English" class="flag-img">
-                    </div>
-                    <div class="lang-option" onclick="selectLanguage('es')" data-lang="es" title="Espa?ol">
-                        <img src="/static/flags/es.svg" alt="Espa?ol" class="flag-img">
-                    </div>
-                </div>
-            </div>
-            <!-- Status indicator: dot+text normally, becomes warning button when errors exist (F0.30) -->
-            <div class="flex items-center gap-1.5 cursor-default" id="status-indicator" onclick="onStatusClick()">
-                <span class="status-dot w-1.5 h-1.5 rounded-full bg-green-500" id="status-dot"></span>
-                <span class="text-[11px] text-slate-400" id="status-line">--</span>
-            </div>
-        </div>
-    </header>
+    <!-- Unified Header -->
+    <div id="cuchi-header"
+         data-title="Smart Home"
+         data-i18n-key="header.title"
+         data-show-i18n="true"
+         data-show-status="true"
+         data-status-clickable="true"
+         data-status-labels='{"loading":"--"}'></div>
+    <script type="module" src="/static/js/common/cuchi-header.js"></script>
 
     <!-- Average Temperature Card -->
     <div class="card rounded-3xl p-6 mb-4 text-center cursor-pointer" onclick="openModal()" role="button" aria-label="View sensors detail">

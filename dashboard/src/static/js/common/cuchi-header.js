@@ -85,6 +85,12 @@ const HEADER_CSS = `
     gap: 0.375rem;
     cursor: default;
 }
+.cuchi-status-clickable {
+    cursor: pointer;
+}
+.cuchi-status-clickable:hover .cuchi-status-text {
+    text-decoration: underline;
+}
 .cuchi-status-dot {
     width: 0.375rem;
     height: 0.375rem;
@@ -196,6 +202,7 @@ class CuchiHeader {
             showI18n: c.dataset.showI18n === 'true',
             statusEndpoint: c.dataset.statusEndpoint || null,
             showStatus: c.dataset.showStatus === 'true', // show status indicator without auto-polling
+            statusClickable: c.dataset.statusClickable === 'true', // make status clickable (emits statusclick event)
             statusLabels,
             homeUrl: c.dataset.homeUrl || '/smart-home',
             actionsId: c.dataset.actionsId || 'cuchi-header-actions', // custom ID for actions container
@@ -265,8 +272,9 @@ class CuchiHeader {
         // Build status HTML (show if endpoint defined OR manual status enabled)
         let statusHtml = '';
         if (config.statusEndpoint || config.showStatus) {
+            const clickableClass = config.statusClickable ? ' cuchi-status-clickable' : '';
             statusHtml = `
-                <div class="cuchi-status" id="cuchi-status">
+                <div class="cuchi-status${clickableClass}" id="cuchi-status">
                     <span class="cuchi-status-dot loading" id="cuchi-status-dot"></span>
                     <span class="cuchi-status-text" id="cuchi-status-text">${config.statusLabels.loading}</span>
                 </div>
@@ -300,6 +308,18 @@ class CuchiHeader {
         // Bind events
         if (config.showI18n) {
             this.bindI18nEvents();
+        }
+        if (config.statusClickable) {
+            this.bindStatusClick();
+        }
+    }
+
+    bindStatusClick() {
+        const status = this.container.querySelector('#cuchi-status');
+        if (status) {
+            status.addEventListener('click', () => {
+                this.container.dispatchEvent(new CustomEvent('statusclick', { bubbles: true }));
+            });
         }
     }
 
