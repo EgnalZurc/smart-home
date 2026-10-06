@@ -55,9 +55,7 @@ class TestBuiltinProfiles:
     def testDEFAULT_PROFILE_ID_is_familia_principal(self):
         import user_profiles
 
-        assert (
-            user_profiles.DEFAULT_PROFILE_ID == "familia-principal-0000-000000000002"
-        )
+        assert user_profiles.DEFAULT_PROFILE_ID == "familia-principal-0000-000000000002"
 
     def test_only_super_is_protected(self):
         """Only SUPER should be protected, others can be edited."""
@@ -86,32 +84,39 @@ class TestBuiltinProfiles:
 
 
 class TestAppRegistry:
-    def test_ac_has_view_level_1(self):
+    def test_ac_visible_to_familia(self):
+        """AC should be visible to FAMILIA (level 1)."""
         import user_profiles
 
         ac = next(a for a in user_profiles.APP_REGISTRY if a["key"] == "ac")
-        assert ac["view_level"] == 1
+        assert ac["min_level"] == 0
+        assert ac["max_level"] == 1
 
-    def test_zigbee_requires_level_0(self):
+    def test_zigbee_requires_super(self):
+        """Zigbee should only be visible to SUPER (level 0)."""
         import user_profiles
 
         zigbee = next(a for a in user_profiles.APP_REGISTRY if a["key"] == "zigbee")
-        assert zigbee["view_level"] == 0
+        assert zigbee["min_level"] == 0
+        assert zigbee["max_level"] == 0
 
-    def test_passwords_requires_level_0(self):
+    def test_passwords_requires_super(self):
+        """Passwords should only be visible to SUPER (level 0)."""
         import user_profiles
 
         passwords = next(
             a for a in user_profiles.APP_REGISTRY if a["key"] == "passwords"
         )
-        assert passwords["view_level"] == 0
+        assert passwords["min_level"] == 0
+        assert passwords["max_level"] == 0
 
-    def test_valheim_has_view_level_3(self):
-        """Valheim should be visible to GAMER (level 3)."""
+    def test_valheim_only_visible_to_gamer(self):
+        """Valheim should only be visible to GAMER (level 3) and SUPER."""
         import user_profiles
 
         valheim = next(a for a in user_profiles.APP_REGISTRY if a["key"] == "valheim")
-        assert valheim["view_level"] == 3
+        assert valheim["min_level"] == 3
+        assert valheim["max_level"] == 3
 
 
 # ── Profile CRUD with Database ────────────────────────────────────────────────

@@ -86,33 +86,36 @@ _BUILTIN_NAME_TO_ID = {p["name"]: pid for pid, p in BUILTIN_PROFILES.items()}
 # App registry
 # ---------------------------------------------------------------------------
 APP_REGISTRY: list[dict] = [
-    {"key": "ac", "view_level": 1, "edit_level": 1},
-    {"key": "photos", "view_level": 1, "edit_level": 1},
-    {"key": "vacaciones", "view_level": 1, "edit_level": 1},
-    {"key": "casita", "view_level": 1, "edit_level": 1},
-    {"key": "zigbee", "view_level": 0, "edit_level": 0},
-    {"key": "passwords", "view_level": 0, "edit_level": 0},
-    {"key": "babygifts", "view_level": 1, "edit_level": 1},
-    {"key": "valheim", "view_level": 3, "edit_level": 3},
-    {"key": "portfolio", "view_level": 0, "edit_level": 0},
+    {"key": "ac", "min_level": 0, "max_level": 1},
+    {"key": "photos", "min_level": 0, "max_level": 1},
+    {"key": "vacaciones", "min_level": 0, "max_level": 1},
+    {"key": "casita", "min_level": 0, "max_level": 1},
+    {"key": "zigbee", "min_level": 0, "max_level": 0},  # SUPER only
+    {"key": "passwords", "min_level": 0, "max_level": 0},  # SUPER only
+    {"key": "babygifts", "min_level": 0, "max_level": 1},
+    {"key": "valheim", "min_level": 3, "max_level": 3},  # GAMER only (and SUPER)
+    {"key": "portfolio", "min_level": 0, "max_level": 0},  # SUPER only
 ]
 
 EXTERNAL_SERVICES: list[dict] = [
     {
         "key": "ai",
-        "view_level": 1,
+        "min_level": 0,
+        "max_level": 1,
         "url": "https://raspberrypi.tailaa37cd.ts.net:8443/",
         "statusUrl": "/api/health/ai",
     },
     {
         "key": "photos_ext",
-        "view_level": 1,
+        "min_level": 0,
+        "max_level": 1,
         "url": "https://raspberrypi.tailaa37cd.ts.net:10000/",
         "statusUrl": "/api/health/immich",
     },
     {
         "key": "passwords_ext",
-        "view_level": 0,
+        "min_level": 0,
+        "max_level": 0,  # SUPER only
         "url": "/passwords/",
         "statusUrl": "/api/health/passwords",
     },
@@ -609,17 +612,25 @@ def get_user_info(username: str) -> dict:
     profiles = get_user_profiles_detailed(username)
     effective_level = get_effective_level(username)
 
+    # Permission logic:
+    # - SUPER (level 0) sees everything
+    # - Others see apps where min_level <= their level <= max_level
+    def can_view_app(level: int, app: dict) -> bool:
+        if level == 0:  # SUPER sees all
+            return True
+        min_lvl = app.get("min_level", 0)
+        max_lvl = app.get("max_level", 3)
+        return min_lvl <= level <= max_lvl
+
     # Build app permissions based on effective level
     apps = [
-        {"key": app["key"], "can_view": effective_level <= app["view_level"]}
+        {"key": app["key"], "can_view": can_view_app(effective_level, app)}
         for app in APP_REGISTRY
-        if effective_level <= app["view_level"]
+        if can_view_app(effective_level, app)
     ]
 
     # External services
-    external = [
-        svc for svc in EXTERNAL_SERVICES if effective_level <= svc["view_level"]
-    ]
+    external = [svc for svc in EXTERNAL_SERVICES if can_view_app(effective_level, svc)]
 
     return {
         "username": username,
@@ -634,16 +645,29 @@ def get_user_info(username: str) -> dict:
 # ---------------------------------------------------------------------------
 # App permissions helpers (used by /api/me)
 # ---------------------------------------------------------------------------
+def _can_view(user_level: int, item: dict) -> bool:
+    """Check if a user can view an app/service.
+
+    - SUPER (level 0) sees everything
+    - Others see items where min_level <= their level <= max_level
+    """
+    if user_level == 0:
+        return True
+    min_lvl = item.get("min_level", 0)
+    max_lvl = item.get("max_level", 3)
+    return min_lvl <= user_level <= max_lvl
+
+
 def app_permissions(username: str) -> list[dict]:
     """Return visible apps with their resolved permissions for the user."""
     level = get_effective_level(username)
     result = []
     for app in APP_REGISTRY:
-        if level <= app["view_level"]:
+        if _can_view(level, app):
             result.append(
                 {
                     "key": app["key"],
-                    "can_edit": level <= app.get("edit_level", app["view_level"]),
+                    "can_edit": _can_view(level, app),  # Same as view for now
                 }
             )
     return result
@@ -652,4 +676,4 @@ def app_permissions(username: str) -> list[dict]:
 def visible_external_services(username: str) -> list[dict]:
     """Return external services visible to a user."""
     level = get_effective_level(username)
-    return [svc for svc in EXTERNAL_SERVICES if level <= svc["view_level"]]
+    return [svc for svc in EXTERNAL_SERVICES if _can_view(level, svc)]
