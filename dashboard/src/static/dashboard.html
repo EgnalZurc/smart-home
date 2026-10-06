@@ -749,22 +749,24 @@ function switchSvcTab(tab) {
 }
 
 async function loadSvcStatus() {
-    // Load status for external services
-    for (const svc of externalServices) {
-        const info = EXT_SERVICES[svc.key];
-        if (info?.statusUrl) {
-            try {
-                const data = await fetch(info.statusUrl).then(r => r.json());
-                svcStatus[svc.key] = data?.online === true;
-            } catch { svcStatus[svc.key] = false; }
-        }
-    }
-    // Load status for core services
-    for (const svc of CORE_SERVICES) {
-        try {
-            const data = await fetch(svc.statusUrl).then(r => r.json());
-            svcStatus[svc.key] = svc.getStatus(data);
-        } catch { svcStatus[svc.key] = false; }
+    // Batch load all health statuses in a single request
+    // Backend checks all services in parallel, reducing latency from O(n*timeout) to O(max_timeout)
+    try {
+        const all = await fetch('/api/health/all').then(r => r.json());
+
+        // Map backend response to frontend service keys
+        // External services
+        svcStatus['ai'] = all.ai?.online === true;
+        svcStatus['photos_ext'] = all.immich?.online === true;
+        svcStatus['passwords_ext'] = all.passwords?.online === true;
+
+        // Core services
+        svcStatus['core_backend'] = all.backend?.online === true;
+        svcStatus['core_mqtt'] = all.zigbee?.mqtt_connected === true;
+        svcStatus['core_zigbee'] = all.zigbee?.online === true;
+    } catch {
+        // On error, mark all as offline
+        ['ai', 'photos_ext', 'passwords_ext', 'core_backend', 'core_mqtt', 'core_zigbee'].forEach(k => svcStatus[k] = false);
     }
 }
 

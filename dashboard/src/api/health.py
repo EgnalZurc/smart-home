@@ -4,10 +4,63 @@ These endpoints are used by the dashboard UI to show service status
 and by external monitoring tools.
 """
 
+import asyncio
+
 import httpx
 from fastapi import APIRouter
 
 router = APIRouter(prefix="/api/health", tags=["Health"])
+
+
+@router.get("/all")
+async def get_all_health():
+    """Batch health check for all services in parallel.
+
+    Returns status of all services in a single request, checking them
+    concurrently using asyncio.gather(). This reduces total latency from
+    O(n * timeout) to O(max_timeout) where n is the number of services.
+
+    Used by the Services modal to load all statuses quickly.
+    """
+    # Run all health checks in parallel
+    results = await asyncio.gather(
+        get_backend_health(),
+        get_zigbee_health(),
+        get_ac_health(),
+        get_vacaciones_health(),
+        get_immich_health(),
+        get_casita_health(),
+        get_baby_gifts_health(),
+        get_portfolio_health(),
+        get_passwords_health(),
+        get_ai_health(),
+        get_valheim_health(),
+        return_exceptions=True,
+    )
+
+    # Map results to service keys, handling exceptions gracefully
+    keys = [
+        "backend",
+        "zigbee",
+        "ac",
+        "vacaciones",
+        "immich",
+        "casita",
+        "baby-gifts",
+        "portfolio",
+        "passwords",
+        "ai",
+        "valheim",
+    ]
+
+    response = {}
+    for key, result in zip(keys, results):
+        if isinstance(result, Exception):
+            response[key] = {"online": False, "error": str(type(result).__name__)}
+        else:
+            response[key] = result
+
+    return response
 
 
 @router.get("")
