@@ -179,13 +179,22 @@ def _migrate_profiles_table():
 
         logger.info("Migrating profiles table from name-based to ID-based schema")
 
-        # Old schema had: name (PK), level, description, builtin
-        # New schema has: id (PK), name (UNIQUE), level, description, protected
+        # Old schema variations:
+        # - Variant A: name (PK), level, description, builtin
+        # - Variant B: name (PK), level, description (no builtin column)
+        # New schema: id (PK), name (UNIQUE), level, description, protected
+
+        has_builtin = "builtin" in columns
 
         # Save old data
-        old_profiles = conn.execute(
-            "SELECT name, level, description, builtin FROM profiles"
-        ).fetchall()
+        if has_builtin:
+            old_profiles = conn.execute(
+                "SELECT name, level, description, builtin FROM profiles"
+            ).fetchall()
+        else:
+            old_profiles = conn.execute(
+                "SELECT name, level, description FROM profiles"
+            ).fetchall()
 
         # Drop old table
         conn.execute("DROP TABLE profiles")
@@ -203,11 +212,15 @@ def _migrate_profiles_table():
 
         # Migrate data - convert names to IDs
         for row in old_profiles:
-            name, level, description, builtin = row
+            if has_builtin:
+                name, level, description, _builtin = row
+            else:
+                name, level, description = row
+
             # Find ID for builtin profiles
             profile_id = _BUILTIN_NAME_TO_ID.get(name)
             if profile_id:
-                # Builtin profile - use known ID and protected flag
+                # Builtin profile - use known ID and protected flag from definition
                 protected = 1 if BUILTIN_PROFILES[profile_id]["protected"] else 0
             else:
                 # Custom profile - generate new UUID
