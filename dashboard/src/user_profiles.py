@@ -53,28 +53,29 @@ logger = logging.getLogger(__name__)
 AUTH_DB_PATH: str = "/app/data/auth.db"
 
 # ---------------------------------------------------------------------------
-# Built-in profile definitions (cannot be deleted, but level can be viewed)
+# Built-in profile definitions
+# Only SUPER is truly protected (builtin=True) - others can be edited/deleted
 # ---------------------------------------------------------------------------
 BUILTIN_PROFILES: dict[str, dict] = {
     "SUPER": {
         "level": 0,
         "description": "Administrador completo — acceso total",
-        "builtin": True,
+        "builtin": True,  # Protected - cannot be edited or deleted
     },
     "FAMILIA_ALL": {
         "level": 1,
         "description": "Familia con acceso total a apps",
-        "builtin": True,
+        "builtin": False,  # Can be edited
     },
     "FAMILIA_PRINCIPAL": {
         "level": 1,
         "description": "Familia estándar",
-        "builtin": True,
+        "builtin": False,  # Can be edited
     },
     "GAMER": {
         "level": 3,
         "description": "Jugador — solo Valheim",
-        "builtin": True,
+        "builtin": False,  # Can be edited
     },
 }
 
@@ -272,10 +273,22 @@ def create_profile(name: str, level: int, description: str = "") -> None:
 
 
 def update_profile(name: str, level: int = None, description: str = None) -> None:
-    """Update a custom profile. Cannot modify built-in profiles."""
-    if name in BUILTIN_PROFILES:
-        raise ValueError(f"Cannot modify built-in profile: {name}")
+    """Update a profile. Cannot modify profiles with builtin=True (only SUPER)."""
+    if name in BUILTIN_PROFILES and BUILTIN_PROFILES[name].get("builtin", False):
+        raise ValueError(f"Cannot modify protected profile: {name}")
 
+    # For editable BUILTIN_PROFILES (FAMILIA_ALL, etc.), update in memory
+    if name in BUILTIN_PROFILES:
+        if level is not None:
+            if not 0 <= level <= 3:
+                raise ValueError(f"Level must be 0-3, got {level}")
+            BUILTIN_PROFILES[name]["level"] = level
+        if description is not None:
+            BUILTIN_PROFILES[name]["description"] = description
+        logger.info("Updated builtin profile %r", name)
+        return
+
+    # For custom profiles, update in DB
     with _db() as conn:
         if level is not None:
             if not 0 <= level <= 3:
@@ -290,9 +303,14 @@ def update_profile(name: str, level: int = None, description: str = None) -> Non
 
 
 def delete_profile(name: str) -> None:
-    """Delete a custom profile. Cannot delete built-in profiles."""
+    """Delete a profile. Cannot delete profiles with builtin=True (only SUPER)."""
+    if name in BUILTIN_PROFILES and BUILTIN_PROFILES[name].get("builtin", False):
+        raise ValueError(f"Cannot delete protected profile: {name}")
+
+    # For editable BUILTIN_PROFILES, we don't actually delete them from memory
+    # (they're hardcoded), but we can remove them from the "active" set if needed
     if name in BUILTIN_PROFILES:
-        raise ValueError(f"Cannot delete built-in profile: {name}")
+        raise ValueError(f"Cannot delete default profile: {name}")
 
     with _db() as conn:
         # Remove from users first
