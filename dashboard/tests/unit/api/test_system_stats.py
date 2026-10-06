@@ -59,7 +59,7 @@ def _patch_unauthenticated():
     def fake_401(request):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    return patch("api.routes._require_super", side_effect=fake_401)
+    return patch("system.stats._require_super", side_effect=fake_401)
 
 
 # Realistic /proc/meminfo content
