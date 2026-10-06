@@ -740,17 +740,24 @@ function renderAdminContent() {
     } else {
         // Profiles tab
         body.innerHTML = `
-            <div class="mb-4">
+            <div class="mb-4 flex items-center justify-between">
+                <span class="text-xs text-slate-500 uppercase tracking-wider">Gestionar perfiles de permiso</span>
                 <button class="btn-sm" onclick="showCreateProfileDialog()">+ Nuevo perfil</button>
             </div>
             ${Object.entries(adminProfiles).map(([name, p]) => `
-                <div class="profile-card">
+                <div class="profile-card ${p.builtin ? 'builtin' : 'custom'}">
                     <div class="profile-card-header">
                         <span class="profile-card-title">${name}</span>
                         <span class="profile-card-level ${getLevelClass(p.level)}">Nivel ${p.level}</span>
                     </div>
                     <p class="profile-card-desc">${p.description || '—'}</p>
-                    ${!p.builtin ? `<div class="profile-card-actions"><button class="btn-sm" onclick="editProfile('${name}')">Editar</button><button class="btn-sm danger" onclick="deleteProfile('${name}')">Eliminar</button></div>` : '<p class="text-xs text-slate-600 mt-2">Perfil del sistema</p>'}
+                    ${p.builtin 
+                        ? '<p class="text-xs text-slate-600 mt-2 italic">Perfil del sistema (no editable)</p>' 
+                        : `<div class="profile-card-actions">
+                            <button class="btn-sm edit-btn" onclick="editProfile('${name}')">✏️ Editar</button>
+                            <button class="btn-sm danger" onclick="deleteProfile('${name}')">🗑️ Eliminar</button>
+                           </div>`
+                    }
                 </div>
             `).join('')}
         `;
