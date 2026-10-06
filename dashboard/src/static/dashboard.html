@@ -206,6 +206,28 @@
         .profile-card-level { font-size: 12px; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
         .profile-card-actions { display: flex; gap: 8px; margin-top: 8px; }
 
+        /* User card */
+        .user-card {
+            background: rgba(30,41,59,.5); border: 1px solid rgba(51,65,85,.4);
+            border-radius: 10px; padding: 12px;
+        }
+        .user-card-avatar {
+            width: 40px; height: 40px; border-radius: 10px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; font-weight: 700; color: white;
+            flex-shrink: 0; overflow: hidden;
+        }
+        .user-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .profile-chip-sm {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;
+        }
+        .profile-chip-sm .remove-btn {
+            cursor: pointer; opacity: .6; font-size: 12px; line-height: 1;
+        }
+        .profile-chip-sm .remove-btn:hover { opacity: 1; }
+
         /* Service item in modal */
         .svc-item {
             display: flex; align-items: center; gap: 10px;
@@ -219,7 +241,13 @@
         .svc-item .svc-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
         .svc-item .svc-name { font-size: 13px; font-weight: 500; color: #e2e8f0; }
 
-        /* Small button */
+        /* Buttons */
+        .btn-xs {
+            padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;
+            border: 1px solid rgba(51,65,85,.5); background: rgba(30,41,59,.5);
+            color: #94a3b8; cursor: pointer; transition: all .15s;
+        }
+        .btn-xs:hover { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.4); color: #a5b4fc; }
         .btn-sm {
             padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
             border: 1px solid rgba(51,65,85,.5); background: rgba(30,41,59,.5);
@@ -228,6 +256,8 @@
         .btn-sm:hover { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.4); color: #a5b4fc; }
         .btn-sm.danger { color: #f87171; border-color: rgba(239,68,68,.3); }
         .btn-sm.danger:hover { background: rgba(239,68,68,.15); }
+        .btn-sm.edit-btn { color: #fbbf24; border-color: rgba(251,191,36,.3); }
+        .btn-sm.edit-btn:hover { background: rgba(251,191,36,.15); }
 
         /* Input */
         .admin-input {
@@ -297,6 +327,100 @@
     <div id="admin-body">
       <div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>
     </div>
+  </div>
+</div>
+
+<!-- Profile Edit Modal -->
+<div id="profile-edit-modal" class="modal-overlay" onclick="closeProfileEditModal(event)">
+  <div class="modal-panel" style="max-width: 400px;">
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-4">
+      <span class="text-sm font-semibold text-slate-200">Editar Perfil</span>
+      <button class="text-slate-400 hover:text-white" onclick="closeProfileEditModal()">&times;</button>
+    </div>
+    <form id="profile-edit-form" onsubmit="submitProfileEdit(event)">
+      <input type="hidden" id="profile-edit-id">
+      <div class="mb-3">
+        <label class="block text-xs text-slate-400 mb-1">Nombre</label>
+        <input type="text" id="profile-edit-name" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white" required>
+      </div>
+      <div class="mb-3">
+        <label class="block text-xs text-slate-400 mb-1">Nivel (0=Admin, 1=Familia, 3=Gamer)</label>
+        <input type="number" id="profile-edit-level" min="0" max="3" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white" required>
+      </div>
+      <div class="mb-4">
+        <label class="block text-xs text-slate-400 mb-1">Descripción</label>
+        <input type="text" id="profile-edit-desc" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white">
+      </div>
+      <div class="flex gap-2">
+        <button type="button" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-sm py-2 rounded" onclick="closeProfileEditModal()">Cancelar</button>
+        <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-sm py-2 rounded">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- User Edit Modal -->
+<div id="user-edit-modal" class="modal-overlay" onclick="closeUserEditModal(event)">
+  <div class="modal-panel" style="max-width: 400px;">
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-4">
+      <span class="text-sm font-semibold text-slate-200" id="user-edit-title">Editar Usuario</span>
+      <button class="text-slate-400 hover:text-white" onclick="closeUserEditModal()">&times;</button>
+    </div>
+    <form id="user-edit-form" onsubmit="submitUserEdit(event)">
+      <input type="hidden" id="user-edit-id">
+      <div class="mb-3">
+        <label class="block text-xs text-slate-400 mb-1">Username (no editable)</label>
+        <input type="text" id="user-edit-username" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-slate-500" readonly>
+      </div>
+      <div class="mb-3">
+        <label class="block text-xs text-slate-400 mb-1">Nombre para mostrar</label>
+        <input type="text" id="user-edit-displayname" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white" required>
+      </div>
+      <div class="mb-3">
+        <label class="block text-xs text-slate-400 mb-1">Nueva contraseña (dejar vacío para no cambiar)</label>
+        <input type="password" id="user-edit-password" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white" autocomplete="new-password">
+      </div>
+      <div class="mb-4">
+        <label class="block text-xs text-slate-400 mb-1">Icono (URL o dejar vacío para inicial)</label>
+        <input type="text" id="user-edit-icon" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white" placeholder="https://...">
+      </div>
+      <div class="flex gap-2">
+        <button type="button" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-sm py-2 rounded" onclick="closeUserEditModal()">Cancelar</button>
+        <button type="button" class="bg-red-600 hover:bg-red-500 text-white text-sm py-2 px-3 rounded" onclick="deleteCurrentUser()" id="user-delete-btn">Eliminar</button>
+        <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-sm py-2 rounded">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- User Create Modal -->
+<div id="user-create-modal" class="modal-overlay" onclick="closeUserCreateModal(event)">
+  <div class="modal-panel" style="max-width: 400px;">
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-4">
+      <span class="text-sm font-semibold text-slate-200">Crear Usuario</span>
+      <button class="text-slate-400 hover:text-white" onclick="closeUserCreateModal()">&times;</button>
+    </div>
+    <form id="user-create-form" onsubmit="submitUserCreate(event)">
+      <div class="mb-3">
+        <label class="block text-xs text-slate-400 mb-1">Username</label>
+        <input type="text" id="user-create-username" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white" required pattern="[a-z0-9_]+" title="Solo letras minúsculas, números y guión bajo">
+      </div>
+      <div class="mb-3">
+        <label class="block text-xs text-slate-400 mb-1">Contraseña</label>
+        <input type="password" id="user-create-password" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white" required minlength="4" autocomplete="new-password">
+      </div>
+      <div class="mb-4">
+        <label class="block text-xs text-slate-400 mb-1">Nombre para mostrar</label>
+        <input type="text" id="user-create-displayname" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white">
+      </div>
+      <div class="flex gap-2">
+        <button type="button" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-sm py-2 rounded" onclick="closeUserCreateModal()">Cancelar</button>
+        <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-sm py-2 rounded">Crear</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -716,25 +840,30 @@ function renderAdminContent() {
     
     if (currentAdminTab === 'users') {
         body.innerHTML = `
-            <table class="admin-table">
-                <thead><tr><th>Usuario</th><th>Perfiles</th><th></th></tr></thead>
-                <tbody>
-                    ${adminUsers.map(u => `
-                        <tr data-username="${u.username}">
-                            <td><span class="font-medium">${u.username}</span></td>
-                            <td>
-                                <div class="flex flex-wrap gap-1">
-                                    ${u.profiles.map(p => {
-                                        return `<span class="profile-chip ${getLevelClass(p.level)}">${p.name}<span class="remove-btn" onclick="removeUserProfile('${u.username}','${p.id}')">×</span></span>`;
-                                    }).join('')}
-                                    <button class="btn-sm" onclick="showAddProfileDialog('${u.username}')" title="Añadir perfil">+</button>
+            <div class="mb-4 flex items-center justify-between">
+                <span class="text-xs text-slate-500 uppercase tracking-wider">Gestionar usuarios</span>
+                <button class="btn-sm" onclick="showCreateUserDialog()">+ Nuevo usuario</button>
+            </div>
+            <div class="space-y-3">
+                ${adminUsers.map(u => `
+                    <div class="user-card" data-user-id="${u.id}">
+                        <div class="flex items-center gap-3">
+                            <div class="user-card-avatar">${u.icon ? `<img src="${u.icon}" alt="">` : u.display_name.charAt(0).toUpperCase()}</div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-medium text-white">${u.display_name || u.username}</span>
+                                    <span class="text-xs text-slate-500">@${u.username}</span>
                                 </div>
-                            </td>
-                            <td></td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
+                                <div class="flex flex-wrap gap-1 mt-1">
+                                    ${u.profiles.map(p => `<span class="profile-chip-sm ${getLevelClass(p.level)}">${p.name}<span class="remove-btn" onclick="removeUserProfile('${u.username}','${p.id}')">×</span></span>`).join('')}
+                                    <button class="btn-xs" onclick="showAddProfileDialog('${u.username}')" title="Añadir perfil">+</button>
+                                </div>
+                            </div>
+                            <button class="btn-sm edit-btn" onclick="editUser('${u.id}')">✏️</button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
         `;
     } else {
         // Profiles tab - adminProfiles is {id: {name, level, description, protected}}
@@ -825,35 +954,130 @@ function editProfile(profileId) {
     const p = adminProfiles[profileId];
     if (!p || p.protected) return;
     
-    const newName = prompt(`Nombre actual: ${p.name}\nNuevo nombre (dejar vacío para no cambiar):`, p.name);
-    const newLevel = prompt(`Nivel actual: ${p.level}. Nuevo nivel (0-3):`, p.level);
-    const newDesc = prompt('Descripción:', p.description || '');
+    // Populate modal fields
+    document.getElementById('profile-edit-id').value = profileId;
+    document.getElementById('profile-edit-name').value = p.name;
+    document.getElementById('profile-edit-level').value = p.level;
+    document.getElementById('profile-edit-desc').value = p.description || '';
     
-    const updates = {};
-    if (newName && newName !== p.name) updates.name = newName.toUpperCase();
-    if (newLevel !== null && newLevel !== '') {
-        const lvl = parseInt(newLevel);
-        if (!isNaN(lvl) && lvl >= 0 && lvl <= 3) updates.level = lvl;
-    }
-    if (newDesc !== null) updates.description = newDesc;
-    
-    if (Object.keys(updates).length > 0) {
-        updateProfile(profileId, updates);
-    }
+    // Open modal
+    document.getElementById('profile-edit-modal').classList.add('open');
 }
 
-async function updateProfile(profileId, updates) {
+function closeProfileEditModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById('profile-edit-modal').classList.remove('open');
+}
+
+async function submitProfileEdit(event) {
+    event.preventDefault();
+    const profileId = document.getElementById('profile-edit-id').value;
+    const name = document.getElementById('profile-edit-name').value.toUpperCase();
+    const level = parseInt(document.getElementById('profile-edit-level').value);
+    const description = document.getElementById('profile-edit-desc').value;
+    
     try {
         const r = await fetch(`/api/auth/admin/profiles/${profileId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updates)
+            body: JSON.stringify({ name, level, description })
         });
         if (!r.ok) { const e = await r.json(); alert('Error: ' + e.detail); return; }
+        closeProfileEditModal();
         await loadAdminData();
         renderAdminContent();
     } catch (e) { alert('Error: ' + e.message); }
 }
+
+// ── User Management ─────────────────────────────────────────────────────────
+
+function editUser(userId) {
+    const user = adminUsers.find(u => u.id === userId);
+    if (!user) return;
+    
+    document.getElementById('user-edit-id').value = userId;
+    document.getElementById('user-edit-username').value = user.username;
+    document.getElementById('user-edit-displayname').value = user.display_name || '';
+    document.getElementById('user-edit-password').value = '';
+    document.getElementById('user-edit-icon').value = user.icon || '';
+    document.getElementById('user-edit-modal').classList.add('open');
+}
+
+function closeUserEditModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById('user-edit-modal').classList.remove('open');
+}
+
+async function submitUserEdit(event) {
+    event.preventDefault();
+    const userId = document.getElementById('user-edit-id').value;
+    const display_name = document.getElementById('user-edit-displayname').value;
+    const password = document.getElementById('user-edit-password').value;
+    const icon = document.getElementById('user-edit-icon').value;
+    
+    const body = { display_name };
+    if (password) body.password = password;
+    if (icon !== undefined) body.icon = icon || null;
+    
+    try {
+        const r = await fetch(`/api/auth/admin/users/${userId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!r.ok) { const e = await r.json(); alert('Error: ' + e.detail); return; }
+        closeUserEditModal();
+        await loadAdminData();
+        renderAdminContent();
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function deleteCurrentUser() {
+    const userId = document.getElementById('user-edit-id').value;
+    const user = adminUsers.find(u => u.id === userId);
+    if (!confirm(`¿Eliminar usuario "${user?.username}"? Esta acción no se puede deshacer.`)) return;
+    
+    try {
+        const r = await fetch(`/api/auth/admin/users/${userId}`, { method: 'DELETE' });
+        if (!r.ok) { const e = await r.json(); alert('Error: ' + e.detail); return; }
+        closeUserEditModal();
+        await loadAdminData();
+        renderAdminContent();
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
+function showCreateUserDialog() {
+    document.getElementById('user-create-username').value = '';
+    document.getElementById('user-create-password').value = '';
+    document.getElementById('user-create-displayname').value = '';
+    document.getElementById('user-create-modal').classList.add('open');
+}
+
+function closeUserCreateModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById('user-create-modal').classList.remove('open');
+}
+
+async function submitUserCreate(event) {
+    event.preventDefault();
+    const username = document.getElementById('user-create-username').value.toLowerCase();
+    const password = document.getElementById('user-create-password').value;
+    const display_name = document.getElementById('user-create-displayname').value;
+    
+    try {
+        const r = await fetch('/api/auth/admin/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, display_name })
+        });
+        if (!r.ok) { const e = await r.json(); alert('Error: ' + e.detail); return; }
+        closeUserCreateModal();
+        await loadAdminData();
+        renderAdminContent();
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
+// ── Profile Delete ──────────────────────────────────────────────────────────
 
 async function deleteProfile(profileId) {
     const p = adminProfiles[profileId];

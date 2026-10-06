@@ -440,17 +440,21 @@ def _require_super(request: Request) -> str:
 async def list_users(request: Request):
     """List all users with their assigned profiles.
 
-    Returns: [{"username": str, "profiles": [{id, name, level, ...}], "effective_level": int}, ...]
+    Returns: [{"id": str, "username": str, "display_name": str, "icon": str|null,
+               "profiles": [{id, name, level, ...}], "effective_level": int}, ...]
     """
     _require_super(request)
-    users = auth_users._load_htpasswd(auth_users.HTPASSWD_PATH)
+    users = auth_users.get_all_users()
     result = []
-    for username in sorted(users.keys()):
-        profiles = user_profiles.get_user_profiles_detailed(username)
-        effective_level = user_profiles.get_effective_level(username)
+    for user in users:
+        profiles = user_profiles.get_user_profiles_detailed(user["username"])
+        effective_level = user_profiles.get_effective_level(user["username"])
         result.append(
             {
-                "username": username,
+                "id": user["id"],
+                "username": user["username"],
+                "display_name": user["display_name"],
+                "icon": user["icon"],
                 "profiles": profiles,
                 "effective_level": effective_level,
             }
@@ -532,6 +536,103 @@ async def remove_user_profile_endpoint(
         "profiles": user_profiles.get_user_profiles_detailed(username),
         "effective_level": user_profiles.get_effective_level(username),
     }
+
+
+# ── User CRUD ────────────────────────────────────────────────────────────────
+
+
+@router.post("/admin/users", tags=["Admin"])
+async def create_user_endpoint(request: Request):
+    """Create a new user.
+
+    Body: {"username": str, "password": str, "display_name": str (optional)}
+    Returns: {"id": str, "username": str, "display_name": str, "icon": null}
+    """
+    _require_super(request)
+
+    body = await request.json()
+    username = body.get("username", "").strip().lower()
+    password = body.get("password", "")
+    display_name = body.get("display_name", "").strip()
+
+    if not username:
+        raise HTTPException(status_code=400, detail="Username required")
+    if not password:
+        raise HTTPException(status_code=400, detail="Password required")
+    if len(password) < 4:
+        raise HTTPException(status_code=400, detail="Password too short (min 4)")
+
+    try:
+        user_id = auth_users.create_user(username, password, display_name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # Assign default profile
+    default_profile = user_profiles.DEFAULT_PROFILE_ID
+    user_profiles.add_user_profile(username, default_profile)
+
+    return auth_users.get_user_by_id(user_id)
+
+
+@router.put("/admin/users/{user_id}", tags=["Admin"])
+async def update_user_endpoint(user_id: str, request: Request):
+    """Update a user's display_name, icon, or password.
+
+    Body: {"display_name": str, "icon": str|null, "password": str} (all optional)
+    Returns: {"id": str, "username": str, "display_name": str, "icon": str|null}
+    """
+    _require_super(request)
+
+    user = auth_users.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail=f"User not found: {user_id}")
+
+    body = await request.json()
+    display_name = body.get("display_name")
+    icon = body.get("icon")
+    password = body.get("password")
+
+    if password is not None and len(password) < 4:
+        raise HTTPException(status_code=400, detail="Password too short (min 4)")
+
+    try:
+        auth_users.update_user(
+            user_id,
+            display_name=display_name,
+            icon=icon,
+            password=password if password else None,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return auth_users.get_user_by_id(user_id)
+
+
+@router.delete("/admin/users/{user_id}", tags=["Admin"])
+async def delete_user_endpoint(user_id: str, request: Request):
+    """Delete a user by ID.
+
+    Cannot delete the current user (yourself).
+    """
+    _require_super(request)
+    current_user = auth_core.get_current_user(request)
+
+    user = auth_users.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail=f"User not found: {user_id}")
+
+    if user["username"] == current_user:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+
+    # Remove user's profile assignments first
+    user_profiles.set_user_profiles(user["username"], [])
+
+    try:
+        auth_users.delete_user(user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return {"deleted": True, "id": user_id}
 
 
 # ── Profile Management ───────────────────────────────────────────────────────
