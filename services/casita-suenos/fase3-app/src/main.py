@@ -129,7 +129,9 @@ class _StatusHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _serve_static_file(self, filename: str, content_type: str | None = None) -> None:
+    def _serve_static_file(
+        self, filename: str, content_type: str | None = None
+    ) -> None:
         """Serve a static file from the static/ directory."""
         # Security: prevent path traversal
         if ".." in filename or filename.startswith("/"):
@@ -156,7 +158,11 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 ".json": "application/json",
             }
             content_type = content_types.get(ext, "application/octet-stream")
-        elif "html" in content_type or "css" in content_type or "javascript" in content_type:
+        elif (
+            "html" in content_type
+            or "css" in content_type
+            or "javascript" in content_type
+        ):
             content_type = f"{content_type}; charset=utf-8"
 
         try:
