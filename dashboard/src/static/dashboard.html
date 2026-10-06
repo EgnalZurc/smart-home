@@ -500,7 +500,9 @@ async function loadPcStatus() {
         if (pcOnline && modeRes.mode) {
             // Mode from API - check against known modes
             const knownModes = ['balanced', 'gaming', 'servidor'];
-            currentPcMode = knownModes.includes(modeRes.mode.toLowerCase()) ? modeRes.mode.toLowerCase() : null;
+            const modeLC = modeRes.mode.toLowerCase();
+            // If mode matches known modes, use it; otherwise it's a custom profile
+            currentPcMode = knownModes.includes(modeLC) ? modeLC : 'custom';
         } else {
             currentPcMode = null;
         }
