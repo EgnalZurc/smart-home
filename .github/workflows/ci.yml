@@ -242,7 +242,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install tools
-        run: pip install ruff bandit pytest pytest-asyncio pytest-cov httpx
+        run: pip install -r requirements-dev.txt
 
       - name: Install Hadolint
         run: |
@@ -282,7 +282,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install tools
-        run: pip install ruff bandit pytest pytest-asyncio httpx
+        run: pip install -r requirements-dev.txt
 
       - name: Install Hadolint
         run: |
@@ -322,7 +322,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install tools
-        run: pip install ruff bandit pytest pytest-asyncio httpx
+        run: pip install -r requirements-dev.txt
 
       - name: Install Hadolint
         run: |
@@ -362,7 +362,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install tools
-        run: pip install ruff bandit pytest pytest-asyncio httpx
+        run: pip install -r requirements-dev.txt
 
       - name: Install Hadolint
         run: |
@@ -402,7 +402,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install tools
-        run: pip install ruff bandit pytest pytest-asyncio httpx
+        run: pip install -r requirements-dev.txt
 
       - name: Install Hadolint
         run: |
@@ -442,7 +442,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install tools
-        run: pip install ruff bandit pytest pytest-asyncio httpx
+        run: pip install -r requirements-dev.txt
 
       - name: Install Hadolint
         run: |
@@ -500,7 +500,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install tools
-        run: pip install ruff bandit pytest pytest-asyncio httpx
+        run: pip install -r requirements-dev.txt
 
       - name: Install Hadolint
         run: |
@@ -540,7 +540,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install tools
-        run: pip install ruff bandit pytest pytest-asyncio httpx
+        run: pip install -r requirements-dev.txt
 
       - name: Ruff - Code Quality
         run: |
