@@ -629,3 +629,27 @@ def get_user_info(username: str) -> dict:
         "apps": apps,
         "external_services": external,
     }
+
+
+# ---------------------------------------------------------------------------
+# App permissions helpers (used by /api/me)
+# ---------------------------------------------------------------------------
+def app_permissions(username: str) -> list[dict]:
+    """Return visible apps with their resolved permissions for the user."""
+    level = get_effective_level(username)
+    result = []
+    for app in APP_REGISTRY:
+        if level <= app["view_level"]:
+            result.append(
+                {
+                    "key": app["key"],
+                    "can_edit": level <= app.get("edit_level", app["view_level"]),
+                }
+            )
+    return result
+
+
+def visible_external_services(username: str) -> list[dict]:
+    """Return external services visible to a user."""
+    level = get_effective_level(username)
+    return [svc for svc in EXTERNAL_SERVICES if level <= svc["view_level"]]
