@@ -109,3 +109,15 @@ window.selectLanguage     = locale => {
     selectLanguage(locale, i18n);
     retranslateCharts(window.i18n || i18n);
 };
+
+// -- Connect to unified header component events --------------------------------
+// Listen for language changes from cuchi-header component
+document.getElementById('cuchi-header')?.addEventListener('languagechange', e => {
+    selectLanguage(e.detail.locale, i18n);
+    retranslateCharts(window.i18n || i18n);
+});
+
+// Listen for status click from cuchi-header component
+document.getElementById('cuchi-header')?.addEventListener('statusclick', () => {
+    window.onStatusClick();
+});

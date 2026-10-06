@@ -1,8 +1,9 @@
 import { getCurrentErrors } from './errors.js';
 
 export function updateConnectionStatus(mqttConnected, i18n) {
-    const dot  = document.getElementById('status-dot');
-    const line = document.getElementById('status-line');
+    // Support both old IDs and new component IDs
+    const dot  = document.getElementById('cuchi-status-dot') || document.getElementById('status-dot');
+    const line = document.getElementById('cuchi-status-text') || document.getElementById('status-line');
     if (!dot || !line) return;
 
     // If there are active errors, errors.js owns the status indicator — don't overwrite
@@ -10,22 +11,30 @@ export function updateConnectionStatus(mqttConnected, i18n) {
 
     line.textContent = i18n.t(mqttConnected ? 'header.connected' : 'header.disconnected');
     line.style.color = '';
-    dot.className = mqttConnected
-        ? 'status-dot w-1.5 h-1.5 rounded-full bg-green-500'
-        : 'w-1.5 h-1.5 rounded-full bg-red-400';
+    // Use component classes if using new component, otherwise use Tailwind classes
+    if (dot.classList.contains('cuchi-status-dot')) {
+        dot.className = mqttConnected ? 'cuchi-status-dot online' : 'cuchi-status-dot offline';
+    } else {
+        dot.className = mqttConnected
+            ? 'status-dot w-1.5 h-1.5 rounded-full bg-green-500'
+            : 'w-1.5 h-1.5 rounded-full bg-red-400';
+    }
     dot.textContent = '';
     dot.style.fontSize = '';
 }
 
 export function toggleLanguageMenu() {
-    document.getElementById('lang-menu').classList.toggle('open');
+    const menu = document.getElementById('cuchi-lang-menu') || document.getElementById('lang-menu');
+    menu?.classList.toggle('open');
 }
 
 export function selectLanguage(locale, i18n) {
-    document.getElementById('lang-menu').classList.remove('open');
+    const menu = document.getElementById('cuchi-lang-menu') || document.getElementById('lang-menu');
+    menu?.classList.remove('open');
     const flags = { en: '/static/flags/gb.svg', es: '/static/flags/es.svg' };
-    document.getElementById('current-flag').src = flags[locale];
-    document.querySelectorAll('.lang-option').forEach(opt => {
+    const currentFlag = document.getElementById('cuchi-current-flag') || document.getElementById('current-flag');
+    if (currentFlag) currentFlag.src = flags[locale];
+    document.querySelectorAll('.lang-option, .cuchi-lang-option').forEach(opt => {
         opt.classList.toggle('active', opt.dataset.lang === locale);
     });
     i18n.switchLocale(locale);
@@ -33,9 +42,10 @@ export function selectLanguage(locale, i18n) {
 
 export function initLanguageDropdown(i18n) {
     document.addEventListener('click', e => {
-        const dd = document.querySelector('.lang-dropdown');
+        const dd = document.querySelector('.cuchi-lang-dropdown') || document.querySelector('.lang-dropdown');
+        const menu = document.getElementById('cuchi-lang-menu') || document.getElementById('lang-menu');
         if (dd && !dd.contains(e.target)) {
-            document.getElementById('lang-menu')?.classList.remove('open');
+            menu?.classList.remove('open');
         }
     });
 }
