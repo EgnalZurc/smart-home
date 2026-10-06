@@ -281,7 +281,7 @@ async def get_me(request: Request):
 
     profiles = user_profiles.get_user_profiles(user)
     effective_level = user_profiles.get_effective_level(user)
-    
+
     return JSONResponse(
         {
             "username": user,
@@ -448,11 +448,13 @@ async def list_users(request: Request):
     for username in sorted(users.keys()):
         profiles = user_profiles.get_user_profiles(username)
         effective_level = user_profiles.get_effective_level(username)
-        result.append({
-            "username": username,
-            "profiles": profiles,
-            "effective_level": effective_level,
-        })
+        result.append(
+            {
+                "username": username,
+                "profiles": profiles,
+                "effective_level": effective_level,
+            }
+        )
     return result
 
 

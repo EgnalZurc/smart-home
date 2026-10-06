@@ -376,7 +376,7 @@ def is_super(username: str) -> bool:
 # ---------------------------------------------------------------------------
 def get_profile(username: str) -> dict:
     """Return a profile-like dict for compatibility.
-    
+
     Returns the effective level and computed permissions.
     """
     level = get_effective_level(username)
@@ -415,10 +415,12 @@ def app_permissions(username: str) -> list[dict]:
     result = []
     for app in APP_REGISTRY:
         if level <= app["view_level"]:
-            result.append({
-                "key": app["key"],
-                "can_edit": level <= app["edit_level"],
-            })
+            result.append(
+                {
+                    "key": app["key"],
+                    "can_edit": level <= app["edit_level"],
+                }
+            )
     return result
 
 
