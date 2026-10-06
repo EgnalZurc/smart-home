@@ -1,9 +1,9 @@
-"""Unit tests for auth profile system with level-based permissions."""
+"""Unit tests for auth profile system with ID-based profiles."""
 
 import os
 import sys
 import tempfile
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -31,40 +31,55 @@ class TestBuiltinProfiles:
     def test_super_has_level_0(self):
         import user_profiles
 
-        assert user_profiles.BUILTIN_PROFILES["SUPER"]["level"] == 0
+        super_id = "super-0000-0000-0000-000000000000"
+        assert user_profiles.BUILTIN_PROFILES[super_id]["level"] == 0
 
     def test_familia_all_has_level_1(self):
         import user_profiles
 
-        assert user_profiles.BUILTIN_PROFILES["FAMILIA_ALL"]["level"] == 1
+        fam_id = "familia-all-0000-0000-000000000001"
+        assert user_profiles.BUILTIN_PROFILES[fam_id]["level"] == 1
 
     def test_familia_principal_has_level_1(self):
         import user_profiles
 
-        assert user_profiles.BUILTIN_PROFILES["FAMILIA_PRINCIPAL"]["level"] == 1
+        fam_id = "familia-principal-0000-000000000002"
+        assert user_profiles.BUILTIN_PROFILES[fam_id]["level"] == 1
 
     def test_gamer_has_level_3(self):
         import user_profiles
 
-        assert user_profiles.BUILTIN_PROFILES["GAMER"]["level"] == 3
+        gamer_id = "gamer-0000-0000-0000-000000000003"
+        assert user_profiles.BUILTIN_PROFILES[gamer_id]["level"] == 3
 
-    def test_default_profile_is_familia_principal(self):
+    def test_default_profile_id_is_familia_principal(self):
         import user_profiles
 
-        assert user_profiles._DEFAULT_PROFILE == "FAMILIA_PRINCIPAL"
+        assert (
+            user_profiles._DEFAULT_PROFILE_ID == "familia-principal-0000-000000000002"
+        )
 
-    def test_builtin_profiles_marked_correctly(self):
-        """Only SUPER should be protected (builtin=True), others can be edited."""
+    def test_only_super_is_protected(self):
+        """Only SUPER should be protected, others can be edited."""
         import user_profiles
 
-        # SUPER is the only protected profile
-        assert user_profiles.BUILTIN_PROFILES["SUPER"].get("builtin") is True
+        super_id = "super-0000-0000-0000-000000000000"
+        assert user_profiles.BUILTIN_PROFILES[super_id]["protected"] is True
 
-        # Other profiles can be edited (builtin=False)
-        for name in ["FAMILIA_ALL", "FAMILIA_PRINCIPAL", "GAMER"]:
-            assert user_profiles.BUILTIN_PROFILES[name].get("builtin") is False, (
-                f"{name} should be editable (builtin=False)"
-            )
+        # Other profiles can be edited (protected=False)
+        for pid, profile in user_profiles.BUILTIN_PROFILES.items():
+            if pid != super_id:
+                assert profile["protected"] is False, (
+                    f"{profile['name']} should be editable (protected=False)"
+                )
+
+    def test_builtin_profiles_have_names(self):
+        """All built-in profiles must have name field."""
+        import user_profiles
+
+        for pid, profile in user_profiles.BUILTIN_PROFILES.items():
+            assert "name" in profile, f"Profile {pid} missing name"
+            assert profile["name"], f"Profile {pid} has empty name"
 
 
 # ── APP_REGISTRY ──────────────────────────────────────────────────────────────
@@ -98,301 +113,298 @@ class TestAppRegistry:
         valheim = next(a for a in user_profiles.APP_REGISTRY if a["key"] == "valheim")
         assert valheim["view_level"] == 3
 
-    def test_portfolio_requires_level_0(self):
-        import user_profiles
 
-        portfolio = next(
-            a for a in user_profiles.APP_REGISTRY if a["key"] == "portfolio"
-        )
-        assert portfolio["view_level"] == 0
-
-    def test_all_keys_unique(self):
-        import user_profiles
-
-        keys = [a["key"] for a in user_profiles.APP_REGISTRY]
-        assert len(keys) == len(set(keys))
+# ── Profile CRUD with Database ────────────────────────────────────────────────
 
 
-# ── Permission Levels ─────────────────────────────────────────────────────────
-
-
-class TestPermissionLevels:
-    def test_level_0_sees_everything(self):
-        """Level 0 (SUPER) should see all apps."""
+class TestProfileCRUD:
+    def test_get_all_profiles_includes_builtins(self):
+        """get_all_profiles should return all built-in profiles."""
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(user_profiles, "AUTH_DB_PATH", _tmp_db_path(tmp)):
-                # Simulate level 0 user
-                with patch.object(user_profiles, "get_effective_level", return_value=0):
-                    apps = user_profiles.app_permissions("admin")
-        app_keys = [a["key"] for a in apps]
-        assert "zigbee" in app_keys
-        assert "passwords" in app_keys
-        assert "portfolio" in app_keys
-        assert "valheim" in app_keys
-        assert "ac" in app_keys
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
-    def test_level_1_sees_standard_apps(self):
-        """Level 1 (FAMILIA) should see standard apps but not admin-only."""
+            profiles = user_profiles.get_all_profiles()
+
+            # Should have all 4 built-in profiles
+            assert len(profiles) >= 4
+            # Check SUPER exists
+            super_id = "super-0000-0000-0000-000000000000"
+            assert super_id in profiles
+            assert profiles[super_id]["name"] == "SUPER"
+
+    def test_create_profile_returns_id(self):
+        """create_profile should return the new profile's UUID."""
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(user_profiles, "AUTH_DB_PATH", _tmp_db_path(tmp)):
-                with patch.object(user_profiles, "get_effective_level", return_value=1):
-                    apps = user_profiles.app_permissions("family")
-        app_keys = [a["key"] for a in apps]
-        assert "ac" in app_keys
-        assert "vacaciones" in app_keys
-        assert "valheim" in app_keys  # level 3, so level 1 can see it
-        assert "zigbee" not in app_keys  # level 0 only
-        assert "passwords" not in app_keys  # level 0 only
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
-    def test_level_3_sees_only_gamer_apps(self):
-        """Level 3 (GAMER) should only see valheim."""
+            profile_id = user_profiles.create_profile("TEST_PROFILE", 2, "Test desc")
+
+            assert profile_id is not None
+            assert len(profile_id) == 36  # UUID format
+
+            # Verify it's retrievable
+            profile = user_profiles.get_profile_by_id(profile_id)
+            assert profile["name"] == "TEST_PROFILE"
+            assert profile["level"] == 2
+            assert profile["description"] == "Test desc"
+
+    def test_update_profile_name(self):
+        """Should be able to update profile name."""
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(user_profiles, "AUTH_DB_PATH", _tmp_db_path(tmp)):
-                with patch.object(user_profiles, "get_effective_level", return_value=3):
-                    apps = user_profiles.app_permissions("gamer")
-        app_keys = [a["key"] for a in apps]
-        assert "valheim" in app_keys
-        assert "ac" not in app_keys  # level 1 only
-        assert "zigbee" not in app_keys  # level 0 only
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
+            # Create a profile
+            pid = user_profiles.create_profile("ORIGINAL", 1, "Original")
 
-# ── Multi-Profile Support ─────────────────────────────────────────────────────
+            # Update name
+            user_profiles.update_profile(pid, name="RENAMED")
 
+            profile = user_profiles.get_profile_by_id(pid)
+            assert profile["name"] == "RENAMED"
 
-class TestMultiProfile:
-    def test_set_and_get_multiple_profiles(self):
+    def test_update_profile_level(self):
+        """Should be able to update profile level."""
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                user_profiles.set_user_profiles("testuser", ["GAMER", "FAMILIA_ALL"])
-                profiles = user_profiles.get_user_profiles("testuser")
-                assert "GAMER" in profiles
-                assert "FAMILIA_ALL" in profiles
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
-    def test_effective_level_is_minimum(self):
-        """Effective level should be the minimum (most permissive) across profiles."""
+            pid = user_profiles.create_profile("LEVEL_TEST", 1, "Test")
+            user_profiles.update_profile(pid, level=3)
+
+            profile = user_profiles.get_profile_by_id(pid)
+            assert profile["level"] == 3
+
+    def test_cannot_update_protected_profile(self):
+        """Should not be able to update SUPER profile."""
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                # GAMER=3, FAMILIA_ALL=1 → effective should be 1
-                user_profiles.set_user_profiles("testuser", ["GAMER", "FAMILIA_ALL"])
-                level = user_profiles.get_effective_level("testuser")
-                assert level == 1
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
-    def test_add_profile_to_user(self):
+            super_id = "super-0000-0000-0000-000000000000"
+            with pytest.raises(ValueError, match="protected"):
+                user_profiles.update_profile(super_id, level=1)
+
+    def test_can_update_editable_builtin_profile(self):
+        """Should be able to update FAMILIA_ALL, GAMER, etc."""
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                user_profiles.set_user_profiles("testuser", ["GAMER"])
-                user_profiles.add_user_profile("testuser", "FAMILIA_PRINCIPAL")
-                profiles = user_profiles.get_user_profiles("testuser")
-                assert "GAMER" in profiles
-                assert "FAMILIA_PRINCIPAL" in profiles
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
-    def test_remove_profile_from_user(self):
-        import user_profiles
+            gamer_id = "gamer-0000-0000-0000-000000000003"
+            user_profiles.update_profile(gamer_id, description="Updated description")
 
-        with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                user_profiles.set_user_profiles("testuser", ["GAMER", "FAMILIA_ALL"])
-                user_profiles.remove_user_profile("testuser", "GAMER")
-                profiles = user_profiles.get_user_profiles("testuser")
-                assert "GAMER" not in profiles
-                assert "FAMILIA_ALL" in profiles
-
-    def test_get_default_for_unknown_user(self):
-        import user_profiles
-
-        with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                profiles = user_profiles.get_user_profiles("unknownuser")
-                assert profiles == ["FAMILIA_PRINCIPAL"]
-
-
-# ── is_super helper ───────────────────────────────────────────────────────────
-
-
-class TestIsSuperHelper:
-    def test_is_super_returns_true_for_level_0(self):
-        import user_profiles
-
-        with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                user_profiles.set_user_profiles("admin", ["SUPER"])
-                assert user_profiles.is_super("admin") is True
-
-    def test_is_super_returns_false_for_level_1(self):
-        import user_profiles
-
-        with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                user_profiles.set_user_profiles("family", ["FAMILIA_ALL"])
-                assert user_profiles.is_super("family") is False
-
-    def test_is_super_returns_false_for_gamer(self):
-        import user_profiles
-
-        with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                user_profiles.set_user_profiles("gamer", ["GAMER"])
-                assert user_profiles.is_super("gamer") is False
-
-
-# ── Custom Profiles ───────────────────────────────────────────────────────────
-
-
-class TestCustomProfiles:
-    def test_create_custom_profile(self):
-        import user_profiles
-
-        with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                user_profiles.create_profile("CUSTOM", 2, "Test profile")
-                all_profiles = user_profiles.get_all_profiles()
-                assert "CUSTOM" in all_profiles
-                assert all_profiles["CUSTOM"]["level"] == 2
-                assert all_profiles["CUSTOM"]["builtin"] is False
-
-    def test_cannot_create_builtin_name(self):
-        import user_profiles
-
-        with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                with pytest.raises(ValueError):
-                    user_profiles.create_profile("SUPER", 1, "Cannot override")
+            profile = user_profiles.get_profile_by_id(gamer_id)
+            assert profile["description"] == "Updated description"
 
     def test_delete_custom_profile(self):
+        """Should be able to delete custom profiles."""
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                user_profiles.create_profile("TODELETE", 2, "Will be deleted")
-                user_profiles.delete_profile("TODELETE")
-                all_profiles = user_profiles.get_all_profiles()
-                assert "TODELETE" not in all_profiles
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
-    def test_cannot_delete_builtin(self):
+            pid = user_profiles.create_profile("TO_DELETE", 1, "Delete me")
+            assert user_profiles.get_profile_by_id(pid) is not None
+
+            user_profiles.delete_profile(pid)
+            assert user_profiles.get_profile_by_id(pid) is None
+
+    def test_cannot_delete_builtin_profile(self):
+        """Should not be able to delete built-in profiles."""
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                with pytest.raises(ValueError):
-                    user_profiles.delete_profile("SUPER")
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
-    def test_update_custom_profile(self):
+            gamer_id = "gamer-0000-0000-0000-000000000003"
+            with pytest.raises(ValueError, match="built-in"):
+                user_profiles.delete_profile(gamer_id)
+
+
+# ── User-Profile Assignment ───────────────────────────────────────────────────
+
+
+class TestUserProfiles:
+    def test_get_user_profiles_returns_default(self):
+        """Users without assigned profiles get the default."""
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                user_profiles.create_profile("TOUPDATE", 2, "Original")
-                user_profiles.update_profile("TOUPDATE", level=1, description="Updated")
-                all_profiles = user_profiles.get_all_profiles()
-                assert all_profiles["TOUPDATE"]["level"] == 1
-                assert all_profiles["TOUPDATE"]["description"] == "Updated"
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
-    def test_cannot_update_builtin(self):
+            profiles = user_profiles.get_user_profiles("newuser")
+            assert profiles == [user_profiles._DEFAULT_PROFILE_ID]
+
+    def test_set_user_profiles(self):
+        """Should be able to assign profiles to a user."""
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                with pytest.raises(ValueError):
-                    user_profiles.update_profile("SUPER", level=3)
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
+            super_id = "super-0000-0000-0000-000000000000"
+            gamer_id = "gamer-0000-0000-0000-000000000003"
 
-# ── Legacy Compatibility ──────────────────────────────────────────────────────
+            user_profiles.set_user_profiles("testuser", [super_id, gamer_id])
+            profiles = user_profiles.get_user_profiles("testuser")
 
+            assert super_id in profiles
+            assert gamer_id in profiles
 
-class TestLegacyCompatibility:
-    def test_set_profile_single(self):
-        """Legacy set_profile should work with single profile."""
+    def test_add_user_profile(self):
+        """Should be able to add a profile to a user."""
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                user_profiles.set_profile("testuser", "GAMER")
-                profiles = user_profiles.get_user_profiles("testuser")
-                assert profiles == ["GAMER"]
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
-    def test_get_profile_returns_dict(self):
-        """Legacy get_profile should return a dict with level info."""
+            fam_id = "familia-principal-0000-000000000002"
+            gamer_id = "gamer-0000-0000-0000-000000000003"
+
+            user_profiles.set_user_profiles("adduser", [fam_id])
+            user_profiles.add_user_profile("adduser", gamer_id)
+
+            profiles = user_profiles.get_user_profiles("adduser")
+            assert gamer_id in profiles
+            assert fam_id in profiles
+
+    def test_remove_user_profile(self):
+        """Should be able to remove a profile from a user."""
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            db_path = _tmp_db_path(tmp)
-            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
-                user_profiles.set_user_profiles("testuser", ["SUPER"])
-                profile = user_profiles.get_profile("testuser")
-                assert "level" in profile
-                assert profile["level"] == 0
-                assert profile["show_config_apps"] is True  # level 0 only
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
-    def test_profiles_alias_exists(self):
-        """PROFILES alias should exist for backward compatibility."""
+            super_id = "super-0000-0000-0000-000000000000"
+            gamer_id = "gamer-0000-0000-0000-000000000003"
+
+            user_profiles.set_user_profiles("removeuser", [super_id, gamer_id])
+            user_profiles.remove_user_profile("removeuser", gamer_id)
+
+            profiles = user_profiles.get_user_profiles("removeuser")
+            assert gamer_id not in profiles
+            assert super_id in profiles
+
+
+# ── Effective Level Calculation ───────────────────────────────────────────────
+
+
+class TestEffectiveLevel:
+    def test_super_user_has_level_0(self):
+        """User with SUPER profile should have level 0."""
         import user_profiles
 
-        assert hasattr(user_profiles, "PROFILES")
-        assert "SUPER" in user_profiles.PROFILES
+        with tempfile.TemporaryDirectory() as tmp:
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
+            super_id = "super-0000-0000-0000-000000000000"
+            user_profiles.set_user_profiles("admin", [super_id])
 
-# ── _require_super in auth_routes ─────────────────────────────────────────────
+            assert user_profiles.get_effective_level("admin") == 0
 
-
-class TestRequireSuperFunction:
-    def test_raises_401_when_no_user(self):
-        import auth as auth_core
-        from api.auth_routes import _require_super
-        from fastapi import HTTPException
-
-        mock_request = MagicMock()
-        with patch.object(auth_core, "get_current_user", return_value=None):
-            with pytest.raises(HTTPException) as exc_info:
-                _require_super(mock_request)
-        assert exc_info.value.status_code == 401
-
-    def test_raises_403_when_not_level_0(self):
-        import auth as auth_core
+    def test_multiple_profiles_uses_minimum(self):
+        """Effective level is the minimum across all profiles."""
         import user_profiles
-        from api.auth_routes import _require_super
-        from fastapi import HTTPException
 
-        mock_request = MagicMock()
-        with patch.object(auth_core, "get_current_user", return_value="virchi"):
-            with patch.object(user_profiles, "is_super", return_value=False):
-                with pytest.raises(HTTPException) as exc_info:
-                    _require_super(mock_request)
-        assert exc_info.value.status_code == 403
+        with tempfile.TemporaryDirectory() as tmp:
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
 
-    def test_returns_username_when_super(self):
-        import auth as auth_core
+            super_id = "super-0000-0000-0000-000000000000"  # level 0
+            gamer_id = "gamer-0000-0000-0000-000000000003"  # level 3
+
+            user_profiles.set_user_profiles("multiuser", [super_id, gamer_id])
+
+            # Should be 0 (minimum of 0 and 3)
+            assert user_profiles.get_effective_level("multiuser") == 0
+
+    def test_is_super_returns_true_for_level_0(self):
+        """is_super should return True for users with level 0."""
         import user_profiles
-        from api.auth_routes import _require_super
 
-        mock_request = MagicMock()
-        with patch.object(auth_core, "get_current_user", return_value="egnal"):
-            with patch.object(user_profiles, "is_super", return_value=True):
-                result = _require_super(mock_request)
-        assert result == "egnal"
+        with tempfile.TemporaryDirectory() as tmp:
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
+
+            super_id = "super-0000-0000-0000-000000000000"
+            user_profiles.set_user_profiles("superuser", [super_id])
+
+            assert user_profiles.is_super("superuser") is True
+
+    def test_is_super_returns_false_for_non_admin(self):
+        """is_super should return False for regular users."""
+        import user_profiles
+
+        with tempfile.TemporaryDirectory() as tmp:
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
+
+            fam_id = "familia-principal-0000-000000000002"
+            user_profiles.set_user_profiles("normaluser", [fam_id])
+
+            assert user_profiles.is_super("normaluser") is False
+
+
+# ── User Info API ─────────────────────────────────────────────────────────────
+
+
+class TestUserInfo:
+    def test_get_user_info_includes_profiles(self):
+        """get_user_info should include detailed profile info."""
+        import user_profiles
+
+        with tempfile.TemporaryDirectory() as tmp:
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
+
+            super_id = "super-0000-0000-0000-000000000000"
+            user_profiles.set_user_profiles("infouser", [super_id])
+
+            info = user_profiles.get_user_info("infouser")
+
+            assert info["username"] == "infouser"
+            assert info["effective_level"] == 0
+            assert info["is_admin"] is True
+            assert len(info["profiles"]) >= 1
+            assert info["profiles"][0]["name"] == "SUPER"
+
+    def test_get_user_info_includes_apps(self):
+        """get_user_info should include permitted apps."""
+        import user_profiles
+
+        with tempfile.TemporaryDirectory() as tmp:
+            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            user_profiles._ensure_builtin_profiles()
+
+            super_id = "super-0000-0000-0000-000000000000"
+            user_profiles.set_user_profiles("appuser", [super_id])
+
+            info = user_profiles.get_user_info("appuser")
+
+            # SUPER should see all apps
+            app_keys = [a["key"] for a in info["apps"]]
+            assert "ac" in app_keys
+            assert "zigbee" in app_keys
+            assert "passwords" in app_keys

@@ -725,8 +725,7 @@ function renderAdminContent() {
                             <td>
                                 <div class="flex flex-wrap gap-1">
                                     ${u.profiles.map(p => {
-                                        const prof = adminProfiles[p] || {};
-                                        return `<span class="profile-chip ${getLevelClass(prof.level ?? 1)}">${p}<span class="remove-btn" onclick="removeUserProfile('${u.username}','${p}')">×</span></span>`;
+                                        return `<span class="profile-chip ${getLevelClass(p.level)}">${p.name}<span class="remove-btn" onclick="removeUserProfile('${u.username}','${p.id}')">×</span></span>`;
                                     }).join('')}
                                     <button class="btn-sm" onclick="showAddProfileDialog('${u.username}')" title="Añadir perfil">+</button>
                                 </div>
@@ -738,24 +737,24 @@ function renderAdminContent() {
             </table>
         `;
     } else {
-        // Profiles tab
+        // Profiles tab - adminProfiles is {id: {name, level, description, protected}}
         body.innerHTML = `
             <div class="mb-4 flex items-center justify-between">
                 <span class="text-xs text-slate-500 uppercase tracking-wider">Gestionar perfiles de permiso</span>
                 <button class="btn-sm" onclick="showCreateProfileDialog()">+ Nuevo perfil</button>
             </div>
-            ${Object.entries(adminProfiles).map(([name, p]) => `
-                <div class="profile-card ${p.builtin ? 'builtin' : 'custom'}">
+            ${Object.entries(adminProfiles).map(([id, p]) => `
+                <div class="profile-card ${p.protected ? 'protected' : 'editable'}">
                     <div class="profile-card-header">
-                        <span class="profile-card-title">${name}</span>
+                        <span class="profile-card-title">${p.name}</span>
                         <span class="profile-card-level ${getLevelClass(p.level)}">Nivel ${p.level}</span>
                     </div>
                     <p class="profile-card-desc">${p.description || '—'}</p>
-                    ${p.builtin 
-                        ? '<p class="text-xs text-slate-600 mt-2 italic">Perfil del sistema (no editable)</p>' 
+                    ${p.protected 
+                        ? '<p class="text-xs text-slate-600 mt-2 italic">Perfil protegido (no editable)</p>' 
                         : `<div class="profile-card-actions">
-                            <button class="btn-sm edit-btn" onclick="editProfile('${name}')">✏️ Editar</button>
-                            <button class="btn-sm danger" onclick="deleteProfile('${name}')">🗑️ Eliminar</button>
+                            <button class="btn-sm edit-btn" onclick="editProfile('${id}')">✏️ Editar</button>
+                            ${id.includes('-0000-') ? '' : `<button class="btn-sm danger" onclick="deleteProfile('${id}')">🗑️ Eliminar</button>`}
                            </div>`
                     }
                 </div>
@@ -764,30 +763,37 @@ function renderAdminContent() {
     }
 }
 
-async function removeUserProfile(username, profile) {
+async function removeUserProfile(username, profileId) {
     const user = adminUsers.find(u => u.username === username);
     if (user?.profiles.length <= 1) { alert('No se puede eliminar el último perfil'); return; }
     try {
-        await fetch(`/api/auth/admin/users/${username}/profiles/${profile}`, { method: 'DELETE' });
+        await fetch(`/api/auth/admin/users/${username}/profiles/${profileId}`, { method: 'DELETE' });
         await loadAdminData();
         renderAdminContent();
     } catch (e) { alert('Error: ' + e.message); }
 }
 
 function showAddProfileDialog(username) {
-    const profiles = Object.keys(adminProfiles);
     const user = adminUsers.find(u => u.username === username);
-    const available = profiles.filter(p => !user?.profiles.includes(p));
+    const userProfileIds = user?.profiles.map(p => p.id) || [];
+    const available = Object.entries(adminProfiles).filter(([id]) => !userProfileIds.includes(id));
     if (!available.length) { alert('El usuario ya tiene todos los perfiles'); return; }
-    const profile = prompt(`Añadir perfil a ${username}.\nDisponibles: ${available.join(', ')}`);
-    if (profile && available.includes(profile)) {
-        addUserProfile(username, profile);
+    
+    const options = available.map(([id, p]) => `${p.name}`).join(', ');
+    const selectedName = prompt(`Añadir perfil a ${username}.\nDisponibles: ${options}`);
+    if (!selectedName) return;
+    
+    const match = available.find(([id, p]) => p.name.toLowerCase() === selectedName.toLowerCase());
+    if (match) {
+        addUserProfile(username, match[0]);
+    } else {
+        alert('Perfil no encontrado');
     }
 }
 
-async function addUserProfile(username, profile) {
+async function addUserProfile(username, profileId) {
     try {
-        await fetch(`/api/auth/admin/users/${username}/profiles/${profile}`, { method: 'POST' });
+        await fetch(`/api/auth/admin/users/${username}/profiles/${profileId}`, { method: 'POST' });
         await loadAdminData();
         renderAdminContent();
     } catch (e) { alert('Error: ' + e.message); }
@@ -815,21 +821,33 @@ async function createProfile(name, level, description) {
     } catch (e) { alert('Error: ' + e.message); }
 }
 
-function editProfile(name) {
-    const p = adminProfiles[name];
-    if (!p || p.builtin) return;
-    const level = parseInt(prompt(`Nivel actual: ${p.level}. Nuevo nivel (0-3):`, p.level));
-    if (isNaN(level) || level < 0 || level > 3) { alert('Nivel inválido'); return; }
-    const desc = prompt('Descripción:', p.description || '') || '';
-    updateProfile(name, level, desc);
+function editProfile(profileId) {
+    const p = adminProfiles[profileId];
+    if (!p || p.protected) return;
+    
+    const newName = prompt(`Nombre actual: ${p.name}\nNuevo nombre (dejar vacío para no cambiar):`, p.name);
+    const newLevel = prompt(`Nivel actual: ${p.level}. Nuevo nivel (0-3):`, p.level);
+    const newDesc = prompt('Descripción:', p.description || '');
+    
+    const updates = {};
+    if (newName && newName !== p.name) updates.name = newName.toUpperCase();
+    if (newLevel !== null && newLevel !== '') {
+        const lvl = parseInt(newLevel);
+        if (!isNaN(lvl) && lvl >= 0 && lvl <= 3) updates.level = lvl;
+    }
+    if (newDesc !== null) updates.description = newDesc;
+    
+    if (Object.keys(updates).length > 0) {
+        updateProfile(profileId, updates);
+    }
 }
 
-async function updateProfile(name, level, description) {
+async function updateProfile(profileId, updates) {
     try {
-        const r = await fetch(`/api/auth/admin/profiles/${name}`, {
+        const r = await fetch(`/api/auth/admin/profiles/${profileId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ level, description })
+            body: JSON.stringify(updates)
         });
         if (!r.ok) { const e = await r.json(); alert('Error: ' + e.detail); return; }
         await loadAdminData();
@@ -837,10 +855,11 @@ async function updateProfile(name, level, description) {
     } catch (e) { alert('Error: ' + e.message); }
 }
 
-async function deleteProfile(name) {
-    if (!confirm(`¿Eliminar perfil "${name}"?`)) return;
+async function deleteProfile(profileId) {
+    const p = adminProfiles[profileId];
+    if (!confirm(`¿Eliminar perfil "${p?.name || profileId}"?`)) return;
     try {
-        const r = await fetch(`/api/auth/admin/profiles/${name}`, { method: 'DELETE' });
+        const r = await fetch(`/api/auth/admin/profiles/${profileId}`, { method: 'DELETE' });
         if (!r.ok) { const e = await r.json(); alert('Error: ' + e.detail); return; }
         await loadAdminData();
         renderAdminContent();

@@ -69,15 +69,19 @@ def _familia_client():
     return c, user, profile
 
 
-def _patch_require_super(username: str, profile_key: str):
+def _patch_require_super(username: str, profile_name: str):
     """Context manager: patch _require_super to return username or raise 403."""
     import user_profiles
     from fastapi import HTTPException
 
-    # Use the new level-based system
-    all_profiles = user_profiles.BUILTIN_PROFILES
-    profile_def = all_profiles.get(profile_key, {})
-    level = profile_def.get("level", 1)
+    # Find profile by name in the new ID-based system
+    profile_def = None
+    for pid, p in user_profiles.BUILTIN_PROFILES.items():
+        if p["name"] == profile_name:
+            profile_def = p
+            break
+
+    level = profile_def.get("level", 1) if profile_def else 1
     is_super = level == 0  # Level 0 = SUPER
 
     def fake_require_super(request):
