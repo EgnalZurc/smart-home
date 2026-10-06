@@ -1,0 +1,76 @@
+# ==============================================================================
+# smart-home CI-equivalent dev/test image
+# Reproduces the GitHub CI toolchain (.github/workflows/ci.yml):
+#   - runner: ubuntu-24.04 + actions/setup-python@v6 (Python 3.12)
+#   - tools:  ruff, bandit, pytest, pytest-asyncio, pytest-cov, httpx (installed via pip)
+#   - hadolint v2.12.0 (Dockerfile linter)
+#
+# The CI installs the lint/test tools UNPINNED (`pip install ruff bandit ...`),
+# so it always resolves to the latest release at run time. To make LOCAL runs
+# match CI *and* be reproducible, versions are pinned here as build ARGs with
+# defaults equal to the versions currently resolved in CI (ruff 0.16.x observed
+# in the repo .ruff_cache). Bump the ARGs to track CI, or pass --build-arg to
+# reproduce a specific CI run.
+#
+# Platform note:
+#   CI builds the SERVICE images for linux/arm64 (the Pi). This CI-test image is
+#   for linting + unit tests only, which are architecture-independent, so it is
+#   built NATIVELY for the host arch (amd64) for speed. To reproduce an arm64
+#   *service build* locally, use buildx/QEMU against the service Dockerfile
+#   directly; you do NOT need this image for that.
+# ==============================================================================
+FROM python:3.12-slim
+
+# --- Tool versions (match CI; override with --build-arg to pin to a CI run) ---
+ARG RUFF_VERSION=0.16.10
+ARG BANDIT_VERSION=1.8.6
+ARG PYTEST_VERSION=8.3.4
+ARG PYTEST_ASYNCIO_VERSION=0.25.3
+ARG PYTEST_COV_VERSION=6.0.0
+ARG HTTPX_VERSION=0.28.1
+ARG HADOLINT_VERSION=2.12.0
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# --- System build essentials + git (some wheels need a compiler; git for VCS) ---
+# hadolint ignore=DL3008
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git \
+        build-essential \
+        curl \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Hadolint (same version CI pins) ---
+# Image is amd64 here; CI pulls the Linux x86_64 binary too.
+RUN curl -fsSL \
+      "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" \
+      -o /usr/local/bin/hadolint \
+    && chmod +x /usr/local/bin/hadolint
+
+# --- CI lint/test toolchain ---
+RUN pip install \
+      "ruff==${RUFF_VERSION}" \
+      "bandit==${BANDIT_VERSION}" \
+      "pytest==${PYTEST_VERSION}" \
+      "pytest-asyncio==${PYTEST_ASYNCIO_VERSION}" \
+      "pytest-cov==${PYTEST_COV_VERSION}" \
+      "httpx==${HTTPX_VERSION}"
+
+# ------------------------------------------------------------------------------
+# HOW TO ADD A TOOL TO THIS IMAGE (do NOT install on the Windows host):
+#   1. Add it above (another pip package, or an apt package in the RUN block).
+#   2. Rebuild:  .\dev.ps1 build   (or: docker compose -f docker-compose.citest.yml build)
+#   3. The new tool is now available to every `.\dev.ps1 run ...` invocation.
+# This keeps the host clean and the toolchain versioned in git-tracked files.
+# ------------------------------------------------------------------------------
+
+# Repo is bind-mounted here by docker-compose.citest.yml
+WORKDIR /workspace
+
+# Default: drop into a shell. Compose/helper override this with real commands.
+CMD ["bash"]
