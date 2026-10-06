@@ -95,12 +95,17 @@ class TestDashboardAppCatalogue:
         assert "!== 'zigbee'" in html or "key !== 'zigbee'" in html
 
 
-# ── Infrastructure bar (SUPER only) ──────────────────────────────────────────
+# ── Infrastructure dropdown (SUPER only) ─────────────────────────────────────
 
 
-class TestInfrastructureBar:
-    def test_core_section_exists(self):
-        assert "core-section" in _html()
+class TestInfrastructureDropdown:
+    def test_infra_dropdown_exists(self):
+        """Infrastructure dropdown must exist in the header."""
+        assert "infra-dropdown" in _html()
+
+    def test_infra_btn_exists(self):
+        """Infrastructure button must exist to toggle the dropdown."""
+        assert "infra-btn" in _html()
 
     def test_core_services_has_three_items(self):
         """CORE_SERVICES must contain exactly Backend, MQTT, Zigbee."""
@@ -126,13 +131,13 @@ class TestInfrastructureBar:
         core_block = html[core_start:core_end]
         assert "core_vacaciones" not in core_block
 
-    def test_core_section_gated_by_show_config_apps(self):
-        """Infrastructure bar must only render for SUPER (show_config_apps=true)."""
+    def test_infra_gated_by_show_config_apps(self):
+        """Infrastructure dropdown must only render for SUPER (show_config_apps=true)."""
         html = _html()
         assert "show_config_apps" in html
 
-    def test_zigbee_is_clickable_in_core_bar(self):
-        """Zigbee in core bar must link to /zigbee/."""
+    def test_zigbee_is_clickable_in_infra(self):
+        """Zigbee in core services must link to /zigbee/."""
         html = _html()
         core_start = html.index("CORE_SERVICES")
         core_end = html.index("APP_CATALOGUE")
@@ -222,6 +227,81 @@ class TestStopStartButtons:
         html = _html()
         assert "loadContainerStates" in html
         assert "setInterval" in html
+
+
+# ── Admin Modal (SUPER only) ──────────────────────────────────────────────────
+
+
+class TestAdminModal:
+    def test_admin_modal_exists(self):
+        """Admin modal must exist for user/profile management."""
+        assert "admin-modal" in _html()
+
+    def test_admin_btn_exists(self):
+        """Admin button must exist to open the modal."""
+        assert "admin-btn" in _html()
+
+    def test_admin_tabs_exist(self):
+        """Admin modal must have tabs for users and profiles."""
+        html = _html()
+        assert "admin-tabs" in html
+        assert "switchAdminTab" in html
+
+    def test_admin_calls_users_api(self):
+        """Admin modal must call /api/auth/admin/users."""
+        assert "/api/auth/admin/users" in _html()
+
+    def test_admin_calls_profiles_api(self):
+        """Admin modal must call /api/auth/admin/profiles."""
+        assert "/api/auth/admin/profiles" in _html()
+
+    def test_change_user_profile_function_exists(self):
+        """Function to change user profile must exist."""
+        assert "changeUserProfile" in _html()
+
+
+# ── Resources Modal with Pi/PC tabs ───────────────────────────────────────────
+
+
+class TestResourcesModal:
+    def test_res_modal_exists(self):
+        """Resources modal must exist."""
+        assert "res-modal" in _html()
+
+    def test_res_tabs_exist(self):
+        """Resources modal must have tabs for Pi and PC."""
+        html = _html()
+        assert "res-tabs" in html
+        assert "switchResSource" in html
+
+    def test_pi_tab_exists(self):
+        """Pi tab must exist in resources modal."""
+        html = _html()
+        assert "data-source=\"pi\"" in html or "data-source='pi'" in html
+
+    def test_pc_tab_exists(self):
+        """PC tab must exist in resources modal."""
+        html = _html()
+        assert "data-source=\"pc\"" in html or "data-source='pc'" in html
+
+    def test_render_pi_resources_function_exists(self):
+        """Function to render Pi resources must exist."""
+        assert "renderPiResources" in _html()
+
+    def test_render_pc_resources_function_exists(self):
+        """Function to render PC resources must exist."""
+        assert "renderPcResources" in _html()
+
+    def test_pc_mode_buttons_in_modal(self):
+        """PC mode buttons must be in resources modal."""
+        html = _html()
+        assert "pc-mode-btn" in html
+        assert "setPcMode" in html
+
+    def test_custom_mode_detection(self):
+        """PC mode must detect 'custom' when not balanced/gaming/servidor."""
+        html = _html()
+        assert "custom" in html
 
 
 def html():

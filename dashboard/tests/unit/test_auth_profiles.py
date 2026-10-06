@@ -265,3 +265,121 @@ class TestAuthMeResponse:
 
         show = user_profiles.PROFILES.get("UNKNOWN", {}).get("show_config_apps", False)
         assert show is False
+
+
+
+# ── Admin API endpoints ───────────────────────────────────────────────────────
+
+
+class TestAdminRequireSuper:
+    """Tests for _require_super in auth_routes."""
+
+    def test_raises_401_when_no_user(self):
+        import auth as auth_core
+        from api.auth_routes import _require_super
+        from fastapi import HTTPException
+
+        mock_request = MagicMock()
+        with patch.object(auth_core, "get_current_user", return_value=None):
+            with pytest.raises(HTTPException) as exc_info:
+                _require_super(mock_request)
+        assert exc_info.value.status_code == 401
+
+    def test_raises_403_when_familia_principal(self):
+        import auth as auth_core
+        import user_profiles
+        from api.auth_routes import _require_super
+        from fastapi import HTTPException
+
+        mock_request = MagicMock()
+        with patch.object(auth_core, "get_current_user", return_value="virchi"):
+            with patch.object(
+                user_profiles, "get_profile_key", return_value="FAMILIA_PRINCIPAL"
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    _require_super(mock_request)
+        assert exc_info.value.status_code == 403
+
+    def test_raises_403_when_familia_all(self):
+        """FAMILIA_ALL is not SUPER, so it should be rejected."""
+        import auth as auth_core
+        import user_profiles
+        from api.auth_routes import _require_super
+        from fastapi import HTTPException
+
+        mock_request = MagicMock()
+        with patch.object(auth_core, "get_current_user", return_value="virchu"):
+            with patch.object(
+                user_profiles, "get_profile_key", return_value="FAMILIA_ALL"
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    _require_super(mock_request)
+        assert exc_info.value.status_code == 403
+
+    def test_returns_username_when_super(self):
+        import auth as auth_core
+        import user_profiles
+        from api.auth_routes import _require_super
+
+        mock_request = MagicMock()
+        with patch.object(auth_core, "get_current_user", return_value="egnal"):
+            with patch.object(user_profiles, "get_profile_key", return_value="SUPER"):
+                result = _require_super(mock_request)
+        assert result == "egnal"
+
+
+class TestUserProfilesDbOperations:
+    """Tests for user_profiles database operations."""
+
+    def test_set_and_get_profile(self):
+        import user_profiles
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = _tmp_db_path(tmp)
+            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
+                # Set profile
+                user_profiles.set_profile("testuser", "GAMER")
+
+                # Get it back
+                key = user_profiles.get_profile_key("testuser")
+                assert key == "GAMER"
+
+    def test_set_profile_rejects_invalid(self):
+        import user_profiles
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = _tmp_db_path(tmp)
+            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
+                with pytest.raises(ValueError) as exc_info:
+                    user_profiles.set_profile("testuser", "INVALID_PROFILE")
+                assert "Unknown profile" in str(exc_info.value)
+
+    def test_get_profile_returns_default_for_unknown_user(self):
+        import user_profiles
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = _tmp_db_path(tmp)
+            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
+                profile = user_profiles.get_profile("unknownuser")
+                # Should return default profile (FAMILIA_PRINCIPAL)
+                assert profile == user_profiles.PROFILES["FAMILIA_PRINCIPAL"]
+
+    def test_get_profile_key_returns_default_for_unknown_user(self):
+        import user_profiles
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = _tmp_db_path(tmp)
+            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
+                key = user_profiles.get_profile_key("unknownuser")
+                assert key == "FAMILIA_PRINCIPAL"
+
+    def test_set_profile_overwrites_existing(self):
+        import user_profiles
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = _tmp_db_path(tmp)
+            with patch.object(user_profiles, "AUTH_DB_PATH", db_path):
+                user_profiles.set_profile("testuser", "GAMER")
+                user_profiles.set_profile("testuser", "SUPER")
+                key = user_profiles.get_profile_key("testuser")
+                assert key == "SUPER"
