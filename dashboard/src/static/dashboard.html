@@ -524,9 +524,10 @@ function _barColor(pct) { return pct < 70 ? 'green' : pct < 85 ? 'yellow' : 'red
 function _tempColor(c) { return c < 60 ? 'green' : c < 75 ? 'yellow' : 'red'; }
 function _bar(pct, color) { return `<div class="res-bar-bg"><div class="res-bar ${color}" style="width:${Math.min(pct,100)}%"></div></div>`; }
 
-function switchResSource(source) {
+async function switchResSource(source) {
     currentResSource = source;
     document.querySelectorAll('#res-tabs .res-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.source === source));
+    if (source === 'pc') await loadPcStatus(); // Refresh PC status before rendering
     fetchAndRenderResources();
 }
 
@@ -716,16 +717,11 @@ function renderAdminContent() {
     if (currentAdminTab === 'users') {
         body.innerHTML = `
             <table class="admin-table">
-                <thead><tr><th>Usuario</th><th>Perfiles</th><th>Nivel</th><th></th></tr></thead>
+                <thead><tr><th>Usuario</th><th>Perfiles</th><th></th></tr></thead>
                 <tbody>
                     ${adminUsers.map(u => `
                         <tr data-username="${u.username}">
-                            <td>
-                                <div class="flex items-center gap-2">
-                                    <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500/30 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center text-xs font-bold text-indigo-300">${u.username.charAt(0).toUpperCase()}</div>
-                                    <span>${u.username}</span>
-                                </div>
-                            </td>
+                            <td><span class="font-medium">${u.username}</span></td>
                             <td>
                                 <div class="flex flex-wrap gap-1">
                                     ${u.profiles.map(p => {
@@ -735,7 +731,6 @@ function renderAdminContent() {
                                     <button class="btn-sm" onclick="showAddProfileDialog('${u.username}')" title="Añadir perfil">+</button>
                                 </div>
                             </td>
-                            <td><span class="profile-chip ${getLevelClass(u.effective_level)}">${u.effective_level}</span></td>
                             <td></td>
                         </tr>
                     `).join('')}
@@ -984,8 +979,9 @@ async function loadUser() {
         }
         
         // Build app list from permissions
+        // photos and passwords go in external services modal, not main list
         APPS = (currentUserData.apps || [])
-            .filter(p => p.key !== 'zigbee') // Zigbee goes in infra modal
+            .filter(p => !['zigbee', 'photos', 'passwords'].includes(p.key))
             .map(p => ({ key: p.key, ...APP_CATALOGUE[p.key] }))
             .filter(a => a);
         
