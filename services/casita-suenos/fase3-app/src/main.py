@@ -179,10 +179,16 @@ class _StatusHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         global _scheduler_instance
 
-        if self.path == "/health":
+        # Parse path without query string for route matching
+        from urllib.parse import urlparse
+
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+
+        if path == "/health":
             self._send_json(200, {"online": True})
 
-        elif self.path == "/status":
+        elif path == "/status":
             if _scheduler_instance is None:
                 self._send_json(503, {"online": False, "error": "Scheduler not ready"})
                 return
@@ -242,15 +248,14 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 },
             )
 
-        elif self.path.startswith("/radar"):
+        elif path.startswith("/radar"):
             if _scheduler_instance is None:
                 self._send_json(503, {"error": "Not ready"})
                 return
             # Parsear query params: ?limit=20&offset=0&sort_by=score&sort_dir=desc
-            from urllib.parse import parse_qs, urlparse
+            from urllib.parse import parse_qs
 
-            parsed = urlparse(self.path)
-            qs = parse_qs(parsed.query)
+            qs = parse_qs(parsed_url.query)
 
             def _qs(key, default):
                 return qs.get(key, [default])[0]
@@ -274,33 +279,33 @@ class _StatusHandler(BaseHTTPRequestHandler):
             )
             self._send_json(200, result)
 
-        elif self.path == "/dismissed":
+        elif path == "/dismissed":
             if _scheduler_instance is None:
                 self._send_json(503, {"error": "Not ready"})
                 return
             props = _scheduler_instance.get_dismissed()
             self._send_json(200, {"properties": props})
 
-        elif self.path == "/schedule":
+        elif path == "/schedule":
             if _scheduler_instance is None:
                 self._send_json(503, {"error": "Not ready"})
                 return
             self._send_json(200, _scheduler_instance.get_schedule_config())
 
-        elif self.path == "/summary":
+        elif path == "/summary":
             if _scheduler_instance is None:
                 self._send_json(503, {"error": "Not ready"})
                 return
             summary = _scheduler_instance.get_last_summary()
             self._send_json(200, summary or {"content": None, "sent_at": None})
 
-        elif self.path in ("/", "/smart-home/casita", "/smart-home/casita/"):
+        elif path in ("/", "/smart-home/casita", "/smart-home/casita/"):
             # Serve the frontend HTML
             self._serve_static_file("casita.html", "text/html")
 
-        elif self.path.startswith("/static/casita/"):
+        elif path.startswith("/static/casita/"):
             # Serve static files (CSS, images, etc.)
-            filename = self.path.replace("/static/casita/", "")
+            filename = path.replace("/static/casita/", "")
             self._serve_static_file(filename)
 
         else:
@@ -312,27 +317,33 @@ class _StatusHandler(BaseHTTPRequestHandler):
             self._send_json(503, {"error": "Not ready"})
             return
 
+        # Parse path without query string
+        from urllib.parse import urlparse
+
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+
         length = int(self.headers.get("Content-Length", 0))
         body = {}
         if length:
             with contextlib.suppress(Exception):
                 body = json.loads(self.rfile.read(length))
 
-        if self.path == "/dismiss":
+        if path == "/dismiss":
             uid = body.get("uid", "")
             ok = _scheduler_instance.dismiss_property(uid)
             self._send_json(200 if ok else 404, {"ok": ok, "uid": uid})
 
-        elif self.path == "/undismiss":
+        elif path == "/undismiss":
             uid = body.get("uid", "")
             ok = _scheduler_instance.undismiss_property(uid)
             self._send_json(200 if ok else 404, {"ok": ok, "uid": uid})
 
-        elif self.path == "/schedule":
+        elif path == "/schedule":
             _scheduler_instance.save_schedule_config(body)
             self._send_json(200, {"ok": True})
 
-        elif self.path == "/run-scraping":
+        elif path == "/run-scraping":
             import threading
 
             threading.Thread(
@@ -342,7 +353,7 @@ class _StatusHandler(BaseHTTPRequestHandler):
             ).start()
             self._send_json(202, {"ok": True, "message": "Scraping iniciado"})
 
-        elif self.path == "/telegram-webhook":
+        elif path == "/telegram-webhook":
             # Recibe updates del bot Telegram (webhook o polling manual)
             # Procesa el comando /start para registrar el chat_id
             try:
@@ -360,7 +371,7 @@ class _StatusHandler(BaseHTTPRequestHandler):
                     self._send_json(200, {"ok": True})
             except Exception as e:
                 self._send_json(200, {"ok": True, "warn": str(e)})
-        elif self.path == "/run-summary":
+        elif path == "/run-summary":
             import threading
 
             threading.Thread(
@@ -369,7 +380,7 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 name="manual-summary",
             ).start()
             self._send_json(202, {"ok": True, "message": "Resumen iniciado"})
-        elif self.path == "/run-fotocasa-check":
+        elif path == "/run-fotocasa-check":
             import threading
 
             threading.Thread(
@@ -378,7 +389,7 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 name="manual-fotocasa",
             ).start()
             self._send_json(202, {"ok": True, "message": "Fotocasa check iniciado"})
-        elif self.path == "/run-gmail-check":
+        elif path == "/run-gmail-check":
             import threading
 
             threading.Thread(
@@ -387,11 +398,11 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 name="manual-gmail",
             ).start()
             self._send_json(202, {"ok": True, "message": "Gmail check iniciado"})
-        elif self.path == "/mark-viewed":
+        elif path == "/mark-viewed":
             uid = body.get("uid", "")
             ok = _scheduler_instance.mark_viewed(uid)
             self._send_json(200 if ok else 404, {"ok": ok, "uid": uid})
-        elif self.path == "/save-comment":
+        elif path == "/save-comment":
             uid = body.get("uid", "")
             comment = body.get("comment", "")
             ok = _scheduler_instance.save_comment(uid, comment)
