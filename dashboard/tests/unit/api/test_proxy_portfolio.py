@@ -16,7 +16,7 @@ from api.proxy.portfolio import (
     get_portfolio_schedule,
     reload_portfolio_config,
     get_portfolio_notification_status,
-    test_portfolio_notification,
+    test_portfolio_notification as send_test_notification,
 )
 
 
@@ -155,18 +155,18 @@ class TestPostEndpoints:
             assert result["reloaded"] == True
 
     @pytest.mark.asyncio
-    async def test_test_notification_success(self):
+    async def test_send_notification_success(self):
         """Sends test notification."""
         with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response({"sent": True})
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await test_portfolio_notification()
+            result = await send_test_notification()
             assert result["sent"] == True
 
     @pytest.mark.asyncio
-    async def test_test_notification_telegram_error(self):
+    async def test_send_notification_telegram_error(self):
         """Raises error when Telegram fails."""
         with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
@@ -176,7 +176,7 @@ class TestPostEndpoints:
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await test_portfolio_notification()
+                await send_test_notification()
             assert exc.value.status_code == 400
 
 
