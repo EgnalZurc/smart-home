@@ -1,4 +1,8 @@
-"""Unit tests for auth.py - JWT session and password verification."""
+"""Unit tests for auth.py - JWT session and password verification.
+
+NOTE: test_auth_profiles.py mocks passlib globally. These tests must
+handle that by using fresh imports or checking if passlib is real.
+"""
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
@@ -7,33 +11,81 @@ import jwt
 import pytest
 
 
+def _get_real_passlib():
+    """Get real passlib module, reimporting if necessary."""
+    import sys
+
+    # Check if passlib is mocked
+    passlib = sys.modules.get("passlib.hash")
+    if passlib and isinstance(passlib, MagicMock):
+        # Force reimport of real passlib
+        for key in list(sys.modules.keys()):
+            if key.startswith("passlib"):
+                del sys.modules[key]
+        import passlib.hash
+
+        return passlib.hash
+    elif passlib:
+        return passlib
+    else:
+        import passlib.hash
+
+        return passlib.hash
+
+
 class TestVerifyPassword:
     def test_valid_password(self):
-        import auth
-        from passlib.hash import apr_md5_crypt
+        passlib_hash = _get_real_passlib()
+        # Reimport auth to get fresh module
+        import importlib
+        import sys
 
-        hashed = apr_md5_crypt.hash("testpassword")
+        if "auth" in sys.modules:
+            auth = importlib.reload(sys.modules["auth"])
+        else:
+            import auth
+
+        hashed = passlib_hash.apr_md5_crypt.hash("testpassword")
         assert auth.verify_password("testpassword", hashed)
 
     def test_invalid_password(self):
-        import auth
-        from passlib.hash import apr_md5_crypt
+        passlib_hash = _get_real_passlib()
+        import importlib
+        import sys
 
-        hashed = apr_md5_crypt.hash("correctpassword")
+        if "auth" in sys.modules:
+            auth = importlib.reload(sys.modules["auth"])
+        else:
+            import auth
+
+        hashed = passlib_hash.apr_md5_crypt.hash("correctpassword")
         result = auth.verify_password("wrongpassword", hashed)
         assert result is False
 
     def test_malformed_hash_returns_false(self):
-        import auth
+        _get_real_passlib()  # Ensure passlib is real
+        import importlib
+        import sys
+
+        if "auth" in sys.modules:
+            auth = importlib.reload(sys.modules["auth"])
+        else:
+            import auth
 
         result = auth.verify_password("anypassword", "not-a-valid-hash")
         assert result is False
 
     def test_empty_password_against_hash(self):
-        import auth
-        from passlib.hash import apr_md5_crypt
+        passlib_hash = _get_real_passlib()
+        import importlib
+        import sys
 
-        hashed = apr_md5_crypt.hash("realpassword")
+        if "auth" in sys.modules:
+            auth = importlib.reload(sys.modules["auth"])
+        else:
+            import auth
+
+        hashed = passlib_hash.apr_md5_crypt.hash("realpassword")
         result = auth.verify_password("", hashed)
         assert result is False
 
@@ -42,7 +94,6 @@ class TestCreateToken:
     def test_creates_valid_jwt(self):
         import auth
 
-        # Save and set secret
         orig = auth.AUTH_SECRET
         auth.AUTH_SECRET = "test-secret-key-32-chars-minimum"
         try:

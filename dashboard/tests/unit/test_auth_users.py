@@ -1,7 +1,7 @@
 """Unit tests for auth_users.py - user store and trusted device management.
 
-These tests use a fresh database per test to avoid state pollution.
-The database is created in a temp directory unique to each test.
+NOTE: test_auth_profiles.py mocks passlib globally. These tests ensure
+passlib is real before running tests that depend on password hashing.
 """
 
 import sqlite3
@@ -11,17 +11,36 @@ from pathlib import Path
 import pytest
 
 
+def _ensure_real_passlib():
+    """Ensure passlib is the real module, not a mock."""
+    import sys
+    from unittest.mock import MagicMock
+
+    passlib = sys.modules.get("passlib.hash")
+    if passlib and isinstance(passlib, MagicMock):
+        # Remove mocked passlib modules
+        for key in list(sys.modules.keys()):
+            if key.startswith("passlib"):
+                del sys.modules[key]
+        # Reimport
+        import passlib.hash  # noqa: F401
+
+
 @pytest.fixture
 def isolated_auth_users():
-    """Create an isolated auth_users module with a fresh temp database.
-
-    This fixture:
-    1. Creates a temp directory
-    2. Patches the module-level constants
-    3. Yields the module for testing
-    4. Cleans up after the test
-    """
+    """Create an isolated auth_users module with a fresh temp database."""
     import shutil
+
+    _ensure_real_passlib()
+
+    # Reimport auth_users with real passlib
+    import sys
+
+    if "auth_users" in sys.modules:
+        del sys.modules["auth_users"]
+    if "auth" in sys.modules:
+        # auth uses passlib, need to reload it too
+        del sys.modules["auth"]
 
     import auth_users
 
@@ -193,7 +212,6 @@ class TestAuthenticate:
 
     def test_authenticate_unknown_user(self, isolated_auth_users):
         auth_users = isolated_auth_users["module"]
-        # Should return False without revealing user doesn't exist
         assert not auth_users.authenticate_user("nonexistent", "anypassword")
 
 
@@ -312,7 +330,6 @@ class TestHmacSignatures:
         auth_users = isolated_auth_users["module"]
         url = auth_users.make_action_url("https://example.com", "test-token", "approve")
         sig = url.split("sig=")[1]
-        # Try to use approve signature for reject action
         assert not auth_users.verify_action_sig("test-token", "reject", sig)
 
 
