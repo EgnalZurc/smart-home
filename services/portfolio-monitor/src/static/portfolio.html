@@ -518,22 +518,18 @@
 </head>
 <body>
     <div class="container">
-        <header>
-            <div class="header-left">
-                <a href="/smart-home" class="home-btn" aria-label="Dashboard" title="Cuchi Casa">
-                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
-                    </svg>
-                </a>
-                <h1>Portfolio Monitor</h1>
-            </div>
-            <div class="header-actions">
+        <!-- Unified Header -->
+        <div id="cuchi-header"
+             data-title="Portfolio Monitor"
+             data-actions-id="header-actions">
+            <template data-slot="actions">
                 <span id="lastUpdate" class="last-update"></span>
                 <button id="refreshBtn" class="btn btn-primary" onclick="refreshAll()">
                     🔄 Actualizar
                 </button>
-            </div>
-        </header>
+            </template>
+        </div>
+        <script type="module" src="/static/js/common/cuchi-header.js"></script>
         
         <!-- Compact Disclaimer -->
         <div class="disclaimer">

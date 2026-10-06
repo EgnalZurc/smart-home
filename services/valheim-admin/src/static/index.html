@@ -115,15 +115,10 @@
 </head>
 <body>
 <div class="page fade-in">
-  <!-- Header -->
-  <div class="header">
-    <a href="/smart-home" class="back-btn" title="Dashboard" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-      </svg>
-    </a>
-    <h1>Valheim Admin</h1>
-  </div>
+  <!-- Unified Header -->
+  <div id="cuchi-header" data-title="Valheim Admin"></div>
+  <script type="module" src="/static/js/common/cuchi-header.js"></script>
+
   <!-- Status -->
   <div class="card" id="card-status">
     <div class="card-title">Estado del servidor</div>

@@ -291,16 +291,12 @@
 </script>
 <div id="app-content">
 <div class="responsive-wide mx-auto px-4 pt-6 pb-10 fade-in">
-    <!-- Header -->
-    <header class="flex items-center justify-between mb-6">
-        <div class="flex items-center gap-3">
-            <a href="/smart-home" id="home-btn" class="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-700/40 transition-all flex-shrink-0" aria-label="Dashboard" title="Cuchi Casa">
-                <img src="/static/icono-cuchi-casa.png" class="w-5 h-5 object-contain rounded" alt="Home">
-            </a>
-            <h1 class="text-lg font-semibold tracking-tight">🍼 Cuchi Regalos Valeria</h1>
-        </div>
-        <div id="header-actions" class="header-btns"></div>
-    </header>
+    <!-- Unified Header -->
+    <div id="cuchi-header"
+         data-title="🍼 Cuchi Regalos Valeria"
+         data-actions-id="header-actions"></div>
+    <script type="module" src="/static/js/common/cuchi-header.js"></script>
+
     <!-- Guest welcome (shown only for guests) -->
     <div id="guest-welcome" class="guest-welcome" style="display:none">
         <div class="guest-name">¡Hola, <span id="guest-name-display"></span>!</div>
@@ -452,7 +448,7 @@ async function init() {
             await loadAuthUserData();
         } else {
             // Guest with invitation token
-            document.getElementById('home-btn').style.display = 'none';
+            document.querySelector('.cuchi-home-btn').style.display = 'none';
             await loadGuestData();
         }
     } catch (e) {

@@ -139,21 +139,13 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 <div id="page-content">
 <div class="responsive-wide mx-auto px-4 pt-5 pb-16 fade-in">
 
-  <!-- Header -->
-  <header class="flex items-center justify-between mb-5">
-    <div class="flex items-center gap-3">
-      <a href="/smart-home" class="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-700/40 transition-all flex-shrink-0" aria-label="Dashboard" title="Cuchi Casa"><img src="/static/icono-cuchi-casa.png" class="w-5 h-5 object-contain rounded" alt="Home"></a>
-      <div>
-        <h1 class="text-base font-bold">Casita Sueños</h1>
-        <p class="text-[10px] text-slate-500">Monitor inmobiliario · casita-orquestador</p>
-      </div>
-    </div>
-    <!-- Estado del orquestador -->
-    <div class="flex items-center gap-1.5">
-      <span class="status-dot dot-loading" id="orch-dot"></span>
-      <span class="text-[11px] text-slate-400" id="orch-txt">—</span>
-    </div>
-  </header>
+  <!-- Unified Header -->
+  <div id="cuchi-header"
+       data-title="Casita Sueños"
+       data-subtitle="Monitor inmobiliario · casita-orquestador"
+       data-show-status="true"
+       data-status-labels='{"loading":"—"}'></div>
+  <script type="module" src="/static/js/common/cuchi-header.js"></script>
 
   <!-- Stats rápidas -->
   <div class="grid grid-cols-4 gap-2 mb-4">
@@ -895,20 +887,23 @@ async function loadStatus() {
 }
 
 function updateOrchestratorDot(online, hasErrors) {
-  const dot = document.getElementById('orch-dot');
-  const txt = document.getElementById('orch-txt');
+  const dot = document.getElementById('cuchi-status-dot');
+  const txt = document.getElementById('cuchi-status-text');
+  if (!dot || !txt) return;
   if (!online) {
-    dot.className = 'status-dot dot-off';
+    dot.className = 'cuchi-status-dot offline';
     txt.textContent = 'Offline';
-    txt.className = 'text-[11px] text-red-400';
+    txt.style.color = 'rgb(248, 113, 113)'; // text-red-400
   } else if (hasErrors) {
-    dot.className = 'status-dot dot-warn';
+    dot.className = 'cuchi-status-dot';
+    dot.style.background = 'rgb(251, 146, 60)'; // orange-400
     txt.textContent = 'Con errores';
-    txt.className = 'text-[11px] text-orange-400';
+    txt.style.color = 'rgb(251, 146, 60)';
   } else {
-    dot.className = 'status-dot dot-on';
+    dot.className = 'cuchi-status-dot online';
+    dot.style.background = '';
     txt.textContent = 'Activo';
-    txt.className = 'text-[11px] text-green-400';
+    txt.style.color = 'rgb(74, 222, 128)'; // text-green-400
   }
 }
 
