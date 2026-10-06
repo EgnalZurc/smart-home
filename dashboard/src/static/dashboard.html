@@ -749,27 +749,33 @@ function switchSvcTab(tab) {
 }
 
 async function loadSvcStatus() {
-    // Batch load all health statuses in a single request
-    // Backend checks all services in parallel, reducing latency from O(n*timeout) to O(max_timeout)
-    // UI shows all services as offline (red) immediately, then updates to green as results arrive
-    try {
-        const all = await fetch('/api/health/all').then(r => r.json());
+    // Fire individual health checks in parallel - each updates UI independently as it resolves
+    // This way fast services (immich, passwords) don't wait for slow ones (ai with 5s timeout)
 
-        // Map backend response to frontend service keys
+    const checks = [
         // External services
-        svcStatus['ai'] = all.ai?.online === true;
-        svcStatus['photos_ext'] = all.immich?.online === true;
-        svcStatus['passwords_ext'] = all.passwords?.online === true;
-
+        { key: 'ai', endpoint: '/api/health/ai', extract: r => r.online === true },
+        { key: 'photos_ext', endpoint: '/api/health/immich', extract: r => r.online === true },
+        { key: 'passwords_ext', endpoint: '/api/health/passwords', extract: r => r.online === true },
         // Core services
-        svcStatus['core_backend'] = all.backend?.online === true;
-        svcStatus['core_mqtt'] = all.zigbee?.mqtt_connected === true;
-        svcStatus['core_zigbee'] = all.zigbee?.online === true;
-    } catch {
-        // On error, all remain offline (already initialized as false)
-    }
-    // Re-render with actual status
-    renderSvcContent();
+        { key: 'core_backend', endpoint: '/api/health/backend', extract: r => r.online === true },
+        { key: 'core_mqtt', endpoint: '/api/health/zigbee', extract: r => r.mqtt_connected === true },
+        { key: 'core_zigbee', endpoint: '/api/health/zigbee', extract: r => r.online === true },
+    ];
+
+    // Fire all requests simultaneously, update UI as each completes
+    checks.forEach(({ key, endpoint, extract }) => {
+        fetch(endpoint)
+            .then(r => r.json())
+            .then(data => {
+                svcStatus[key] = extract(data);
+                renderSvcContent();  // Re-render immediately when this service responds
+            })
+            .catch(() => {
+                svcStatus[key] = false;
+                renderSvcContent();
+            });
+    });
 }
 
 function renderSvcContent() {
