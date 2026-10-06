@@ -74,9 +74,11 @@ def _patch_require_super(username: str, profile_key: str):
     import user_profiles
     from fastapi import HTTPException
 
-    profiles = user_profiles.PROFILES
-    profile_def = profiles.get(profile_key, {})
-    is_super = profile_def.get("show_config_apps", False)
+    # Use the new level-based system
+    all_profiles = user_profiles.BUILTIN_PROFILES
+    profile_def = all_profiles.get(profile_key, {})
+    level = profile_def.get("level", 1)
+    is_super = level == 0  # Level 0 = SUPER
 
     def fake_require_super(request):
         if not is_super:
@@ -280,7 +282,7 @@ def _patch_super_inline():
         def __init__(self):
             self._patches = [
                 _patch.object(auth_core, "get_current_user", return_value="egnal"),
-                _patch.object(user_profiles, "get_profile_key", return_value="SUPER"),
+                _patch.object(user_profiles, "is_super", return_value=True),
             ]
 
         def __enter__(self):
@@ -297,16 +299,14 @@ def _patch_super_inline():
 
 class TestRequireSuperGuard:
     def test_familia_principal_returns_403(self):
-        """FAMILIA_PRINCIPAL (no show_gaming_apps) cannot access /api/system/containers."""
+        """FAMILIA_PRINCIPAL (level 1) cannot access /api/system/containers."""
         import auth as auth_core
         import user_profiles
 
         c = _make_client()
         with (
             patch.object(auth_core, "get_current_user", return_value="virchi"),
-            patch.object(
-                user_profiles, "get_profile_key", return_value="FAMILIA_PRINCIPAL"
-            ),
+            patch.object(user_profiles, "is_super", return_value=False),
         ):
             r = c.get("/api/system/containers")
         assert r.status_code == 403
@@ -330,7 +330,7 @@ class TestRequireSuperGuard:
         ]
         with (
             patch.object(auth_core, "get_current_user", return_value="egnal"),
-            patch.object(user_profiles, "get_profile_key", return_value="SUPER"),
+            patch.object(user_profiles, "is_super", return_value=True),
         ):
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_cls.return_value.__aenter__.return_value.get = AsyncMock(

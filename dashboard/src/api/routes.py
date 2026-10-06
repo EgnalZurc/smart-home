@@ -392,16 +392,14 @@ CONTAINER_START_DELAYS: dict[str, int] = {
 
 
 def _require_super(request: Request) -> str:
-    """Return username if caller is SUPER, raise 403 otherwise."""
+    """Return username if caller has level 0 (SUPER), raise 403 otherwise."""
     import auth as auth_core
     import user_profiles
 
     user = auth_core.get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    profile_key = user_profiles.get_profile_key(user)
-    profile = user_profiles.PROFILES.get(profile_key, {})
-    if not profile.get("show_config_apps", False):
+    if not user_profiles.is_super(user):
         raise HTTPException(status_code=403, detail="SUPER profile required")
     return user
 

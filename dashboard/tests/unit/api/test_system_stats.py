@@ -347,10 +347,10 @@ class TestDashboardSystemStats:
         assert "display:none" in html or "display: none" in html
 
     def test_res_btn_shown_only_for_super(self):
-        """res-btn visibility must be gated on isSuper()."""
+        """res-btn visibility must be gated on isAdmin()."""
         html = self._html()
-        # Must show the button only after confirming SUPER profile
-        assert "isSuper()" in html or "show_config_apps" in html
+        # Must show the button only after confirming admin/SUPER profile (level 0)
+        assert "isAdmin()" in html
 
     def test_translations_es_include_res_keys(self):
         html = self._html()
