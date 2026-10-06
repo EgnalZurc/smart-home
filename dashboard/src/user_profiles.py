@@ -77,7 +77,7 @@ BUILTIN_PROFILES: dict[str, dict] = {
 }
 
 # Default profile ID for new users
-_DEFAULT_PROFILE_ID = "familia-principal-0000-000000000002"
+DEFAULT_PROFILE_ID = "familia-principal-0000-000000000002"
 
 # Quick lookup: name -> id for built-ins
 _BUILTIN_NAME_TO_ID = {p["name"]: pid for pid, p in BUILTIN_PROFILES.items()}
@@ -290,7 +290,7 @@ def _migrate_user_profiles_table():
                     profile_id = result[0]
                 else:
                     # Unknown profile, use default
-                    profile_id = _DEFAULT_PROFILE_ID
+                    profile_id = DEFAULT_PROFILE_ID
                     logger.warning(
                         "Unknown profile %r for user %r, using default",
                         profile_name,
@@ -491,7 +491,7 @@ def get_user_profiles(username: str) -> list[str]:
         ).fetchall()
 
     profile_ids = [row["profile_id"] for row in rows]
-    return profile_ids if profile_ids else [_DEFAULT_PROFILE_ID]
+    return profile_ids if profile_ids else [DEFAULT_PROFILE_ID]
 
 
 def get_user_profiles_detailed(username: str) -> list[dict]:
@@ -565,7 +565,7 @@ def get_effective_level(username: str) -> int:
 
     if not levels:
         # Fallback to default profile level
-        default = all_profiles.get(_DEFAULT_PROFILE_ID)
+        default = all_profiles.get(DEFAULT_PROFILE_ID)
         return default["level"] if default else 1
 
     return min(levels)

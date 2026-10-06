@@ -52,11 +52,11 @@ class TestBuiltinProfiles:
         gamer_id = "gamer-0000-0000-0000-000000000003"
         assert user_profiles.BUILTIN_PROFILES[gamer_id]["level"] == 3
 
-    def test_default_profile_id_is_familia_principal(self):
+    def testDEFAULT_PROFILE_ID_is_familia_principal(self):
         import user_profiles
 
         assert (
-            user_profiles._DEFAULT_PROFILE_ID == "familia-principal-0000-000000000002"
+            user_profiles.DEFAULT_PROFILE_ID == "familia-principal-0000-000000000002"
         )
 
     def test_only_super_is_protected(self):
@@ -251,7 +251,7 @@ class TestUserProfiles:
             user_profiles._ensure_builtin_profiles()
 
             profiles = user_profiles.get_user_profiles("newuser")
-            assert profiles == [user_profiles._DEFAULT_PROFILE_ID]
+            assert profiles == [user_profiles.DEFAULT_PROFILE_ID]
 
     def test_set_user_profiles(self):
         """Should be able to assign profiles to a user."""
