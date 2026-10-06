@@ -24,7 +24,7 @@ class TestProxyFlood:
     def test_flood_endpoint_registered(self):
         """Flood endpoint is registered on router."""
         routes = [r.path for r in router.routes]
-        assert "/flood" in routes
+        assert "/api/proxy/flood" in routes
 
 
 class TestProxyFirms:
@@ -47,7 +47,7 @@ class TestProxyFirms:
     def test_firms_endpoint_registered(self):
         """FIRMS endpoint is registered on router."""
         routes = [r.path for r in router.routes]
-        assert "/firms" in routes
+        assert "/api/proxy/firms" in routes
 
 
 class TestRouterRegistration:
