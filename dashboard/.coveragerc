@@ -3,8 +3,6 @@ source = src
 omit =
     # Entry point - integration/config code, not unit-testable
     src/main.py
-    # Duplicate tests accidentally placed in src/
-    src/tests/*
 
 [report]
 exclude_lines =
