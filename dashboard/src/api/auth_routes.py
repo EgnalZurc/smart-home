@@ -415,3 +415,72 @@ async def verify_session(request: Request):
         resp.headers["X-Auth-User"] = user
         return resp
     return FastAPIResponse(status_code=401)
+
+
+# ---------------------------------------------------------------------------
+# Admin API: Users and Profiles management (SUPER only)
+# ---------------------------------------------------------------------------
+
+
+def _require_super(request: Request) -> str:
+    """Check that the current user has SUPER profile. Returns username or raises 403."""
+    user = auth_core.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    profile_key = user_profiles.get_profile_key(user)
+    if profile_key != "SUPER":
+        raise HTTPException(status_code=403, detail="SUPER profile required")
+    return user
+
+
+@router.get("/admin/users", tags=["Admin"])
+async def list_users(request: Request):
+    """List all users with their assigned profiles.
+
+    Returns: [{"username": str, "profile": str}, ...]
+    """
+    _require_super(request)
+    users = auth_users._load_htpasswd(auth_users.HTPASSWD_PATH)
+    result = []
+    for username in sorted(users.keys()):
+        profile_key = user_profiles.get_profile_key(username)
+        result.append({"username": username, "profile": profile_key})
+    return result
+
+
+@router.get("/admin/profiles", tags=["Admin"])
+async def list_profiles(request: Request):
+    """List all available profiles with their settings.
+
+    Returns: {"PROFILE_KEY": {settings...}, ...}
+    """
+    _require_super(request)
+    return user_profiles.PROFILES
+
+
+@router.put("/admin/users/{username}/profile", tags=["Admin"])
+async def set_user_profile(username: str, request: Request):
+    """Assign a profile to a user.
+
+    Body: {"profile": "PROFILE_KEY"}
+    """
+    _require_super(request)
+
+    # Verify user exists
+    if not auth_users.user_exists(username):
+        raise HTTPException(status_code=404, detail=f"User not found: {username}")
+
+    body = await request.json()
+    profile_key = body.get("profile")
+    if not profile_key:
+        raise HTTPException(status_code=400, detail="Missing 'profile' field")
+
+    if profile_key not in user_profiles.PROFILES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid profile: {profile_key}. Valid: {list(user_profiles.PROFILES.keys())}",
+        )
+
+    user_profiles.set_profile(username, profile_key)
+    logger.info("Profile %r assigned to user %r by admin", profile_key, username)
+    return {"username": username, "profile": profile_key}
