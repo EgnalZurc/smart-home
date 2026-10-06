@@ -39,7 +39,7 @@ def _patch_super(username="egnal"):
     def fake_super(request):
         return username
 
-    return patch("api.routes._require_super", side_effect=fake_super)
+    return patch("system.stats._require_super", side_effect=fake_super)
 
 
 def _patch_familia():
@@ -49,7 +49,7 @@ def _patch_familia():
     def fake_familia(request):
         raise HTTPException(status_code=403, detail="SUPER profile required")
 
-    return patch("api.routes._require_super", side_effect=fake_familia)
+    return patch("system.stats._require_super", side_effect=fake_familia)
 
 
 def _patch_unauthenticated():
@@ -126,7 +126,7 @@ class TestSystemStatsAuth:
         c = _make_client()
         with _patch_super():
             with patch("builtins.open", side_effect=_mock_proc_files()):
-                with patch("os.statvfs", return_value=_mock_statvfs()):
+                with patch("system.stats.os.statvfs", return_value=_mock_statvfs()):
                     r = c.get("/api/system/stats")
         assert r.status_code == 200
 
@@ -151,7 +151,7 @@ class TestSystemStatsStructure:
         c = _make_client()
         with _patch_super():
             with patch("builtins.open", side_effect=_mock_proc_files()):
-                with patch("os.statvfs", return_value=_mock_statvfs()):
+                with patch("system.stats.os.statvfs", return_value=_mock_statvfs()):
                     return c.get("/api/system/stats").json()
 
     def test_response_has_all_top_level_keys(self):
@@ -189,7 +189,7 @@ class TestSystemStatsValues:
         c = _make_client()
         with _patch_super():
             with patch("builtins.open", side_effect=_mock_proc_files()):
-                with patch("os.statvfs", return_value=_mock_statvfs()):
+                with patch("system.stats.os.statvfs", return_value=_mock_statvfs()):
                     return c.get("/api/system/stats").json()
 
     def test_ram_total_matches_meminfo(self):
@@ -262,7 +262,7 @@ class TestSystemStatsResilience:
         c = _make_client()
         with _patch_super():
             with patch("builtins.open", side_effect=open_no_thermal):
-                with patch("os.statvfs", return_value=_mock_statvfs()):
+                with patch("system.stats.os.statvfs", return_value=_mock_statvfs()):
                     r = c.get("/api/system/stats")
         assert r.status_code == 200
         data = r.json()
@@ -275,7 +275,9 @@ class TestSystemStatsResilience:
         c = _make_client()
         with _patch_super():
             with patch("builtins.open", side_effect=_mock_proc_files()):
-                with patch("os.statvfs", side_effect=OSError("permission denied")):
+                with patch(
+                    "system.stats.os.statvfs", side_effect=OSError("permission denied")
+                ):
                     r = c.get("/api/system/stats")
         assert r.status_code == 200
         data = r.json()
@@ -298,7 +300,7 @@ class TestSystemStatsResilience:
 
         c = _make_client()
         with _patch_super(), patch("builtins.open", side_effect=open_no_mem):
-            with patch("os.statvfs", return_value=_mock_statvfs()):
+            with patch("system.stats.os.statvfs", return_value=_mock_statvfs()):
                 r = c.get("/api/system/stats")
         assert r.status_code == 200
         assert "ram" in r.json()
