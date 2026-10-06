@@ -431,7 +431,7 @@
     <header class="flex items-center justify-between mb-8">
         <h1 id="title" class="text-xl font-bold tracking-tight">Cuchi Casa</h1>
         <div class="flex items-center gap-2">
-            <!-- Services button (level <= 1) -->
+            <!-- Services button (SUPER only) -->
             <button id="svc-btn" class="hdr-btn" onclick="openSvcModal()" style="display:none" title="Servicios">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
@@ -1221,9 +1221,9 @@ async function loadUser() {
         document.getElementById('user-avatar').textContent = username.charAt(0).toUpperCase();
         document.getElementById('user-dropdown').style.display = 'block';
         
-        // Show buttons based on level
-        if (getLevel() <= 1) document.getElementById('svc-btn').style.display = 'flex';
+        // Show buttons based on level (SUPER = level 0)
         if (isAdmin()) {
+            document.getElementById('svc-btn').style.display = 'flex';
             document.getElementById('res-btn').style.display = 'flex';
             document.getElementById('admin-btn').style.display = 'flex';
         }
