@@ -270,7 +270,7 @@ async def post_logout(request: Request):
 async def get_me(request: Request):
     """Return the current authenticated user info, or 401.
 
-    Response includes profile key and the list of apps the user can access,
+    Response includes profile info and the list of apps the user can access,
     so the dashboard can filter its app list without an extra round-trip.
     """
     user = auth_core.get_current_user(request)
@@ -279,17 +279,18 @@ async def get_me(request: Request):
 
     has_device = bool(auth_devices.get_device_cookie_from_request(request))
 
-    profile_key = user_profiles.get_profile_key(user)
-    profile_def = user_profiles.PROFILES.get(profile_key, {})
+    profiles = user_profiles.get_user_profiles(user)
+    effective_level = user_profiles.get_effective_level(user)
+
     return JSONResponse(
         {
             "username": user,
             "trusted_device": has_device,
-            "profile": profile_key,
-            "profile_data": {
-                "show_config_apps": profile_def.get("show_config_apps", False),
-            },
+            "profiles": profiles,
+            "effective_level": effective_level,
+            "is_admin": effective_level == 0,
             "apps": user_profiles.app_permissions(user),
+            "external_services": user_profiles.visible_external_services(user),
         }
     )
 
@@ -423,50 +424,203 @@ async def verify_session(request: Request):
 
 
 def _require_super(request: Request) -> str:
-    """Check that the current user has SUPER profile. Returns username or raises 403."""
+    """Check that the current user has level 0 (SUPER). Returns username or raises 403."""
     user = auth_core.get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    profile_key = user_profiles.get_profile_key(user)
-    if profile_key != "SUPER":
-        raise HTTPException(status_code=403, detail="SUPER profile required")
+    if not user_profiles.is_super(user):
+        raise HTTPException(status_code=403, detail="Admin access required (level 0)")
     return user
+
+
+# ── User Management ──────────────────────────────────────────────────────────
 
 
 @router.get("/admin/users", tags=["Admin"])
 async def list_users(request: Request):
     """List all users with their assigned profiles.
 
-    Returns: [{"username": str, "profile": str}, ...]
+    Returns: [{"username": str, "profiles": [str], "effective_level": int}, ...]
     """
     _require_super(request)
     users = auth_users._load_htpasswd(auth_users.HTPASSWD_PATH)
     result = []
     for username in sorted(users.keys()):
-        profile_key = user_profiles.get_profile_key(username)
-        result.append({"username": username, "profile": profile_key})
+        profiles = user_profiles.get_user_profiles(username)
+        effective_level = user_profiles.get_effective_level(username)
+        result.append(
+            {
+                "username": username,
+                "profiles": profiles,
+                "effective_level": effective_level,
+            }
+        )
     return result
+
+
+@router.put("/admin/users/{username}/profiles", tags=["Admin"])
+async def set_user_profiles_endpoint(username: str, request: Request):
+    """Set the profiles for a user (replaces all existing).
+
+    Body: {"profiles": ["PROFILE1", "PROFILE2", ...]}
+    """
+    _require_super(request)
+
+    if not auth_users.user_exists(username):
+        raise HTTPException(status_code=404, detail=f"User not found: {username}")
+
+    body = await request.json()
+    profiles = body.get("profiles", [])
+
+    if not profiles:
+        raise HTTPException(status_code=400, detail="At least one profile required")
+
+    all_profiles = user_profiles.get_all_profiles()
+    for p in profiles:
+        if p not in all_profiles:
+            raise HTTPException(status_code=400, detail=f"Unknown profile: {p}")
+
+    user_profiles.set_user_profiles(username, profiles)
+    logger.info("Profiles %r assigned to user %r by admin", profiles, username)
+
+    return {
+        "username": username,
+        "profiles": profiles,
+        "effective_level": user_profiles.get_effective_level(username),
+    }
+
+
+@router.post("/admin/users/{username}/profiles/{profile}", tags=["Admin"])
+async def add_user_profile_endpoint(username: str, profile: str, request: Request):
+    """Add a profile to a user (keeps existing profiles)."""
+    _require_super(request)
+
+    if not auth_users.user_exists(username):
+        raise HTTPException(status_code=404, detail=f"User not found: {username}")
+
+    all_profiles = user_profiles.get_all_profiles()
+    if profile not in all_profiles:
+        raise HTTPException(status_code=400, detail=f"Unknown profile: {profile}")
+
+    user_profiles.add_user_profile(username, profile)
+
+    return {
+        "username": username,
+        "profiles": user_profiles.get_user_profiles(username),
+        "effective_level": user_profiles.get_effective_level(username),
+    }
+
+
+@router.delete("/admin/users/{username}/profiles/{profile}", tags=["Admin"])
+async def remove_user_profile_endpoint(username: str, profile: str, request: Request):
+    """Remove a profile from a user."""
+    _require_super(request)
+
+    if not auth_users.user_exists(username):
+        raise HTTPException(status_code=404, detail=f"User not found: {username}")
+
+    current_profiles = user_profiles.get_user_profiles(username)
+    if len(current_profiles) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot remove last profile")
+
+    user_profiles.remove_user_profile(username, profile)
+
+    return {
+        "username": username,
+        "profiles": user_profiles.get_user_profiles(username),
+        "effective_level": user_profiles.get_effective_level(username),
+    }
+
+
+# ── Profile Management ───────────────────────────────────────────────────────
 
 
 @router.get("/admin/profiles", tags=["Admin"])
 async def list_profiles(request: Request):
     """List all available profiles with their settings.
 
-    Returns: {"PROFILE_KEY": {settings...}, ...}
+    Returns: {"PROFILE_KEY": {level, description, builtin}, ...}
     """
     _require_super(request)
-    return user_profiles.PROFILES
+    return user_profiles.get_all_profiles()
+
+
+@router.post("/admin/profiles", tags=["Admin"])
+async def create_profile_endpoint(request: Request):
+    """Create a new custom profile.
+
+    Body: {"name": str, "level": int (0-3), "description": str}
+    """
+    _require_super(request)
+
+    body = await request.json()
+    name = body.get("name", "").strip().upper()
+    level = body.get("level")
+    description = body.get("description", "")
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Profile name required")
+    if level is None or not isinstance(level, int):
+        raise HTTPException(status_code=400, detail="Level required (0-3)")
+    if not 0 <= level <= 3:
+        raise HTTPException(status_code=400, detail="Level must be 0-3")
+
+    try:
+        user_profiles.create_profile(name, level, description)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"name": name, "level": level, "description": description, "builtin": False}
+
+
+@router.put("/admin/profiles/{name}", tags=["Admin"])
+async def update_profile_endpoint(name: str, request: Request):
+    """Update a custom profile. Cannot modify built-in profiles.
+
+    Body: {"level": int (optional), "description": str (optional)}
+    """
+    _require_super(request)
+
+    body = await request.json()
+    level = body.get("level")
+    description = body.get("description")
+
+    if level is not None and not 0 <= level <= 3:
+        raise HTTPException(status_code=400, detail="Level must be 0-3")
+
+    try:
+        user_profiles.update_profile(name, level, description)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    all_profiles = user_profiles.get_all_profiles()
+    return all_profiles.get(name, {})
+
+
+@router.delete("/admin/profiles/{name}", tags=["Admin"])
+async def delete_profile_endpoint(name: str, request: Request):
+    """Delete a custom profile. Cannot delete built-in profiles."""
+    _require_super(request)
+
+    try:
+        user_profiles.delete_profile(name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"deleted": name}
+
+
+# ── Legacy endpoint for backward compatibility ───────────────────────────────
 
 
 @router.put("/admin/users/{username}/profile", tags=["Admin"])
-async def set_user_profile(username: str, request: Request):
-    """Assign a profile to a user.
+async def set_user_profile_legacy(username: str, request: Request):
+    """Legacy: Assign a single profile to a user (replaces all).
 
     Body: {"profile": "PROFILE_KEY"}
     """
     _require_super(request)
 
-    # Verify user exists
     if not auth_users.user_exists(username):
         raise HTTPException(status_code=404, detail=f"User not found: {username}")
 
@@ -475,7 +629,8 @@ async def set_user_profile(username: str, request: Request):
     if not profile_key:
         raise HTTPException(status_code=400, detail="Missing 'profile' field")
 
-    if profile_key not in user_profiles.PROFILES:
+    all_profiles = user_profiles.get_all_profiles()
+    if profile_key not in all_profiles:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid profile: {profile_key}. Valid: {list(user_profiles.PROFILES.keys())}",
