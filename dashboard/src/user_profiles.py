@@ -284,7 +284,7 @@ def delete_profile(name: str) -> None:
     """Delete a custom profile. Cannot delete built-in profiles."""
     if name in BUILTIN_PROFILES:
         raise ValueError(f"Cannot delete built-in profile: {name}")
-    
+
     with _db() as conn:
         # Remove from users first
         conn.execute("DELETE FROM user_profiles WHERE profile = ?", (name,))
@@ -301,7 +301,7 @@ def get_user_profiles(username: str) -> list[str]:
         rows = conn.execute(
             "SELECT profile FROM user_profiles WHERE username = ?", (username,)
         ).fetchall()
-    
+
     profiles = [row["profile"] for row in rows]
     return profiles if profiles else [_DEFAULT_PROFILE]
 
@@ -312,13 +312,13 @@ def set_user_profiles(username: str, profiles: list[str]) -> None:
     for p in profiles:
         if p not in all_profiles:
             raise ValueError(f"Unknown profile: {p}")
-    
+
     with _db() as conn:
         conn.execute("DELETE FROM user_profiles WHERE username = ?", (username,))
         for p in profiles:
             conn.execute(
                 "INSERT INTO user_profiles (username, profile) VALUES (?, ?)",
-                (username, p)
+                (username, p),
             )
     logger.info("Assigned profiles %r to user %r", profiles, username)
 
@@ -328,11 +328,11 @@ def add_user_profile(username: str, profile: str) -> None:
     all_profiles = get_all_profiles()
     if profile not in all_profiles:
         raise ValueError(f"Unknown profile: {profile}")
-    
+
     with _db() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO user_profiles (username, profile) VALUES (?, ?)",
-            (username, profile)
+            (username, profile),
         )
     logger.info("Added profile %r to user %r", profile, username)
 
