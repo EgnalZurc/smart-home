@@ -751,6 +751,7 @@ function switchSvcTab(tab) {
 async function loadSvcStatus() {
     // Batch load all health statuses in a single request
     // Backend checks all services in parallel, reducing latency from O(n*timeout) to O(max_timeout)
+    // UI shows all services as offline (red) immediately, then updates to green as results arrive
     try {
         const all = await fetch('/api/health/all').then(r => r.json());
 
@@ -765,9 +766,10 @@ async function loadSvcStatus() {
         svcStatus['core_mqtt'] = all.zigbee?.mqtt_connected === true;
         svcStatus['core_zigbee'] = all.zigbee?.online === true;
     } catch {
-        // On error, mark all as offline
-        ['ai', 'photos_ext', 'passwords_ext', 'core_backend', 'core_mqtt', 'core_zigbee'].forEach(k => svcStatus[k] = false);
+        // On error, all remain offline (already initialized as false)
     }
+    // Re-render with actual status
+    renderSvcContent();
 }
 
 function renderSvcContent() {
@@ -801,9 +803,11 @@ async function openSvcModal() {
     document.getElementById('svc-modal').classList.add('open');
     currentSvcTab = 'external';
     document.querySelectorAll('#svc-tabs .res-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'external'));
-    document.getElementById('svc-body').innerHTML = '<div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>';
-    await loadSvcStatus();
-    renderSvcContent();
+    // Initialize all services as offline (red) - instant feedback
+    ['ai', 'photos_ext', 'passwords_ext', 'core_backend', 'core_mqtt', 'core_zigbee'].forEach(k => svcStatus[k] = false);
+    renderSvcContent();  // Show immediately with all red dots
+    // Load actual status in background - will re-render when complete
+    loadSvcStatus();
 }
 
 function closeSvcModal(e) {
