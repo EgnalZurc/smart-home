@@ -1,0 +1,20 @@
+# ==============================================================================
+# smart-home - CI/test toolchain (SINGLE SOURCE OF TRUTH)
+#
+# These are the lint/test tools pinned to exact versions. Both the GitHub CI
+# (.github/workflows/ci.yml) and the local CI-equivalent image
+# (Dockerfile.citest) install from THIS file, so local runs and CI resolve the
+# EXACT same tool versions. Bump a version here and both follow.
+#
+# NOT installed from here (handled separately, by design):
+#   - hadolint: a standalone binary pulled via wget/curl, not a pip package.
+#     Its version lives as HADOLINT_VERSION in both ci.yml and Dockerfile.citest.
+#
+# After editing, rebuild the local image:  .\dev.ps1 build
+# ==============================================================================
+ruff==0.16.10
+bandit==1.9.4
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0
+httpx==0.28.1
