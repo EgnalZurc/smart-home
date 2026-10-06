@@ -772,6 +772,13 @@ async function loadSvcStatus() {
 
 function renderSvcContent() {
     const body = document.getElementById('svc-body');
+    
+    // Helper to get dot class based on status (true=green, false=red, 'pending'=yellow pulse)
+    const getDotClass = (status) => {
+        if (status === 'pending') return 'bg-yellow-500 animate-pulse';
+        return status ? 'bg-green-500 status-dot' : 'bg-red-400';
+    };
+    
     if (currentSvcTab === 'external') {
         if (!externalServices.length) {
             body.innerHTML = '<p class="text-center text-slate-500 py-4 text-sm">No hay servicios externos disponibles</p>';
@@ -780,16 +787,16 @@ function renderSvcContent() {
         body.innerHTML = externalServices.map(svc => {
             const info = EXT_SERVICES[svc.key];
             if (!info) return '';
-            const online = svcStatus[svc.key] ?? false;
+            const status = svcStatus[svc.key] ?? false;
             return `<a href="${info.url}" target="_blank" rel="noopener" class="svc-item">
-                <span class="svc-dot ${online ? 'bg-green-500 status-dot' : 'bg-red-400'}"></span>
+                <span class="svc-dot ${getDotClass(status)}"></span>
                 <span class="svc-name">${t(info.nameKey)}</span>
             </a>`;
         }).join('');
     } else {
         body.innerHTML = CORE_SERVICES.map(svc => {
-            const online = svcStatus[svc.key] ?? false;
-            const inner = `<span class="svc-dot ${online ? 'bg-green-500 status-dot' : 'bg-red-400'}"></span><span class="svc-name">${t(svc.labelKey)}</span>`;
+            const status = svcStatus[svc.key] ?? false;
+            const inner = `<span class="svc-dot ${getDotClass(status)}"></span><span class="svc-name">${t(svc.labelKey)}</span>`;
             return svc.url 
                 ? `<a href="${svc.url}" class="svc-item">${inner}</a>`
                 : `<div class="svc-item" style="cursor:default">${inner}</div>`;
@@ -801,7 +808,13 @@ async function openSvcModal() {
     document.getElementById('svc-modal').classList.add('open');
     currentSvcTab = 'external';
     document.querySelectorAll('#svc-tabs .res-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'external'));
-    document.getElementById('svc-body').innerHTML = '<div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>';
+    
+    // Show modal immediately with "checking" state (yellow dots)
+    // This gives instant feedback while health checks run in background
+    ['ai', 'photos_ext', 'passwords_ext', 'core_backend', 'core_mqtt', 'core_zigbee'].forEach(k => svcStatus[k] = 'pending');
+    renderSvcContent();
+    
+    // Load actual status in background and update
     await loadSvcStatus();
     renderSvcContent();
 }

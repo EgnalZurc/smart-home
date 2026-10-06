@@ -174,9 +174,13 @@ async def get_passwords_health():
 
 @router.get("/ai")
 async def get_ai_health():
-    """Health check for Local AI (Open WebUI on EgnalPC)."""
+    """Health check for Local AI (Open WebUI on EgnalPC).
+
+    Uses a shorter timeout (2s) because this service is on a different machine
+    and if it's not responding quickly, it's likely powered off.
+    """
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=2.0) as client:
             r = await client.get("http://192.168.1.164:3000/health")
             data = r.json()
             return {"online": data.get("status", False) is True}
