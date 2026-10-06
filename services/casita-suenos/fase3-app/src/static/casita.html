@@ -7,11 +7,11 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Casita Sueños</title>
-<link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-<link rel="icon" type="image/png" sizes="32x32" href="/static/icon-32.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+<link rel="icon" type="image/x-icon" href="/static/casita/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/casita/icon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/casita/apple-touch-icon.png">
 <meta name="theme-color" content="#0f172a">
-<link rel="stylesheet" href="/static/tailwind.css">
+<link rel="stylesheet" href="/static/casita/tailwind.css">
 <style>
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
 .card{background:linear-gradient(145deg,rgba(30,41,59,.8),rgba(15,23,42,.9));border:1px solid rgba(51,65,85,.5);backdrop-filter:blur(10px);border-radius:1rem}
@@ -225,7 +225,7 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
         <button id="btn-portal-filter" onclick="togglePortalFilter()"
           title="Sin filtro de portal"
           class="flex items-center justify-center w-7 h-7 rounded-lg border border-slate-700/50 bg-slate-800/60 text-slate-500 hover:text-slate-200 hover:border-slate-500 transition-all">
-          <span id="portal-icon" class="flex items-center justify-center w-4 h-4"><img src="/static/portal_all.png" class="w-4 h-4 object-contain" alt="Portales"></span>
+          <span id="portal-icon" class="flex items-center justify-center w-4 h-4"><img src="/static/casita/portal_all.png" class="w-4 h-4 object-contain" alt="Portales"></span>
         </button>
         <!-- Botón toggle filtro vistas -->
         <button id="btn-viewed-filter" onclick="toggleViewedFilter()"
@@ -448,10 +448,10 @@ function _ageLabel(iso) { return _fmtFirstSeen(iso); }
 function _fmtPortal(portal) {
   if (!portal) return '';
   const icons = {
-    pisos:      '/static/portal_pisos.png',
-    habitaclia: '/static/portal_habitaclia.png',
-    idealista:  '/static/portal_idealista.png',
-    fotocasa:   '/static/portal_fotocasa.png',
+    pisos:      '/static/casita/portal_pisos.png',
+    habitaclia: '/static/casita/portal_habitaclia.png',
+    idealista:  '/static/casita/portal_idealista.png',
+    fotocasa:   '/static/casita/portal_fotocasa.png',
   };
   const colors = {
     pisos:      'border-emerald-800/40',
@@ -497,11 +497,11 @@ let _radarFilter = 'not_viewed';  // Arranca en not_viewed — casas vistas ocul
 // Filtro de portal
 let _portalFilter = null;  // null | 'idealista' | 'pisos' | 'habitaclia' | 'fotocasa'
 const _portalStates = [
-  { key: null,         icon: "<img src='/static/portal_all.png' class='w-4 h-4 object-contain' alt='Todos'>", cls: "", title: "Todos los portales" },
-  { key: "idealista",  icon: "<img src='/static/portal_idealista.png' class='w-4 h-4' alt='I'>",  cls: "filter-idealista",   title: "Solo Idealista" },
-  { key: "pisos",      icon: "<img src='/static/portal_pisos.png' class='w-4 h-4' alt='Pi'>",     cls: "filter-pisos",       title: "Solo Pisos.com" },
-  { key: "habitaclia", icon: "<img src='/static/portal_habitaclia.png' class='w-4 h-4' alt='H'>", cls: "filter-habitaclia",  title: "Solo Habitaclia" },
-  { key: "fotocasa",   icon: "<img src='/static/portal_fotocasa.png' class='w-4 h-4 object-contain' alt='F'>",   cls: "filter-fotocasa",    title: "Solo Fotocasa" },
+  { key: null,         icon: "<img src='/static/casita/portal_all.png' class='w-4 h-4 object-contain' alt='Todos'>", cls: "", title: "Todos los portales" },
+  { key: "idealista",  icon: "<img src='/static/casita/portal_idealista.png' class='w-4 h-4' alt='I'>",  cls: "filter-idealista",   title: "Solo Idealista" },
+  { key: "pisos",      icon: "<img src='/static/casita/portal_pisos.png' class='w-4 h-4' alt='Pi'>",     cls: "filter-pisos",       title: "Solo Pisos.com" },
+  { key: "habitaclia", icon: "<img src='/static/casita/portal_habitaclia.png' class='w-4 h-4' alt='H'>", cls: "filter-habitaclia",  title: "Solo Habitaclia" },
+  { key: "fotocasa",   icon: "<img src='/static/casita/portal_fotocasa.png' class='w-4 h-4 object-contain' alt='F'>",   cls: "filter-fotocasa",    title: "Solo Fotocasa" },
 ];
 let _portalFilterIdx = 0;
 

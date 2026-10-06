@@ -129,6 +129,47 @@ class _StatusHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_static_file(self, filename: str, content_type: str | None = None) -> None:
+        """Serve a static file from the static/ directory."""
+        # Security: prevent path traversal
+        if ".." in filename or filename.startswith("/"):
+            self._send_json(400, {"error": "Invalid path"})
+            return
+
+        static_dir = Path(__file__).parent / "static"
+        filepath = static_dir / filename
+
+        if not filepath.exists() or not filepath.is_file():
+            self._send_json(404, {"error": f"File not found: {filename}"})
+            return
+
+        # Determine content type
+        if content_type is None:
+            ext = filepath.suffix.lower()
+            content_types = {
+                ".html": "text/html; charset=utf-8",
+                ".css": "text/css; charset=utf-8",
+                ".js": "application/javascript; charset=utf-8",
+                ".png": "image/png",
+                ".ico": "image/x-icon",
+                ".svg": "image/svg+xml",
+                ".json": "application/json",
+            }
+            content_type = content_types.get(ext, "application/octet-stream")
+        elif "html" in content_type or "css" in content_type or "javascript" in content_type:
+            content_type = f"{content_type}; charset=utf-8"
+
+        try:
+            with open(filepath, "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", len(body))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            self._send_json(500, {"error": str(e)})
+
     def do_GET(self):
         global _scheduler_instance
 
@@ -246,6 +287,15 @@ class _StatusHandler(BaseHTTPRequestHandler):
                 return
             summary = _scheduler_instance.get_last_summary()
             self._send_json(200, summary or {"content": None, "sent_at": None})
+
+        elif self.path in ("/", "/smart-home/casita", "/smart-home/casita/"):
+            # Serve the frontend HTML
+            self._serve_static_file("casita.html", "text/html")
+
+        elif self.path.startswith("/static/casita/"):
+            # Serve static files (CSS, images, etc.)
+            filename = self.path.replace("/static/casita/", "")
+            self._serve_static_file(filename)
 
         else:
             self._send_json(404, {"error": "Not found"})
