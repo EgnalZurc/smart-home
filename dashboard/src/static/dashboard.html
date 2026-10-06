@@ -21,14 +21,8 @@
             text-decoration: none; display: block;
             border-radius: 16px;
         }
-        .app-card.offline {
-            filter: grayscale(1);
-            opacity: 0.6;
-        }
-        .app-card.offline:hover {
-            filter: grayscale(0.7);
-            opacity: 0.75;
-        }
+        .app-card.offline { filter: grayscale(1); opacity: 0.6; }
+        .app-card.offline:hover { filter: grayscale(0.7); opacity: 0.75; }
         .app-card:active { transform: scale(0.97); }
         @media (hover:hover) { .app-card:hover { border-color: rgba(99,102,241,0.4); transform: translateY(-1px); } }
 
@@ -84,8 +78,6 @@
             transition: transform .25s cubic-bezier(.4,0,.2,1);
         }
         .modal-overlay.open .modal-panel { transform: translateY(0); }
-
-        /* drag handle */
         .modal-handle { width: 36px; height: 4px; background: rgba(100,116,139,.4); border-radius: 2px; margin: 0 auto 16px; }
 
         /* resource rows */
@@ -108,13 +100,6 @@
         .temp-pill.green  { background: rgba(34,197,94,.15);  color: #86efac; }
         .temp-pill.yellow { background: rgba(245,158,11,.15); color: #fcd34d; }
         .temp-pill.red    { background: rgba(239,68,68,.15);  color: #fca5a5; }
-
-        /* Core infrastructure bar */
-        .core-bar { background: rgba(15,23,42,0.7); border: 1px solid rgba(51,65,85,0.35); border-radius: 14px; }
-        .core-item { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
-        .core-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; vertical-align: middle; animation: pulse 2s infinite; }
-        .core-label { font-size: 11px; color: #94a3b8; font-weight: 500; line-height: 1; margin-right: 6px; }
-        .core-item:hover .core-label { color: #cbd5e1; }
 
         .section-label { font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
         .status-dot { animation: pulse 2s infinite; }
@@ -154,231 +139,107 @@
         /* PC mode buttons */
         .pc-mode-btn {
             display: inline-flex; align-items: center; justify-content: center;
-            gap: 4px;
-            font-size: 10px; font-weight: 600;
+            gap: 4px; font-size: 10px; font-weight: 600;
             padding: 6px 12px; border-radius: 8px;
             border: 2px solid rgba(51,65,85,.5);
             background: rgba(30,41,59,.5);
             color: #94a3b8; cursor: pointer;
             transition: all .15s ease;
-            white-space: nowrap;
-            min-width: 70px;
+            white-space: nowrap; min-width: 70px;
         }
         .pc-mode-btn:hover { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.4); color: #a5b4fc; }
         .pc-mode-btn:active { transform: scale(0.95); }
         .pc-mode-btn.active { background: rgba(34,197,94,.15); border-color: rgba(34,197,94,.6); color: #86efac; box-shadow: 0 0 8px rgba(34,197,94,.3); }
         .pc-mode-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-        /* AI Section - subtle style matching core-bar */
-        .ai-card {
-            background: rgba(15,23,42,0.7);
-            border: 1px solid rgba(51,65,85,0.35);
-            border-radius: 14px;
-            padding: 14px 16px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-        }
-        .ai-card:hover {
-            border-color: rgba(124,58,237,0.4);
-            background: rgba(15,23,42,0.85);
-        }
-        .ai-card:active { transform: scale(0.98); }
-        .ai-card.offline {
-            filter: grayscale(0.7);
-            opacity: 0.55;
-        }
-        .ai-card.offline:hover {
-            filter: grayscale(0.4);
-            opacity: 0.7;
-        }
-        .ai-icon {
-            width: 36px;
-            height: 36px;
-            background: linear-gradient(135deg, rgba(124,58,237,0.2), rgba(59,130,246,0.15));
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-        .ai-icon svg {
-            width: 18px;
-            height: 18px;
-            color: #a78bfa;
-        }
-        .ai-content { flex: 1; min-width: 0; }
-        .ai-title {
-            font-size: 0.8125rem;
-            font-weight: 600;
-            color: #e2e8f0;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .ai-status-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-        .ai-desc {
-            font-size: 0.6875rem;
-            color: #64748b;
-            margin-top: 2px;
-        }
-        .ai-arrow {
-            color: #475569;
-            font-size: 1.1rem;
-            transition: transform 0.15s, color 0.15s;
-        }
-        .ai-card:hover .ai-arrow {
-            transform: translateX(2px);
-            color: #a78bfa;
-        }
-
-        /* Resource selector tabs */
-        .res-tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
+        /* Resource/Services tabs */
+        .res-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
         .res-tab {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 8px 14px;
-            border-radius: 10px;
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 14px; border-radius: 10px;
             border: 1px solid rgba(51,65,85,.5);
             background: rgba(30,41,59,.3);
-            color: #64748b;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all .15s;
+            color: #64748b; font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: all .15s;
         }
         .res-tab:hover { background: rgba(51,65,85,.5); color: #94a3b8; }
         .res-tab.active { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.5); color: #a5b4fc; }
-        .res-tab .tab-dot {
-            width: 6px; height: 6px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
+        .res-tab .tab-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 
         /* Admin modal tabs */
-        .admin-tabs {
-            display: flex;
-            gap: 4px;
-            margin-bottom: 16px;
-            border-bottom: 1px solid rgba(51,65,85,.4);
-            padding-bottom: 8px;
-        }
-        .admin-tab {
-            padding: 8px 16px;
-            border-radius: 8px 8px 0 0;
-            background: transparent;
-            color: #64748b;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all .15s;
-            border: none;
-        }
+        .admin-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid rgba(51,65,85,.4); padding-bottom: 8px; }
+        .admin-tab { padding: 8px 16px; border-radius: 8px 8px 0 0; background: transparent; color: #64748b; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; border: none; }
         .admin-tab:hover { background: rgba(51,65,85,.3); color: #94a3b8; }
         .admin-tab.active { background: rgba(99,102,241,.15); color: #a5b4fc; }
 
         /* Admin table */
-        .admin-table {
-            width: 100%;
-            font-size: 13px;
-        }
-        .admin-table th {
-            text-align: left;
-            padding: 8px 12px;
-            color: #64748b;
-            font-weight: 600;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: .05em;
-            border-bottom: 1px solid rgba(51,65,85,.4);
-        }
-        .admin-table td {
-            padding: 10px 12px;
-            color: #e2e8f0;
-            border-bottom: 1px solid rgba(51,65,85,.2);
-        }
+        .admin-table { width: 100%; font-size: 13px; }
+        .admin-table th { text-align: left; padding: 8px 12px; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid rgba(51,65,85,.4); }
+        .admin-table td { padding: 10px 12px; color: #e2e8f0; border-bottom: 1px solid rgba(51,65,85,.2); vertical-align: middle; }
         .admin-table tr:last-child td { border-bottom: none; }
         .admin-table tr:hover td { background: rgba(51,65,85,.15); }
 
-        /* Profile select */
-        .profile-select {
-            background: rgba(30,41,59,.8);
-            border: 1px solid rgba(51,65,85,.5);
-            border-radius: 6px;
-            color: #e2e8f0;
-            padding: 4px 8px;
-            font-size: 12px;
-            cursor: pointer;
+        /* Profile chips */
+        .profile-chip {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 4px;
+            font-size: 10px; font-weight: 600;
+            background: rgba(51,65,85,.5); color: #94a3b8;
+            margin: 2px;
         }
-        .profile-select:focus { outline: none; border-color: rgba(99,102,241,.5); }
+        .profile-chip.level-0 { background: rgba(239,68,68,.15); color: #fca5a5; }
+        .profile-chip.level-1 { background: rgba(34,197,94,.15); color: #86efac; }
+        .profile-chip.level-2 { background: rgba(245,158,11,.15); color: #fcd34d; }
+        .profile-chip.level-3 { background: rgba(59,130,246,.15); color: #93c5fd; }
+        .profile-chip .remove-btn { cursor: pointer; opacity: 0.6; margin-left: 2px; }
+        .profile-chip .remove-btn:hover { opacity: 1; }
 
-        /* Profile badge */
-        .profile-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .profile-badge.super { background: rgba(239,68,68,.15); color: #fca5a5; }
-        .profile-badge.familia-all { background: rgba(124,58,237,.15); color: #c4b5fd; }
-        .profile-badge.familia-principal { background: rgba(34,197,94,.15); color: #86efac; }
-        .profile-badge.gamer { background: rgba(59,130,246,.15); color: #93c5fd; }
-
-        /* Profile info cards */
+        /* Profile card */
         .profile-card {
-            background: rgba(30,41,59,.5);
-            border: 1px solid rgba(51,65,85,.4);
-            border-radius: 10px;
-            padding: 12px;
-            margin-bottom: 10px;
+            background: rgba(30,41,59,.5); border: 1px solid rgba(51,65,85,.4);
+            border-radius: 10px; padding: 12px; margin-bottom: 10px;
         }
         .profile-card:last-child { margin-bottom: 0; }
-        .profile-card-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 8px;
+        .profile-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+        .profile-card-title { font-size: 14px; font-weight: 600; color: #e2e8f0; }
+        .profile-card-desc { font-size: 11px; color: #64748b; line-height: 1.4; }
+        .profile-card-level { font-size: 12px; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+        .profile-card-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+        /* Service item in modal */
+        .svc-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: 10px;
+            background: rgba(30,41,59,.4); border: 1px solid rgba(51,65,85,.3);
+            margin-bottom: 8px; cursor: pointer; transition: all .15s;
+            text-decoration: none; color: inherit;
         }
-        .profile-card-title {
-            font-size: 13px;
-            font-weight: 600;
-            color: #e2e8f0;
+        .svc-item:hover { background: rgba(51,65,85,.4); border-color: rgba(99,102,241,.3); }
+        .svc-item:last-child { margin-bottom: 0; }
+        .svc-item .svc-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .svc-item .svc-name { font-size: 13px; font-weight: 500; color: #e2e8f0; }
+
+        /* Small button */
+        .btn-sm {
+            padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
+            border: 1px solid rgba(51,65,85,.5); background: rgba(30,41,59,.5);
+            color: #94a3b8; cursor: pointer; transition: all .15s;
         }
-        .profile-card-desc {
-            font-size: 11px;
-            color: #64748b;
-            line-height: 1.4;
+        .btn-sm:hover { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.4); color: #a5b4fc; }
+        .btn-sm.danger { color: #f87171; border-color: rgba(239,68,68,.3); }
+        .btn-sm.danger:hover { background: rgba(239,68,68,.15); }
+
+        /* Input */
+        .admin-input {
+            background: rgba(30,41,59,.8); border: 1px solid rgba(51,65,85,.5);
+            border-radius: 6px; color: #e2e8f0; padding: 6px 10px; font-size: 13px; width: 100%;
         }
-        .profile-card-perms {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-            flex-wrap: wrap;
+        .admin-input:focus { outline: none; border-color: rgba(99,102,241,.5); }
+        .admin-select {
+            background: rgba(30,41,59,.8); border: 1px solid rgba(51,65,85,.5);
+            border-radius: 6px; color: #e2e8f0; padding: 6px 10px; font-size: 13px; cursor: pointer;
         }
-        .perm-chip {
-            font-size: 10px;
-            padding: 2px 6px;
-            border-radius: 4px;
-            background: rgba(51,65,85,.5);
-            color: #94a3b8;
-        }
-        .perm-chip.yes { background: rgba(34,197,94,.15); color: #86efac; }
-        .perm-chip.no { background: rgba(239,68,68,.1); color: #fca5a5; }
+        .admin-select:focus { outline: none; border-color: rgba(99,102,241,.5); }
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
@@ -391,7 +252,6 @@
       <span id="res-title" class="text-sm font-semibold text-slate-200">Recursos del sistema</span>
       <span id="res-timestamp" class="text-[10px] text-slate-600">—</span>
     </div>
-    <!-- Resource source tabs (Pi / EgnalPC) -->
     <div class="res-tabs" id="res-tabs">
       <button class="res-tab active" data-source="pi" onclick="switchResSource('pi')">
         <span class="tab-dot bg-slate-600" id="pi-tab-dot"></span>
@@ -408,9 +268,24 @@
   </div>
 </div>
 
-<!-- Admin modal (users & profiles) -->
+<!-- Services modal (external + infra) -->
+<div id="svc-modal" class="modal-overlay" onclick="closeSvcModal(event)">
+  <div class="modal-panel" id="svc-panel">
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-4">
+      <span class="text-sm font-semibold text-slate-200">Servicios</span>
+    </div>
+    <div class="res-tabs" id="svc-tabs">
+      <button class="res-tab active" data-tab="external" onclick="switchSvcTab('external')">Externos</button>
+      <button class="res-tab" data-tab="infra" onclick="switchSvcTab('infra')">Infraestructura</button>
+    </div>
+    <div id="svc-body"></div>
+  </div>
+</div>
+
+<!-- Admin modal -->
 <div id="admin-modal" class="modal-overlay" onclick="closeAdminModal(event)">
-  <div class="modal-panel" id="admin-panel" style="max-width: 540px;">
+  <div class="modal-panel" id="admin-panel" style="max-width: 560px;">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-4">
       <span class="text-sm font-semibold text-slate-200">Administración</span>
@@ -432,18 +307,13 @@
     <header class="flex items-center justify-between mb-8">
         <h1 id="title" class="text-xl font-bold tracking-tight">Cuchi Casa</h1>
         <div class="flex items-center gap-2">
-            <!-- Infrastructure button (SUPER only) -->
-            <button id="infra-btn" class="hdr-btn" onclick="toggleInfraDropdown()" style="display:none" title="Infraestructura">
+            <!-- Services button (level <= 1) -->
+            <button id="svc-btn" class="hdr-btn" onclick="openSvcModal()" style="display:none" title="Servicios">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
                 </svg>
             </button>
-            <!-- Infrastructure dropdown -->
-            <div id="infra-dropdown" class="absolute top-14 right-4 bg-[rgba(15,23,42,.97)] border border-slate-700 rounded-xl p-3 shadow-xl z-50" style="display:none; min-width: 180px;">
-                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-2 px-1">Infraestructura</p>
-                <div id="infra-items" class="space-y-1"></div>
-            </div>
-            <!-- Resources button (SUPER only) -->
+            <!-- Resources button (admin only) -->
             <button id="res-btn" class="hdr-btn" onclick="openResModal()" style="display:none" title="Recursos del sistema">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>
@@ -453,7 +323,7 @@
                     <line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>
                 </svg>
             </button>
-            <!-- Admin button (SUPER only) -->
+            <!-- Admin button (admin only) -->
             <button id="admin-btn" class="hdr-btn" onclick="openAdminModal()" style="display:none" title="Administración">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -494,28 +364,7 @@
         </div>
     </header>
 
-    <!-- SECTION 0: AI Card (SUPER or FAMILIA_ALL only) -->
-    <section class="mb-5" id="ai-section" style="display:none">
-        <a href="https://raspberrypi.tailaa37cd.ts.net:8443/" class="ai-card" id="ai-card" target="_blank" rel="noopener">
-            <div class="ai-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 3v2m0 14v2M3 12h2m14 0h2"/>
-                    <path d="M5.6 5.6l1.4 1.4m10 10l1.4 1.4M5.6 18.4l1.4-1.4m10-10l1.4-1.4"/>
-                    <circle cx="12" cy="12" r="4"/>
-                </svg>
-            </div>
-            <div class="ai-content">
-                <div class="ai-title">
-                    <span id="ai-title-text">IA Local</span>
-                    <span id="ai-status-dot" class="ai-status-dot bg-slate-600"></span>
-                </div>
-                <p id="ai-desc-text" class="ai-desc">Chat con modelos de lenguaje locales</p>
-            </div>
-            <span class="ai-arrow">›</span>
-        </a>
-    </section>
-
-    <!-- SECTION 2: Services -->
+    <!-- Services section -->
     <section id="services-section" style="display:none">
         <p id="apps-label" class="section-label mb-3 px-1">Servicios</p>
         <div id="apps-list" class="space-y-2"></div>
@@ -529,13 +378,11 @@
 // Translations
 const T = {
     es: {
-        title: 'Cuchi Casa', infrastructure: 'Infraestructura', services: 'Servicios',
-        connected: 'Conectado', offline: 'Sin conexión', logout_label: 'Salir',
-        core_backend: 'Backend', core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
+        title: 'Cuchi Casa', services: 'Servicios', logout_label: 'Salir',
+        connected: 'Conectado', offline: 'Sin conexión',
         svc_stop: 'Parar', svc_start: 'Arrancar', svc_loading: '…',
         res_title: 'Recursos del sistema', res_ram: 'RAM', res_swap: 'Swap',
         res_cpu: 'CPU', res_disk: 'Disco', res_temp: 'Temperatura',
-        res_used: 'usados', res_free: 'libres',
         ac_name: 'Control AC', ac_desc: 'Temperatura, sensores Zigbee, MELCloud',
         photos_name: 'Fotos', photos_desc: 'Copia de seguridad de fotos y vídeos',
         vacaciones_name: 'Cuchi Vacaciones', vacaciones_desc: 'Planificador de cuchi vacaciones',
@@ -545,22 +392,17 @@ const T = {
         valheim_name: 'Valheim', valheim_desc: 'Servidor de Valheim',
         babygifts_name: 'Lista Regalos Bebé', babygifts_desc: 'Lista de regalos para el bebé',
         portfolio_name: 'Monitor Cartera', portfolio_desc: 'Monitorización de ETFs y crypto',
-        ai_name: 'IA Local', ai_desc: 'Chat con modelos de lenguaje locales',
-        pc_online: 'Online', pc_offline: 'Offline', pc_changing: 'Cambiando...',
-        admin_users: 'Usuarios', admin_profiles: 'Perfiles',
-        profile_super: 'Administrador completo',
-        profile_familia_all: 'Familia con acceso total',
-        profile_familia_principal: 'Familia estándar',
-        profile_gamer: 'Jugador (solo Valheim)',
+        ai_name: 'IA Local', ai_desc: 'Chat con modelos de lenguaje',
+        pc_online: 'Online', pc_offline: 'Offline',
+        core_backend: 'Backend', core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
+        external_services: 'Servicios externos', infrastructure: 'Infraestructura',
     },
     en: {
-        title: 'Cuchi Casa', infrastructure: 'Infrastructure', services: 'Services',
-        connected: 'Connected', offline: 'Offline', logout_label: 'Sign out',
-        core_backend: 'Backend', core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
+        title: 'Cuchi Casa', services: 'Services', logout_label: 'Sign out',
+        connected: 'Connected', offline: 'Offline',
         svc_stop: 'Stop', svc_start: 'Start', svc_loading: '…',
         res_title: 'System resources', res_ram: 'RAM', res_swap: 'Swap',
         res_cpu: 'CPU', res_disk: 'Disk', res_temp: 'Temperature',
-        res_used: 'used', res_free: 'free',
         ac_name: 'AC Control', ac_desc: 'Temperature control, Zigbee sensors, MELCloud',
         photos_name: 'Photos', photos_desc: 'Photo and video backup',
         vacaciones_name: 'Cuchi Holidays', vacaciones_desc: 'Holiday planner',
@@ -570,22 +412,21 @@ const T = {
         valheim_name: 'Valheim', valheim_desc: 'Valheim server',
         babygifts_name: 'Baby Gift List', babygifts_desc: 'Baby gift registry',
         portfolio_name: 'Portfolio Monitor', portfolio_desc: 'ETF and crypto monitoring',
-        ai_name: 'Local AI', ai_desc: 'Chat with local language models',
-        pc_online: 'Online', pc_offline: 'Offline', pc_changing: 'Changing...',
-        admin_users: 'Users', admin_profiles: 'Profiles',
-        profile_super: 'Full administrator',
-        profile_familia_all: 'Family with full access',
-        profile_familia_principal: 'Standard family',
-        profile_gamer: 'Gamer (Valheim only)',
+        ai_name: 'Local AI', ai_desc: 'Chat with language models',
+        pc_online: 'Online', pc_offline: 'Offline',
+        core_backend: 'Backend', core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
+        external_services: 'External services', infrastructure: 'Infrastructure',
     },
 };
 
-// Core + app catalogues
+// Core services (infrastructure)
 const CORE_SERVICES = [
     { key: 'core_backend', labelKey: 'core_backend', statusUrl: '/api/health/backend', getStatus: d => d?.online === true, url: null },
     { key: 'core_mqtt',    labelKey: 'core_mqtt',    statusUrl: '/api/health/zigbee',  getStatus: d => d?.mqtt_connected === true, url: null },
     { key: 'core_zigbee',  labelKey: 'core_zigbee',  statusUrl: '/api/health/zigbee',  getStatus: d => d?.online === true, url: '/zigbee/' },
 ];
+
+// App catalogue
 const APP_CATALOGUE = {
     ac:        { url: '/smart-home/ac',                               nameKey: 'ac_name',        descKey: 'ac_desc',        statusUrl: '/api/health/ac',        getStatus: d => d?.online === true },
     photos:    { url: 'https://raspberrypi.tailaa37cd.ts.net:10000/', nameKey: 'photos_name',    descKey: 'photos_desc',    statusUrl: '/api/health/immich',    getStatus: d => d?.online === true },
@@ -593,12 +434,20 @@ const APP_CATALOGUE = {
     casita:    { url: '/smart-home/casita?' + Date.now(),             nameKey: 'casita_name',    descKey: 'casita_desc',    statusUrl: '/api/health/casita',    getStatus: d => d?.online === true },
     passwords: { url: '/passwords/',                                  nameKey: 'passwords_name', descKey: 'passwords_desc', statusUrl: '/api/health/passwords', getStatus: d => d?.online === true },
     babygifts: { url: '/smart-home/baby-gifts', nameKey: 'babygifts_name', descKey: 'babygifts_desc', statusUrl: '/api/health/baby-gifts', getStatus: d => d?.online === true },
-    valheim:   { url: '/valheim-admin/',                                 nameKey: 'valheim_name',   descKey: 'valheim_desc',     statusUrl: '/api/health/valheim',       getStatus: d => d?.online === true },
-    portfolio: { url: '/smart-home/portfolio',                            nameKey: 'portfolio_name', descKey: 'portfolio_desc',   statusUrl: '/api/health/portfolio',     getStatus: d => d?.online === true },
+    valheim:   { url: '/valheim-admin/',        nameKey: 'valheim_name',   descKey: 'valheim_desc',   statusUrl: '/api/health/valheim',    getStatus: d => d?.online === true },
+    portfolio: { url: '/smart-home/portfolio',  nameKey: 'portfolio_name', descKey: 'portfolio_desc', statusUrl: '/api/health/portfolio',  getStatus: d => d?.online === true },
 };
+
+// External services (for Services modal)
+const EXT_SERVICES = {
+    ai:            { url: 'https://raspberrypi.tailaa37cd.ts.net:8443/', nameKey: 'ai_name',        statusUrl: '/api/health/ai' },
+    photos_ext:    { url: 'https://raspberrypi.tailaa37cd.ts.net:10000/', nameKey: 'photos_name',   statusUrl: '/api/health/immich' },
+    passwords_ext: { url: '/passwords/',                                  nameKey: 'passwords_name', statusUrl: '/api/health/passwords' },
+};
+
 let APPS = [];
-let currentProfile = null;
-let currentProfileKey = null;
+let externalServices = [];
+let currentUserData = null;
 let containerState = {};
 
 // Language
@@ -611,21 +460,16 @@ function applyLang() {
     const flags = { en: '/static/flags/gb.svg', es: '/static/flags/es.svg' };
     document.getElementById('current-flag').src = flags[currentLang];
     document.querySelectorAll('.lang-option').forEach(o => o.classList.toggle('active', o.dataset.lang === currentLang));
-    document.getElementById('title').textContent      = t('title');
+    document.getElementById('title').textContent = t('title');
     document.getElementById('apps-label').textContent = t('services');
-    document.getElementById('res-title').textContent  = t('res_title');
+    document.getElementById('res-title').textContent = t('res_title');
     const logoutText = document.getElementById('logout-text');
     if (logoutText) logoutText.textContent = t('logout_label');
-    // AI hero section texts
-    const aiTitle = document.getElementById('ai-title-text');
-    const aiDesc = document.getElementById('ai-desc-text');
-    if (aiTitle) aiTitle.textContent = t('ai_name');
-    if (aiDesc) aiDesc.textContent = t('ai_desc');
     saveLang(currentLang);
 }
 function setLang(l) {
     document.getElementById('lang-menu').classList.remove('open');
-    currentLang = l; applyLang(); renderInfra(); renderApps(); loadStatus();
+    currentLang = l; applyLang(); renderApps(); loadStatus();
 }
 function toggleLang() { document.getElementById('lang-menu').classList.toggle('open'); }
 document.addEventListener('click', e => {
@@ -633,39 +477,13 @@ document.addEventListener('click', e => {
     if (dd && !dd.contains(e.target)) document.getElementById('lang-menu').classList.remove('open');
 });
 
-// Infrastructure dropdown
-let infraVisible = false;
-function toggleInfraDropdown() {
-    infraVisible = !infraVisible;
-    document.getElementById('infra-dropdown').style.display = infraVisible ? 'block' : 'none';
-}
-document.addEventListener('click', e => {
-    const btn = document.getElementById('infra-btn');
-    const dd = document.getElementById('infra-dropdown');
-    if (btn && dd && !btn.contains(e.target) && !dd.contains(e.target)) {
-        infraVisible = false;
-        dd.style.display = 'none';
-    }
-});
+// Helper
+function isAdmin() { return currentUserData?.is_admin === true; }
+function getLevel() { return currentUserData?.effective_level ?? 99; }
 
-function renderInfra() {
-    if (!currentProfile?.show_config_apps) return;
-    const container = document.getElementById('infra-items');
-    container.innerHTML = CORE_SERVICES.map(svc => {
-        const inner = `
-            <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-800/50 transition-colors ${svc.url ? 'cursor-pointer' : ''}">
-                <span class="w-2 h-2 rounded-full bg-slate-600" id="infra-dot-${svc.key}"></span>
-                <span class="text-xs text-slate-400">${t(svc.labelKey)}</span>
-            </div>
-        `;
-        return svc.url
-            ? `<a href="${svc.url}" class="block">${inner}</a>`
-            : `<div>${inner}</div>`;
-    }).join('');
-    document.getElementById('infra-btn').style.display = 'flex';
-}
-
+// ═══════════════════════════════════════════════════════════════════════════
 // PC Control
+// ═══════════════════════════════════════════════════════════════════════════
 let currentPcMode = null;
 let pcOnline = false;
 
@@ -675,19 +493,14 @@ async function loadPcStatus() {
             fetch('/api/pc/status').then(r => r.json()),
             fetch('/api/pc/mode').then(r => r.json())
         ]);
-        
         pcOnline = statusRes.online === true;
-        
-        // Update PC tab dot in resources modal
         const pcTabDot = document.getElementById('pc-tab-dot');
-        if (pcTabDot) {
-            pcTabDot.className = `tab-dot ${pcOnline ? 'bg-green-500' : 'bg-red-400'}`;
-        }
+        if (pcTabDot) pcTabDot.className = `tab-dot ${pcOnline ? 'bg-green-500' : 'bg-red-400'}`;
         
         if (pcOnline && modeRes.mode) {
-            // Check if mode is one of the known ones
+            // Mode from API - check against known modes
             const knownModes = ['balanced', 'gaming', 'servidor'];
-            currentPcMode = knownModes.includes(modeRes.mode) ? modeRes.mode : 'custom';
+            currentPcMode = knownModes.includes(modeRes.mode.toLowerCase()) ? modeRes.mode.toLowerCase() : null;
         } else {
             currentPcMode = null;
         }
@@ -699,131 +512,58 @@ async function loadPcStatus() {
     }
 }
 
-// Resources modal
+// ═══════════════════════════════════════════════════════════════════════════
+// Resources Modal
+// ═══════════════════════════════════════════════════════════════════════════
 let _resInterval = null;
 let currentResSource = 'pi';
-let piOnline = true;
 
-function _barColor(pct) {
-    if (pct < 70) return 'green';
-    if (pct < 85) return 'yellow';
-    return 'red';
-}
-
-function _tempColor(c) {
-    if (c < 60) return 'green';
-    if (c < 75) return 'yellow';
-    return 'red';
-}
-
-function _bar(pct, color) {
-    return `<div class="res-bar-bg"><div class="res-bar ${color}" style="width:${Math.min(pct,100)}%"></div></div>`;
-}
+function _barColor(pct) { return pct < 70 ? 'green' : pct < 85 ? 'yellow' : 'red'; }
+function _tempColor(c) { return c < 60 ? 'green' : c < 75 ? 'yellow' : 'red'; }
+function _bar(pct, color) { return `<div class="res-bar-bg"><div class="res-bar ${color}" style="width:${Math.min(pct,100)}%"></div></div>`; }
 
 function switchResSource(source) {
     currentResSource = source;
-    document.querySelectorAll('.res-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.source === source);
-    });
+    document.querySelectorAll('#res-tabs .res-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.source === source));
     fetchAndRenderResources();
 }
 
 function renderPiResources(d) {
-    if (!d) return;
     const body = document.getElementById('res-body');
-    const ts   = document.getElementById('res-timestamp');
-    ts.textContent = new Date().toLocaleTimeString();
-
-    const ramPct  = d.ram?.percent  ?? 0;
-    const swapPct = d.swap?.percent ?? 0;
-    const cpuPct  = d.cpu?.percent  ?? 0;
-    const diskPct = d.disk?.percent ?? 0;
-    const tempC   = d.temp?.celsius ?? 0;
-
+    document.getElementById('res-timestamp').textContent = new Date().toLocaleTimeString();
+    const ramPct = d.ram?.percent ?? 0, swapPct = d.swap?.percent ?? 0;
+    const cpuPct = d.cpu?.percent ?? 0, diskPct = d.disk?.percent ?? 0;
+    const tempC = d.temp?.celsius ?? 0;
     body.innerHTML = `
-      <div class="res-row">
-        <div class="res-row-header">
-          <span class="res-label">${t('res_ram')}</span>
-          <span class="res-value">${d.ram?.used_mb ?? '—'} / ${d.ram?.total_mb ?? '—'} MB · <b>${ramPct}%</b>${d.ram?.cache_mb ? ` <span style="opacity:.5;font-size:.85em">+${d.ram.cache_mb}MB cache</span>` : ''}</span>
-        </div>
-        ${_bar(ramPct, _barColor(ramPct))}
-      </div>
-      <div class="res-row">
-        <div class="res-row-header">
-          <span class="res-label">${t('res_swap')}</span>
-          <span class="res-value">${d.swap?.used_mb ?? '—'} / ${d.swap?.total_mb ?? '—'} MB · <b>${swapPct}%</b></span>
-        </div>
-        ${_bar(swapPct, _barColor(swapPct))}
-      </div>
-      <div class="res-row">
-        <div class="res-row-header">
-          <span class="res-label">${t('res_cpu')}</span>
-          <span class="res-value"><b>${cpuPct}%</b></span>
-        </div>
-        ${_bar(cpuPct, _barColor(cpuPct))}
-      </div>
-      <div class="res-row">
-        <div class="res-row-header">
-          <span class="res-label">${t('res_disk')} (/)</span>
-          <span class="res-value">${d.disk?.used_gb ?? '—'} / ${d.disk?.total_gb ?? '—'} GB · <b>${diskPct}%</b></span>
-        </div>
-        ${_bar(diskPct, _barColor(diskPct))}
-      </div>
-      <div class="res-row" style="margin-bottom:0">
-        <div class="res-row-header">
-          <span class="res-label">${t('res_temp')}</span>
-          <span class="temp-pill ${_tempColor(tempC)}">${tempC} °C</span>
-        </div>
-      </div>
+      <div class="res-row"><div class="res-row-header"><span class="res-label">${t('res_ram')}</span><span class="res-value">${d.ram?.used_mb ?? '—'} / ${d.ram?.total_mb ?? '—'} MB · <b>${ramPct}%</b></span></div>${_bar(ramPct, _barColor(ramPct))}</div>
+      <div class="res-row"><div class="res-row-header"><span class="res-label">${t('res_swap')}</span><span class="res-value">${d.swap?.used_mb ?? '—'} / ${d.swap?.total_mb ?? '—'} MB · <b>${swapPct}%</b></span></div>${_bar(swapPct, _barColor(swapPct))}</div>
+      <div class="res-row"><div class="res-row-header"><span class="res-label">${t('res_cpu')}</span><span class="res-value"><b>${cpuPct}%</b></span></div>${_bar(cpuPct, _barColor(cpuPct))}</div>
+      <div class="res-row"><div class="res-row-header"><span class="res-label">${t('res_disk')} (/)</span><span class="res-value">${d.disk?.used_gb ?? '—'} / ${d.disk?.total_gb ?? '—'} GB · <b>${diskPct}%</b></span></div>${_bar(diskPct, _barColor(diskPct))}</div>
+      <div class="res-row" style="margin-bottom:0"><div class="res-row-header"><span class="res-label">${t('res_temp')}</span><span class="temp-pill ${_tempColor(tempC)}">${tempC} °C</span></div></div>
     `;
-    
-    piOnline = true;
     const piTabDot = document.getElementById('pi-tab-dot');
     if (piTabDot) piTabDot.className = 'tab-dot bg-green-500';
 }
 
 function renderPcResources() {
     const body = document.getElementById('res-body');
-    const ts   = document.getElementById('res-timestamp');
-    ts.textContent = new Date().toLocaleTimeString();
-
+    document.getElementById('res-timestamp').textContent = new Date().toLocaleTimeString();
     if (!pcOnline) {
-        body.innerHTML = `
-            <div class="text-center py-8">
-                <div class="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-3">
-                    <span class="w-3 h-3 rounded-full bg-red-400"></span>
-                </div>
-                <p class="text-slate-400 text-sm mb-1">Egnal PC</p>
-                <p class="text-red-400 font-semibold">${t('pc_offline')}</p>
-            </div>
-        `;
+        body.innerHTML = `<div class="text-center py-8"><div class="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-3"><span class="w-3 h-3 rounded-full bg-red-400"></span></div><p class="text-slate-400 text-sm mb-1">Egnal PC</p><p class="text-red-400 font-semibold">${t('pc_offline')}</p></div>`;
         return;
     }
-
-    // PC online - show mode selector with visual indicators
     const modes = ['balanced', 'gaming', 'servidor'];
     const modeIcons = { balanced: '⚡', gaming: '🎮', servidor: '🖥️' };
-    
     body.innerHTML = `
         <div class="text-center py-4">
             <div class="flex items-center justify-center gap-2 mb-6">
-                <span class="w-3 h-3 rounded-full bg-green-500 animate-pulse"></span>
+                <span class="w-3 h-3 rounded-full bg-green-500 status-dot"></span>
                 <span class="text-green-400 font-semibold">${t('pc_online')}</span>
             </div>
             <p class="text-xs text-slate-500 uppercase tracking-wider mb-4">Perfil de energía</p>
             <div class="flex justify-center gap-3" id="pc-mode-btns">
-                ${modes.map(mode => `
-                    <button class="pc-mode-btn ${currentPcMode === mode ? 'active' : ''}" 
-                            data-mode="${mode}" 
-                            onclick="setPcMode('${mode}')">
-                        <span>${modeIcons[mode]}</span>
-                        <span>${mode.charAt(0).toUpperCase() + mode.slice(1)}</span>
-                    </button>
-                `).join('')}
+                ${modes.map(mode => `<button class="pc-mode-btn ${currentPcMode === mode ? 'active' : ''}" data-mode="${mode}" onclick="setPcMode('${mode}')"><span>${modeIcons[mode]}</span><span>${mode.charAt(0).toUpperCase() + mode.slice(1)}</span></button>`).join('')}
             </div>
-            ${currentPcMode === 'custom' ? `
-                <p class="text-xs text-amber-400 mt-4">⚠️ Perfil personalizado activo</p>
-            ` : ''}
         </div>
     `;
 }
@@ -835,11 +575,8 @@ async function fetchAndRenderResources() {
             if (!r.ok) throw new Error('HTTP ' + r.status);
             renderPiResources(await r.json());
         } catch (e) {
-            piOnline = false;
-            const piTabDot = document.getElementById('pi-tab-dot');
-            if (piTabDot) piTabDot.className = 'tab-dot bg-red-400';
-            document.getElementById('res-body').innerHTML =
-                `<p class="text-center text-red-400 text-sm py-4">Error: ${e.message}</p>`;
+            document.getElementById('pi-tab-dot').className = 'tab-dot bg-red-400';
+            document.getElementById('res-body').innerHTML = `<p class="text-center text-red-400 text-sm py-4">Error: ${e.message}</p>`;
         }
     } else {
         renderPcResources();
@@ -847,31 +584,20 @@ async function fetchAndRenderResources() {
 }
 
 async function setPcMode(mode) {
-    if (!isSuper()) return;
-    
-    // Disable all buttons during change
+    if (!isAdmin()) return;
     document.querySelectorAll('.pc-mode-btn').forEach(btn => btn.disabled = true);
-    
     try {
         const r = await fetch(`/api/pc/mode/${mode}`, { method: 'POST' });
-        if (r.ok) {
-            currentPcMode = mode;
-        }
+        if (r.ok) currentPcMode = mode;
     } catch {}
-    
-    // Re-render PC resources to update button states
     await loadPcStatus();
-    if (currentResSource === 'pc') {
-        renderPcResources();
-    }
+    if (currentResSource === 'pc') renderPcResources();
 }
 
 function openResModal() {
     document.getElementById('res-modal').classList.add('open');
-    currentResSource = 'pi'; // Always start with Pi
-    document.querySelectorAll('.res-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.source === 'pi');
-    });
+    currentResSource = 'pi';
+    document.querySelectorAll('#res-tabs .res-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.source === 'pi'));
     fetchAndRenderResources();
     _resInterval = setInterval(fetchAndRenderResources, 5000);
 }
@@ -883,7 +609,82 @@ function closeResModal(e) {
     _resInterval = null;
 }
 
-// Admin modal
+// ═══════════════════════════════════════════════════════════════════════════
+// Services Modal (external + infra)
+// ═══════════════════════════════════════════════════════════════════════════
+let currentSvcTab = 'external';
+let svcStatus = {};
+
+function switchSvcTab(tab) {
+    currentSvcTab = tab;
+    document.querySelectorAll('#svc-tabs .res-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    renderSvcContent();
+}
+
+async function loadSvcStatus() {
+    // Load status for external services
+    for (const svc of externalServices) {
+        const info = EXT_SERVICES[svc.key];
+        if (info?.statusUrl) {
+            try {
+                const data = await fetch(info.statusUrl).then(r => r.json());
+                svcStatus[svc.key] = data?.online === true;
+            } catch { svcStatus[svc.key] = false; }
+        }
+    }
+    // Load status for core services
+    for (const svc of CORE_SERVICES) {
+        try {
+            const data = await fetch(svc.statusUrl).then(r => r.json());
+            svcStatus[svc.key] = svc.getStatus(data);
+        } catch { svcStatus[svc.key] = false; }
+    }
+}
+
+function renderSvcContent() {
+    const body = document.getElementById('svc-body');
+    if (currentSvcTab === 'external') {
+        if (!externalServices.length) {
+            body.innerHTML = '<p class="text-center text-slate-500 py-4 text-sm">No hay servicios externos disponibles</p>';
+            return;
+        }
+        body.innerHTML = externalServices.map(svc => {
+            const info = EXT_SERVICES[svc.key];
+            if (!info) return '';
+            const online = svcStatus[svc.key] ?? false;
+            return `<a href="${info.url}" target="_blank" rel="noopener" class="svc-item">
+                <span class="svc-dot ${online ? 'bg-green-500 status-dot' : 'bg-red-400'}"></span>
+                <span class="svc-name">${t(info.nameKey)}</span>
+            </a>`;
+        }).join('');
+    } else {
+        body.innerHTML = CORE_SERVICES.map(svc => {
+            const online = svcStatus[svc.key] ?? false;
+            const inner = `<span class="svc-dot ${online ? 'bg-green-500 status-dot' : 'bg-red-400'}"></span><span class="svc-name">${t(svc.labelKey)}</span>`;
+            return svc.url 
+                ? `<a href="${svc.url}" class="svc-item">${inner}</a>`
+                : `<div class="svc-item" style="cursor:default">${inner}</div>`;
+        }).join('');
+    }
+}
+
+async function openSvcModal() {
+    document.getElementById('svc-modal').classList.add('open');
+    currentSvcTab = 'external';
+    document.querySelectorAll('#svc-tabs .res-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'external'));
+    document.getElementById('svc-body').innerHTML = '<div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>';
+    await loadSvcStatus();
+    renderSvcContent();
+}
+
+function closeSvcModal(e) {
+    if (e && document.getElementById('svc-panel').contains(e.target)) return;
+    document.getElementById('svc-modal').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Admin Modal
+// ═══════════════════════════════════════════════════════════════════════════
 let adminUsers = [];
 let adminProfiles = {};
 let currentAdminTab = 'users';
@@ -896,63 +697,44 @@ async function loadAdminData() {
         ]);
         adminUsers = usersRes;
         adminProfiles = profilesRes;
-    } catch (e) {
-        console.error('Failed to load admin data:', e);
-    }
+    } catch (e) { console.error('Failed to load admin data:', e); }
 }
 
 function switchAdminTab(tab) {
     currentAdminTab = tab;
-    document.querySelectorAll('.admin-tab').forEach(t => {
-        t.classList.toggle('active', t.dataset.tab === tab);
-    });
+    document.querySelectorAll('.admin-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     renderAdminContent();
 }
 
-function getProfileBadgeClass(profile) {
-    const map = {
-        'SUPER': 'super',
-        'FAMILIA_ALL': 'familia-all',
-        'FAMILIA_PRINCIPAL': 'familia-principal',
-        'GAMER': 'gamer'
-    };
-    return map[profile] || 'familia-principal';
-}
+function getLevelClass(level) { return `level-${level}`; }
 
 function renderAdminContent() {
     const body = document.getElementById('admin-body');
     
     if (currentAdminTab === 'users') {
-        const profileOptions = Object.keys(adminProfiles).map(k => 
-            `<option value="${k}">${k}</option>`
-        ).join('');
-        
         body.innerHTML = `
             <table class="admin-table">
-                <thead>
-                    <tr>
-                        <th>Usuario</th>
-                        <th>Perfil</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Usuario</th><th>Perfiles</th><th>Nivel</th><th></th></tr></thead>
                 <tbody>
                     ${adminUsers.map(u => `
-                        <tr>
+                        <tr data-username="${u.username}">
                             <td>
                                 <div class="flex items-center gap-2">
-                                    <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500/30 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center text-xs font-bold text-indigo-300">
-                                        ${u.username.charAt(0).toUpperCase()}
-                                    </div>
+                                    <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500/30 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center text-xs font-bold text-indigo-300">${u.username.charAt(0).toUpperCase()}</div>
                                     <span>${u.username}</span>
                                 </div>
                             </td>
                             <td>
-                                <select class="profile-select" data-username="${u.username}" onchange="changeUserProfile(this)">
-                                    ${Object.keys(adminProfiles).map(k => 
-                                        `<option value="${k}" ${u.profile === k ? 'selected' : ''}>${k}</option>`
-                                    ).join('')}
-                                </select>
+                                <div class="flex flex-wrap gap-1">
+                                    ${u.profiles.map(p => {
+                                        const prof = adminProfiles[p] || {};
+                                        return `<span class="profile-chip ${getLevelClass(prof.level ?? 1)}">${p}<span class="remove-btn" onclick="removeUserProfile('${u.username}','${p}')">×</span></span>`;
+                                    }).join('')}
+                                    <button class="btn-sm" onclick="showAddProfileDialog('${u.username}')" title="Añadir perfil">+</button>
+                                </div>
                             </td>
+                            <td><span class="profile-chip ${getLevelClass(u.effective_level)}">${u.effective_level}</span></td>
+                            <td></td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -960,57 +742,105 @@ function renderAdminContent() {
         `;
     } else {
         // Profiles tab
-        const profileDescriptions = {
-            'SUPER': t('profile_super'),
-            'FAMILIA_ALL': t('profile_familia_all'),
-            'FAMILIA_PRINCIPAL': t('profile_familia_principal'),
-            'GAMER': t('profile_gamer')
-        };
-        
-        body.innerHTML = Object.entries(adminProfiles).map(([key, profile]) => `
-            <div class="profile-card">
-                <div class="profile-card-header">
-                    <span class="profile-card-title">${key}</span>
-                    <span class="profile-badge ${getProfileBadgeClass(key)}">${key}</span>
-                </div>
-                <p class="profile-card-desc">${profileDescriptions[key] || ''}</p>
-                <div class="profile-card-perms">
-                    <span class="perm-chip">View level: ${profile.can_view_level}</span>
-                    <span class="perm-chip">Edit level: ${profile.can_edit_level}</span>
-                    <span class="perm-chip ${profile.show_config_apps ? 'yes' : 'no'}">
-                        Config apps: ${profile.show_config_apps ? '✓' : '✗'}
-                    </span>
-                </div>
+        body.innerHTML = `
+            <div class="mb-4">
+                <button class="btn-sm" onclick="showCreateProfileDialog()">+ Nuevo perfil</button>
             </div>
-        `).join('');
+            ${Object.entries(adminProfiles).map(([name, p]) => `
+                <div class="profile-card">
+                    <div class="profile-card-header">
+                        <span class="profile-card-title">${name}</span>
+                        <span class="profile-card-level ${getLevelClass(p.level)}">Nivel ${p.level}</span>
+                    </div>
+                    <p class="profile-card-desc">${p.description || '—'}</p>
+                    ${!p.builtin ? `<div class="profile-card-actions"><button class="btn-sm" onclick="editProfile('${name}')">Editar</button><button class="btn-sm danger" onclick="deleteProfile('${name}')">Eliminar</button></div>` : '<p class="text-xs text-slate-600 mt-2">Perfil del sistema</p>'}
+                </div>
+            `).join('')}
+        `;
     }
 }
 
-async function changeUserProfile(select) {
-    const username = select.dataset.username;
-    const profile = select.value;
-    
+async function removeUserProfile(username, profile) {
+    const user = adminUsers.find(u => u.username === username);
+    if (user?.profiles.length <= 1) { alert('No se puede eliminar el último perfil'); return; }
     try {
-        const r = await fetch(`/api/auth/admin/users/${username}/profile`, {
+        await fetch(`/api/auth/admin/users/${username}/profiles/${profile}`, { method: 'DELETE' });
+        await loadAdminData();
+        renderAdminContent();
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
+function showAddProfileDialog(username) {
+    const profiles = Object.keys(adminProfiles);
+    const user = adminUsers.find(u => u.username === username);
+    const available = profiles.filter(p => !user?.profiles.includes(p));
+    if (!available.length) { alert('El usuario ya tiene todos los perfiles'); return; }
+    const profile = prompt(`Añadir perfil a ${username}.\nDisponibles: ${available.join(', ')}`);
+    if (profile && available.includes(profile)) {
+        addUserProfile(username, profile);
+    }
+}
+
+async function addUserProfile(username, profile) {
+    try {
+        await fetch(`/api/auth/admin/users/${username}/profiles/${profile}`, { method: 'POST' });
+        await loadAdminData();
+        renderAdminContent();
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
+function showCreateProfileDialog() {
+    const name = prompt('Nombre del nuevo perfil (mayúsculas):');
+    if (!name) return;
+    const level = parseInt(prompt('Nivel (0-3):', '1'));
+    if (isNaN(level) || level < 0 || level > 3) { alert('Nivel inválido'); return; }
+    const desc = prompt('Descripción:', '') || '';
+    createProfile(name.toUpperCase(), level, desc);
+}
+
+async function createProfile(name, level, description) {
+    try {
+        const r = await fetch('/api/auth/admin/profiles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, level, description })
+        });
+        if (!r.ok) { const e = await r.json(); alert('Error: ' + e.detail); return; }
+        await loadAdminData();
+        renderAdminContent();
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
+function editProfile(name) {
+    const p = adminProfiles[name];
+    if (!p || p.builtin) return;
+    const level = parseInt(prompt(`Nivel actual: ${p.level}. Nuevo nivel (0-3):`, p.level));
+    if (isNaN(level) || level < 0 || level > 3) { alert('Nivel inválido'); return; }
+    const desc = prompt('Descripción:', p.description || '') || '';
+    updateProfile(name, level, desc);
+}
+
+async function updateProfile(name, level, description) {
+    try {
+        const r = await fetch(`/api/auth/admin/profiles/${name}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ profile })
+            body: JSON.stringify({ level, description })
         });
-        
-        if (!r.ok) {
-            const err = await r.json();
-            alert(`Error: ${err.detail}`);
-            // Revert selection
-            await loadAdminData();
-            renderAdminContent();
-        } else {
-            // Update local data
-            const user = adminUsers.find(u => u.username === username);
-            if (user) user.profile = profile;
-        }
-    } catch (e) {
-        alert(`Error: ${e.message}`);
-    }
+        if (!r.ok) { const e = await r.json(); alert('Error: ' + e.detail); return; }
+        await loadAdminData();
+        renderAdminContent();
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function deleteProfile(name) {
+    if (!confirm(`¿Eliminar perfil "${name}"?`)) return;
+    try {
+        const r = await fetch(`/api/auth/admin/profiles/${name}`, { method: 'DELETE' });
+        if (!r.ok) { const e = await r.json(); alert('Error: ' + e.detail); return; }
+        await loadAdminData();
+        renderAdminContent();
+    } catch (e) { alert('Error: ' + e.message); }
 }
 
 async function openAdminModal() {
@@ -1018,9 +848,7 @@ async function openAdminModal() {
     document.getElementById('admin-body').innerHTML = '<div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>';
     await loadAdminData();
     currentAdminTab = 'users';
-    document.querySelectorAll('.admin-tab').forEach(t => {
-        t.classList.toggle('active', t.dataset.tab === 'users');
-    });
+    document.querySelectorAll('.admin-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'users'));
     renderAdminContent();
 }
 
@@ -1029,23 +857,17 @@ function closeAdminModal(e) {
     document.getElementById('admin-modal').classList.remove('open');
 }
 
-// Close modals on Escape key
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-        closeResModal();
-        closeAdminModal();
-    }
-});
+// Close modals on Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeResModal(); closeSvcModal(); closeAdminModal(); } });
 
-// Service cards
-function isSuper() { return currentProfile?.show_config_apps === true; }
+// ═══════════════════════════════════════════════════════════════════════════
+// Service Cards
+// ═══════════════════════════════════════════════════════════════════════════
 function renderApps() {
     if (!APPS.length) return;
-    const super_ = isSuper();
-    const showBtn_ = isSuper();
+    const showBtn = isAdmin();
     document.getElementById('apps-list').innerHTML = APPS.map(app => {
-        const btnHtml = showBtn_ ? `<button class="svc-btn loading" id="btn-${app.key}" onclick="toggleService(event,'${app.key}')">${t('svc_loading')}</button>` : '';
-
+        const btnHtml = showBtn ? `<button class="svc-btn loading" id="btn-${app.key}" onclick="toggleService(event,'${app.key}')">${t('svc_loading')}</button>` : '';
         const tag = app.url ? 'a' : 'div';
         const href = app.url ? `href="${app.url}"` : '';
         return `<${tag} ${href} class="app-card px-4 py-3.5">
@@ -1059,12 +881,12 @@ function renderApps() {
                     </div>
                     <p class="text-[11px] text-slate-400 truncate">${t(app.descKey)}</p>
                 </div>
-                ${btnHtml}${(showBtn_ || !app.url) ? '' : '<span class="text-slate-600 ml-1">&rsaquo;</span>'}
+                ${btnHtml}${(showBtn || !app.url) ? '' : '<span class="text-slate-600 ml-1">›</span>'}
             </div>
         </${tag}>`;
     }).join('');
     document.getElementById('services-section').style.display = 'block';
-    if (isSuper()) loadContainerStates();
+    if (isAdmin()) loadContainerStates();
 }
 
 // Container control
@@ -1088,6 +910,7 @@ function updateBtn(key, running) {
     btn.className = running ? 'svc-btn running' : 'svc-btn stopped';
     btn.textContent = running ? '⏹ ' + t('svc_stop') : '▶ ' + t('svc_start');
 }
+
 async function toggleService(event, key) {
     event.preventDefault(); event.stopPropagation();
     const btn = document.getElementById('btn-' + key);
@@ -1114,33 +937,8 @@ async function fetchStatus(url) {
     statusCache[url] = { data, ts: Date.now() };
     return data;
 }
+
 async function loadStatus() {
-    // AI card status (if visible - SUPER or FAMILIA_ALL)
-    if (currentProfileKey === 'FAMILIA_ALL' || currentProfileKey === 'SUPER') {
-        try {
-            const data = await fetchStatus('/api/health/ai');
-            const dot = document.getElementById('ai-status-dot');
-            const card = document.getElementById('ai-card');
-            const online = data?.online === true;
-            if (dot) dot.className = `ai-status-dot ${online ? 'bg-green-500' : 'bg-red-400'}`;
-            if (card) card.classList.toggle('offline', !online);
-        } catch {
-            const dot = document.getElementById('ai-status-dot');
-            const card = document.getElementById('ai-card');
-            if (dot) dot.className = 'ai-status-dot bg-red-400';
-            if (card) card.classList.add('offline');
-        }
-    }
-    // Infrastructure status
-    for (const svc of CORE_SERVICES) {
-        const dot = document.getElementById('infra-dot-' + svc.key);
-        if (!dot) continue;
-        try {
-            const data = await fetchStatus(svc.statusUrl);
-            dot.className = `w-2 h-2 rounded-full ${svc.getStatus(data) ? 'bg-green-500' : 'bg-red-400'}`;
-        } catch { dot.className = 'w-2 h-2 rounded-full bg-red-400'; }
-    }
-    // App status
     for (const app of APPS) {
         if (!app.statusUrl || !app.getStatus) continue;
         try {
@@ -1156,43 +954,42 @@ async function loadStatus() {
     }
 }
 
-// User info
+// User menu
 function toggleUserMenu() { document.getElementById('user-menu').classList.toggle('open'); }
 document.addEventListener('click', e => {
     const dd = document.getElementById('user-dropdown');
     if (dd && !dd.contains(e.target)) document.getElementById('user-menu')?.classList.remove('open');
 });
 
+// Load user
 async function loadUser() {
     try {
         const res = await fetch('/api/auth/me');
         if (!res.ok) return;
-        const data = await res.json();
-        const username = data.username || '';
+        currentUserData = await res.json();
+        const username = currentUserData.username || '';
         if (!username) return;
-        currentProfile = data.profile_data || null;
-        currentProfileKey = data.profile || null;
-        document.getElementById('user-name').textContent   = username;
+        
+        document.getElementById('user-name').textContent = username;
         document.getElementById('user-avatar').textContent = username.charAt(0).toUpperCase();
         document.getElementById('user-dropdown').style.display = 'block';
         
-        // Show SUPER-only buttons
-        if (isSuper()) {
+        // Show buttons based on level
+        if (getLevel() <= 1) document.getElementById('svc-btn').style.display = 'flex';
+        if (isAdmin()) {
             document.getElementById('res-btn').style.display = 'flex';
             document.getElementById('admin-btn').style.display = 'flex';
         }
         
-        // Show AI section for SUPER or FAMILIA_ALL profiles
-        if (currentProfileKey === 'FAMILIA_ALL' || currentProfileKey === 'SUPER') {
-            document.getElementById('ai-section').style.display = 'block';
-        }
-        
-        APPS = (data.apps || [])
-            .filter(p => p.key !== 'zigbee')
+        // Build app list from permissions
+        APPS = (currentUserData.apps || [])
+            .filter(p => p.key !== 'zigbee') // Zigbee goes in infra modal
             .map(p => ({ key: p.key, ...APP_CATALOGUE[p.key] }))
             .filter(a => a);
         
-        renderInfra();
+        // External services
+        externalServices = currentUserData.external_services || [];
+        
         renderApps();
         loadStatus();
     } catch {}
@@ -1201,17 +998,14 @@ async function loadUser() {
 // Init
 (async function init() {
     applyLang();
-    try {
-        await Promise.race([ loadUser(), new Promise(r => setTimeout(r, 5000)) ]);
-    } catch {}
+    try { await Promise.race([ loadUser(), new Promise(r => setTimeout(r, 5000)) ]); } catch {}
     const overlay = document.getElementById('loading-overlay');
-    const content  = document.getElementById('dash-content');
+    const content = document.getElementById('dash-content');
     content.classList.add('visible');
     overlay.classList.add('done');
     setTimeout(() => { overlay.style.display = 'none'; }, 400);
     setInterval(loadStatus, 10000);
-    setInterval(() => { if (isSuper()) loadContainerStates(); }, 30000);
-    // PC status polling (for resources modal)
+    setInterval(() => { if (isAdmin()) loadContainerStates(); }, 30000);
     loadPcStatus();
     setInterval(loadPcStatus, 30000);
 })();

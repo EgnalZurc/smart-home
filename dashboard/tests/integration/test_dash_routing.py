@@ -95,17 +95,17 @@ class TestDashboardAppCatalogue:
         assert "!== 'zigbee'" in html or "key !== 'zigbee'" in html
 
 
-# ── Infrastructure dropdown (SUPER only) ─────────────────────────────────────
+# ── Services Modal (replaced Infrastructure dropdown) ────────────────────────
 
 
-class TestInfrastructureDropdown:
-    def test_infra_dropdown_exists(self):
-        """Infrastructure dropdown must exist in the header."""
-        assert "infra-dropdown" in _html()
+class TestServicesModal:
+    def test_svc_modal_exists(self):
+        """Services modal must exist."""
+        assert "svc-modal" in _html()
 
-    def test_infra_btn_exists(self):
-        """Infrastructure button must exist to toggle the dropdown."""
-        assert "infra-btn" in _html()
+    def test_svc_btn_exists(self):
+        """Services button must exist to open the modal."""
+        assert "svc-btn" in _html()
 
     def test_core_services_has_three_items(self):
         """CORE_SERVICES must contain exactly Backend, MQTT, Zigbee."""
@@ -131,10 +131,11 @@ class TestInfrastructureDropdown:
         core_block = html[core_start:core_end]
         assert "core_vacaciones" not in core_block
 
-    def test_infra_gated_by_show_config_apps(self):
-        """Infrastructure dropdown must only render for SUPER (show_config_apps=true)."""
+    def test_svc_modal_has_tabs(self):
+        """Services modal must have tabs for external and infra."""
         html = _html()
-        assert "show_config_apps" in html
+        assert "svc-tabs" in html
+        assert "switchSvcTab" in html
 
     def test_zigbee_is_clickable_in_infra(self):
         """Zigbee in core services must link to /zigbee/."""
@@ -148,11 +149,9 @@ class TestInfrastructureDropdown:
         """Backend health must use /api/health/backend (JSON), not /health (plain text)."""
         html = _html()
         assert "/api/health/backend" in html
-        # Old /health endpoint (nginx plain text) must NOT be the backend status URL
         core_start = html.index("CORE_SERVICES")
         core_end = html.index("APP_CATALOGUE")
         core_block = html[core_start:core_end]
-        # core_backend entry should not use bare /health
         backend_entry_start = core_block.index("core_backend")
         backend_entry_end = core_block.index("core_mqtt")
         backend_entry = core_block[backend_entry_start:backend_entry_end]
@@ -209,10 +208,10 @@ class TestStopStartButtons:
     def test_toggle_calls_containers_api(self):
         assert "/api/system/containers/" in _html()
 
-    def test_button_gated_by_is_super(self):
-        """Stop/start button must only render for SUPER."""
+    def test_button_gated_by_is_admin(self):
+        """Stop/start button must only render for admin (level 0)."""
         html = _html()
-        assert "isSuper()" in html
+        assert "isAdmin()" in html
 
     def test_button_prevents_navigation(self):
         """Button click must call event.preventDefault() to avoid navigating."""
@@ -229,7 +228,7 @@ class TestStopStartButtons:
         assert "setInterval" in html
 
 
-# ── Admin Modal (SUPER only) ──────────────────────────────────────────────────
+# ── Admin Modal (level 0 only) ────────────────────────────────────────────────
 
 
 class TestAdminModal:
@@ -255,9 +254,21 @@ class TestAdminModal:
         """Admin modal must call /api/auth/admin/profiles."""
         assert "/api/auth/admin/profiles" in _html()
 
-    def test_change_user_profile_function_exists(self):
-        """Function to change user profile must exist."""
-        assert "changeUserProfile" in _html()
+    def test_add_user_profile_function_exists(self):
+        """Function to add profile to user must exist."""
+        assert "addUserProfile" in _html()
+
+    def test_remove_user_profile_function_exists(self):
+        """Function to remove profile from user must exist."""
+        assert "removeUserProfile" in _html()
+
+    def test_create_profile_function_exists(self):
+        """Function to create profile must exist."""
+        assert "createProfile" in _html()
+
+    def test_delete_profile_function_exists(self):
+        """Function to delete profile must exist."""
+        assert "deleteProfile" in _html()
 
 
 # ── Resources Modal with Pi/PC tabs ───────────────────────────────────────────
