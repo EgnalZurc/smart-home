@@ -53,11 +53,18 @@ class TestBuiltinProfiles:
 
         assert user_profiles._DEFAULT_PROFILE == "FAMILIA_PRINCIPAL"
 
-    def test_builtin_profiles_marked_as_builtin(self):
+    def test_builtin_profiles_marked_correctly(self):
+        """Only SUPER should be protected (builtin=True), others can be edited."""
         import user_profiles
 
-        for name, profile in user_profiles.BUILTIN_PROFILES.items():
-            assert profile.get("builtin") is True, f"{name} should be marked builtin"
+        # SUPER is the only protected profile
+        assert user_profiles.BUILTIN_PROFILES["SUPER"].get("builtin") is True
+
+        # Other profiles can be edited (builtin=False)
+        for name in ["FAMILIA_ALL", "FAMILIA_PRINCIPAL", "GAMER"]:
+            assert user_profiles.BUILTIN_PROFILES[name].get("builtin") is False, (
+                f"{name} should be editable (builtin=False)"
+            )
 
 
 # ── APP_REGISTRY ──────────────────────────────────────────────────────────────
