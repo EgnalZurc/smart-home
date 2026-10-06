@@ -1,6 +1,5 @@
 """Unit tests for AC controller state machine."""
 
-import pytest
 from controllers.state_machine import (
     ControllerState,
     ManualMode,
@@ -18,7 +17,7 @@ class TestStateMachineConfig:
     def test_default_values(self):
         """Config should have sensible defaults."""
         config = StateMachineConfig()
-        
+
         assert config.hysteresis_on == 0.5
         assert config.hysteresis_off == 0.3
         assert config.min_setpoint == 19.0
@@ -35,9 +34,9 @@ class TestProportionalSetpoint:
         config = StateMachineConfig()
         target = 25.0
         hot_edge = target + config.hysteresis_on  # 25.5
-        
+
         setpoint = _calculate_proportional_setpoint(hot_edge, target, config)
-        
+
         assert setpoint == config.min_setpoint
 
     def test_cold_edge_returns_max_setpoint(self):
@@ -45,18 +44,18 @@ class TestProportionalSetpoint:
         config = StateMachineConfig()
         target = 25.0
         cold_edge = target - config.hysteresis_off  # 24.7
-        
+
         setpoint = _calculate_proportional_setpoint(cold_edge, target, config)
-        
+
         assert setpoint == config.max_setpoint
 
     def test_middle_returns_intermediate(self):
         """At target temp, setpoint should be intermediate."""
         config = StateMachineConfig()
         target = 25.0
-        
+
         setpoint = _calculate_proportional_setpoint(target, target, config)
-        
+
         assert config.min_setpoint < setpoint < config.max_setpoint
 
 
@@ -75,9 +74,9 @@ class TestEvaluateOffState:
             seconds_since_last_sensor_update=0,
             consecutive_melcloud_failures=0,
         )
-        
+
         result = evaluate(ControllerState.OFF, inputs, config)
-        
+
         assert result.state == ControllerState.OFF
         assert result.power is False
 
@@ -93,9 +92,9 @@ class TestEvaluateOffState:
             seconds_since_last_sensor_update=0,
             consecutive_melcloud_failures=0,
         )
-        
+
         result = evaluate(ControllerState.OFF, inputs, config)
-        
+
         assert result.state == ControllerState.COOLING_MAX
         assert result.power is True
         assert result.fan_speed == 3
@@ -112,9 +111,9 @@ class TestEvaluateOffState:
             seconds_since_last_sensor_update=0,
             consecutive_melcloud_failures=0,
         )
-        
+
         result = evaluate(ControllerState.OFF, inputs, config)
-        
+
         assert result.state == ControllerState.OFF
 
 
@@ -133,9 +132,9 @@ class TestEvaluateCoolingMaxState:
             seconds_since_last_sensor_update=0,
             consecutive_melcloud_failures=0,
         )
-        
+
         result = evaluate(ControllerState.COOLING_MAX, inputs, config)
-        
+
         assert result.state == ControllerState.COOLDOWN
         assert result.power is False
 
@@ -151,9 +150,9 @@ class TestEvaluateCoolingMaxState:
             seconds_since_last_sensor_update=0,
             consecutive_melcloud_failures=0,
         )
-        
+
         result = evaluate(ControllerState.COOLING_MAX, inputs, config)
-        
+
         assert result.state == ControllerState.MODULATING
         assert result.power is True
         assert result.fan_speed == 0  # Auto fan in modulating
@@ -170,9 +169,9 @@ class TestEvaluateCoolingMaxState:
             seconds_since_last_sensor_update=0,
             consecutive_melcloud_failures=0,
         )
-        
+
         result = evaluate(ControllerState.COOLING_MAX, inputs, config)
-        
+
         assert result.state == ControllerState.COOLING_MAX
 
 
@@ -191,9 +190,9 @@ class TestEvaluateCooldownState:
             seconds_since_last_sensor_update=0,
             consecutive_melcloud_failures=0,
         )
-        
+
         result = evaluate(ControllerState.COOLDOWN, inputs, config)
-        
+
         assert result.state == ControllerState.COOLDOWN
 
     def test_cooldown_transitions_after_period(self):
@@ -208,9 +207,9 @@ class TestEvaluateCooldownState:
             seconds_since_last_sensor_update=0,
             consecutive_melcloud_failures=0,
         )
-        
+
         result = evaluate(ControllerState.COOLDOWN, inputs, config)
-        
+
         assert result.state == ControllerState.COOLING_MAX
 
 
@@ -229,9 +228,9 @@ class TestManualMode:
             seconds_since_last_sensor_update=0,
             consecutive_melcloud_failures=0,
         )
-        
+
         result = evaluate(ControllerState.COOLING_MAX, inputs, config)
-        
+
         assert result.state == ControllerState.SYSTEM_OFF
         assert result.power is False
 
@@ -248,9 +247,9 @@ class TestManualMode:
             seconds_since_last_sensor_update=0,
             consecutive_melcloud_failures=0,
         )
-        
+
         result = evaluate(ControllerState.OFF, inputs, config)
-        
+
         assert result.state == ControllerState.MANUAL
         assert result.power is True
         assert result.setpoint == 22.0
@@ -273,9 +272,9 @@ class TestErrorConditions:
             seconds_since_last_sensor_update=0,
             consecutive_melcloud_failures=100,  # At max
         )
-        
+
         result = evaluate(ControllerState.COOLING_MAX, inputs, config)
-        
+
         assert result.state == ControllerState.ERROR
         assert result.power is False
         assert result.melcloud_error is True
@@ -292,9 +291,9 @@ class TestErrorConditions:
             seconds_since_last_sensor_update=4000,  # Exceeds threshold
             consecutive_melcloud_failures=0,
         )
-        
+
         result = evaluate(ControllerState.OFF, inputs, config)
-        
+
         assert result.sensor_alert is True
 
 
@@ -313,9 +312,9 @@ class TestModulatingState:
             seconds_since_last_sensor_update=0,
             consecutive_melcloud_failures=0,
         )
-        
+
         result = evaluate(ControllerState.MODULATING, inputs, config)
-        
+
         assert result.state == ControllerState.MODULATING
         assert config.min_setpoint < result.setpoint < config.max_setpoint
 
@@ -331,7 +330,7 @@ class TestModulatingState:
             seconds_since_last_sensor_update=0,
             consecutive_melcloud_failures=0,
         )
-        
+
         result = evaluate(ControllerState.MODULATING, inputs, config)
-        
+
         assert result.state == ControllerState.COOLING_MAX
