@@ -92,7 +92,12 @@ class TestDashboardAppCatalogue:
     def test_apps_filters_zigbee_client_side(self):
         """Dashboard JS must filter out zigbee from service cards."""
         html = _html()
-        assert "!== 'zigbee'" in html or "key !== 'zigbee'" in html
+        # Accept either old syntax (p.key !== 'zigbee') or new array syntax (includes)
+        assert (
+            "!== 'zigbee'" in html
+            or "key !== 'zigbee'" in html
+            or "'zigbee'" in html and ".includes(p.key)" in html
+        )
 
 
 # ── Services Modal (replaced Infrastructure dropdown) ────────────────────────
