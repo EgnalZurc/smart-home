@@ -175,7 +175,8 @@ class I18n {
      * Update language selector dropdown state
      */
     updateLanguageSelector() {
-        const currentFlag = document.getElementById('current-flag');
+        // Try new component IDs first, fall back to old IDs for backwards compatibility
+        const currentFlag = document.getElementById('cuchi-current-flag') || document.getElementById('current-flag');
         
         if (!currentFlag) return;
         
@@ -186,8 +187,8 @@ class I18n {
         };
         currentFlag.src = flagPaths[this.currentLocale];
         
-        // Update active state in dropdown menu
-        document.querySelectorAll('.lang-option').forEach(opt => {
+        // Update active state in dropdown menu (supports both old and new class names)
+        document.querySelectorAll('.lang-option, .cuchi-lang-option').forEach(opt => {
             if (opt.dataset.lang === this.currentLocale) {
                 opt.classList.add('active');
             } else {

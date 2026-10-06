@@ -8,18 +8,24 @@ export function updateErrorIndicator(errorsData, i18n) {
     const { errors, has_errors } = errorsData;
     _currentErrors = errors || [];
 
-    const dot       = document.getElementById('status-dot');
-    const line      = document.getElementById('status-line');
-    const indicator = document.getElementById('status-indicator');
+    // Support both old IDs and new component IDs
+    const dot       = document.getElementById('cuchi-status-dot') || document.getElementById('status-dot');
+    const line      = document.getElementById('cuchi-status-text') || document.getElementById('status-line');
+    const indicator = document.getElementById('cuchi-status') || document.getElementById('status-indicator');
     if (!dot || !line) return;
+    
+    // Check if using new component (different class structure)
+    const usingComponent = dot.classList.contains('cuchi-status-dot');
 
     if (has_errors) {
         const worstIsError = errors.some(e => e.severity === 'error');
         // Replace dot with warning icon
-        dot.className = '';
+        dot.className = usingComponent ? 'cuchi-status-dot' : '';
         dot.textContent = worstIsError ? '\u26a0\ufe0f' : '\u26a0\ufe0f';
         dot.style.fontSize = '14px';
         dot.style.lineHeight = '1';
+        dot.style.background = 'none';
+        dot.style.animation = 'none';
         // Status text shows count
         const label = errors.length === 1 ? errors[0].source : `${errors.length} issues`;
         line.textContent = label;
@@ -33,12 +39,18 @@ export function updateErrorIndicator(errorsData, i18n) {
         }
     } else {
         // Restore normal dot
-        dot.className = 'status-dot w-1.5 h-1.5 rounded-full bg-green-500';
+        if (usingComponent) {
+            dot.className = 'cuchi-status-dot online';
+        } else {
+            dot.className = 'status-dot w-1.5 h-1.5 rounded-full bg-green-500';
+        }
         dot.textContent = '';
         dot.style.fontSize = '';
         dot.style.lineHeight = '';
+        dot.style.background = '';
+        dot.style.animation = '';
         line.style.color = '';
-        if (indicator) indicator.style.cursor = 'default';
+        if (indicator) indicator.style.cursor = usingComponent ? '' : 'default';
         // status-line text is managed by header.js (Connected/Disconnected)
         // Don't touch it here when no errors
     }
