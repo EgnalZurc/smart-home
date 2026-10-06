@@ -78,11 +78,32 @@ docker-compose up -d  # Automatically uses both files
 docker-compose -f docker-compose.yml up -d
 ```
 
-### `docker-compose.dev.yml` (DEPRECATED)
+### `docker-compose.citest.yml` (CI-equivalent local dev/test)
 
-**Status**: ⚠️ To be removed
+**Purpose**: Provides a Docker container mirroring the GitHub CI toolchain (Python 3.12 + ruff/bandit/pytest/hadolint) for local linting and testing. Uses `Dockerfile.citest`.
 
-**Reason**: Replaced by `docker-compose.override.yml` which follows Docker Compose official pattern
+**Usage** (via helper script):
+```powershell
+.\dev.ps1 build          # build / rebuild the dev image
+.\dev.ps1 shell          # interactive bash in the container
+.\dev.ps1 run <cmd...>   # run a one-off command
+.\dev.ps1 ci <service>   # reproduce the CI lint+test for one service
+```
+
+## Build & test only in the dev container (host stays clean)
+
+NEVER compile or run tests of project code on the Windows host. ALWAYS use the Docker CI-equivalent image (`docker-compose.citest.yml` + `Dockerfile.citest`), which mirrors the GitHub CI toolchain (Python 3.12 + ruff/bandit/pytest/pytest-asyncio/pytest-cov/httpx + hadolint).
+
+Use the helper from the repo root:
+
+- `.\dev.ps1 build` -- build / rebuild the dev image
+- `.\dev.ps1 shell` -- interactive shell in the container
+- `.\dev.ps1 run <cmd...>` -- run a one-off command (ruff, pytest)
+- `.\dev.ps1 ci <service>` -- reproduce CI lint+test for one service
+
+To add a tool, edit `Dockerfile.citest` (pip or apt block) and rebuild -- do NOT `pip install` / `npm install` / install SDKs on the host.
+
+Allowed on host (escape hatches): `git`, `gh`, `ssh`, `scp`, `docker`, `robocopy` -- these are needed for pc-agent + Pi ops. The rule is specifically about compiling and running tests of project code.
 
 ### `.dockerignore`
 
@@ -197,9 +218,13 @@ tar -czf backup.tar.gz data/
 
 ## 🔄 Migration Notes
 
-### From `docker-compose.dev.yml` to `docker-compose.override.yml`
+### From `docker-compose.dev.yml` (removed) to `docker-compose.override.yml`
 
-**Old way**:
+The deprecated `docker-compose.dev.yml` has been **removed**. Development
+overrides now live in `docker-compose.override.yml`, which Docker Compose
+applies automatically.
+
+**Old way** (no longer available):
 ```bash
 docker-compose -f docker-compose.dev.yml up -d
 ```

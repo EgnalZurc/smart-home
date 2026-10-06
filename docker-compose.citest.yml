@@ -1,0 +1,44 @@
+# ==============================================================================
+# smart-home local CI-equivalent dev/test environment
+#
+# One interactive container with the GitHub CI toolchain baked in and the repo
+# bind-mounted read-write at /workspace. ALL linting and testing of project code
+# happens IN HERE, never on the Windows host.
+#
+# Usage (prefer the helper, which also starts Docker Desktop):
+#   .\dev.ps1 build          # build the image (first time / after Dockerfile edit)
+#   .\dev.ps1 shell          # interactive bash in the container
+#   .\dev.ps1 run <cmd...>   # run a one-off command, e.g. ruff/pytest
+#   .\dev.ps1 ci <service>   # reproduce the CI lint+test for one service
+#
+# Raw equivalents (run from the repo root):
+#   docker compose -f docker-compose.citest.yml build
+#   docker compose -f docker-compose.citest.yml run --rm dev bash
+#
+# The repo root is bind-mounted via ${SMART_HOME_REPO}, which defaults to the
+# compose working directory ("."), i.e. the repo root when run from there.
+# ==============================================================================
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.citest
+      # Native host arch (amd64) for fast lint/test. arm64 service builds are a
+      # separate buildx concern, not this container's job.
+    image: smart-home-citest:local
+    container_name: smart-home-citest
+    # Bind-mount the repo. ${SMART_HOME_REPO} defaults to the repo root (".")
+    # so this works when compose is run from the repo root.
+    volumes:
+      - "${SMART_HOME_REPO:-.}:/workspace"
+    working_dir: /workspace
+    # Keep container alive for `docker compose exec` style reuse if desired.
+    stdin_open: true
+    tty: true
+    # No ports: this is a lint/test box, not a running service. If you later want
+    # to run a service for manual testing, add a port mapping + command here.
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    # Do not auto-restart; it is an on-demand tool container.
+    restart: "no"
