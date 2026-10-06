@@ -471,7 +471,7 @@ async def set_user_profiles_endpoint(username: str, request: Request):
 
     body = await request.json()
     profiles = body.get("profiles", [])
-    
+
     if not profiles:
         raise HTTPException(status_code=400, detail="At least one profile required")
 
@@ -482,7 +482,7 @@ async def set_user_profiles_endpoint(username: str, request: Request):
 
     user_profiles.set_user_profiles(username, profiles)
     logger.info("Profiles %r assigned to user %r by admin", profiles, username)
-    
+
     return {
         "username": username,
         "profiles": profiles,
@@ -503,7 +503,7 @@ async def add_user_profile_endpoint(username: str, profile: str, request: Reques
         raise HTTPException(status_code=400, detail=f"Unknown profile: {profile}")
 
     user_profiles.add_user_profile(username, profile)
-    
+
     return {
         "username": username,
         "profiles": user_profiles.get_user_profiles(username),
@@ -524,7 +524,7 @@ async def remove_user_profile_endpoint(username: str, profile: str, request: Req
         raise HTTPException(status_code=400, detail="Cannot remove last profile")
 
     user_profiles.remove_user_profile(username, profile)
-    
+
     return {
         "username": username,
         "profiles": user_profiles.get_user_profiles(username),

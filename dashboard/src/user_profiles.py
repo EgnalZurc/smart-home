@@ -163,7 +163,7 @@ def _db() -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    
+
     # User-profile assignments (many-to-many)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS user_profiles (
@@ -172,7 +172,7 @@ def _db() -> sqlite3.Connection:
             PRIMARY KEY (username, profile)
         )
     """)
-    
+
     # Custom profiles (beyond built-ins)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS profiles (
@@ -181,7 +181,7 @@ def _db() -> sqlite3.Connection:
             description TEXT DEFAULT ''
         )
     """)
-    
+
     conn.commit()
     return conn
 
@@ -192,7 +192,7 @@ def _migrate_old_schema():
         # Check if old schema exists (single profile column)
         cursor = conn.execute("PRAGMA table_info(user_profiles)")
         columns = [row[1] for row in cursor.fetchall()]
-        
+
         if "profile" in columns and len(columns) == 2:
             # Old schema detected, check if it's the old format
             try:
@@ -200,10 +200,12 @@ def _migrate_old_schema():
                 old_data = conn.execute(
                     "SELECT username, profile FROM user_profiles"
                 ).fetchall()
-                
+
                 if old_data:
                     # Backup and recreate
-                    conn.execute("ALTER TABLE user_profiles RENAME TO user_profiles_old")
+                    conn.execute(
+                        "ALTER TABLE user_profiles RENAME TO user_profiles_old"
+                    )
                     conn.execute("""
                         CREATE TABLE user_profiles (
                             username TEXT NOT NULL,
@@ -215,13 +217,17 @@ def _migrate_old_schema():
                     for row in old_data:
                         conn.execute(
                             "INSERT OR IGNORE INTO user_profiles (username, profile) VALUES (?, ?)",
-                            (row[0], row[1])
+                            (row[0], row[1]),
                         )
                     conn.execute("DROP TABLE user_profiles_old")
                     conn.commit()
-                    logger.info("Migrated %d users to new multi-profile schema", len(old_data))
+                    logger.info(
+                        "Migrated %d users to new multi-profile schema", len(old_data)
+                    )
             except Exception as e:
-                logger.warning("Migration check failed (may be already migrated): %s", e)
+                logger.warning(
+                    "Migration check failed (may be already migrated): %s", e
+                )
 
 
 # Run migration on module load
@@ -237,7 +243,7 @@ except Exception as e:
 def get_all_profiles() -> dict[str, dict]:
     """Return all profiles (built-in + custom) as {name: {level, description, builtin}}."""
     result = dict(BUILTIN_PROFILES)
-    
+
     with _db() as conn:
         rows = conn.execute("SELECT name, level, description FROM profiles").fetchall()
         for row in rows:
@@ -246,7 +252,7 @@ def get_all_profiles() -> dict[str, dict]:
                 "description": row["description"] or "",
                 "builtin": False,
             }
-    
+
     return result
 
 
@@ -256,11 +262,11 @@ def create_profile(name: str, level: int, description: str = "") -> None:
         raise ValueError(f"Cannot create profile with built-in name: {name}")
     if not 0 <= level <= 3:
         raise ValueError(f"Level must be 0-3, got {level}")
-    
+
     with _db() as conn:
         conn.execute(
             "INSERT INTO profiles (name, level, description) VALUES (?, ?, ?)",
-            (name, level, description)
+            (name, level, description),
         )
     logger.info("Created profile %r with level %d", name, level)
 
@@ -269,14 +275,17 @@ def update_profile(name: str, level: int = None, description: str = None) -> Non
     """Update a custom profile. Cannot modify built-in profiles."""
     if name in BUILTIN_PROFILES:
         raise ValueError(f"Cannot modify built-in profile: {name}")
-    
+
     with _db() as conn:
         if level is not None:
             if not 0 <= level <= 3:
                 raise ValueError(f"Level must be 0-3, got {level}")
             conn.execute("UPDATE profiles SET level = ? WHERE name = ?", (level, name))
         if description is not None:
-            conn.execute("UPDATE profiles SET description = ? WHERE name = ?", (description, name))
+            conn.execute(
+                "UPDATE profiles SET description = ? WHERE name = ?",
+                (description, name),
+            )
     logger.info("Updated profile %r", name)
 
 
