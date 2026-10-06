@@ -440,13 +440,13 @@ def _require_super(request: Request) -> str:
 async def list_users(request: Request):
     """List all users with their assigned profiles.
 
-    Returns: [{"username": str, "profiles": [str], "effective_level": int}, ...]
+    Returns: [{"username": str, "profiles": [{id, name, level, ...}], "effective_level": int}, ...]
     """
     _require_super(request)
     users = auth_users._load_htpasswd(auth_users.HTPASSWD_PATH)
     result = []
     for username in sorted(users.keys()):
-        profiles = user_profiles.get_user_profiles(username)
+        profiles = user_profiles.get_user_profiles_detailed(username)
         effective_level = user_profiles.get_effective_level(username)
         result.append(
             {
@@ -462,7 +462,7 @@ async def list_users(request: Request):
 async def set_user_profiles_endpoint(username: str, request: Request):
     """Set the profiles for a user (replaces all existing).
 
-    Body: {"profiles": ["PROFILE1", "PROFILE2", ...]}
+    Body: {"profile_ids": ["uuid1", "uuid2", ...]}
     """
     _require_super(request)
 
@@ -470,28 +470,28 @@ async def set_user_profiles_endpoint(username: str, request: Request):
         raise HTTPException(status_code=404, detail=f"User not found: {username}")
 
     body = await request.json()
-    profiles = body.get("profiles", [])
+    profile_ids = body.get("profile_ids", [])
 
-    if not profiles:
+    if not profile_ids:
         raise HTTPException(status_code=400, detail="At least one profile required")
 
     all_profiles = user_profiles.get_all_profiles()
-    for p in profiles:
-        if p not in all_profiles:
-            raise HTTPException(status_code=400, detail=f"Unknown profile: {p}")
+    for pid in profile_ids:
+        if pid not in all_profiles:
+            raise HTTPException(status_code=400, detail=f"Unknown profile ID: {pid}")
 
-    user_profiles.set_user_profiles(username, profiles)
-    logger.info("Profiles %r assigned to user %r by admin", profiles, username)
+    user_profiles.set_user_profiles(username, profile_ids)
+    logger.info("Profiles %r assigned to user %r by admin", profile_ids, username)
 
     return {
         "username": username,
-        "profiles": profiles,
+        "profiles": user_profiles.get_user_profiles_detailed(username),
         "effective_level": user_profiles.get_effective_level(username),
     }
 
 
-@router.post("/admin/users/{username}/profiles/{profile}", tags=["Admin"])
-async def add_user_profile_endpoint(username: str, profile: str, request: Request):
+@router.post("/admin/users/{username}/profiles/{profile_id}", tags=["Admin"])
+async def add_user_profile_endpoint(username: str, profile_id: str, request: Request):
     """Add a profile to a user (keeps existing profiles)."""
     _require_super(request)
 
@@ -499,20 +499,22 @@ async def add_user_profile_endpoint(username: str, profile: str, request: Reques
         raise HTTPException(status_code=404, detail=f"User not found: {username}")
 
     all_profiles = user_profiles.get_all_profiles()
-    if profile not in all_profiles:
-        raise HTTPException(status_code=400, detail=f"Unknown profile: {profile}")
+    if profile_id not in all_profiles:
+        raise HTTPException(status_code=400, detail=f"Unknown profile ID: {profile_id}")
 
-    user_profiles.add_user_profile(username, profile)
+    user_profiles.add_user_profile(username, profile_id)
 
     return {
         "username": username,
-        "profiles": user_profiles.get_user_profiles(username),
+        "profiles": user_profiles.get_user_profiles_detailed(username),
         "effective_level": user_profiles.get_effective_level(username),
     }
 
 
-@router.delete("/admin/users/{username}/profiles/{profile}", tags=["Admin"])
-async def remove_user_profile_endpoint(username: str, profile: str, request: Request):
+@router.delete("/admin/users/{username}/profiles/{profile_id}", tags=["Admin"])
+async def remove_user_profile_endpoint(
+    username: str, profile_id: str, request: Request
+):
     """Remove a profile from a user."""
     _require_super(request)
 
@@ -523,11 +525,11 @@ async def remove_user_profile_endpoint(username: str, profile: str, request: Req
     if len(current_profiles) <= 1:
         raise HTTPException(status_code=400, detail="Cannot remove last profile")
 
-    user_profiles.remove_user_profile(username, profile)
+    user_profiles.remove_user_profile(username, profile_id)
 
     return {
         "username": username,
-        "profiles": user_profiles.get_user_profiles(username),
+        "profiles": user_profiles.get_user_profiles_detailed(username),
         "effective_level": user_profiles.get_effective_level(username),
     }
 
@@ -539,7 +541,7 @@ async def remove_user_profile_endpoint(username: str, profile: str, request: Req
 async def list_profiles(request: Request):
     """List all available profiles with their settings.
 
-    Returns: {"PROFILE_KEY": {level, description, builtin}, ...}
+    Returns: {"profile_id": {name, level, description, protected}, ...}
     """
     _require_super(request)
     return user_profiles.get_all_profiles()
@@ -550,6 +552,7 @@ async def create_profile_endpoint(request: Request):
     """Create a new custom profile.
 
     Body: {"name": str, "level": int (0-3), "description": str}
+    Returns: {"id": str, "name": str, "level": int, "description": str, "protected": false}
     """
     _require_super(request)
 
@@ -566,22 +569,29 @@ async def create_profile_endpoint(request: Request):
         raise HTTPException(status_code=400, detail="Level must be 0-3")
 
     try:
-        user_profiles.create_profile(name, level, description)
+        profile_id = user_profiles.create_profile(name, level, description)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    return {"name": name, "level": level, "description": description, "builtin": False}
+    return {
+        "id": profile_id,
+        "name": name,
+        "level": level,
+        "description": description,
+        "protected": False,
+    }
 
 
-@router.put("/admin/profiles/{name}", tags=["Admin"])
-async def update_profile_endpoint(name: str, request: Request):
-    """Update a custom profile. Cannot modify built-in profiles.
+@router.put("/admin/profiles/{profile_id}", tags=["Admin"])
+async def update_profile_endpoint(profile_id: str, request: Request):
+    """Update a profile. Cannot modify protected profiles (SUPER).
 
-    Body: {"level": int (optional), "description": str (optional)}
+    Body: {"name": str (optional), "level": int (optional), "description": str (optional)}
     """
     _require_super(request)
 
     body = await request.json()
+    name = body.get("name")
     level = body.get("level")
     description = body.get("description")
 
@@ -589,25 +599,26 @@ async def update_profile_endpoint(name: str, request: Request):
         raise HTTPException(status_code=400, detail="Level must be 0-3")
 
     try:
-        user_profiles.update_profile(name, level, description)
+        user_profiles.update_profile(
+            profile_id, name=name, level=level, description=description
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    all_profiles = user_profiles.get_all_profiles()
-    return all_profiles.get(name, {})
+    return user_profiles.get_profile_by_id(profile_id)
 
 
-@router.delete("/admin/profiles/{name}", tags=["Admin"])
-async def delete_profile_endpoint(name: str, request: Request):
-    """Delete a custom profile. Cannot delete built-in profiles."""
+@router.delete("/admin/profiles/{profile_id}", tags=["Admin"])
+async def delete_profile_endpoint(profile_id: str, request: Request):
+    """Delete a profile. Cannot delete protected or built-in profiles."""
     _require_super(request)
 
     try:
-        user_profiles.delete_profile(name)
+        user_profiles.delete_profile(profile_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    return {"deleted": name}
+    return {"deleted": profile_id}
 
 
 # ── Legacy endpoint for backward compatibility ───────────────────────────────
