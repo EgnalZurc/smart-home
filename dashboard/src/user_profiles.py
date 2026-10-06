@@ -342,7 +342,7 @@ def remove_user_profile(username: str, profile: str) -> None:
     with _db() as conn:
         conn.execute(
             "DELETE FROM user_profiles WHERE username = ? AND profile = ?",
-            (username, profile)
+            (username, profile),
         )
     logger.info("Removed profile %r from user %r", profile, username)
 
@@ -352,17 +352,17 @@ def remove_user_profile(username: str, profile: str) -> None:
 # ---------------------------------------------------------------------------
 def get_effective_level(username: str) -> int:
     """Return the effective permission level for a user.
-    
+
     This is the MINIMUM level across all assigned profiles (lower = more permissions).
     """
     profiles = get_user_profiles(username)
     all_profiles = get_all_profiles()
-    
+
     levels = []
     for p in profiles:
         if p in all_profiles:
             levels.append(all_profiles[p]["level"])
-    
+
     return min(levels) if levels else all_profiles[_DEFAULT_PROFILE]["level"]
 
 
