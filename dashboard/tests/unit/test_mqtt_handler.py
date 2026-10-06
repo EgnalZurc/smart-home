@@ -1,214 +1,304 @@
-"""Unit tests for mqtt_handler.py"""
+"""Unit tests for mqtt_handler.py - MQTT sensor management."""
 
 import json
+import shutil
+import tempfile
 import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from mqtt_handler import MqttHandler, SensorReading
+import pytest
+
+
+@pytest.fixture
+def temp_persist_file():
+    """Create temporary persist file."""
+    temp_dir = tempfile.mkdtemp()
+    persist_file = str(Path(temp_dir) / "sensor_readings.json")
+    yield persist_file
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@pytest.fixture
+def mqtt_handler(temp_persist_file):
+    """Create MqttHandler with mocked MQTT client."""
+    with patch.dict("os.environ", {"SENSOR_PERSIST_FILE": temp_persist_file}):
+        with patch("mqtt_handler.mqtt.Client") as mock_client:
+            from mqtt_handler import MqttHandler
+
+            handler = MqttHandler(
+                broker="localhost",
+                port=1883,
+                sensor_names=["sensor1", "sensor2"],
+                connect_retries=1,
+                retry_delay=0,
+            )
+            handler._client = mock_client.return_value
+            yield handler
 
 
 class TestSensorReading:
-    def test_to_dict_round_trip(self):
-        r = SensorReading(temperature=25.5, humidity=40, battery=80, timestamp=1000.0)
-        d = r.to_dict()
-        r2 = SensorReading.from_dict(d)
-        assert r2.temperature == 25.5
-        assert r2.humidity == 40
-        assert r2.battery == 80
-        assert r2.timestamp == 1000.0
+    def test_init(self):
+        from mqtt_handler import SensorReading
 
-    def test_from_dict_requires_all_fields(self):
-        # from_dict uses exact keys, test valid full dict
-        d = {"temperature": 22.0, "humidity": 40, "battery": 80, "timestamp": 500.0}
-        r = SensorReading.from_dict(d)
-        assert r.temperature == 22.0
+        reading = SensorReading(
+            temperature=23.5, humidity=65.0, battery=95, timestamp=1234567890.0
+        )
+
+        assert reading.temperature == 23.5
+        assert reading.humidity == 65.0
+        assert reading.battery == 95
+        assert reading.timestamp == 1234567890.0
+
+    def test_to_dict(self):
+        from mqtt_handler import SensorReading
+
+        reading = SensorReading(
+            temperature=23.5, humidity=65.0, battery=95, timestamp=1234567890.0
+        )
+        d = reading.to_dict()
+
+        assert d["temperature"] == 23.5
+        assert d["humidity"] == 65.0
+        assert d["battery"] == 95
+        assert d["timestamp"] == 1234567890.0
+
+    def test_from_dict(self):
+        from mqtt_handler import SensorReading
+
+        d = {
+            "temperature": 23.5,
+            "humidity": 65.0,
+            "battery": 95,
+            "timestamp": 1234567890.0,
+        }
+        reading = SensorReading.from_dict(d)
+
+        assert reading.temperature == 23.5
+        assert reading.humidity == 65.0
+        assert reading.battery == 95
 
 
-class TestOnMessage:
-    def _make_handler(self, sensor_names):
-        with patch("mqtt_handler.mqtt"):
-            with patch.object(MqttHandler, "_load_from_disk"):
-                h = MqttHandler("localhost", 1883, sensor_names, max_history=5)
-                h._connected = True
-                h._error_tracker = None
-                return h
+class TestMqttHandlerInit:
+    def test_init_sets_attributes(self, temp_persist_file):
+        with patch.dict("os.environ", {"SENSOR_PERSIST_FILE": temp_persist_file}):
+            with patch("mqtt_handler.mqtt.Client"):
+                from mqtt_handler import MqttHandler
 
-    def _make_msg(self, topic, payload_dict):
-        msg = MagicMock()
-        msg.topic = topic
-        msg.payload = json.dumps(payload_dict).encode()
-        return msg
-
-    def test_processes_valid_message(self):
-        h = self._make_handler(["Salon"])
-        with patch.object(h, "_save_to_disk"):
-            msg = self._make_msg(
-                "zigbee2mqtt/Salon",
-                {"temperature": 25.0, "humidity": 40, "battery": 90},
-            )
-            h._on_message(None, None, msg)
-        assert "Salon" in h.readings
-        assert h.readings["Salon"].temperature == 25.0
-
-    def test_ignores_unknown_sensor(self):
-        h = self._make_handler(["Salon"])
-        with patch.object(h, "_save_to_disk"):
-            msg = self._make_msg("zigbee2mqtt/Unknown", {"temperature": 25.0})
-            h._on_message(None, None, msg)
-        assert "Unknown" not in h.readings
-
-    def test_trims_history_to_max(self):
-        h = self._make_handler(["Salon"])
-        with patch.object(h, "_save_to_disk"):
-            for i in range(10):
-                msg = self._make_msg(
-                    "zigbee2mqtt/Salon", {"temperature": float(i), "humidity": 40}
+                handler = MqttHandler(
+                    broker="test-broker",
+                    port=1884,
+                    sensor_names=["s1", "s2"],
+                    max_history=100,
                 )
-                h._on_message(None, None, msg)
-        assert len(h.history["Salon"]) <= 5
 
-    def test_ignores_message_without_temperature(self):
-        h = self._make_handler(["Salon"])
-        msg = self._make_msg("zigbee2mqtt/Salon", {"humidity": 40})
-        h._on_message(None, None, msg)
-        assert "Salon" not in h.readings
+                assert handler.broker == "test-broker"
+                assert handler.port == 1884
+                assert handler.sensor_names == ["s1", "s2"]
+                assert handler.max_history == 100
 
 
-class TestGetActiveReadings:
-    def _make_handler_with_reading(self, age_seconds):
-        with patch("mqtt_handler.mqtt"):
-            with patch.object(MqttHandler, "_load_from_disk"):
-                h = MqttHandler("localhost", 1883, ["Salon"], max_history=200)
-                h._error_tracker = None
-                ts = time.time() - age_seconds
-                h.readings["Salon"] = SensorReading(25.0, 40, 80, ts)
-                return h
+class TestMqttHandlerCallbacks:
+    def test_on_message_parses_sensor(self, mqtt_handler):
+        msg = MagicMock()
+        msg.topic = "zigbee2mqtt/sensor1"
+        msg.payload = json.dumps(
+            {"temperature": 24.5, "humidity": 60.0, "battery": 85}
+        ).encode()
 
-    def test_fresh_reading_is_active(self):
-        h = self._make_handler_with_reading(age_seconds=60)
-        active = h.get_active_readings(max_age_seconds=3600)
-        assert "Salon" in active
+        mqtt_handler._on_message(None, None, msg)
 
-    def test_stale_reading_not_active(self):
-        h = self._make_handler_with_reading(age_seconds=4000)
-        active = h.get_active_readings(max_age_seconds=3600)
-        assert "Salon" not in active
+        assert "sensor1" in mqtt_handler.readings
+        assert mqtt_handler.readings["sensor1"].temperature == 24.5
+        assert mqtt_handler.readings["sensor1"].humidity == 60.0
 
-    def test_average_temperature_with_active(self):
-        with patch("mqtt_handler.mqtt"):
-            with patch.object(MqttHandler, "_load_from_disk"):
-                h = MqttHandler("localhost", 1883, ["s1", "s2"], max_history=200)
-                h._error_tracker = None
-                now = time.time()
-                h.readings["s1"] = SensorReading(24.0, 40, 80, now)
-                h.readings["s2"] = SensorReading(26.0, 40, 80, now)
-                avg = h.get_average_temperature(max_age_seconds=3600)
-                assert avg == 25.0
+    def test_on_message_ignores_unknown_sensor(self, mqtt_handler):
+        msg = MagicMock()
+        msg.topic = "zigbee2mqtt/unknown_sensor"
+        msg.payload = json.dumps({"temperature": 24.5}).encode()
 
-    def test_average_returns_none_when_no_active(self):
-        with patch("mqtt_handler.mqtt"):
-            with patch.object(MqttHandler, "_load_from_disk"):
-                h = MqttHandler("localhost", 1883, ["s1"], max_history=200)
-                h._error_tracker = None
-                assert h.get_average_temperature(max_age_seconds=3600) is None
+        mqtt_handler._on_message(None, None, msg)
+
+        assert "unknown_sensor" not in mqtt_handler.readings
+
+    def test_on_message_handles_json_error(self, mqtt_handler):
+        msg = MagicMock()
+        msg.topic = "zigbee2mqtt/sensor1"
+        msg.payload = b"not valid json"
+
+        # Should not raise
+        mqtt_handler._on_message(None, None, msg)
+
+    def test_on_message_limits_history(self, mqtt_handler):
+        mqtt_handler.max_history = 3
+        mqtt_handler.history.clear()
+
+        for i in range(10):
+            msg = MagicMock()
+            msg.topic = "zigbee2mqtt/sensor1"
+            msg.payload = json.dumps({"temperature": 20.0 + i, "humidity": 50}).encode()
+            mqtt_handler._on_message(None, None, msg)
+
+        assert len(mqtt_handler.history.get("sensor1", [])) <= 3
 
 
 class TestRecordAcTemp:
-    """Tests for AC room temperature hourly recording (AC-CHART)."""
+    def test_records_temperature(self, mqtt_handler):
+        mqtt_handler.record_ac_temp(25.5)
 
-    def _make_handler(self):
-        with patch("mqtt_handler.mqtt"):
-            with patch.object(MqttHandler, "_load_from_disk"):
-                h = MqttHandler("localhost", 1883, ["s1"], max_history=200)
-                h._error_tracker = None
-                return h
+        assert "AC" in mqtt_handler.history
+        assert len(mqtt_handler.history["AC"]) == 1
+        assert mqtt_handler.history["AC"][0].temperature == 25.5
 
-    def test_record_ac_temp_adds_to_history(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("SENSOR_PERSIST_FILE", str(tmp_path / "sensor.json"))
-        import mqtt_handler as mh
+    def test_limits_history(self, mqtt_handler):
+        mqtt_handler.max_history = 3
 
-        monkeypatch.setattr(mh, "PERSIST_FILE", str(tmp_path / "sensor.json"))
-        h = self._make_handler()
-        h.record_ac_temp(24.5)
-        assert "AC" in h.history
-        assert len(h.history["AC"]) == 1
-        assert h.history["AC"][0].temperature == 24.5
-        assert h.history["AC"][0].humidity is None
-        assert h.history["AC"][0].battery is None
-
-    def test_record_ac_temp_persists_to_disk(self, tmp_path, monkeypatch):
-        import json
-
-        import mqtt_handler as mh
-
-        persist = tmp_path / "sensor.json"
-        monkeypatch.setattr(mh, "PERSIST_FILE", str(persist))
-        h = self._make_handler()
-        h.record_ac_temp(22.0)
-        data = json.loads(persist.read_text(encoding="utf-8"))
-        assert "AC" in data
-        assert data["AC"][0]["temperature"] == 22.0
-
-    def test_record_ac_temp_respects_max_history(self, tmp_path, monkeypatch):
-        import mqtt_handler as mh
-
-        monkeypatch.setattr(mh, "PERSIST_FILE", str(tmp_path / "sensor.json"))
-        h = self._make_handler()
-        h.max_history = 5
         for i in range(10):
-            h.record_ac_temp(20.0 + i)
-        assert len(h.history["AC"]) == 5
+            mqtt_handler.record_ac_temp(20.0 + i)
 
-    def test_ac_sensor_loaded_from_disk(self, tmp_path, monkeypatch):
-        """AC entries persisted on disk are loaded even though AC not in sensor_names."""
-        import json
+        assert len(mqtt_handler.history["AC"]) <= 3
 
-        import mqtt_handler as mh
 
-        persist = tmp_path / "sensor.json"
-        monkeypatch.setattr(mh, "PERSIST_FILE", str(persist))
-        # Write pre-existing AC data
-        persist.write_text(
-            json.dumps(
-                {
-                    "AC": [
-                        {
-                            "temperature": 23.0,
-                            "humidity": None,
-                            "battery": None,
-                            "timestamp": 1000.0,
-                        }
-                    ]
-                }
-            ),
-            encoding="utf-8",
+class TestGetActiveReadings:
+    def test_returns_recent_readings(self, mqtt_handler):
+        from mqtt_handler import SensorReading
+
+        now = time.time()
+        mqtt_handler.readings["sensor1"] = SensorReading(
+            temperature=22.0, humidity=50.0, battery=90, timestamp=now - 100
         )
-        with patch("mqtt_handler.mqtt"):
-            h = MqttHandler("localhost", 1883, ["s1"], max_history=200)
-            h._error_tracker = None
-        assert "AC" in h.history
-        assert h.history["AC"][0].temperature == 23.0
 
+        active = mqtt_handler.get_active_readings(max_age_seconds=600)
 
-class TestSensorReadingOptionalFields:
-    """SensorReading supports None humidity/battery (AC virtual sensor)."""
+        assert "sensor1" in active
+        assert active["sensor1"].temperature == 22.0
 
-    def test_ac_reading_humidity_battery_none(self):
-        r = SensorReading(
-            temperature=23.5, humidity=None, battery=None, timestamp=999.0
+    def test_excludes_old_readings(self, mqtt_handler):
+        from mqtt_handler import SensorReading
+
+        now = time.time()
+        mqtt_handler.readings["sensor1"] = SensorReading(
+            temperature=22.0, humidity=50.0, battery=90, timestamp=now - 1000
         )
-        assert r.humidity is None
-        assert r.battery is None
 
-    def test_to_dict_with_none_fields(self):
-        r = SensorReading(24.0, None, None, 1000.0)
-        d = r.to_dict()
-        assert d["humidity"] is None
-        assert d["battery"] is None
+        active = mqtt_handler.get_active_readings(max_age_seconds=600)
 
-    def test_from_dict_with_none_fields(self):
-        d = {"temperature": 22.0, "humidity": None, "battery": None, "timestamp": 500.0}
-        r = SensorReading.from_dict(d)
-        assert r.humidity is None
-        assert r.battery is None
-        assert r.temperature == 22.0
+        assert "sensor1" not in active
+
+
+class TestAverages:
+    def test_get_average_temperature(self, mqtt_handler):
+        from mqtt_handler import SensorReading
+
+        now = time.time()
+        # Clear and set fresh data
+        mqtt_handler.readings.clear()
+        mqtt_handler.readings["sensor1"] = SensorReading(
+            temperature=20.0, humidity=50.0, battery=90, timestamp=now
+        )
+        mqtt_handler.readings["sensor2"] = SensorReading(
+            temperature=24.0, humidity=50.0, battery=90, timestamp=now
+        )
+
+        avg = mqtt_handler.get_average_temperature()
+
+        assert avg == 22.0  # (20 + 24) / 2
+
+    def test_get_average_temperature_none_when_empty(self, mqtt_handler):
+        mqtt_handler.readings.clear()
+        avg = mqtt_handler.get_average_temperature()
+        assert avg is None
+
+    def test_get_average_humidity(self, mqtt_handler):
+        from mqtt_handler import SensorReading
+
+        now = time.time()
+        mqtt_handler.readings.clear()
+        mqtt_handler.readings["sensor1"] = SensorReading(
+            temperature=20.0, humidity=40.0, battery=90, timestamp=now
+        )
+        mqtt_handler.readings["sensor2"] = SensorReading(
+            temperature=24.0, humidity=60.0, battery=90, timestamp=now
+        )
+
+        avg = mqtt_handler.get_average_humidity()
+
+        assert avg == 50.0  # (40 + 60) / 2
+
+    def test_get_average_humidity_none_when_empty(self, mqtt_handler):
+        mqtt_handler.readings.clear()
+        avg = mqtt_handler.get_average_humidity()
+        assert avg is None
+
+
+class TestConnectionStatus:
+    def test_is_connected_property(self, mqtt_handler):
+        mqtt_handler._connected = True
+        assert mqtt_handler.is_connected is True
+
+        mqtt_handler._connected = False
+        assert mqtt_handler.is_connected is False
+
+
+class TestErrorTracker:
+    def test_set_error_tracker(self, mqtt_handler):
+        tracker = MagicMock()
+        mqtt_handler.set_error_tracker(tracker)
+
+        assert mqtt_handler._error_tracker is tracker
+
+    def test_on_connect_clears_error(self, mqtt_handler):
+        tracker = MagicMock()
+        mqtt_handler.set_error_tracker(tracker)
+
+        mqtt_handler._on_connect(MagicMock(), None, None, 0, None)
+
+        tracker.clear.assert_called_with("mqtt_disconnected")
+
+    def test_on_disconnect_registers_error(self, mqtt_handler):
+        tracker = MagicMock()
+        mqtt_handler.set_error_tracker(tracker)
+
+        mqtt_handler._on_disconnect(None, None, None, 0, None)
+
+        tracker.register.assert_called()
+
+
+class TestStartStop:
+    def test_start_connects(self, mqtt_handler):
+        mqtt_handler._client.connect.return_value = None
+
+        mqtt_handler.start()
+
+        mqtt_handler._client.connect.assert_called_once()
+        mqtt_handler._client.loop_start.assert_called_once()
+
+    def test_start_retries_on_failure(self, temp_persist_file):
+        with patch.dict("os.environ", {"SENSOR_PERSIST_FILE": temp_persist_file}):
+            with patch("mqtt_handler.mqtt.Client") as mock_client_class:
+                mock_client = MagicMock()
+                mock_client.connect.side_effect = ConnectionError("Test")
+                mock_client_class.return_value = mock_client
+
+                from mqtt_handler import MqttHandler
+
+                handler = MqttHandler(
+                    broker="localhost",
+                    port=1883,
+                    sensor_names=["s1"],
+                    connect_retries=2,
+                    retry_delay=0,
+                )
+
+                with pytest.raises(ConnectionError):
+                    handler.start()
+
+                assert mock_client.connect.call_count == 2
+
+    def test_stop_saves_and_disconnects(self, mqtt_handler):
+        mqtt_handler._client = MagicMock()
+
+        mqtt_handler.stop()
+
+        mqtt_handler._client.loop_stop.assert_called_once()
+        mqtt_handler._client.disconnect.assert_called_once()

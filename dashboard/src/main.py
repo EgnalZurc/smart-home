@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
     auth_routes.SMTP_USER = AUTH_SMTP_USER
     auth_routes.SMTP_PASSWORD = AUTH_SMTP_PASS
     auth_routes.BASE_URL = AUTH_BASE_URL
-    routes.FIRMS_MAP_KEY = FIRMS_MAP_KEY
+    routes.set_firms_key(FIRMS_MAP_KEY)
     logger.info("=== Smart Home Backend ready (auth + dashboard) ===")
     yield
     logger.info("=== Smart Home Backend shutdown ===")

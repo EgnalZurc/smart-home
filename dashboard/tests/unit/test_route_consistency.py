@@ -8,7 +8,6 @@ These tests ensure that:
 This prevents deployment of mismatched frontend/backend routes.
 """
 
-import os
 import re
 from pathlib import Path
 
@@ -25,7 +24,7 @@ class TestFrontendAuthRoutes:
     # Pattern to find fetch('/auth/...) or action="/auth/..."
     # Excludes comments and /api/auth/
     LEGACY_AUTH_PATTERN = re.compile(
-        r'''(?:fetch\s*\(\s*['"]|action\s*=\s*['"])(/auth/[^'"]+)''',
+        r"""(?:fetch\s*\(\s*['"]|action\s*=\s*['"])(/auth/[^'"]+)""",
         re.IGNORECASE,
     )
 
@@ -50,7 +49,7 @@ class TestFrontendAuthRoutes:
 
         issues = self._scan_file_for_legacy_auth(dashboard)
         assert not issues, (
-            f"dashboard.html has legacy /auth/ routes that should be /api/auth/:\n"
+            "dashboard.html has legacy /auth/ routes that should be /api/auth/:\n"
             + "\n".join(f"  Line {ln}: {route}" for ln, route in issues)
         )
 
@@ -62,7 +61,7 @@ class TestFrontendAuthRoutes:
 
         issues = self._scan_file_for_legacy_auth(login)
         assert not issues, (
-            f"login.html has legacy /auth/ routes that should be /api/auth/:\n"
+            "login.html has legacy /auth/ routes that should be /api/auth/:\n"
             + "\n".join(f"  Line {ln}: {route}" for ln, route in issues)
         )
 
@@ -80,7 +79,8 @@ class TestFrontendAuthRoutes:
         assert not all_issues, (
             "Found legacy /auth/ routes (should be /api/auth/):\n"
             + "\n".join(
-                f"  {fname}:\n" + "\n".join(f"    Line {ln}: {route}" for ln, route in issues)
+                f"  {fname}:\n"
+                + "\n".join(f"    Line {ln}: {route}" for ln, route in issues)
                 for fname, issues in all_issues.items()
             )
         )
@@ -96,12 +96,10 @@ class TestFrontendAuthRoutes:
             if issues:
                 all_issues[str(js_file.relative_to(STATIC_DIR))] = issues
 
-        assert not all_issues, (
-            "Found legacy /auth/ routes in JS files:\n"
-            + "\n".join(
-                f"  {fname}:\n" + "\n".join(f"    Line {ln}: {route}" for ln, route in issues)
-                for fname, issues in all_issues.items()
-            )
+        assert not all_issues, "Found legacy /auth/ routes in JS files:\n" + "\n".join(
+            f"  {fname}:\n"
+            + "\n".join(f"    Line {ln}: {route}" for ln, route in issues)
+            for fname, issues in all_issues.items()
         )
 
 
@@ -110,24 +108,23 @@ class TestBackendUrlGenerators:
 
     def test_make_action_url_uses_api_prefix(self):
         """auth_users.make_action_url must generate /api/auth/* URLs.
-        
+
         Checks the source code directly to avoid import dependency issues.
         """
         auth_users_path = DASHBOARD_SRC / "auth_users.py"
         if not auth_users_path.exists():
             pytest.skip("auth_users.py not found")
-        
+
         content = auth_users_path.read_text(encoding="utf-8")
-        
+
         # Find the make_action_url function and check it uses /api/auth/
         # Look for the f-string that builds the URL
         pattern = re.compile(
-            r'def\s+make_action_url.*?return\s+f["\']([^"\']+)["\']',
-            re.DOTALL
+            r'def\s+make_action_url.*?return\s+f["\']([^"\']+)["\']', re.DOTALL
         )
         match = pattern.search(content)
         assert match, "Could not find make_action_url function"
-        
+
         url_template = match.group(1)
         assert "/api/auth/trust/" in url_template, (
             f"make_action_url uses legacy route pattern: {url_template}\n"
@@ -139,11 +136,14 @@ class TestBackendUrlGenerators:
         auth_users_path = DASHBOARD_SRC / "auth_users.py"
         if not auth_users_path.exists():
             pytest.skip("auth_users.py not found")
-        
+
         content = auth_users_path.read_text(encoding="utf-8")
-        
+
         # Check that comments about trust URLs use /api/auth/
-        if "/auth/trust/approve" in content and "/api/auth/trust/approve" not in content:
+        if (
+            "/auth/trust/approve" in content
+            and "/api/auth/trust/approve" not in content
+        ):
             pytest.fail(
                 "auth_users.py has comments with legacy /auth/trust/ URLs - "
                 "update to /api/auth/trust/"
@@ -156,7 +156,7 @@ class TestFrontendApiRoutes:
     # Pattern for fetch calls that DON'T use /api/ prefix (excluding external URLs)
     # This catches things like fetch('/health') that should be fetch('/api/health')
     NON_API_FETCH_PATTERN = re.compile(
-        r'''fetch\s*\(\s*['"](?!/api/|/static/|https?://|//)(/[a-z][^'"]+)''',
+        r"""fetch\s*\(\s*['"](?!/api/|/static/|https?://|//)(/[a-z][^'"]+)""",
         re.IGNORECASE,
     )
 
@@ -174,7 +174,9 @@ class TestFrontendApiRoutes:
             if match:
                 route = match.group(1)
                 # Check if it's an allowed exception
-                if not any(route.startswith(allowed) for allowed in self.ALLOWED_NON_API_ROUTES):
+                if not any(
+                    route.startswith(allowed) for allowed in self.ALLOWED_NON_API_ROUTES
+                ):
                     issues.append((i, route))
         return issues
 
@@ -187,9 +189,9 @@ class TestFrontendApiRoutes:
         issues = self._scan_file_for_non_api_fetch(dashboard)
         # Filter out known OK patterns
         issues = [(ln, r) for ln, r in issues if not r.startswith("/api/")]
-        
+
         assert not issues, (
-            f"dashboard.html has fetch calls without /api/ prefix:\n"
+            "dashboard.html has fetch calls without /api/ prefix:\n"
             + "\n".join(f"  Line {ln}: {route}" for ln, route in issues)
         )
 
@@ -202,9 +204,9 @@ class TestAuthRouterPrefix:
         auth_routes_path = DASHBOARD_SRC / "api" / "auth_routes.py"
         if not auth_routes_path.exists():
             pytest.skip("auth_routes.py not found")
-        
+
         content = auth_routes_path.read_text(encoding="utf-8")
-        
+
         # Look for router definition with prefix
         # Pattern: router = APIRouter(prefix="/api/auth"...)
         if 'prefix="/api/auth"' not in content and "prefix='/api/auth'" not in content:
@@ -218,25 +220,26 @@ class TestAuthRouterPrefix:
         auth_routes_path = DASHBOARD_SRC / "api" / "auth_routes.py"
         if not auth_routes_path.exists():
             pytest.skip("auth_routes.py not found")
-        
+
         content = auth_routes_path.read_text(encoding="utf-8")
-        
+
         # Extract docstring (first triple-quoted string)
         docstring_match = re.search(r'^"""(.*?)"""', content, re.DOTALL)
         if not docstring_match:
             pytest.skip("No module docstring found")
-        
+
         docstring = docstring_match.group(1)
-        
+
         # Check that route documentation uses /api/auth/ prefix
         if "/auth/" in docstring:
             # Should have /api/auth/ for all routes
             lines_with_auth = [
-                line.strip() for line in docstring.split('\n')
-                if '/auth/' in line and 'GET' in line or 'POST' in line
+                line.strip()
+                for line in docstring.split("\n")
+                if "/auth/" in line and "GET" in line or "POST" in line
             ]
             for line in lines_with_auth:
-                if '/auth/' in line and '/api/auth/' not in line:
+                if "/auth/" in line and "/api/auth/" not in line:
                     pytest.fail(
                         f"Docstring has legacy route documentation: {line}\n"
                         "Should use /api/auth/ prefix"

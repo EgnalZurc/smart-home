@@ -242,7 +242,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install tools
-        run: pip install ruff bandit pytest pytest-asyncio httpx
+        run: pip install ruff bandit pytest pytest-asyncio pytest-cov httpx
 
       - name: Install Hadolint
         run: |
@@ -264,7 +264,7 @@ jobs:
         run: |
           if [[ -d "dashboard/tests" ]] && find dashboard/tests -name "test_*.py" | grep -q .; then
             pip install -r dashboard/requirements.txt --quiet 2>/dev/null || true
-            cd dashboard && PYTHONPATH=src python -m pytest tests/ -v --tb=short
+            cd dashboard && PYTHONPATH=src python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
           else
             echo "⏭️ No tests found"
           fi
