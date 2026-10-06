@@ -127,12 +127,17 @@ input:checked + .toggle-slider:before{transform:translateX(16px)}
 .loc-margin-note{font-size:9px;color:#475569;margin-left:.35rem;font-style:italic}
 #btn-loc-analyzer{transition:all .2s}
 #btn-loc-analyzer.active{background:rgba(99,102,241,.2);border-color:rgba(99,102,241,.5);color:#818cf8}
+/* Responsive container - wide (data-dense: property cards, tables) */
+.responsive-wide{width:100%;max-width:100%}
+@media(min-width:640px){.responsive-wide{max-width:720px}}
+@media(min-width:1024px){.responsive-wide{max-width:960px}}
+@media(min-width:1280px){.responsive-wide{max-width:1100px}}
 </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
 
 <div id="page-content">
-<div class="max-w-md mx-auto px-4 pt-5 pb-16 fade-in">
+<div class="responsive-wide mx-auto px-4 pt-5 pb-16 fade-in">
 
   <!-- Header -->
   <header class="flex items-center justify-between mb-5">
