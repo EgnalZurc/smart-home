@@ -304,7 +304,7 @@ jobs:
         run: |
           if [[ -d "services/ac-service/tests" ]] && find services/ac-service/tests -name "test_*.py" | grep -q .; then
             pip install -r services/ac-service/requirements.txt --quiet 2>/dev/null || true
-            cd services/ac-service && PYTHONPATH=src python -m pytest tests/ -v --tb=short
+            cd services/ac-service && PYTHONPATH=src python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
           else
             echo "⏭️ No tests found"
           fi

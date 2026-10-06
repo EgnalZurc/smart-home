@@ -4,11 +4,10 @@ Tests the HTTP client that communicates with the MELCloud API
 for controlling the air conditioning unit.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
-import httpx
+from unittest.mock import MagicMock, patch
 
-from melcloud_client import MelCloudClient, AC_MODE_COOL, AC_MODE_HEAT, MODE_MAP
+import httpx
+from melcloud_client import MODE_MAP, MelCloudClient
 
 
 class TestMelCloudClientInit:
@@ -22,7 +21,7 @@ class TestMelCloudClientInit:
             password="password",
             building_id=123,
         )
-        
+
         assert client.base_url == "https://app.melcloud.com/Mitsubishi.Wifi.Client"
         client.close()
 
@@ -34,7 +33,7 @@ class TestMelCloudClientInit:
             password="password",
             building_id=123,
         )
-        
+
         assert client.base_url == "https://app.melcloud.com/Mitsubishi.Wifi.Client"
         client.close()
 
@@ -47,7 +46,7 @@ class TestMelCloudClientInit:
             building_id=123,
             timeout=60.0,
         )
-        
+
         assert client._timeout == 60.0
         client.close()
 
@@ -63,9 +62,9 @@ class TestMelCloudClientHeaders:
             password="password",
             building_id=123,
         )
-        
+
         headers = client._headers()
-        
+
         assert headers["Content-Type"] == "application/json"
         assert "X-MitsContextKey" not in headers
         client.close()
@@ -79,9 +78,9 @@ class TestMelCloudClientHeaders:
             building_id=123,
         )
         client.context_key = "test-context-key-123"
-        
+
         headers = client._headers()
-        
+
         assert headers["X-MitsContextKey"] == "test-context-key-123"
         client.close()
 
@@ -97,17 +96,17 @@ class TestMelCloudClientLogin:
             password="password",
             building_id=123,
         )
-        
+
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "ErrorId": None,
             "LoginData": {"ContextKey": "abc123"},
         }
         mock_response.raise_for_status = MagicMock()
-        
+
         with patch.object(client.client, "post", return_value=mock_response):
             result = client.login()
-        
+
         assert result is True
         assert client.context_key == "abc123"
         # Password should be deleted after successful login
@@ -122,17 +121,17 @@ class TestMelCloudClientLogin:
             password="password",
             building_id=123,
         )
-        
+
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "ErrorId": 1,
             "ErrorMessage": "Invalid credentials",
         }
         mock_response.raise_for_status = MagicMock()
-        
+
         with patch.object(client.client, "post", return_value=mock_response):
             result = client.login()
-        
+
         assert result is False
         assert client.context_key is None
         client.close()
@@ -145,17 +144,17 @@ class TestMelCloudClientLogin:
             password="password",
             building_id=123,
         )
-        
+
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "ErrorId": None,
             "LoginData": {},  # No ContextKey
         }
         mock_response.raise_for_status = MagicMock()
-        
+
         with patch.object(client.client, "post", return_value=mock_response):
             result = client.login()
-        
+
         assert result is False
         client.close()
 
@@ -167,12 +166,12 @@ class TestMelCloudClientLogin:
             password="password",
             building_id=123,
         )
-        
+
         with patch.object(
             client.client, "post", side_effect=httpx.HTTPError("Connection failed")
         ):
             result = client.login()
-        
+
         assert result is False
         client.close()
 
@@ -189,21 +188,21 @@ class TestMelCloudClientGetDeviceState:
             building_id=123,
         )
         client.context_key = "test-key"
-        
+
         expected_state = {
             "Power": True,
             "OperationMode": 3,
             "SetTemperature": 24.0,
             "RoomTemperature": 26.5,
         }
-        
+
         mock_response = MagicMock()
         mock_response.json.return_value = expected_state
         mock_response.raise_for_status = MagicMock()
-        
+
         with patch.object(client.client, "get", return_value=mock_response):
             result = client.get_device_state(device_id=123, building_id=456)
-        
+
         assert result == expected_state
         client.close()
 
@@ -216,12 +215,12 @@ class TestMelCloudClientGetDeviceState:
             building_id=123,
         )
         client.context_key = "test-key"
-        
+
         with patch.object(
             client.client, "get", side_effect=httpx.HTTPError("Server error")
         ):
             result = client.get_device_state(device_id=123, building_id=456)
-        
+
         assert result is None
         client.close()
 
@@ -238,18 +237,18 @@ class TestMelCloudClientSetTemperature:
             building_id=123,
         )
         client.context_key = "test-key"
-        
+
         current_state = {
             "Power": False,
             "OperationMode": 3,
             "SetTemperature": 22.0,
             "SetFanSpeed": 0,
         }
-        
+
         post_response = MagicMock()
         post_response.json.return_value = {"SetTemperature": 24.0}
         post_response.raise_for_status = MagicMock()
-        
+
         with patch.object(client, "get_device_state", return_value=current_state):
             with patch.object(client.client, "post", return_value=post_response):
                 result = client.set_temperature(
@@ -259,7 +258,7 @@ class TestMelCloudClientSetTemperature:
                     mode="cool",
                     fan_speed=2,
                 )
-        
+
         assert result is True
         client.close()
 
@@ -272,24 +271,24 @@ class TestMelCloudClientSetTemperature:
             building_id=123,
         )
         client.context_key = "test-key"
-        
+
         current_state = {"Power": False, "SetTemperature": 22.0}
         post_response = MagicMock()
         post_response.json.return_value = {"SetTemperature": 16.0}
         post_response.raise_for_status = MagicMock()
-        
+
         posted_data = None
-        
+
         def capture_post(*args, **kwargs):
             nonlocal posted_data
             posted_data = kwargs.get("json")
             return post_response
-        
+
         with patch.object(client, "get_device_state", return_value=current_state):
             with patch.object(client.client, "post", side_effect=capture_post):
                 # Try to set temperature below minimum
                 client.set_temperature(device_id=123, setpoint=10.0)
-        
+
         assert posted_data["SetTemperature"] == 16.0
         client.close()
 
@@ -302,10 +301,10 @@ class TestMelCloudClientSetTemperature:
             building_id=123,
         )
         client.context_key = "test-key"
-        
+
         with patch.object(client, "get_device_state", return_value=None):
             result = client.set_temperature(device_id=123, setpoint=24.0)
-        
+
         assert result is False
         client.close()
 
@@ -318,15 +317,15 @@ class TestMelCloudClientSetTemperature:
             building_id=123,
         )
         client.context_key = "test-key"
-        
+
         current_state = {"Power": False, "SetTemperature": 22.0}
-        
+
         with patch.object(client, "get_device_state", return_value=current_state):
             with patch.object(
                 client.client, "post", side_effect=httpx.HTTPError("Server error")
             ):
                 result = client.set_temperature(device_id=123, setpoint=24.0)
-        
+
         assert result is False
         client.close()
 
