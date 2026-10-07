@@ -69,9 +69,7 @@ class EmailSender:
             "SMTP_PASSWORD", os.environ.get("AUTH_SMTP_PASSWORD", "")
         )
         self._default_recipient = (
-            default_recipient
-            or os.environ.get("ALERT_EMAIL")
-            or self._smtp_user
+            default_recipient or os.environ.get("ALERT_EMAIL") or self._smtp_user
         )
         self._timeout = timeout
         self._enabled = bool(self._smtp_user and self._smtp_password)

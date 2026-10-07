@@ -2,13 +2,12 @@
 Tests for the etf_monitor module.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
-
 from models import AlertLevel
 
 
@@ -248,10 +247,6 @@ class TestSignalAnalysis:
 
         assert result["price"] > 0
         # Should have profit signal - check for Spanish or English text
-        profit_signals = [
-            s for s in result["signals"]
-            if any(word in s.body.lower() for word in ["beneficio", "profit", "+"])
-        ]
         # If position is profitable, we should have at least OK level
         assert result["level"] in (AlertLevel.OK, AlertLevel.INFO)
 
@@ -414,7 +409,12 @@ class TestFetchHelpers:
         mock_ticker = MagicMock()
         dates = pd.date_range(end=datetime.now(), periods=30, freq="D")
         mock_hist = pd.DataFrame(
-            {"Open": [100] * 30, "High": [101] * 30, "Low": [99] * 30, "Close": [100] * 30},
+            {
+                "Open": [100] * 30,
+                "High": [101] * 30,
+                "Low": [99] * 30,
+                "Close": [100] * 30,
+            },
             index=dates,
         )
         mock_ticker.history.return_value = mock_hist
