@@ -7,22 +7,10 @@ Only accessible to SUPER profile.
 import asyncio
 import os
 
-from fastapi import APIRouter, HTTPException, Request
+from api.auth_helpers import require_super
+from fastapi import APIRouter, Request
 
 router = APIRouter(prefix="/api/system", tags=["System"])
-
-
-def _require_super(request: Request) -> str:
-    """Return username if caller has level 0 (SUPER), raise 403 otherwise."""
-    import auth as auth_core
-    import user_profiles
-
-    user = auth_core.get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    if not user_profiles.is_super(user):
-        raise HTTPException(status_code=403, detail="SUPER profile required")
-    return user
 
 
 def _read_cpu_times() -> tuple[float, float]:
@@ -52,7 +40,7 @@ async def get_system_stats(request: Request):
       "temp": {"celsius": float},
     }
     """
-    _require_super(request)
+    require_super(request)
 
     stats: dict = {}
 
