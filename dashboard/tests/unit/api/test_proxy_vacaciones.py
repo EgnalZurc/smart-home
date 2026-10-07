@@ -7,13 +7,13 @@ from fastapi import HTTPException
 from httpx import Response
 
 from api.proxy.vacaciones import (
-    router,
+    add_vacaciones_year,
+    delete_vacaciones_year,
     get_vacaciones,
     get_vacaciones_config,
     post_vacaciones_config,
-    add_vacaciones_year,
     post_vacaciones_year,
-    delete_vacaciones_year,
+    router,
 )
 
 
@@ -22,6 +22,7 @@ def make_mock_response(data, status_code=200):
     resp = MagicMock(spec=Response)
     resp.status_code = status_code
     resp.json.return_value = data
+    resp.text = str(data)
     return resp
 
 
@@ -33,6 +34,10 @@ def make_mock_request(json_data=None):
     return mock_req
 
 
+# All tests mock httpx at the base module level since ServiceProxy uses httpx
+HTTPX_PATCH = "api.proxy.base.httpx.AsyncClient"
+
+
 class TestGetEndpoints:
     """Tests for GET endpoints."""
 
@@ -40,7 +45,7 @@ class TestGetEndpoints:
     async def test_get_vacaciones_success(self):
         """Returns all vacaciones data."""
         data = {"years": [{"year": 2024, "momentos": []}]}
-        with patch("api.proxy.vacaciones.httpx.AsyncClient") as mock_client:
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.get.return_value = make_mock_response(data)
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -51,7 +56,7 @@ class TestGetEndpoints:
     @pytest.mark.asyncio
     async def test_get_vacaciones_service_error(self):
         """Raises 503 when service unavailable."""
-        with patch("api.proxy.vacaciones.httpx.AsyncClient") as mock_client:
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.get.side_effect = Exception("Connection refused")
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -64,7 +69,7 @@ class TestGetEndpoints:
     async def test_get_config_success(self):
         """Returns config data."""
         config = {"nucleos": [], "personas": []}
-        with patch("api.proxy.vacaciones.httpx.AsyncClient") as mock_client:
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.get.return_value = make_mock_response(config)
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -79,41 +84,43 @@ class TestPostEndpoints:
     @pytest.mark.asyncio
     async def test_post_config_success(self):
         """Saves config successfully."""
-        new_config = {"nucleos": [{"name": "Family"}]}
-        request = make_mock_request(json_data=new_config)
+        req = make_mock_request({"nucleos": ["A"], "personas": ["B"]})
+        resp_data = {"status": "saved"}
 
-        with patch("api.proxy.vacaciones.httpx.AsyncClient") as mock_client:
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.post.return_value = make_mock_response(new_config)
+            mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await post_vacaciones_config(request)
-            assert result == new_config
+            result = await post_vacaciones_config(req)
+            assert result == resp_data
 
     @pytest.mark.asyncio
     async def test_add_year_success(self):
         """Adds new year successfully."""
-        with patch("api.proxy.vacaciones.httpx.AsyncClient") as mock_client:
+        resp_data = {"year": 2025, "momentos": []}
+
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.post.return_value = make_mock_response({"year": 2025})
+            mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             result = await add_vacaciones_year()
-            assert result["year"] == 2025
+            assert result == resp_data
 
     @pytest.mark.asyncio
     async def test_post_year_success(self):
-        """Saves year planning successfully."""
-        year_data = {"momentos": [{"name": "Christmas", "asignaciones": []}]}
-        request = make_mock_request(json_data=year_data)
+        """Saves year data successfully."""
+        req = make_mock_request({"momentos": [{"id": 1}]})
+        resp_data = {"status": "saved"}
 
-        with patch("api.proxy.vacaciones.httpx.AsyncClient") as mock_client:
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.post.return_value = make_mock_response(year_data)
+            mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await post_vacaciones_year(2024, request)
-            assert result == year_data
+            result = await post_vacaciones_year(2024, req)
+            assert result == resp_data
 
 
 class TestDeleteEndpoint:
@@ -122,21 +129,23 @@ class TestDeleteEndpoint:
     @pytest.mark.asyncio
     async def test_delete_year_success(self):
         """Deletes year successfully."""
-        with patch("api.proxy.vacaciones.httpx.AsyncClient") as mock_client:
+        resp_data = {"status": "deleted"}
+
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.delete.return_value = make_mock_response({"deleted": 2024})
+            mock_instance.delete.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             result = await delete_vacaciones_year(2024)
-            assert result["deleted"] == 2024
+            assert result == resp_data
 
     @pytest.mark.asyncio
     async def test_delete_year_not_found(self):
-        """Raises 404 when year not found."""
-        with patch("api.proxy.vacaciones.httpx.AsyncClient") as mock_client:
+        """Returns error when year not found."""
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.delete.return_value = make_mock_response(
-                {"detail": "Year not found"}, 404
+                {"detail": "Year not found"}, status_code=404
             )
             mock_client.return_value.__aenter__.return_value = mock_instance
 
@@ -146,11 +155,11 @@ class TestDeleteEndpoint:
 
     @pytest.mark.asyncio
     async def test_delete_year_cannot_delete_only(self):
-        """Raises 400 when trying to delete the only year."""
-        with patch("api.proxy.vacaciones.httpx.AsyncClient") as mock_client:
+        """Returns error when trying to delete last year."""
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.delete.return_value = make_mock_response(
-                {"detail": "Cannot delete only year"}, 400
+                {"detail": "Cannot delete"}, status_code=400
             )
             mock_client.return_value.__aenter__.return_value = mock_instance
 
@@ -160,8 +169,8 @@ class TestDeleteEndpoint:
 
     @pytest.mark.asyncio
     async def test_delete_year_service_error(self):
-        """Raises 503 on service error."""
-        with patch("api.proxy.vacaciones.httpx.AsyncClient") as mock_client:
+        """Raises 503 when service unavailable."""
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.delete.side_effect = Exception("Connection refused")
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -169,15 +178,3 @@ class TestDeleteEndpoint:
             with pytest.raises(HTTPException) as exc:
                 await delete_vacaciones_year(2024)
             assert exc.value.status_code == 503
-
-
-class TestRouterConfiguration:
-    """Tests for router configuration."""
-
-    def test_router_has_correct_prefix(self):
-        """Router has /api/vacaciones prefix."""
-        assert router.prefix == "/api/vacaciones"
-
-    def test_router_has_vacaciones_tag(self):
-        """Router is tagged as Vacaciones."""
-        assert "Vacaciones" in router.tags

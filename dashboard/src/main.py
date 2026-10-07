@@ -11,6 +11,7 @@ import auth as auth_core
 import auth_devices
 import auth_users
 from api import auth_routes, routes
+from api.auth import admin as auth_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -244,6 +245,9 @@ app.add_middleware(
 
 # Auth routes (API endpoints under /api/auth)
 app.include_router(auth_routes.router)
+
+# Admin routes (user/profile management under /api/auth/admin)
+app.include_router(auth_admin.router)
 
 # API routes (all under /api)
 app.include_router(routes.router)

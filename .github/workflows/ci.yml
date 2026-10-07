@@ -86,6 +86,7 @@ jobs:
           filters: |
             dashboard:
               - 'dashboard/**'
+              - 'libs/smart_home_common/**'
             ac-service:
               - 'services/ac-service/**'
             baby-gifts:
@@ -192,7 +193,7 @@ jobs:
           }
           
           [[ "${{ steps.changes.outputs.dashboard }}" == "true" ]] && \
-            add_service "smart-home-backend" "egnal/smart-home-dashboard" "./dashboard" "Dockerfile"
+            add_service "smart-home-backend" "egnal/smart-home-dashboard" "." "dashboard/Dockerfile"
           [[ "${{ steps.changes.outputs.ac-service }}" == "true" ]] && \
             add_service "ac-service" "egnal/smart-home-ac-service" "./services/ac-service" "Dockerfile"
           [[ "${{ steps.changes.outputs.baby-gifts }}" == "true" ]] && \
@@ -265,6 +266,7 @@ jobs:
         run: |
           if [[ -d "dashboard/tests" ]] && find dashboard/tests -name "test_*.py" | grep -q .; then
             pip install -r dashboard/requirements.txt --quiet 2>/dev/null || true
+            pip install -e libs/smart_home_common --quiet 2>/dev/null || true
             cd dashboard && PYTHONPATH=src python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
           else
             echo "⏭️ No tests found"

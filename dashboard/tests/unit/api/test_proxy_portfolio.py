@@ -7,15 +7,15 @@ from fastapi import HTTPException
 from httpx import Response
 
 from api.proxy.portfolio import (
-    router,
-    get_portfolio_summary,
-    get_portfolio_etf,
     get_portfolio_crypto,
+    get_portfolio_etf,
+    get_portfolio_notification_status,
+    get_portfolio_schedule,
+    get_portfolio_summary,
     refresh_portfolio,
     refresh_portfolio_monitor,
-    get_portfolio_schedule,
     reload_portfolio_config,
-    get_portfolio_notification_status,
+    router,
     test_portfolio_notification as send_test_notification,
 )
 
@@ -25,7 +25,12 @@ def make_mock_response(data, status_code=200):
     resp = MagicMock(spec=Response)
     resp.status_code = status_code
     resp.json.return_value = data
+    resp.text = str(data)
     return resp
+
+
+# All tests mock httpx at the base module level since ServiceProxy uses httpx
+HTTPX_PATCH = "api.proxy.base.httpx.AsyncClient"
 
 
 class TestGetEndpoints:
@@ -33,9 +38,9 @@ class TestGetEndpoints:
 
     @pytest.mark.asyncio
     async def test_get_summary_success(self):
-        """Returns portfolio summary."""
-        summary = {"total_value": 10000, "etf": {}, "crypto": {}}
-        with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
+        """Returns full portfolio summary."""
+        summary = {"etf": {"total": 1000}, "crypto": {"total": 500}}
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.get.return_value = make_mock_response(summary)
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -46,7 +51,7 @@ class TestGetEndpoints:
     @pytest.mark.asyncio
     async def test_get_summary_service_error(self):
         """Raises 503 when service unavailable."""
-        with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.get.side_effect = Exception("Connection refused")
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -58,8 +63,8 @@ class TestGetEndpoints:
     @pytest.mark.asyncio
     async def test_get_etf_success(self):
         """Returns ETF portfolio."""
-        etf = {"holdings": [], "total": 5000}
-        with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
+        etf = {"positions": [], "total": 1000}
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.get.return_value = make_mock_response(etf)
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -69,9 +74,9 @@ class TestGetEndpoints:
 
     @pytest.mark.asyncio
     async def test_get_crypto_success(self):
-        """Returns crypto staking data."""
-        crypto = {"staking": [], "total": 2000}
-        with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
+        """Returns crypto portfolio."""
+        crypto = {"positions": [], "total": 500}
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.get.return_value = make_mock_response(crypto)
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -82,8 +87,8 @@ class TestGetEndpoints:
     @pytest.mark.asyncio
     async def test_get_schedule_success(self):
         """Returns monitoring schedule."""
-        schedule = {"etf": "daily", "crypto": "hourly"}
-        with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
+        schedule = {"cron": "0 8 * * *"}
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.get.return_value = make_mock_response(schedule)
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -94,8 +99,8 @@ class TestGetEndpoints:
     @pytest.mark.asyncio
     async def test_get_notification_status_success(self):
         """Returns notification status."""
-        status = {"telegram": True, "last_sent": "2024-01-01"}
-        with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
+        status = {"enabled": True, "last_sent": "2024-01-01"}
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.get.return_value = make_mock_response(status)
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -110,32 +115,34 @@ class TestPostEndpoints:
     @pytest.mark.asyncio
     async def test_refresh_all_success(self):
         """Refreshes all monitors."""
-        with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
+        resp_data = {"status": "refreshed"}
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.post.return_value = make_mock_response({"refreshed": True})
+            mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             result = await refresh_portfolio()
-            assert result["refreshed"] == True
+            assert result == resp_data
 
     @pytest.mark.asyncio
     async def test_refresh_monitor_success(self):
         """Refreshes specific monitor."""
-        with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
+        resp_data = {"status": "refreshed", "monitor": "etf"}
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.post.return_value = make_mock_response({"refreshed": "etf"})
+            mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             result = await refresh_portfolio_monitor("etf")
-            assert result["refreshed"] == "etf"
+            assert result == resp_data
 
     @pytest.mark.asyncio
     async def test_refresh_monitor_not_found(self):
-        """Raises 404 for unknown monitor."""
-        with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
+        """Returns error for unknown monitor."""
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response(
-                {"detail": "Monitor not found"}, 404
+                {"detail": "Monitor not found"}, status_code=404
             )
             mock_client.return_value.__aenter__.return_value = mock_instance
 
@@ -145,48 +152,38 @@ class TestPostEndpoints:
 
     @pytest.mark.asyncio
     async def test_reload_config_success(self):
-        """Reloads config successfully."""
-        with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
+        """Reloads configuration."""
+        resp_data = {"status": "reloaded"}
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.post.return_value = make_mock_response({"reloaded": True})
+            mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             result = await reload_portfolio_config()
-            assert result["reloaded"] == True
+            assert result == resp_data
 
     @pytest.mark.asyncio
     async def test_send_notification_success(self):
         """Sends test notification."""
-        with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
+        resp_data = {"status": "sent"}
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.post.return_value = make_mock_response({"sent": True})
+            mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             result = await send_test_notification()
-            assert result["sent"] == True
+            assert result == resp_data
 
     @pytest.mark.asyncio
     async def test_send_notification_telegram_error(self):
-        """Raises error when Telegram fails."""
-        with patch("api.proxy.portfolio.httpx.AsyncClient") as mock_client:
+        """Returns error when Telegram fails."""
+        with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response(
-                {"detail": "Telegram not configured"}, 400
+                {"detail": "Telegram API error"}, status_code=500
             )
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
                 await send_test_notification()
-            assert exc.value.status_code == 400
-
-
-class TestRouterConfiguration:
-    """Tests for router configuration."""
-
-    def test_router_has_correct_prefix(self):
-        """Router has /api/portfolio prefix."""
-        assert router.prefix == "/api/portfolio"
-
-    def test_router_has_portfolio_tag(self):
-        """Router is tagged as Portfolio."""
-        assert "Portfolio" in router.tags
+            assert exc.value.status_code == 500

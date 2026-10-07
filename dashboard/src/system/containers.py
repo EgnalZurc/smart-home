@@ -7,6 +7,7 @@ Uses docker-socket-proxy:2375 (CONTAINERS=1, POST=1 — read + start/stop).
 import asyncio
 
 import httpx
+from api.auth_helpers import require_super
 from fastapi import APIRouter, HTTPException, Request
 
 router = APIRouter(prefix="/api/system", tags=["Containers"])
@@ -31,19 +32,6 @@ CONTAINER_START_DELAYS: dict[str, int] = {
 }
 
 
-def _require_super(request: Request) -> str:
-    """Return username if caller has level 0 (SUPER), raise 403 otherwise."""
-    import auth as auth_core
-    import user_profiles
-
-    user = auth_core.get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    if not user_profiles.is_super(user):
-        raise HTTPException(status_code=403, detail="SUPER profile required")
-    return user
-
-
 @router.get("/containers")
 async def get_containers(request: Request):
     """Return running state for all controllable services.
@@ -56,7 +44,7 @@ async def get_containers(request: Request):
     }
     Only accessible to SUPER profile.
     """
-    _require_super(request)
+    require_super(request)
     result = {}
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -88,7 +76,7 @@ async def stop_service(app_key: str, request: Request):
     Stops containers with a 10-second graceful timeout.
     Only accessible to SUPER profile.
     """
-    _require_super(request)
+    require_super(request)
     containers = CONTROLLABLE_CONTAINERS.get(app_key)
     if not containers:
         raise HTTPException(status_code=404, detail=f"Unknown service: {app_key}")
@@ -114,7 +102,7 @@ async def start_service(app_key: str, request: Request):
 
     Only accessible to SUPER profile.
     """
-    _require_super(request)
+    require_super(request)
     containers = CONTROLLABLE_CONTAINERS.get(app_key)
     if not containers:
         raise HTTPException(status_code=404, detail=f"Unknown service: {app_key}")

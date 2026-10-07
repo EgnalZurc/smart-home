@@ -34,32 +34,32 @@ def _make_client():
 
 
 def _patch_super(username="egnal"):
-    """Patch _require_super to allow as SUPER."""
+    """Patch require_super to allow as SUPER."""
 
     def fake_super(request):
         return username
 
-    return patch("system.stats._require_super", side_effect=fake_super)
+    return patch("system.stats.require_super", side_effect=fake_super)
 
 
 def _patch_familia():
-    """Patch _require_super to reject as FAMILIA_PRINCIPAL (403)."""
+    """Patch require_super to reject as FAMILIA_PRINCIPAL (403)."""
     from fastapi import HTTPException
 
     def fake_familia(request):
         raise HTTPException(status_code=403, detail="SUPER profile required")
 
-    return patch("system.stats._require_super", side_effect=fake_familia)
+    return patch("system.stats.require_super", side_effect=fake_familia)
 
 
 def _patch_unauthenticated():
-    """Patch _require_super to reject as unauthenticated (401)."""
+    """Patch require_super to reject as unauthenticated (401)."""
     from fastapi import HTTPException
 
     def fake_401(request):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    return patch("system.stats._require_super", side_effect=fake_401)
+    return patch("system.stats.require_super", side_effect=fake_401)
 
 
 # Realistic /proc/meminfo content

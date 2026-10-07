@@ -7,8 +7,14 @@
 FROM python:3.12-slim AS builder
 
 WORKDIR /build
-COPY requirements.txt .
-RUN pip install --user --no-cache-dir --no-compile -r requirements.txt
+
+# Copy libs needed for local dependencies
+COPY libs/smart_home_common /build/libs/smart_home_common
+
+# Copy requirements and install
+COPY dashboard/requirements.txt .
+RUN pip install --user --no-cache-dir --no-compile -r requirements.txt && \
+    pip install --user --no-cache-dir --no-compile /build/libs/smart_home_common
 
 # Stage 2: Runtime (minimal)
 FROM python:3.12-slim
@@ -24,7 +30,7 @@ WORKDIR /app
 COPY --from=builder /root/.local /root/.local
 
 # Copy only source code (no tests, no docs)
-COPY src/ .
+COPY dashboard/src/ .
 
 EXPOSE 8080
 
