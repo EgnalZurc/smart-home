@@ -2,10 +2,8 @@
 Tests for the alerts module.
 """
 
-import json
 import tempfile
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,6 +11,7 @@ import pytest
 # Mock config before importing alerts
 with patch.dict("os.environ", {"DATA_DIR": tempfile.mkdtemp()}):
     import sys
+
     # Force reimport of config with mocked DATA_DIR
     if "config" in sys.modules:
         del sys.modules["config"]
@@ -128,9 +127,11 @@ class TestGetAlerts:
         from alerts import _save_alerts_state, get_all_alerts
 
         # Save some state
-        _save_alerts_state({
-            "alert-1": {"triggered": True, "completed": False},
-        })
+        _save_alerts_state(
+            {
+                "alert-1": {"triggered": True, "completed": False},
+            }
+        )
 
         with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
             alerts = get_all_alerts()
@@ -269,9 +270,12 @@ class TestCheckAndTriggerAlerts:
     def test_no_alerts_due(self, temp_data_dir):
         """No notifications when no alerts are due."""
         from datetime import timedelta
+
         from alerts import check_and_trigger_alerts
 
-        future_date = (datetime.now(timezone.utc).date() + timedelta(days=5)).isoformat()
+        future_date = (
+            datetime.now(timezone.utc).date() + timedelta(days=5)
+        ).isoformat()
         config = [
             {
                 "id": "future-alert",

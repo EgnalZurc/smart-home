@@ -113,8 +113,9 @@ def irpf_2025_brackets():
 @pytest.fixture
 def mock_yfinance_response():
     """Mock yfinance ticker response."""
+    from datetime import datetime
+
     import pandas as pd
-    from datetime import datetime, timedelta
 
     dates = pd.date_range(end=datetime.now(), periods=252, freq="D")
     prices = [100 + i * 0.1 for i in range(252)]
