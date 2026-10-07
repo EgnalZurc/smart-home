@@ -400,8 +400,8 @@ class TestFetchHelpers:
             }
         ]
 
-        with patch("monitors.crypto_monitor._get") as mock_get:
-            mock_get.return_value.json.return_value = mock_response
+        with patch("monitors.crypto_monitor._cg_client") as mock_client:
+            mock_client.get.return_value.json.return_value = mock_response
             result = fetch_market_batch(["bitcoin"])
 
         assert "bitcoin" in result
@@ -421,9 +421,8 @@ class TestFetchHelpers:
 
         mock_data = {"data": [{"value": "65", "value_classification": "Greed"}]}
 
-        with patch("requests.get") as mock_get:
-            mock_get.return_value.status_code = 200
-            mock_get.return_value.json.return_value = mock_data
+        with patch("monitors.crypto_monitor._generic_client") as mock_client:
+            mock_client.get.return_value.json.return_value = mock_data
             value, label = fetch_fear_greed()
 
         assert value == 65
@@ -433,7 +432,8 @@ class TestFetchHelpers:
         """fetch_fear_greed handles errors gracefully."""
         from monitors.crypto_monitor import fetch_fear_greed
 
-        with patch("requests.get", side_effect=Exception("Network error")):
+        with patch("monitors.crypto_monitor._generic_client") as mock_client:
+            mock_client.get.side_effect = Exception("Network error")
             value, label = fetch_fear_greed()
 
         assert value is None
