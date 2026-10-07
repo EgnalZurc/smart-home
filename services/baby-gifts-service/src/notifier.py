@@ -2,7 +2,10 @@
 
 Sends notifications to Telegram when gifts are selected or deselected.
 
-Configuration via config.py (from environment variables):
+This module wraps the shared TelegramNotifier library with gift-specific
+message formatting.
+
+Configuration via environment variables (through libs/notifications):
 - TELEGRAM_BOT_TOKEN: Bot token (required)
 - TELEGRAM_CHAT_IDS: Comma-separated list of chat IDs to notify (preferred)
 - TELEGRAM_CHAT_ID: Single chat ID (fallback for backwards compatibility)
@@ -11,26 +14,30 @@ Example: TELEGRAM_CHAT_IDS=123456789,987654321
 """
 
 import logging
-
-import httpx
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID_SINGLE, TELEGRAM_CHAT_IDS_RAW
+import sys
 
 logger = logging.getLogger(__name__)
 
+# Import TelegramNotifier from shared lib
+# The lib path is added to PYTHONPATH in Dockerfile/CI
+try:
+    from libs.notifications import TelegramNotifier
+except ImportError:
+    # Fallback for local development without libs in path
+    sys.path.insert(0, str(__file__).replace("\\", "/").split("/services/")[0])
+    from libs.notifications import TelegramNotifier
 
-def _get_chat_ids() -> list[str]:
-    """Get list of chat IDs to notify.
 
-    Priority:
-    1. TELEGRAM_CHAT_IDS (comma-separated list)
-    2. TELEGRAM_CHAT_ID (single ID, backwards compatibility)
-    """
-    if TELEGRAM_CHAT_IDS_RAW:
-        # Split by comma, strip whitespace, filter empty
-        return [cid.strip() for cid in TELEGRAM_CHAT_IDS_RAW.split(",") if cid.strip()]
-    if TELEGRAM_CHAT_ID_SINGLE:
-        return [TELEGRAM_CHAT_ID_SINGLE]
-    return []
+# Module-level notifier instance (lazy initialization)
+_notifier: TelegramNotifier | None = None
+
+
+def _get_notifier() -> TelegramNotifier:
+    """Get or create the TelegramNotifier instance."""
+    global _notifier
+    if _notifier is None:
+        _notifier = TelegramNotifier.from_env()
+    return _notifier
 
 
 def send_gift_notification(gift_name: str, person_name: str, action: str) -> bool:
@@ -44,9 +51,9 @@ def send_gift_notification(gift_name: str, person_name: str, action: str) -> boo
     Returns:
         True if all notifications were sent successfully, False otherwise
     """
-    chat_ids = _get_chat_ids()
+    notifier = _get_notifier()
 
-    if not TELEGRAM_BOT_TOKEN or not chat_ids:
+    if not notifier.enabled:
         logger.warning(
             "[telegram] Notification skipped — missing TELEGRAM_BOT_TOKEN or chat IDs"
         )
@@ -57,36 +64,19 @@ def send_gift_notification(gift_name: str, person_name: str, action: str) -> boo
     else:
         message = f"↩️ *{person_name}* ha deseleccionado: _{gift_name}_"
 
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    success = True
+    result = notifier.send(message, parse_mode="Markdown")
 
-    for chat_id in chat_ids:
-        try:
-            resp = httpx.post(
-                url,
-                json={
-                    "chat_id": chat_id,
-                    "text": message,
-                    "parse_mode": "Markdown",
-                },
-                timeout=15.0,
-            )
+    if result.success:
+        logger.info(
+            f"[telegram] Notification sent: {action} '{gift_name}' by {person_name}"
+        )
+    else:
+        logger.error(f"[telegram] Notification failed: {result.message}")
 
-            data = resp.json()
-            if data.get("ok"):
-                logger.info(
-                    f"[telegram] Notification sent to {chat_id}: {action} '{gift_name}' by {person_name}"
-                )
-            else:
-                error = data.get("description", "Unknown error")
-                logger.error(f"[telegram] API error for chat {chat_id}: {error}")
-                success = False
+    return result.success
 
-        except httpx.TimeoutException:
-            logger.error(f"[telegram] Request timeout for chat {chat_id}")
-            success = False
-        except Exception as e:
-            logger.error(f"[telegram] Error sending to chat {chat_id}: {e}")
-            success = False
 
-    return success
+def reset_notifier() -> None:
+    """Reset the notifier instance (for testing)."""
+    global _notifier
+    _notifier = None
