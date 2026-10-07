@@ -19,7 +19,14 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 _SUPPORTED = {"es", "en"}
 _DEFAULT = "es"
-_LOCALES_DIR = Path(__file__).parent.parent / "locales"
+# Try multiple locations: Docker (/app/locales) and development (../locales)
+_LOCALES_DIR_CANDIDATES = [
+    Path(__file__).parent / "locales",  # Docker: /app/locales
+    Path(__file__).parent.parent / "locales",  # Dev: services/portfolio-monitor/locales
+]
+_LOCALES_DIR = next(
+    (p for p in _LOCALES_DIR_CANDIDATES if p.exists()), _LOCALES_DIR_CANDIDATES[0]
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Translation loading

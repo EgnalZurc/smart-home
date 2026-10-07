@@ -19,6 +19,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY --from=builder /root/.local /root/.local
 COPY services/portfolio-monitor/src/ .
+COPY services/portfolio-monitor/locales/ /app/locales/
 COPY libs/http_client/ /app/libs/http_client/
 COPY libs/notifications/ /app/libs/notifications/
 EXPOSE 8010
