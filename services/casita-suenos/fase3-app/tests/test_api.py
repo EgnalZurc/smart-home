@@ -5,6 +5,9 @@ from fastapi.testclient import TestClient
 from unittest.mock import MagicMock, patch
 from datetime import datetime
 
+# API prefix for all casita endpoints
+API = "/api/casita"
+
 
 @pytest.fixture
 def mock_scheduler():
@@ -90,7 +93,7 @@ class TestStatusEndpoint:
     """Tests for /status endpoint."""
 
     def test_status_returns_full_info(self, client, mock_scheduler):
-        response = client.get("/status")
+        response = client.get(f"{API}/status")
         assert response.status_code == 200
         data = response.json()
 
@@ -109,7 +112,7 @@ class TestStatusEndpoint:
         main._scheduler_instance = None
         client = TestClient(main.app)
 
-        response = client.get("/status")
+        response = client.get(f"{API}/status")
         assert response.status_code == 503
 
 
@@ -117,7 +120,7 @@ class TestRadarEndpoint:
     """Tests for /radar endpoint."""
 
     def test_radar_returns_properties(self, client, mock_scheduler):
-        response = client.get("/radar")
+        response = client.get(f"{API}/radar")
         assert response.status_code == 200
         data = response.json()
 
@@ -126,7 +129,7 @@ class TestRadarEndpoint:
         assert data["total"] == 1
 
     def test_radar_with_pagination(self, client, mock_scheduler):
-        response = client.get("/radar?limit=10&offset=5")
+        response = client.get(f"{API}/radar?limit=10&offset=5")
         assert response.status_code == 200
         mock_scheduler.get_radar.assert_called_with(
             limit=10,
@@ -138,7 +141,7 @@ class TestRadarEndpoint:
         )
 
     def test_radar_with_filters(self, client, mock_scheduler):
-        response = client.get("/radar?filter=viewed&portal=idealista")
+        response = client.get(f"{API}/radar?filter=viewed&portal=idealista")
         assert response.status_code == 200
         mock_scheduler.get_radar.assert_called_with(
             limit=20,
@@ -150,7 +153,7 @@ class TestRadarEndpoint:
         )
 
     def test_radar_limit_capped_at_100(self, client, mock_scheduler):
-        response = client.get("/radar?limit=500")
+        response = client.get(f"{API}/radar?limit=500")
         assert response.status_code == 200
         mock_scheduler.get_radar.assert_called_with(
             limit=100,  # capped
@@ -166,18 +169,18 @@ class TestDismissEndpoints:
     """Tests for dismiss/undismiss endpoints."""
 
     def test_dismiss_property_success(self, client, mock_scheduler):
-        response = client.post("/dismiss", json={"uid": "idealista:12345"})
+        response = client.post(f"{API}/dismiss", json={"uid": "idealista:12345"})
         assert response.status_code == 200
         assert response.json() == {"ok": True, "uid": "idealista:12345"}
         mock_scheduler.dismiss_property.assert_called_with("idealista:12345")
 
     def test_dismiss_property_not_found(self, client, mock_scheduler):
         mock_scheduler.dismiss_property.return_value = False
-        response = client.post("/dismiss", json={"uid": "nonexistent"})
+        response = client.post(f"{API}/dismiss", json={"uid": "nonexistent"})
         assert response.status_code == 404
 
     def test_undismiss_property_success(self, client, mock_scheduler):
-        response = client.post("/undismiss", json={"uid": "idealista:12345"})
+        response = client.post(f"{API}/undismiss", json={"uid": "idealista:12345"})
         assert response.status_code == 200
         mock_scheduler.undismiss_property.assert_called_with("idealista:12345")
 
@@ -185,7 +188,7 @@ class TestDismissEndpoints:
         mock_scheduler.get_dismissed.return_value = [
             {"uid": "pisos:999", "title": "Dismissed casa"}
         ]
-        response = client.get("/dismissed")
+        response = client.get(f"{API}/dismissed")
         assert response.status_code == 200
         data = response.json()
         assert "properties" in data
@@ -196,18 +199,18 @@ class TestViewedAndComments:
     """Tests for mark-viewed and save-comment endpoints."""
 
     def test_mark_viewed_success(self, client, mock_scheduler):
-        response = client.post("/mark-viewed", json={"uid": "idealista:12345"})
+        response = client.post(f"{API}/mark-viewed", json={"uid": "idealista:12345"})
         assert response.status_code == 200
         mock_scheduler.mark_viewed.assert_called_with("idealista:12345")
 
     def test_mark_viewed_not_found(self, client, mock_scheduler):
         mock_scheduler.mark_viewed.return_value = False
-        response = client.post("/mark-viewed", json={"uid": "nonexistent"})
+        response = client.post(f"{API}/mark-viewed", json={"uid": "nonexistent"})
         assert response.status_code == 404
 
     def test_save_comment_success(self, client, mock_scheduler):
         response = client.post(
-            "/save-comment", json={"uid": "idealista:12345", "comment": "Nice house"}
+            f"{API}/save-comment", json={"uid": "idealista:12345", "comment": "Nice house"}
         )
         assert response.status_code == 200
         mock_scheduler.save_comment.assert_called_with("idealista:12345", "Nice house")
@@ -217,7 +220,7 @@ class TestScheduleEndpoints:
     """Tests for schedule config endpoints."""
 
     def test_get_schedule(self, client, mock_scheduler):
-        response = client.get("/schedule")
+        response = client.get(f"{API}/schedule")
         assert response.status_code == 200
         data = response.json()
         assert data["scraping_enabled"] is True
@@ -225,7 +228,7 @@ class TestScheduleEndpoints:
 
     def test_save_schedule(self, client, mock_scheduler):
         response = client.post(
-            "/schedule",
+            f"{API}/schedule",
             json={"scraping_enabled": False, "scraping_hour": 8},
         )
         assert response.status_code == 200
@@ -234,7 +237,7 @@ class TestScheduleEndpoints:
         )
 
     def test_save_schedule_ignores_none_values(self, client, mock_scheduler):
-        response = client.post("/schedule", json={"scraping_hour": 9})
+        response = client.post(f"{API}/schedule", json={"scraping_hour": 9})
         assert response.status_code == 200
         mock_scheduler.save_schedule_config.assert_called_with({"scraping_hour": 9})
 
@@ -243,14 +246,14 @@ class TestSummaryEndpoint:
     """Tests for summary endpoint."""
 
     def test_get_summary(self, client, mock_scheduler):
-        response = client.get("/summary")
+        response = client.get(f"{API}/summary")
         assert response.status_code == 200
         data = response.json()
         assert data["content"] == "Summary"
 
     def test_get_summary_empty(self, client, mock_scheduler):
         mock_scheduler.get_last_summary.return_value = None
-        response = client.get("/summary")
+        response = client.get(f"{API}/summary")
         assert response.status_code == 200
         assert response.json() == {"content": None, "sent_at": None}
 
@@ -259,23 +262,23 @@ class TestManualTriggerEndpoints:
     """Tests for manual trigger endpoints."""
 
     def test_run_scraping(self, client, mock_scheduler):
-        response = client.post("/run-scraping")
+        response = client.post(f"{API}/run-scraping")
         assert response.status_code == 200
         assert response.json()["ok"] is True
         assert "iniciado" in response.json()["message"].lower()
 
     def test_run_gmail_check(self, client, mock_scheduler):
-        response = client.post("/run-gmail-check")
+        response = client.post(f"{API}/run-gmail-check")
         assert response.status_code == 200
         assert response.json()["ok"] is True
 
     def test_run_fotocasa_check(self, client, mock_scheduler):
-        response = client.post("/run-fotocasa-check")
+        response = client.post(f"{API}/run-fotocasa-check")
         assert response.status_code == 200
         assert response.json()["ok"] is True
 
     def test_run_summary(self, client, mock_scheduler):
-        response = client.post("/run-summary")
+        response = client.post(f"{API}/run-summary")
         assert response.status_code == 200
         assert response.json()["ok"] is True
 
@@ -286,7 +289,7 @@ class TestTelegramWebhook:
     def test_telegram_webhook_start_command(self, client, mock_scheduler):
         mock_scheduler._notifier = MagicMock()
         response = client.post(
-            "/telegram-webhook",
+            f"{API}/telegram-webhook",
             json={
                 "message": {
                     "chat": {"id": 123456, "username": "testuser"},
@@ -301,7 +304,7 @@ class TestTelegramWebhook:
 
     def test_telegram_webhook_other_message(self, client, mock_scheduler):
         response = client.post(
-            "/telegram-webhook",
+            f"{API}/telegram-webhook",
             json={
                 "message": {
                     "chat": {"id": 123456},
@@ -317,7 +320,7 @@ class TestTelegramWebhook:
 
         main._scheduler_instance = None
         client = TestClient(main.app)
-        response = client.post("/telegram-webhook", json={})
+        response = client.post(f"{API}/telegram-webhook", json={})
         assert response.status_code == 200
 
 
