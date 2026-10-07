@@ -2,7 +2,7 @@
 
 Sends notifications to Telegram when gifts are selected or deselected.
 
-Configuration:
+Configuration via config.py (from environment variables):
 - TELEGRAM_BOT_TOKEN: Bot token (required)
 - TELEGRAM_CHAT_IDS: Comma-separated list of chat IDs to notify (preferred)
 - TELEGRAM_CHAT_ID: Single chat ID (fallback for backwards compatibility)
@@ -11,16 +11,11 @@ Example: TELEGRAM_CHAT_IDS=123456789,987654321
 """
 
 import logging
-import os
 
 import httpx
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID_SINGLE, TELEGRAM_CHAT_IDS_RAW
 
 logger = logging.getLogger(__name__)
-
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-# Support multiple chat IDs (comma-separated) or single ID for backwards compatibility
-_CHAT_IDS_RAW = os.environ.get("TELEGRAM_CHAT_IDS", "")
-_CHAT_ID_SINGLE = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 
 def _get_chat_ids() -> list[str]:
@@ -30,11 +25,11 @@ def _get_chat_ids() -> list[str]:
     1. TELEGRAM_CHAT_IDS (comma-separated list)
     2. TELEGRAM_CHAT_ID (single ID, backwards compatibility)
     """
-    if _CHAT_IDS_RAW:
+    if TELEGRAM_CHAT_IDS_RAW:
         # Split by comma, strip whitespace, filter empty
-        return [cid.strip() for cid in _CHAT_IDS_RAW.split(",") if cid.strip()]
-    if _CHAT_ID_SINGLE:
-        return [_CHAT_ID_SINGLE]
+        return [cid.strip() for cid in TELEGRAM_CHAT_IDS_RAW.split(",") if cid.strip()]
+    if TELEGRAM_CHAT_ID_SINGLE:
+        return [TELEGRAM_CHAT_ID_SINGLE]
     return []
 
 

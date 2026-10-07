@@ -1,11 +1,14 @@
 """Baby Gifts Service — standalone microservice for baby gift registry.
+
 Three access modes:
 1. Admin (authenticated via nginx auth_request + SUPER profile): full CRUD + invitation management
 2. Authenticated User (via nginx auth_request): view gifts + reserve/unreserve
 3. Guest (via invitation token): view gifts + reserve/unreserve own
+
 Serves:
   GET  /smart-home/baby-gifts       → SPA (admin/user view, requires auth)
   GET  /guest/baby-gifts/{token}    → SPA (guest view, token-based access)
+
   # Admin endpoints (protected by nginx auth_request, requires SUPER)
   GET  /api/baby-gifts              → all gifts (with reservation details)
   POST /api/baby-gifts              → add gift
@@ -16,23 +19,29 @@ Serves:
   POST /api/baby-gifts/invitations  → create invitation
   DELETE /api/baby-gifts/invitations/{token} → delete invitation
   POST /api/baby-gifts/invitations/{token}/revoke → revoke invitation
+
   # Authenticated user endpoints (protected by nginx auth_request)
   GET  /api/baby-gifts/user              → get gifts for authenticated user
   POST /api/baby-gifts/user/reserve/{id} → reserve a gift as authenticated user
   POST /api/baby-gifts/user/unreserve/{id} → unreserve own gift
+
   # Guest endpoints (token-based, public)
   GET  /api/baby-gifts/guest/{token}           → get gifts for guest
   POST /api/baby-gifts/guest/{token}/reserve/{id}   → reserve a gift
   POST /api/baby-gifts/guest/{token}/unreserve/{id} → unreserve own gift
+
   GET  /health                      → health check
   GET  /api/health/baby-gifts       → health check alias
+
 Port: 8004
 """
 
+import json
 import logging
 import time
 from pathlib import Path
 
+from config import TRUSTED_PROXY_IPS
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -56,12 +65,14 @@ from gifts_controller import (
 )
 from notifier import send_gift_notification
 from pydantic import BaseModel
+from utils import parse_price
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
 app = FastAPI(
     title="Baby Gifts Service",
     version="1.0.0",
@@ -70,7 +81,9 @@ app = FastAPI(
 )
 
 
-# ―― Pydantic models ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+# ═══════════════════════════════════════════════════════════════════════════════
+# Pydantic models
+# ═══════════════════════════════════════════════════════════════════════════════
 class GiftCreate(BaseModel):
     name: str
     description: str = ""
@@ -91,30 +104,33 @@ class InvitationCreate(BaseModel):
     name: str
 
 
-# ?????? Helpers ?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+# ═══════════════════════════════════════════════════════════════════════════════
+# Helpers
+# ═══════════════════════════════════════════════════════════════════════════════
 def _serve_html(
     filename: str, guest_token: str | None = None, auth_user: dict | None = None
 ) -> HTMLResponse:
-    """Serve an HTML file with no-cache headers and optional guest token or auth user injection."""
+    """Serve an HTML file with no-cache headers and optional token/user injection."""
     path = Path(__file__).parent / "static" / filename
     content = path.read_text(encoding="utf-8")
+
     # Inject cache buster
     content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")
+
     # Inject guest token if provided (for guest view)
     if guest_token:
-        import json
-
         content = content.replace(
             "window.GUEST_TOKEN = null;",
             f"window.GUEST_TOKEN = {json.dumps(guest_token)};",
         )
+
     # Inject auth user if provided (for authenticated user view)
     if auth_user:
-        import json
-
         content = content.replace(
-            "window.AUTH_USER = null;", f"window.AUTH_USER = {json.dumps(auth_user)};"
+            "window.AUTH_USER = null;",
+            f"window.AUTH_USER = {json.dumps(auth_user)};",
         )
+
     return HTMLResponse(
         content=content,
         headers={
@@ -126,11 +142,19 @@ def _serve_html(
 
 
 def _get_client_ip(request: Request) -> str:
-    """Get client IP from request, considering proxies."""
+    """Get client IP from request, considering trusted proxies only.
+
+    Only trusts X-Forwarded-For header if the direct connection comes from
+    a trusted proxy IP (e.g., nginx container). This prevents IP spoofing.
+    """
+    client_ip = request.client.host if request.client else "unknown"
     forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
+
+    # Only trust X-Forwarded-For if request comes from trusted proxy
+    if forwarded and client_ip in TRUSTED_PROXY_IPS:
         return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+
+    return client_ip
 
 
 def _get_auth_user(request: Request) -> str | None:
@@ -138,65 +162,66 @@ def _get_auth_user(request: Request) -> str | None:
     return request.headers.get("X-Auth-User")
 
 
-def _is_admin(request: Request) -> bool:
-    """Check if the user is an admin (has babygifts management in their profile).
-    For now, we consider all users with X-Auth-User header as potential admins
-    if they access the admin endpoints. The nginx config should enforce which
-    users can access which endpoints based on their profiles.
-    In practice, only users with 'babygifts' in their profile with view_level >= 2
-    should be able to manage invitations and gifts.
-    """
-    # Check for special admin header that backend could set
-    # For now, we rely on nginx to filter admin endpoints
-    return request.headers.get("X-Auth-Role") == "admin"
+def _truncate_token(token: str) -> str:
+    """Truncate token for safe logging (show last 6 chars only)."""
+    if len(token) > 6:
+        return f"...{token[-6:]}"
+    return token
 
 
-# ?????? Health ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+# ═══════════════════════════════════════════════════════════════════════════════
+# Health endpoints
+# ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/health")
 def health():
-    """Health check ??? used by nginx and the dashboard."""
+    """Health check — used by nginx and the dashboard."""
     return {"online": is_healthy(), "service": "baby-gifts"}
 
 
 @app.get("/api/health/baby-gifts")
 def health_alias():
-    """Health check alias ??? matches path expected by the dashboard."""
+    """Health check alias — matches path expected by the dashboard."""
     return {"online": is_healthy()}
 
 
-# ?????? SPA serving ?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+# ═══════════════════════════════════════════════════════════════════════════════
+# SPA serving
+# ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/smart-home/baby-gifts")
 async def serve_admin(request: Request):
     """Serves the admin/user SPA (protected by nginx auth_request).
+
     If user is an admin (SUPER profile), they get full management capabilities.
     If user is a regular authenticated user, they can view and reserve gifts.
     """
     username = _get_auth_user(request)
     if username:
-        # Authenticated user - pass their info to the frontend
-        # The frontend will detect if they're admin based on available endpoints
         return _serve_html("baby-gifts.html", auth_user={"username": username})
     else:
-        # Admin view (legacy, no specific user info)
         return _serve_html("baby-gifts.html")
 
 
 @app.get("/guest/baby-gifts/{token}")
 async def serve_guest(token: str, request: Request):
     """Serves the guest SPA (public, token-validated).
+
     NOTE: No rate limiting here - we only validate token once on page load.
     Rate limiting is done on API calls instead.
     """
-    # Validate token (no rate limit for initial page load)
     guest = validate_invitation(token)
     if not guest:
-        raise HTTPException(status_code=404, detail="Enlace no v??lido o expirado")
+        raise HTTPException(status_code=404, detail="Enlace no válido o expirado")
+
     client_ip = _get_client_ip(request)
-    logger.info(f"Guest access: {guest['name']} from {client_ip}")
+    logger.info(
+        f"Guest access: {guest['name']} (token: {_truncate_token(token)}) from {client_ip}"
+    )
     return _serve_html("baby-gifts.html", guest_token=token)
 
 
-# ?????? Admin API (protected by nginx auth_request) ?????????????????????????????????????????????????????????????????????????????????????????????
+# ═══════════════════════════════════════════════════════════════════════════════
+# Admin API (protected by nginx auth_request)
+# ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/baby-gifts")
 def get_all_gifts(request: Request):
     """Get all gifts with full reservation details (admin only)."""
@@ -246,15 +271,18 @@ def admin_unreserve(gift_id: str):
     return result
 
 
-# ?????? Invitation management (admin only) ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+# ═══════════════════════════════════════════════════════════════════════════════
+# Invitation management (admin only)
+# ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/baby-gifts/invitations")
 def get_invitations():
     """List all invitations (admin only)."""
     invitations = list_invitations()
+
     # Count reservations per guest and compute gift stats
     gifts_data = get_gifts_data(include_admin=True)
     all_gifts = gifts_data.get("gifts", [])
-    reservation_counts = {}
+    reservation_counts: dict[str, int] = {}
     for gift in all_gifts:
         if gift.get("reserved_by"):
             token = gift["reserved_by"]
@@ -271,6 +299,7 @@ def get_invitations():
         inv["reservations"] = reservation_counts.get(inv["token"], 0)
         inv["visible_gifts"] = visible_gifts
         inv["available_gifts"] = available_gifts
+
     return {"invitations": invitations}
 
 
@@ -301,32 +330,37 @@ def revoke_inv(token: str):
     return result
 
 
-# ?????? Authenticated User API (protected by nginx auth_request) ??????????????????????????????????????????????????????
+# ═══════════════════════════════════════════════════════════════════════════════
+# Authenticated User API (protected by nginx auth_request)
+# ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/baby-gifts/user")
 def get_gifts_for_user(request: Request):
-    """Get gifts for an authenticated user. Shows what's reserved but not by whom (except own).
+    """Get gifts for an authenticated user.
+
+    Shows what's reserved but not by whom (except own).
     FAMILIA users (egnal, virchu) can see hidden gifts.
     Gifts are sorted: visible first by price descending, then hidden by price descending.
     """
     username = _get_auth_user(request)
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
-    # User token format: "user:username"
+
     user_token = f"user:{username}"
     user_is_familia = is_familia_user(username)
+
     # Get gifts and filter reservation info
     data = get_gifts_data(include_admin=False)
     filtered_gifts = []
+
     for gift in data.get("gifts", []):
         # Filter hidden gifts for non-FAMILIA users
         if gift.get("hidden", False) and not user_is_familia:
             continue
+
         if gift.get("reserved_by"):
             if gift["reserved_by"] == user_token:
-                # User's own reservation
                 gift["reserved_by_me"] = True
             else:
-                # Someone else's reservation - hide details
                 gift["reserved_by_me"] = False
                 # For hidden gifts, don't show who reserved
                 if gift.get("hidden", False):
@@ -337,26 +371,8 @@ def get_gifts_for_user(request: Request):
                     gift["reserved_by_name"] = "Alguien"
         else:
             gift["reserved_by_me"] = False
+
         filtered_gifts.append(gift)
-
-    # Sort function to parse price for ordering
-    def parse_price(price_str):
-        """Extract numeric value from price string for sorting."""
-        if not price_str:
-            return 0
-        import re
-
-        # Remove currency symbols and spaces, find numbers
-        numbers = re.findall(r"[\d,\.]+", price_str.replace(",", "."))
-        if numbers:
-            try:
-                # If there's a range (e.g., "100-150"), use the average
-                if len(numbers) >= 2:
-                    return (float(numbers[0]) + float(numbers[-1])) / 2
-                return float(numbers[0])
-            except ValueError:
-                return 0
-        return 0
 
     # Sort: visible gifts by price descending, then hidden gifts by price descending
     visible_gifts = [g for g in filtered_gifts if not g.get("hidden", False)]
@@ -367,12 +383,10 @@ def get_gifts_for_user(request: Request):
     )
     hidden_gifts.sort(key=lambda g: parse_price(g.get("price_range", "")), reverse=True)
 
-    sorted_gifts = visible_gifts + hidden_gifts
-
     return {
         "user_name": username,
         "is_familia": user_is_familia,
-        "gifts": sorted_gifts,
+        "gifts": visible_gifts + hidden_gifts,
     }
 
 
@@ -382,16 +396,15 @@ def user_reserve(gift_id: str, request: Request):
     username = _get_auth_user(request)
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
-    # User token format: "user:username"
+
     user_token = f"user:{username}"
-    # Reserve
     result = reserve_gift(gift_id, user_token, username)
+
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
+
     logger.info(f"Gift reserved: {gift_id} by user {username}")
-    # Send Telegram notification
-    gift_name = result["gift"]["name"]
-    send_gift_notification(gift_name, username, "reserved")
+    send_gift_notification(result["gift"]["name"], username, "reserved")
     return result
 
 
@@ -401,17 +414,16 @@ def user_unreserve(gift_id: str, request: Request):
     username = _get_auth_user(request)
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
-    # User token format: "user:username"
+
     user_token = f"user:{username}"
-    # Get gift name before unreserving
     gift = get_gift(gift_id)
     gift_name = gift["name"] if gift else "Unknown"
-    # Unreserve (only own)
+
     result = unreserve_gift(gift_id, user_token, is_admin=False)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
+
     logger.info(f"Gift unreserved: {gift_id} by user {username}")
-    # Send Telegram notification
     send_gift_notification(gift_name, username, "unreserved")
     return result
 
@@ -422,74 +434,63 @@ def user_toggle_visibility(gift_id: str, request: Request):
     username = _get_auth_user(request)
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
+
     if not is_familia_user(username):
         raise HTTPException(
             status_code=403, detail="No tienes permiso para esta acción"
         )
+
     result = toggle_gift_visibility(gift_id)
     if result["status"] == "error":
         raise HTTPException(status_code=404, detail=result["message"])
+
     logger.info(
         f"Gift visibility toggled: {gift_id} by {username}, hidden={result['hidden']}"
     )
     return result
 
 
-# ?????? Guest API (public, token-based) ?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+# ═══════════════════════════════════════════════════════════════════════════════
+# Guest API (public, token-based)
+# ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/baby-gifts/guest/{token}")
 def get_gifts_for_guest(token: str, request: Request):
-    """Get gifts for a guest. Shows what's reserved but not by whom (except own).
+    """Get gifts for a guest.
+
+    Shows what's reserved but not by whom (except own).
     Hidden gifts are not shown to guests.
     Gifts are sorted by price descending.
     """
-    # Rate limit
     client_ip = _get_client_ip(request)
     if not check_rate_limit(client_ip):
         raise HTTPException(
             status_code=429, detail="Demasiados intentos. Espera un momento."
         )
-    # Validate
+
     guest = validate_invitation(token)
     if not guest:
-        raise HTTPException(status_code=401, detail="Token inv??lido o expirado")
+        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+
     # Get gifts and filter reservation info
     data = get_gifts_data(include_admin=False)
     filtered_gifts = []
+
     for gift in data.get("gifts", []):
         # Filter out hidden gifts for guests
         if gift.get("hidden", False):
             continue
+
         if gift.get("reserved_by"):
             if gift["reserved_by"] == token:
-                # Guest's own reservation - show their name
                 gift["reserved_by_me"] = True
             else:
-                # Someone else's reservation - hide details
                 gift["reserved_by_me"] = False
                 gift["reserved_by"] = "otro"
                 gift["reserved_by_name"] = "Alguien"
         else:
             gift["reserved_by_me"] = False
+
         filtered_gifts.append(gift)
-
-    # Sort function to parse price for ordering
-    def parse_price(price_str):
-        """Extract numeric value from price string for sorting."""
-        if not price_str:
-            return 0
-        import re
-
-        # Remove currency symbols and spaces, find numbers
-        numbers = re.findall(r"[\d,\.]+", price_str.replace(",", "."))
-        if numbers:
-            try:
-                # If there's a range (e.g., "100-150"), use the average
-                if len(numbers) >= 2:
-                    return (float(numbers[0]) + float(numbers[-1])) / 2
-                return float(numbers[0])
-            except ValueError:
-                return 0
-        return 0
 
     # Sort by price descending
     filtered_gifts.sort(
@@ -505,54 +506,53 @@ def get_gifts_for_guest(token: str, request: Request):
 @app.post("/api/baby-gifts/guest/{token}/reserve/{gift_id}")
 def guest_reserve(token: str, gift_id: str, request: Request):
     """Reserve a gift as a guest."""
-    # Rate limit
     client_ip = _get_client_ip(request)
     if not check_rate_limit(client_ip):
         raise HTTPException(
             status_code=429, detail="Demasiados intentos. Espera un momento."
         )
-    # Validate
+
     guest = validate_invitation(token)
     if not guest:
-        raise HTTPException(status_code=401, detail="Token inv??lido o expirado")
-    # Reserve
+        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+
     result = reserve_gift(gift_id, token, guest["name"])
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
+
     logger.info(f"Gift reserved: {gift_id} by {guest['name']}")
-    # Send Telegram notification
-    gift_name = result["gift"]["name"]
-    send_gift_notification(gift_name, guest["name"], "reserved")
+    send_gift_notification(result["gift"]["name"], guest["name"], "reserved")
     return result
 
 
 @app.post("/api/baby-gifts/guest/{token}/unreserve/{gift_id}")
 def guest_unreserve(token: str, gift_id: str, request: Request):
     """Cancel own reservation as a guest."""
-    # Rate limit
     client_ip = _get_client_ip(request)
     if not check_rate_limit(client_ip):
         raise HTTPException(
             status_code=429, detail="Demasiados intentos. Espera un momento."
         )
-    # Validate
+
     guest = validate_invitation(token)
     if not guest:
-        raise HTTPException(status_code=401, detail="Token inv??lido o expirado")
-    # Get gift name before unreserving
+        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+
     gift = get_gift(gift_id)
     gift_name = gift["name"] if gift else "Unknown"
-    # Unreserve (only own)
+
     result = unreserve_gift(gift_id, token, is_admin=False)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
+
     logger.info(f"Gift unreserved: {gift_id} by {guest['name']}")
-    # Send Telegram notification
     send_gift_notification(gift_name, guest["name"], "unreserved")
     return result
 
 
-# ?????? Static assets ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+# ═══════════════════════════════════════════════════════════════════════════════
+# Static assets
+# ═══════════════════════════════════════════════════════════════════════════════
 _static_dir = Path(__file__).parent / "static"
 if _static_dir.exists():
     app.mount(
