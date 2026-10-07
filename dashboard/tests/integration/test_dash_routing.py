@@ -112,13 +112,14 @@ class TestServicesModal:
         """Services button must exist to open the modal."""
         assert "svc-btn" in _html()
 
-    def test_core_services_has_three_items(self):
-        """CORE_SERVICES must contain exactly Backend, MQTT, Zigbee."""
+    def test_core_services_has_two_items(self):
+        """CORE_SERVICES must contain exactly MQTT and Zigbee (Backend removed as tautological)."""
         html = _html()
         assert "CORE_SERVICES" in html
-        assert "core_backend" in html
         assert "core_mqtt" in html
         assert "core_zigbee" in html
+        # Backend was removed - if you can see the dashboard, the backend is running
+        assert "core_backend" not in html
 
     def test_ac_not_in_core_services(self):
         """AC is an external service, NOT in CORE_SERVICES."""
@@ -149,21 +150,6 @@ class TestServicesModal:
         core_end = html.index("APP_CATALOGUE")
         core_block = html[core_start:core_end]
         assert "/zigbee/" in core_block
-
-    def test_backend_health_uses_json_endpoint(self):
-        """Backend health must use /api/health/backend (JSON), not /health (plain text)."""
-        html = _html()
-        assert "/api/health/backend" in html
-        core_start = html.index("CORE_SERVICES")
-        core_end = html.index("APP_CATALOGUE")
-        core_block = html[core_start:core_end]
-        backend_entry_start = core_block.index("core_backend")
-        backend_entry_end = core_block.index("core_mqtt")
-        backend_entry = core_block[backend_entry_start:backend_entry_end]
-        assert (
-            "'/api/health/backend'" in backend_entry
-            or '"/api/health/backend"' in backend_entry
-        )
 
 
 # ── Health status polling ─────────────────────────────────────────────────────

@@ -522,7 +522,7 @@ const T = {
         portfolio_name: 'Monitor Cartera', portfolio_desc: 'Monitorización de ETFs y crypto',
         ai_name: 'IA Local', ai_desc: 'Chat con modelos de lenguaje',
         pc_online: 'Online', pc_offline: 'Offline',
-        core_backend: 'Backend', core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
+        core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
         external_services: 'Servicios externos', infrastructure: 'Infraestructura',
     },
     en: {
@@ -542,14 +542,13 @@ const T = {
         portfolio_name: 'Portfolio Monitor', portfolio_desc: 'ETF and crypto monitoring',
         ai_name: 'Local AI', ai_desc: 'Chat with language models',
         pc_online: 'Online', pc_offline: 'Offline',
-        core_backend: 'Backend', core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
+        core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
         external_services: 'External services', infrastructure: 'Infrastructure',
     },
 };
 
 // Core services (infrastructure)
 const CORE_SERVICES = [
-    { key: 'core_backend', labelKey: 'core_backend', statusUrl: '/api/health/backend', getStatus: d => d?.online === true, url: null },
     { key: 'core_mqtt',    labelKey: 'core_mqtt',    statusUrl: '/api/health/zigbee',  getStatus: d => d?.mqtt_connected === true, url: null },
     { key: 'core_zigbee',  labelKey: 'core_zigbee',  statusUrl: '/api/health/zigbee',  getStatus: d => d?.online === true, url: '/zigbee/' },
 ];
@@ -762,7 +761,6 @@ async function loadSvcStatus() {
         { key: 'photos_ext', endpoint: '/api/health/immich', extract: r => r.online === true },
         { key: 'passwords_ext', endpoint: '/api/health/passwords', extract: r => r.online === true },
         // Core services
-        { key: 'core_backend', endpoint: '/api/health/backend', extract: r => r.online === true },
         { key: 'core_mqtt', endpoint: '/api/health/zigbee', extract: r => r.mqtt_connected === true },
         { key: 'core_zigbee', endpoint: '/api/health/zigbee', extract: r => r.online === true },
     ];
@@ -814,7 +812,7 @@ async function openSvcModal() {
     currentSvcTab = 'external';
     document.querySelectorAll('#svc-tabs .res-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'external'));
     // Initialize all services as offline (red) - instant feedback
-    ['ai', 'photos_ext', 'passwords_ext', 'core_backend', 'core_mqtt', 'core_zigbee'].forEach(k => svcStatus[k] = false);
+    ['ai', 'photos_ext', 'passwords_ext', 'core_mqtt', 'core_zigbee'].forEach(k => svcStatus[k] = false);
     renderSvcContent();  // Show immediately with all red dots
     // Load actual status in background - will re-render when complete
     loadSvcStatus();
