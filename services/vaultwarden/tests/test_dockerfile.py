@@ -35,6 +35,12 @@ class TestDockerfileStructure:
         assert "DOMAIN=" in dockerfile_content
         assert "/passwords" in dockerfile_content
 
+    def test_domain_uses_https(self, dockerfile_content):
+        """DOMAIN should use HTTPS for security."""
+        match = re.search(r"DOMAIN=(\S+)", dockerfile_content)
+        assert match, "DOMAIN not found"
+        assert match.group(1).startswith("https://"), "DOMAIN must use HTTPS"
+
     def test_websocket_enabled(self, dockerfile_content):
         """WebSocket should be enabled for push notifications."""
         assert "WEBSOCKET_ENABLED=true" in dockerfile_content
@@ -47,6 +53,13 @@ class TestDockerfileStructure:
         """Healthcheck should be defined."""
         assert "HEALTHCHECK" in dockerfile_content
 
+    def test_healthcheck_uses_curl(self, dockerfile_content):
+        """Healthcheck should use curl to verify the service."""
+        # Extract HEALTHCHECK CMD (may span multiple lines with \)
+        match = re.search(r"HEALTHCHECK.*CMD\s+(.+)", dockerfile_content, re.DOTALL)
+        assert match, "HEALTHCHECK CMD not found"
+        assert "curl" in match.group(1), "Healthcheck should use curl"
+
     def test_ports_exposed(self, dockerfile_content):
         """Required ports should be exposed."""
         assert "EXPOSE" in dockerfile_content
@@ -57,6 +70,18 @@ class TestDockerfileStructure:
         # ADMIN_TOKEN should be passed at runtime via environment
         assert "ADMIN_TOKEN=" not in dockerfile_content
 
+    def test_no_sensitive_env_vars(self, dockerfile_content):
+        """No sensitive environment variables should be hardcoded."""
+        sensitive_patterns = [
+            r"SMTP_PASSWORD=",
+            r"YUBICO_SECRET_KEY=",
+            r"DUO_SKEY=",
+        ]
+        for pattern in sensitive_patterns:
+            assert not re.search(pattern, dockerfile_content), (
+                f"Sensitive var {pattern} should not be in Dockerfile"
+            )
+
 
 class TestDockerfileEnvironment:
     """Test environment variable configuration."""
@@ -64,6 +89,10 @@ class TestDockerfileEnvironment:
     def test_timezone_configured(self, dockerfile_content):
         """Timezone should be set."""
         assert "TZ=" in dockerfile_content
+
+    def test_timezone_is_europe_madrid(self, dockerfile_content):
+        """Timezone should be Europe/Madrid."""
+        assert "TZ=Europe/Madrid" in dockerfile_content
 
     def test_rocket_address_configured(self, dockerfile_content):
         """Rocket should listen on all interfaces."""
@@ -73,6 +102,14 @@ class TestDockerfileEnvironment:
         """Rocket should use port 80."""
         assert "ROCKET_PORT=80" in dockerfile_content
 
+    def test_rocket_profile_is_release(self, dockerfile_content):
+        """Rocket should use release profile for production."""
+        assert "ROCKET_PROFILE=release" in dockerfile_content
+
     def test_log_level_configured(self, dockerfile_content):
         """Log level should be configured."""
         assert "LOG_LEVEL=" in dockerfile_content
+
+    def test_log_level_not_debug(self, dockerfile_content):
+        """Log level should not be debug in production."""
+        assert "LOG_LEVEL=debug" not in dockerfile_content.lower()
