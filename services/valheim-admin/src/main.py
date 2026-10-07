@@ -12,19 +12,14 @@ Auth: nginx handles auth_request — this service trusts all incoming requests.
 
 import logging
 import os
-import sys
 import time
 from pathlib import Path
 
 import httpx
+from async_http_client import AsyncServiceClient, ServiceClientConfig
 from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-
-# Add libs to path for shared library imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "libs"))
-
-from async_http_client import AsyncServiceClient, ServiceClientConfig  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
