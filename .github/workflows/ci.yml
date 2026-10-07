@@ -421,11 +421,11 @@ jobs:
       - name: Hadolint - Dockerfile Check
         run: hadolint services/vacaciones-service/Dockerfile
 
-      - name: Run Tests
+      - name: Run Tests with Coverage
         run: |
           if [[ -d "services/vacaciones-service/tests" ]] && find services/vacaciones-service/tests -name "test_*.py" | grep -q .; then
             pip install -r services/vacaciones-service/requirements.txt --quiet 2>/dev/null || true
-            cd services/vacaciones-service && PYTHONPATH=src python -m pytest tests/ -v --tb=short
+            cd services/vacaciones-service && PYTHONPATH=src python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
           else
             echo "⏭️ No tests found"
           fi
