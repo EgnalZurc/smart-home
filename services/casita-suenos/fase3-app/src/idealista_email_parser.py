@@ -483,7 +483,7 @@ def delete_processed_emails(
         imap.close()
         imap.logout()
     except Exception:
-        pass
+        logger.debug("[idealista_parser] IMAP logout failed")
 
 
 # Compatibilidad legacy
@@ -495,5 +495,5 @@ def fetch_new_alert_urls(email_address, app_password, lookback_minutes=35, **kwa
             imap.close()
             imap.logout()
         except Exception:
-            pass
+            logger.debug("[idealista_parser] IMAP logout failed (legacy)")
     return [a.url for a in alerts if a.property_id]

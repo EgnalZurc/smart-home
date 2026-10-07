@@ -204,3 +204,283 @@ class TestGmailCheck:
             # Debe haber insertado la propiedad usando fallback del email
             scheduler._db.upsert_property.assert_called()
             scheduler._db.upsert_score.assert_called()
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Additional scheduler tests for coverage - SchedulerStatus and helpers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSchedulerStatus:
+    """Tests for SchedulerStatus dataclass."""
+
+    def test_scheduler_status_creation(self):
+        """Test creating a SchedulerStatus object."""
+        from casita_scheduler import SchedulerStatus, ScraperError
+        from datetime import datetime
+
+        status = SchedulerStatus(
+            running=True,
+            last_scraping=datetime(2026, 10, 1, 7, 0),
+            last_gmail_check=datetime(2026, 10, 1, 8, 0),
+            last_fotocasa_check=datetime(2026, 10, 1, 8, 30),
+            last_summary=datetime(2026, 9, 29, 9, 0),
+            last_scraping_result="ok",
+            total_properties=100,
+            radar_count=20,
+            dismissed_count=5,
+            scraper_errors=[],
+            top_properties=[],
+        )
+
+        assert status.running is True
+        assert status.total_properties == 100
+        assert status.radar_count == 20
+
+    def test_scraper_error_creation(self):
+        """Test creating a ScraperError object."""
+        from casita_scheduler import ScraperError
+        from datetime import datetime
+
+        error = ScraperError(
+            portal="pisos",
+            zone_id="zamora_meseta",
+            error="Connection timeout",
+        )
+
+        assert error.portal == "pisos"
+        assert error.zone_id == "zamora_meseta"
+        assert error.error == "Connection timeout"
+        assert isinstance(error.detected_at, datetime)
+
+
+class TestSchedulerInferZone:
+    """Tests for zone inference from URL."""
+
+    def test_infer_zone_zamora_keywords(self):
+        """Test inferring Zamora zone from URL."""
+        from casita_scheduler import CasitaScheduler
+        from zones import ZONES
+
+        # Create minimal scheduler for testing
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._db = None
+        scheduler._notifier = None
+        scheduler._apify = None
+
+        zone = scheduler._infer_zone_from_url(
+            "https://www.idealista.com/venta-viviendas/zamora/con-jardin/"
+        )
+        assert zone is not None
+        assert zone.id == "zamora_meseta"
+
+    def test_infer_zone_potes(self):
+        """Test inferring Potes zone from URL."""
+        from casita_scheduler import CasitaScheduler
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        zone = scheduler._infer_zone_from_url(
+            "https://www.idealista.com/venta-viviendas/potes-liebana/"
+        )
+        assert zone is not None
+        assert zone.id == "cantabria_liebana"
+
+    def test_infer_zone_unknown_fallback(self):
+        """Test fallback to default zone for unknown URL."""
+        from casita_scheduler import CasitaScheduler
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        zone = scheduler._infer_zone_from_url(
+            "https://www.idealista.com/venta-viviendas/unknown-place/"
+        )
+        # Should fallback to zamora_meseta
+        assert zone is not None
+        assert zone.id == "zamora_meseta"
+
+
+class TestSchedulerConditions:
+    """Tests for scheduler condition checking."""
+
+    def test_should_run_gmail_check_first_time(self):
+        """Test gmail check runs immediately if never ran."""
+        from casita_scheduler import CasitaScheduler
+        from datetime import datetime
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._last_gmail_check = None
+
+        result = scheduler._should_run_gmail_check_interval(1800)  # 30 min
+        assert result is True
+
+    def test_should_run_gmail_check_after_interval(self):
+        """Test gmail check runs after interval passed."""
+        from casita_scheduler import CasitaScheduler
+        from datetime import datetime, timedelta
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._last_gmail_check = datetime.now() - timedelta(minutes=35)
+
+        result = scheduler._should_run_gmail_check_interval(1800)  # 30 min
+        assert result is True
+
+    def test_should_not_run_gmail_check_before_interval(self):
+        """Test gmail check doesn't run before interval."""
+        from casita_scheduler import CasitaScheduler
+        from datetime import datetime, timedelta
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._last_gmail_check = datetime.now() - timedelta(minutes=10)
+
+        result = scheduler._should_run_gmail_check_interval(1800)  # 30 min
+        assert result is False
+
+    def test_should_run_fotocasa_check_first_time(self):
+        """Test fotocasa check runs immediately if never ran."""
+        from casita_scheduler import CasitaScheduler
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._last_fotocasa_check = None
+
+        result = scheduler._should_run_fotocasa_check_interval(1800)
+        assert result is True
+
+
+class TestSchedulerRadar:
+    """Tests for scheduler get_radar method."""
+
+    def test_get_radar_enriches_with_distance(self):
+        """Test that get_radar adds distance_madrid_min to results."""
+        from casita_scheduler import CasitaScheduler
+        from unittest.mock import MagicMock
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._db = MagicMock()
+        scheduler._db.get_radar_properties.return_value = {
+            "items": [
+                {"zone_id": "zamora_meseta", "price": 100000}
+            ],
+            "total": 1,
+        }
+
+        result = scheduler.get_radar(limit=10)
+
+        assert "items" in result
+        assert len(result["items"]) == 1
+        # Should have distance_madrid_min from zone
+        assert "distance_madrid_min" in result["items"][0]
+        assert result["items"][0]["distance_madrid_min"] == 150  # zamora_meseta value
+
+
+class TestSchedulerDelegation:
+    """Tests for scheduler delegation methods."""
+
+    def test_dismiss_property_delegates(self):
+        """Test dismiss_property calls db.dismiss."""
+        from casita_scheduler import CasitaScheduler
+        from unittest.mock import MagicMock
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._db = MagicMock()
+        scheduler._db.dismiss.return_value = True
+
+        result = scheduler.dismiss_property("idealista:123")
+
+        scheduler._db.dismiss.assert_called_once_with("idealista:123")
+        assert result is True
+
+    def test_undismiss_property_delegates(self):
+        """Test undismiss_property calls db.undismiss."""
+        from casita_scheduler import CasitaScheduler
+        from unittest.mock import MagicMock
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._db = MagicMock()
+        scheduler._db.undismiss.return_value = True
+
+        result = scheduler.undismiss_property("idealista:123")
+
+        scheduler._db.undismiss.assert_called_once_with("idealista:123")
+        assert result is True
+
+    def test_mark_viewed_delegates(self):
+        """Test mark_viewed calls db.mark_viewed."""
+        from casita_scheduler import CasitaScheduler
+        from unittest.mock import MagicMock
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._db = MagicMock()
+        scheduler._db.mark_viewed.return_value = True
+
+        result = scheduler.mark_viewed("idealista:123")
+
+        scheduler._db.mark_viewed.assert_called_once_with("idealista:123")
+        assert result is True
+
+    def test_save_comment_delegates(self):
+        """Test save_comment calls db.save_comment."""
+        from casita_scheduler import CasitaScheduler
+        from unittest.mock import MagicMock
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._db = MagicMock()
+        scheduler._db.save_comment.return_value = True
+
+        result = scheduler.save_comment("idealista:123", "Nice house!")
+
+        scheduler._db.save_comment.assert_called_once_with("idealista:123", "Nice house!")
+        assert result is True
+
+    def test_get_schedule_config_delegates(self):
+        """Test get_schedule_config calls db."""
+        from casita_scheduler import CasitaScheduler
+        from unittest.mock import MagicMock
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._db = MagicMock()
+        scheduler._db.get_schedule_config.return_value = {"key": "value"}
+
+        result = scheduler.get_schedule_config()
+
+        scheduler._db.get_schedule_config.assert_called_once()
+        assert result == {"key": "value"}
+
+    def test_save_schedule_config_delegates(self):
+        """Test save_schedule_config calls db."""
+        from casita_scheduler import CasitaScheduler
+        from unittest.mock import MagicMock
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._db = MagicMock()
+
+        scheduler.save_schedule_config({"scraping_hour": 8})
+
+        scheduler._db.save_schedule_config.assert_called_once_with({"scraping_hour": 8})
+
+    def test_get_last_summary_delegates(self):
+        """Test get_last_summary calls db."""
+        from casita_scheduler import CasitaScheduler
+        from unittest.mock import MagicMock
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._db = MagicMock()
+        scheduler._db.get_last_weekly_summary.return_value = {"content": "test"}
+
+        result = scheduler.get_last_summary()
+
+        scheduler._db.get_last_weekly_summary.assert_called_once()
+        assert result == {"content": "test"}
+
+    def test_get_dismissed_delegates(self):
+        """Test get_dismissed calls db."""
+        from casita_scheduler import CasitaScheduler
+        from unittest.mock import MagicMock
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._db = MagicMock()
+        scheduler._db.get_dismissed.return_value = [{"uid": "test:1"}]
+
+        result = scheduler.get_dismissed()
+
+        scheduler._db.get_dismissed.assert_called_once()
+        assert result == [{"uid": "test:1"}]

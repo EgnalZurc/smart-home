@@ -484,4 +484,4 @@ def delete_processed_fotocasa_emails(
         imap.close()
         imap.logout()
     except Exception:
-        pass
+        logger.debug("[fotocasa_parser] IMAP logout failed")
