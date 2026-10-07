@@ -24,6 +24,13 @@ def _tmp_db_path(tmp_dir):
     return os.path.join(tmp_dir, "test_auth.db")
 
 
+def _set_db_path(tmp_dir):
+    """Set AUTH_DB_PATH in profiles.db module (the actual source)."""
+    import profiles.db
+
+    profiles.db.AUTH_DB_PATH = _tmp_db_path(tmp_dir)
+
+
 # ── Built-in Profiles ─────────────────────────────────────────────────────────
 
 
@@ -128,7 +135,7 @@ class TestProfileCRUD:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             profiles = user_profiles.get_all_profiles()
@@ -145,7 +152,7 @@ class TestProfileCRUD:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             profile_id = user_profiles.create_profile("TEST_PROFILE", 2, "Test desc")
@@ -164,7 +171,7 @@ class TestProfileCRUD:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             # Create a profile
@@ -181,7 +188,7 @@ class TestProfileCRUD:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             pid = user_profiles.create_profile("LEVEL_TEST", 1, "Test")
@@ -195,7 +202,7 @@ class TestProfileCRUD:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             super_id = "super-0000-0000-0000-000000000000"
@@ -207,7 +214,7 @@ class TestProfileCRUD:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             gamer_id = "gamer-0000-0000-0000-000000000003"
@@ -221,7 +228,7 @@ class TestProfileCRUD:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             pid = user_profiles.create_profile("TO_DELETE", 1, "Delete me")
@@ -235,7 +242,7 @@ class TestProfileCRUD:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             gamer_id = "gamer-0000-0000-0000-000000000003"
@@ -252,7 +259,7 @@ class TestUserProfiles:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             profiles = user_profiles.get_user_profiles("newuser")
@@ -263,7 +270,7 @@ class TestUserProfiles:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             super_id = "super-0000-0000-0000-000000000000"
@@ -280,7 +287,7 @@ class TestUserProfiles:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             fam_id = "familia-principal-0000-000000000002"
@@ -298,7 +305,7 @@ class TestUserProfiles:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             super_id = "super-0000-0000-0000-000000000000"
@@ -321,7 +328,7 @@ class TestEffectiveLevel:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             super_id = "super-0000-0000-0000-000000000000"
@@ -334,7 +341,7 @@ class TestEffectiveLevel:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             super_id = "super-0000-0000-0000-000000000000"  # level 0
@@ -350,7 +357,7 @@ class TestEffectiveLevel:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             super_id = "super-0000-0000-0000-000000000000"
@@ -363,7 +370,7 @@ class TestEffectiveLevel:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             fam_id = "familia-principal-0000-000000000002"
@@ -381,7 +388,7 @@ class TestUserInfo:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             super_id = "super-0000-0000-0000-000000000000"
@@ -400,7 +407,7 @@ class TestUserInfo:
         import user_profiles
 
         with tempfile.TemporaryDirectory() as tmp:
-            user_profiles.AUTH_DB_PATH = _tmp_db_path(tmp)
+            _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
             super_id = "super-0000-0000-0000-000000000000"
