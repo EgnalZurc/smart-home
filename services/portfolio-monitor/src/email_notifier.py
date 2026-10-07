@@ -2,7 +2,7 @@
 Portfolio Monitor — Email Notifier.
 
 Sends alerts via email when monitors detect WARN or DANGER signals.
-Uses the same SMTP credentials as the dashboard auth system.
+Uses the shared email library from libs/notifications.
 
 Configuration via environment variables:
   - SMTP_USER: Gmail address (e.g., acmlsn@gmail.com)
@@ -14,29 +14,38 @@ from __future__ import annotations
 
 import logging
 import os
-import smtplib
-import ssl
+import sys
 from dataclasses import dataclass
 from datetime import datetime
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from models import AlertLevel, CryptoAnalysis, ETFAnalysis
+    from models import AlertLevel, CryptoAnalysis, ETFAnalysis, SavingsAnalysis
+
+# Add libs to path for shared library import
+_LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
+if _LIBS_PATH not in sys.path:
+    sys.path.insert(0, _LIBS_PATH)
 
 logger = logging.getLogger(__name__)
 
+
 # ─────────────────────────────────────────────────────────────────────────────
-# Configuration
+# Protocol for dependency injection (allows mocking in tests)
 # ─────────────────────────────────────────────────────────────────────────────
-SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER = os.environ.get("SMTP_USER", os.environ.get("AUTH_SMTP_USER", ""))
-SMTP_PASSWORD = os.environ.get(
-    "SMTP_PASSWORD", os.environ.get("AUTH_SMTP_PASSWORD", "")
-)
-ALERT_EMAIL = os.environ.get("ALERT_EMAIL", SMTP_USER)
+class EmailSenderProtocol(Protocol):
+    """Protocol for email sender - allows dependency injection."""
+
+    @property
+    def enabled(self) -> bool: ...
+
+    def send(
+        self,
+        subject: str,
+        html_body: str,
+        recipient: str | None = None,
+        plain_body: str | None = None,
+    ) -> NotificationResult: ...
 
 
 @dataclass
@@ -45,6 +54,76 @@ class NotificationResult:
 
     success: bool
     message: str
+
+
+def _get_email_sender() -> EmailSenderProtocol:
+    """Get the email sender instance, using shared lib or fallback."""
+    try:
+        from libs.notifications import EmailSender
+
+        return EmailSender()
+    except ImportError:
+        logger.warning(
+            "[email] libs.notifications not available, using built-in sender"
+        )
+        return _BuiltinEmailSender()
+
+
+class _BuiltinEmailSender:
+    """Fallback email sender if shared lib is not available."""
+
+    def __init__(self) -> None:
+        import smtplib
+        import ssl
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+
+        self._smtplib = smtplib
+        self._ssl = ssl
+        self._MIMEMultipart = MIMEMultipart
+        self._MIMEText = MIMEText
+
+        self._smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+        self._smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+        self._smtp_user = os.environ.get(
+            "SMTP_USER", os.environ.get("AUTH_SMTP_USER", "")
+        )
+        self._smtp_password = os.environ.get(
+            "SMTP_PASSWORD", os.environ.get("AUTH_SMTP_PASSWORD", "")
+        )
+        self._recipient = os.environ.get("ALERT_EMAIL") or self._smtp_user
+        self._enabled = bool(self._smtp_user and self._smtp_password)
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    def send(
+        self,
+        subject: str,
+        html_body: str,
+        recipient: str | None = None,
+        plain_body: str | None = None,
+    ) -> NotificationResult:
+        if not self._enabled:
+            return NotificationResult(False, "Email disabled — missing credentials")
+
+        to_addr = recipient or self._recipient
+        msg = self._MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = self._smtp_user
+        msg["To"] = to_addr
+        msg.attach(self._MIMEText(html_body, "html", "utf-8"))
+
+        try:
+            ctx = self._ssl.create_default_context()
+            with self._smtplib.SMTP(self._smtp_host, self._smtp_port, timeout=15) as s:
+                s.starttls(context=ctx)
+                s.login(self._smtp_user, self._smtp_password)
+                s.sendmail(self._smtp_user, to_addr, msg.as_bytes())
+            return NotificationResult(True, "Email sent")
+        except Exception as e:
+            return NotificationResult(False, str(e))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -80,7 +159,7 @@ def _level_emoji(level: str) -> str:
 def _build_html_summary(
     etf_results: list[ETFAnalysis],
     crypto_results: list[CryptoAnalysis],
-    savings_results: list,
+    savings_results: list[SavingsAnalysis],
     overall_level: AlertLevel,
     fear_greed: int | None,
 ) -> str:
@@ -173,7 +252,7 @@ def _build_html_summary(
             </div>
 """
 
-    # Crypto Section - only show if there are actual WARN/DANGER alerts
+    # Crypto Section
     crypto_alerts = [
         c for c in crypto_results if c.level in (AlertLevel.WARN, AlertLevel.DANGER)
     ]
@@ -278,7 +357,6 @@ def _build_html_scheduled_alert(alert) -> str:
         "low": "#17a2b8",
     }.get(alert.priority, "#6c757d")
 
-    # If overdue, use red
     if is_overdue:
         priority_color = "#dc3545"
 
@@ -291,14 +369,12 @@ def _build_html_scheduled_alert(alert) -> str:
 
     date_str = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    # Header text
     header_text = (
         "⏰ Alerta Programada — ¡HOY!"
         if not is_overdue
         else "⚠️ Alerta Vencida — ACCIÓN PENDIENTE"
     )
 
-    # Overdue banner HTML
     overdue_banner = ""
     if is_overdue:
         overdue_banner = (
@@ -365,75 +441,31 @@ def _build_html_scheduled_alert(alert) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Email Notifier
+# Email Notifier (uses protocol for testability)
 # ─────────────────────────────────────────────────────────────────────────────
 class EmailNotifier:
     """
     Sends portfolio alerts via email.
 
     Only sends notifications when there are WARN or DANGER signals.
-    Uses Gmail SMTP with TLS (same config as dashboard auth).
+    Uses the shared email library or a built-in fallback.
+
+    Supports dependency injection for testing.
     """
 
-    def __init__(
-        self,
-        smtp_user: str | None = None,
-        smtp_password: str | None = None,
-        recipient: str | None = None,
-    ) -> None:
-        self._smtp_user = smtp_user or SMTP_USER
-        self._smtp_password = smtp_password or SMTP_PASSWORD
-        self._recipient = recipient or ALERT_EMAIL or self._smtp_user
-        self._enabled = bool(self._smtp_user and self._smtp_password)
+    def __init__(self, sender: EmailSenderProtocol | None = None) -> None:
+        """
+        Initialize the notifier.
 
-        if self._enabled:
-            logger.info("[email] Notifier initialized (recipient: %s)", self._recipient)
-        else:
-            logger.warning(
-                "[email] Notifier disabled — missing SMTP_USER or SMTP_PASSWORD"
-            )
+        Args:
+            sender: Email sender instance. If None, creates one automatically.
+        """
+        self._sender = sender or _get_email_sender()
 
     @property
     def enabled(self) -> bool:
         """Return True if notifications are enabled."""
-        return self._enabled
-
-    def _send(self, subject: str, html_body: str) -> NotificationResult:
-        """Send an HTML email."""
-        if not self._enabled:
-            return NotificationResult(
-                success=False,
-                message="Notifications disabled — missing credentials",
-            )
-
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = self._smtp_user
-        msg["To"] = self._recipient
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-        try:
-            ctx = ssl.create_default_context()
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-                server.starttls(context=ctx)
-                server.login(self._smtp_user, self._smtp_password)
-                server.sendmail(self._smtp_user, self._recipient, msg.as_bytes())
-
-            logger.info("[email] Alert sent to %s", self._recipient)
-            return NotificationResult(success=True, message="Email sent")
-
-        except smtplib.SMTPAuthenticationError as e:
-            logger.error("[email] SMTP authentication error: %s", e)
-            return NotificationResult(success=False, message=f"Auth error: {e}")
-        except smtplib.SMTPException as e:
-            logger.error("[email] SMTP error: %s", e)
-            return NotificationResult(success=False, message=f"SMTP error: {e}")
-        except (ConnectionError, TimeoutError) as e:
-            logger.error("[email] Connection error: %s", e)
-            return NotificationResult(success=False, message=f"Connection error: {e}")
-        except Exception as e:
-            logger.error("[email] Unexpected error: %s", e)
-            return NotificationResult(success=False, message=str(e))
+        return self._sender.enabled
 
     def send_summary_alert(
         self,
@@ -441,12 +473,11 @@ class EmailNotifier:
         crypto_results: list[CryptoAnalysis],
         overall_level: AlertLevel,
         fear_greed: int | None = None,
-        savings_results: list | None = None,
+        savings_results: list[SavingsAnalysis] | None = None,
     ) -> NotificationResult:
         """
         Send a summary alert if there are WARN or DANGER signals.
 
-        This is the main entry point — called after monitors run.
         Only sends if overall_level is WARN or DANGER.
         """
         from models import AlertLevel
@@ -469,7 +500,8 @@ class EmailNotifier:
             fear_greed,
         )
 
-        return self._send(subject, html)
+        result = self._sender.send(subject, html)
+        return NotificationResult(result.success, result.message)
 
     def send_scheduled_alert(self, alert) -> NotificationResult:
         """Send a notification for a scheduled alert."""
@@ -482,7 +514,8 @@ class EmailNotifier:
         subject = f"{priority_emoji} Alerta: {alert.title}"
         html = _build_html_scheduled_alert(alert)
 
-        return self._send(subject, html)
+        result = self._sender.send(subject, html)
+        return NotificationResult(result.success, result.message)
 
     def send_test(self) -> NotificationResult:
         """Send a test email to verify configuration."""
@@ -498,4 +531,5 @@ class EmailNotifier:
 </body>
 </html>
 """
-        return self._send(subject, html)
+        result = self._sender.send(subject, html)
+        return NotificationResult(result.success, result.message)

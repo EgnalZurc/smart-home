@@ -2,16 +2,17 @@
 Portfolio Monitor — Monitor Orchestrator.
 Manages scheduled execution of monitors and maintains state.
 Sends email alerts when WARN or DANGER signals are detected.
+
+Supports dependency injection for testing.
 """
 
 import asyncio
 import json
 import logging
 from datetime import datetime, time, timedelta, timezone
-from typing import Any
+from typing import Any, Protocol
 
 from config import DATA_DIR, SCHEDULE, reload_config
-from email_notifier import EmailNotifier
 from models import AlertLevel, MonitorState, PortfolioSummary
 
 logger = logging.getLogger(__name__)
@@ -20,17 +21,68 @@ logger = logging.getLogger(__name__)
 STATE_FILE = DATA_DIR / "state.json"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Protocols for dependency injection
+# ─────────────────────────────────────────────────────────────────────────────
+class NotifierProtocol(Protocol):
+    """Protocol for email notifier - allows dependency injection."""
+
+    @property
+    def enabled(self) -> bool: ...
+
+    def send_summary_alert(
+        self,
+        etf_results: list,
+        crypto_results: list,
+        overall_level: AlertLevel,
+        fear_greed: int | None = None,
+        savings_results: list | None = None,
+    ) -> Any: ...
+
+    def send_scheduled_alert(self, alert: Any) -> Any: ...
+
+
+class MonitorProtocol(Protocol):
+    """Protocol for monitors - allows dependency injection."""
+
+    name: str
+
+    async def run(self) -> dict[str, Any]: ...
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Orchestrator
+# ─────────────────────────────────────────────────────────────────────────────
 class Orchestrator:
     """Orchestrates the execution of portfolio monitors."""
 
-    def __init__(self):
+    def __init__(
+        self,
+        notifier: NotifierProtocol | None = None,
+        monitors: dict[str, MonitorProtocol] | None = None,
+    ):
+        """
+        Initialize the orchestrator.
+
+        Args:
+            notifier: Email notifier instance. If None, creates EmailNotifier.
+            monitors: Dict of monitor instances. If None, creates them on start().
+        """
         self._state = MonitorState()
         self._summary = PortfolioSummary()
-        self._monitors: dict[str, Any] = {}
-        self._notifier = EmailNotifier()
+        self._monitors: dict[str, Any] = monitors or {}
+        self._notifier = notifier
         self._running = False
         self._scheduler_task: asyncio.Task | None = None
         self._load_state()
+
+    def _get_notifier(self) -> NotifierProtocol:
+        """Get notifier, creating lazily if needed."""
+        if self._notifier is None:
+            from email_notifier import EmailNotifier
+
+            self._notifier = EmailNotifier()
+        return self._notifier
 
     def _load_state(self):
         """Load persisted state from disk."""
@@ -53,8 +105,11 @@ class Orchestrator:
             logger.error(f"Could not save state: {e}")
 
     async def _init_monitors(self):
-        """Initialize monitor instances."""
-        # Import monitors (they auto-register via decorator)
+        """Initialize monitor instances if not injected."""
+        if self._monitors:
+            logger.info(f"Using {len(self._monitors)} injected monitors")
+            return
+
         from monitors.crypto_monitor import CryptoMonitor
         from monitors.etf_monitor import ETFMonitor
         from monitors.savings_monitor import SavingsMonitor
@@ -158,7 +213,7 @@ class Orchestrator:
         """Check for alerts due today (or overdue) and send notifications."""
         from alerts import check_and_trigger_alerts
 
-        triggered = check_and_trigger_alerts(self._notifier)
+        triggered = check_and_trigger_alerts(self._get_notifier())
         if triggered:
             logger.info(f"Sent notifications for {len(triggered)} scheduled alerts")
 
@@ -167,7 +222,6 @@ class Orchestrator:
         Send email alerts for market conditions (ETF/Crypto).
 
         Only sends if there are actual WARN or DANGER signals.
-        This is separate from scheduled alerts (which are handled by check_and_trigger_alerts).
         """
         # Calculate overall level from actual market signals
         overall_level = AlertLevel.OK
@@ -208,7 +262,8 @@ class Orchestrator:
         )
 
         # Send summary alert
-        result = self._notifier.send_summary_alert(
+        notifier = self._get_notifier()
+        result = notifier.send_summary_alert(
             etf_results=self._summary.etf_analysis or [],
             crypto_results=self._summary.crypto_analysis or [],
             overall_level=overall_level,
@@ -248,7 +303,6 @@ class Orchestrator:
             # Calculate next run
             next_run = datetime.combine(today, scheduled_time, tzinfo=timezone.utc)
             if next_run <= now:
-                # Already passed today, schedule for tomorrow
                 tomorrow = today + timedelta(days=1)
                 next_run = datetime.combine(
                     tomorrow,
@@ -331,7 +385,9 @@ class Orchestrator:
         logger.info("Configuration reloaded")
 
 
-# Singleton instance
+# ─────────────────────────────────────────────────────────────────────────────
+# Singleton instance (with factory for dependency injection in tests)
+# ─────────────────────────────────────────────────────────────────────────────
 _orchestrator: Orchestrator | None = None
 
 
@@ -341,3 +397,15 @@ def get_orchestrator() -> Orchestrator:
     if _orchestrator is None:
         _orchestrator = Orchestrator()
     return _orchestrator
+
+
+def set_orchestrator(orch: Orchestrator) -> None:
+    """Set the orchestrator instance (for testing)."""
+    global _orchestrator
+    _orchestrator = orch
+
+
+def reset_orchestrator() -> None:
+    """Reset the orchestrator singleton (for testing)."""
+    global _orchestrator
+    _orchestrator = None
