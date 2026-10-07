@@ -8,24 +8,26 @@ Función: orquesta el scraping inmobiliario, la puntuación de propiedades,
 Responsabilidades:
   - Garantiza ejecución única mediante lockfile (singleton)
   - Arranca y supervisa el CasitaScheduler (scraping lunes/jueves, check Gmail 30min)
-  - Expone servidor HTTP en :8001 para el dashboard smart-home
+  - Expone servidor HTTP con FastAPI en :8001 para el dashboard smart-home
     · GET /health  → {"online": true}
     · GET /status  → estado completo (propiedades, errores scrapers, top casas)
 """
 
 from __future__ import annotations
 
-import contextlib
-import json
 import logging
 import os
 import signal
 import sys
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from scorer import ALERT_THRESHOLD as _ALERT_THRESHOLD
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -38,14 +40,14 @@ logger = logging.getLogger(__name__)
 # ── Configuración desde variables de entorno ─────────────────────────────────
 
 # Telegram
-TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # Apify
-APIFY_API_TOKEN = os.environ["APIFY_API_TOKEN"]
+APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN", "")
 
 # Gmail
-GMAIL_ADDRESS = os.environ["GMAIL_ADDRESS"]
+GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
 DATA_DIR = os.environ.get("CASITA_DATA_DIR", "/app/data")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 
@@ -54,6 +56,9 @@ DB_PATH = os.environ.get("CASITA_DB_PATH", f"{DATA_DIR}/casita.db")
 
 # Apify usage tracker
 APIFY_USAGE_PATH = os.environ.get("APIFY_USAGE_PATH", f"{DATA_DIR}/apify_usage.json")
+
+# Puerto
+STATUS_PORT = int(os.environ.get("CASITA_STATUS_PORT", "8001"))
 
 # ── Validación ────────────────────────────────────────────────────────────────
 
@@ -88,341 +93,421 @@ PROCESS_NAME = "casita-orquestador"
 
 
 def _set_process_name() -> None:
-    """
-    Fija el nombre del proceso a 'casita-orquestador' para que sea
-    identificable en ps/top/htop.
-    Intenta setproctitle si está disponible; si no, modifica argv[0].
-    """
-    import sys
-
+    """Fija el nombre del proceso para identificarlo en ps/top/htop."""
     try:
-        import setproctitle  # opcional: pip install setproctitle
+        import setproctitle
 
         setproctitle.setproctitle(PROCESS_NAME)
     except ImportError:
-        # Fallback: cambiar argv[0] (visible en ps en la mayoría de sistemas)
         if sys.argv:
             sys.argv[0] = PROCESS_NAME
-    # También nombramos el thread principal
-    import threading
-
     threading.current_thread().name = PROCESS_NAME
 
 
-_scheduler_instance = None  # referencia global para el servidor HTTP
+# ── Instancia global del scheduler ────────────────────────────────────────────
+_scheduler_instance = None
+_db_instance = None
+
+# ── FastAPI App ───────────────────────────────────────────────────────────────
+
+app = FastAPI(
+    title="Casita Sueños",
+    description="Orquestador de búsqueda inmobiliaria",
+    version="2.0.0",
+    docs_url=None,  # Deshabilitar docs en producción
+    redoc_url=None,
+)
 
 
-# ── Servidor HTTP de estado ────────────────────────────────────────────────────
+# ── Pydantic Models ───────────────────────────────────────────────────────────
 
 
-class _StatusHandler(BaseHTTPRequestHandler):
-    """Handler HTTP minimalista para los endpoints /health y /status."""
-
-    def log_message(self, format, *args):
-        pass  # silenciar logs de acceso HTTP
-
-    def _send_json(self, code: int, data: dict) -> None:
-        body = json.dumps(data, default=str).encode()
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", len(body))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def _serve_static_file(
-        self, filename: str, content_type: str | None = None
-    ) -> None:
-        """Serve a static file from the static/ directory."""
-        # Security: prevent path traversal
-        if ".." in filename or filename.startswith("/"):
-            self._send_json(400, {"error": "Invalid path"})
-            return
-
-        static_dir = Path(__file__).parent / "static"
-        filepath = static_dir / filename
-
-        if not filepath.exists() or not filepath.is_file():
-            self._send_json(404, {"error": f"File not found: {filename}"})
-            return
-
-        # Determine content type
-        if content_type is None:
-            ext = filepath.suffix.lower()
-            content_types = {
-                ".html": "text/html; charset=utf-8",
-                ".css": "text/css; charset=utf-8",
-                ".js": "application/javascript; charset=utf-8",
-                ".png": "image/png",
-                ".ico": "image/x-icon",
-                ".svg": "image/svg+xml",
-                ".json": "application/json",
-            }
-            content_type = content_types.get(ext, "application/octet-stream")
-        elif (
-            "html" in content_type
-            or "css" in content_type
-            or "javascript" in content_type
-        ):
-            content_type = f"{content_type}; charset=utf-8"
-
-        try:
-            with open(filepath, "rb") as f:
-                body = f.read()
-            self.send_response(200)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", len(body))
-            self.end_headers()
-            self.wfile.write(body)
-        except Exception as e:
-            self._send_json(500, {"error": str(e)})
-
-    def do_GET(self):
-        global _scheduler_instance
-
-        # Parse path without query string for route matching
-        from urllib.parse import urlparse
-
-        parsed_url = urlparse(self.path)
-        path = parsed_url.path
-
-        if path == "/health":
-            self._send_json(200, {"online": True})
-
-        elif path == "/status":
-            if _scheduler_instance is None:
-                self._send_json(503, {"online": False, "error": "Scheduler not ready"})
-                return
-            status = _scheduler_instance.get_status()
-            scraper_errors = [
-                {
-                    "portal": e.portal,
-                    "zone_id": e.zone_id,
-                    "error": e.error,
-                    "detected_at": e.detected_at.isoformat(),
-                }
-                for e in status.scraper_errors
-            ]
-            cfg = _scheduler_instance.get_schedule_config()
-            self._send_json(
-                200,
-                {
-                    "online": True,
-                    "running": status.running,
-                    "last_scraping": status.last_scraping.isoformat()
-                    if status.last_scraping
-                    else None,
-                    "last_gmail_check": status.last_gmail_check.isoformat()
-                    if status.last_gmail_check
-                    else None,
-                    "last_summary": status.last_summary.isoformat()
-                    if status.last_summary
-                    else None,
-                    "last_scraping_result": status.last_scraping_result,
-                    "total_properties": status.total_properties,
-                    "radar_count": status.radar_count,
-                    "dismissed_count": status.dismissed_count,
-                    "scraper_errors": scraper_errors,
-                    "scraper_errors_count": len(scraper_errors),
-                    "score_max": __import__("scorer").MAX_SCORE,
-                    "alert_threshold": __import__("scorer").ALERT_THRESHOLD,
-                    "alert_threshold_pct": round(
-                        __import__("scorer").ALERT_THRESHOLD
-                        / __import__("scorer").MAX_SCORE
-                        * 100
-                    ),
-                    "schedule": cfg,
-                    "top_properties": [
-                        {
-                            "uid": p.get("uid", ""),
-                            "title": p.get("title", ""),
-                            "price": p.get("price", 0),
-                            "score": round(p.get("score_total", 0), 1),
-                            "zone_id": p.get("zone_id", ""),
-                            "url": p.get("url", ""),
-                            "rooms": p.get("rooms"),
-                            "size_m2": p.get("size_m2"),
-                            "first_seen": p.get("first_seen", ""),
-                        }
-                        for p in status.top_properties
-                    ],
-                },
-            )
-
-        elif path.startswith("/radar"):
-            if _scheduler_instance is None:
-                self._send_json(503, {"error": "Not ready"})
-                return
-            # Parsear query params: ?limit=20&offset=0&sort_by=score&sort_dir=desc
-            from urllib.parse import parse_qs
-
-            qs = parse_qs(parsed_url.query)
-
-            def _qs(key, default):
-                return qs.get(key, [default])[0]
-
-            try:
-                limit = min(int(_qs("limit", "20")), 100)
-                offset = max(int(_qs("offset", "0")), 0)
-                sort_by = _qs("sort_by", "score")
-                sort_dir = _qs("sort_dir", "desc")
-            except (ValueError, TypeError):
-                limit, offset, sort_by, sort_dir = 20, 0, "score", "desc"
-            filter_by = _qs("filter", None)
-            portal_filter = _qs("portal", None)
-            result = _scheduler_instance.get_radar(
-                limit=limit,
-                offset=offset,
-                sort_by=sort_by,
-                sort_dir=sort_dir,
-                filter_by=filter_by,
-                portal_filter=portal_filter,
-            )
-            self._send_json(200, result)
-
-        elif path == "/dismissed":
-            if _scheduler_instance is None:
-                self._send_json(503, {"error": "Not ready"})
-                return
-            props = _scheduler_instance.get_dismissed()
-            self._send_json(200, {"properties": props})
-
-        elif path == "/schedule":
-            if _scheduler_instance is None:
-                self._send_json(503, {"error": "Not ready"})
-                return
-            self._send_json(200, _scheduler_instance.get_schedule_config())
-
-        elif path == "/summary":
-            if _scheduler_instance is None:
-                self._send_json(503, {"error": "Not ready"})
-                return
-            summary = _scheduler_instance.get_last_summary()
-            self._send_json(200, summary or {"content": None, "sent_at": None})
-
-        elif path in ("/", "/smart-home/casita", "/smart-home/casita/"):
-            # Serve the frontend HTML
-            self._serve_static_file("casita.html", "text/html")
-
-        elif path.startswith("/static/casita/"):
-            # Serve static files (CSS, images, etc.)
-            filename = path.replace("/static/casita/", "")
-            self._serve_static_file(filename)
-
-        else:
-            self._send_json(404, {"error": "Not found"})
-
-    def do_POST(self):
-        global _scheduler_instance
-        if _scheduler_instance is None:
-            self._send_json(503, {"error": "Not ready"})
-            return
-
-        # Parse path without query string
-        from urllib.parse import urlparse
-
-        parsed_url = urlparse(self.path)
-        path = parsed_url.path
-
-        length = int(self.headers.get("Content-Length", 0))
-        body = {}
-        if length:
-            with contextlib.suppress(Exception):
-                body = json.loads(self.rfile.read(length))
-
-        if path == "/dismiss":
-            uid = body.get("uid", "")
-            ok = _scheduler_instance.dismiss_property(uid)
-            self._send_json(200 if ok else 404, {"ok": ok, "uid": uid})
-
-        elif path == "/undismiss":
-            uid = body.get("uid", "")
-            ok = _scheduler_instance.undismiss_property(uid)
-            self._send_json(200 if ok else 404, {"ok": ok, "uid": uid})
-
-        elif path == "/schedule":
-            _scheduler_instance.save_schedule_config(body)
-            self._send_json(200, {"ok": True})
-
-        elif path == "/run-scraping":
-            import threading
-
-            threading.Thread(
-                target=_scheduler_instance.run_scraping_now,
-                daemon=True,
-                name="manual-scraping",
-            ).start()
-            self._send_json(202, {"ok": True, "message": "Scraping iniciado"})
-
-        elif path == "/telegram-webhook":
-            # Recibe updates del bot Telegram (webhook o polling manual)
-            # Procesa el comando /start para registrar el chat_id
-            try:
-                update = body
-                message = update.get("message", {})
-                chat = message.get("chat", {})
-                chat_id = str(chat.get("id", ""))
-                text = message.get("text", "")
-                username = chat.get("username", "") or chat.get("first_name", "")
-                if chat_id and text.startswith("/start"):
-                    if _scheduler_instance:
-                        _scheduler_instance._notifier.register_chat(chat_id, username)
-                    self._send_json(200, {"ok": True, "registered": chat_id})
-                else:
-                    self._send_json(200, {"ok": True})
-            except Exception as e:
-                self._send_json(200, {"ok": True, "warn": str(e)})
-        elif path == "/run-summary":
-            import threading
-
-            threading.Thread(
-                target=_scheduler_instance.run_summary_now,
-                daemon=True,
-                name="manual-summary",
-            ).start()
-            self._send_json(202, {"ok": True, "message": "Resumen iniciado"})
-        elif path == "/run-fotocasa-check":
-            import threading
-
-            threading.Thread(
-                target=_scheduler_instance.run_fotocasa_check_now,
-                daemon=True,
-                name="manual-fotocasa",
-            ).start()
-            self._send_json(202, {"ok": True, "message": "Fotocasa check iniciado"})
-        elif path == "/run-gmail-check":
-            import threading
-
-            threading.Thread(
-                target=_scheduler_instance.run_gmail_check_now,
-                daemon=True,
-                name="manual-gmail",
-            ).start()
-            self._send_json(202, {"ok": True, "message": "Gmail check iniciado"})
-        elif path == "/mark-viewed":
-            uid = body.get("uid", "")
-            ok = _scheduler_instance.mark_viewed(uid)
-            self._send_json(200 if ok else 404, {"ok": ok, "uid": uid})
-        elif path == "/save-comment":
-            uid = body.get("uid", "")
-            comment = body.get("comment", "")
-            ok = _scheduler_instance.save_comment(uid, comment)
-            self._send_json(200 if ok else 404, {"ok": ok, "uid": uid})
-
-        else:
-            self._send_json(404, {"error": "Not found"})
+class PropertyUid(BaseModel):
+    uid: str
 
 
-def _start_status_server(port: int) -> None:
-    """Arranca el servidor HTTP de estado en un thread daemon."""
-    server = HTTPServer(("0.0.0.0", port), _StatusHandler)  # nosec B104
-    thread = threading.Thread(
-        target=server.serve_forever, daemon=True, name="casita-http"
+class CommentRequest(BaseModel):
+    uid: str
+    comment: str
+
+
+class ScheduleConfig(BaseModel):
+    scraping_enabled: bool | None = None
+    scraping_days: list[int] | None = None
+    scraping_hour: int | None = None
+    gmail_check_enabled: bool | None = None
+    gmail_interval_min: int | None = None
+    summary_enabled: bool | None = None
+    summary_day: int | None = None
+    summary_hour: int | None = None
+
+
+# ── Middleware de errores ─────────────────────────────────────────────────────
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception("[http] Unhandled exception: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal server error"},
     )
-    thread.start()
-    logger.info("[main] Servidor HTTP de estado en puerto %d", port)
+
+
+# ── Static files ──────────────────────────────────────────────────────────────
+
+STATIC_DIR = Path(__file__).parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/static/casita", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+# ── Health & Status endpoints ─────────────────────────────────────────────────
+
+
+@app.get("/health")
+async def health():
+    return {"online": True}
+
+
+@app.get("/status")
+async def status():
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Scheduler not ready")
+
+    import scorer
+
+    status_obj = _scheduler_instance.get_status()
+    scraper_errors = [
+        {
+            "portal": e.portal,
+            "zone_id": e.zone_id,
+            "error": e.error,
+            "detected_at": e.detected_at.isoformat(),
+        }
+        for e in status_obj.scraper_errors
+    ]
+    cfg = _scheduler_instance.get_schedule_config()
+
+    return {
+        "online": True,
+        "running": status_obj.running,
+        "last_scraping": status_obj.last_scraping.isoformat()
+        if status_obj.last_scraping
+        else None,
+        "last_gmail_check": status_obj.last_gmail_check.isoformat()
+        if status_obj.last_gmail_check
+        else None,
+        "last_summary": status_obj.last_summary.isoformat()
+        if status_obj.last_summary
+        else None,
+        "last_scraping_result": status_obj.last_scraping_result,
+        "total_properties": status_obj.total_properties,
+        "radar_count": status_obj.radar_count,
+        "dismissed_count": status_obj.dismissed_count,
+        "scraper_errors": scraper_errors,
+        "scraper_errors_count": len(scraper_errors),
+        "score_max": scorer.MAX_SCORE,
+        "alert_threshold": scorer.ALERT_THRESHOLD,
+        "alert_threshold_pct": round(scorer.ALERT_THRESHOLD / scorer.MAX_SCORE * 100),
+        "schedule": cfg,
+        "top_properties": [
+            {
+                "uid": p.get("uid", ""),
+                "title": p.get("title", ""),
+                "price": p.get("price", 0),
+                "score": round(p.get("score_total", 0), 1),
+                "zone_id": p.get("zone_id", ""),
+                "url": p.get("url", ""),
+                "rooms": p.get("rooms"),
+                "size_m2": p.get("size_m2"),
+                "first_seen": p.get("first_seen", ""),
+            }
+            for p in status_obj.top_properties
+        ],
+    }
+
+
+# ── Radar & Properties endpoints ──────────────────────────────────────────────
+
+
+@app.get("/radar")
+async def get_radar(
+    limit: int = 20,
+    offset: int = 0,
+    sort_by: str = "score",
+    sort_dir: str = "desc",
+    filter: str | None = None,
+    portal: str | None = None,
+):
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+
+    limit = min(limit, 100)
+    offset = max(offset, 0)
+
+    return _scheduler_instance.get_radar(
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        filter_by=filter,
+        portal_filter=portal,
+    )
+
+
+@app.get("/dismissed")
+async def get_dismissed():
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+    return {"properties": _scheduler_instance.get_dismissed()}
+
+
+@app.post("/dismiss")
+async def dismiss_property(req: PropertyUid):
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+    ok = _scheduler_instance.dismiss_property(req.uid)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Property not found")
+    return {"ok": True, "uid": req.uid}
+
+
+@app.post("/undismiss")
+async def undismiss_property(req: PropertyUid):
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+    ok = _scheduler_instance.undismiss_property(req.uid)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Property not found")
+    return {"ok": True, "uid": req.uid}
+
+
+@app.post("/mark-viewed")
+async def mark_viewed(req: PropertyUid):
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+    ok = _scheduler_instance.mark_viewed(req.uid)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Property not found")
+    return {"ok": True, "uid": req.uid}
+
+
+@app.post("/save-comment")
+async def save_comment(req: CommentRequest):
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+    ok = _scheduler_instance.save_comment(req.uid, req.comment)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Property not found")
+    return {"ok": True, "uid": req.uid}
+
+
+# ── Schedule endpoints ────────────────────────────────────────────────────────
+
+
+@app.get("/schedule")
+async def get_schedule():
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+    return _scheduler_instance.get_schedule_config()
+
+
+@app.post("/schedule")
+async def save_schedule(config: ScheduleConfig):
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+
+    # Only save non-None fields
+    validated = {k: v for k, v in config.model_dump().items() if v is not None}
+    if validated:
+        _scheduler_instance.save_schedule_config(validated)
+    return {"ok": True}
+
+
+@app.get("/summary")
+async def get_summary():
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+    summary = _scheduler_instance.get_last_summary()
+    return summary or {"content": None, "sent_at": None}
+
+
+# ── Manual trigger endpoints ──────────────────────────────────────────────────
+
+
+@app.post("/run-scraping")
+async def run_scraping():
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+    threading.Thread(
+        target=_scheduler_instance.run_scraping_now,
+        daemon=True,
+        name="manual-scraping",
+    ).start()
+    return {"ok": True, "message": "Scraping iniciado"}
+
+
+@app.post("/run-gmail-check")
+async def run_gmail_check():
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+    threading.Thread(
+        target=_scheduler_instance.run_gmail_check_now,
+        daemon=True,
+        name="manual-gmail",
+    ).start()
+    return {"ok": True, "message": "Gmail check iniciado"}
+
+
+@app.post("/run-fotocasa-check")
+async def run_fotocasa_check():
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+    threading.Thread(
+        target=_scheduler_instance.run_fotocasa_check_now,
+        daemon=True,
+        name="manual-fotocasa",
+    ).start()
+    return {"ok": True, "message": "Fotocasa check iniciado"}
+
+
+@app.post("/run-summary")
+async def run_summary():
+    if _scheduler_instance is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+    threading.Thread(
+        target=_scheduler_instance.run_summary_now,
+        daemon=True,
+        name="manual-summary",
+    ).start()
+    return {"ok": True, "message": "Resumen iniciado"}
+
+
+# ── Telegram webhook ──────────────────────────────────────────────────────────
+
+
+@app.post("/telegram-webhook")
+async def telegram_webhook(request: Request):
+    if _scheduler_instance is None:
+        return {"ok": True}
+
+    try:
+        body = await request.json()
+        message = body.get("message", {})
+        chat = message.get("chat", {})
+        chat_id = str(chat.get("id", ""))
+        text = message.get("text", "")
+        username = chat.get("username", "") or chat.get("first_name", "")
+
+        if chat_id and text.startswith("/start"):
+            _scheduler_instance._notifier.register_chat(chat_id, username)
+            return {"ok": True, "registered": chat_id}
+    except Exception as e:
+        logger.debug("[telegram] Webhook error: %s", e)
+
+    return {"ok": True}
+
+
+# ── Frontend routes ───────────────────────────────────────────────────────────
+
+
+@app.get("/", response_class=HTMLResponse)
+@app.get("/smart-home/casita", response_class=HTMLResponse)
+@app.get("/smart-home/casita/", response_class=HTMLResponse)
+async def serve_frontend():
+    html_path = STATIC_DIR / "casita.html"
+    if not html_path.exists():
+        raise HTTPException(status_code=404, detail="Frontend not found")
+    return FileResponse(html_path, media_type="text/html")
+
+
+# ── Telegram polling (background thread) ──────────────────────────────────────
+
+
+def _telegram_polling() -> None:
+    """Background thread that polls Telegram for /start commands."""
+    import httpx
+
+    token = TELEGRAM_BOT_TOKEN
+    offset = 0
+    url = f"https://api.telegram.org/bot{token}/getUpdates"
+    logger.info("[main] Polling Telegram iniciado")
+
+    while True:
+        try:
+            resp = httpx.get(url, params={"offset": offset, "timeout": 30}, timeout=35)
+            updates = resp.json().get("result", [])
+            for upd in updates:
+                offset = upd["update_id"] + 1
+                msg = upd.get("message", {})
+                text = msg.get("text", "")
+                chat = msg.get("chat", {})
+                chat_id = str(chat.get("id", ""))
+                username = chat.get("username", "") or chat.get("first_name", "")
+
+                if chat_id and text.startswith("/start") and _db_instance:
+                    _db_instance.register_telegram_chat(chat_id, username)
+                    logger.info(
+                        "[main] Nuevo chat registrado via /start: %s (%s)",
+                        chat_id,
+                        username,
+                    )
+                    # Mensaje de bienvenida
+                    httpx.post(
+                        f"https://api.telegram.org/bot{token}/sendMessage",
+                        json={
+                            "chat_id": chat_id,
+                            "text": "Bienvenido/a a Casita Sueños! Recibirás alertas de nuevas casas en el radar.",
+                        },
+                        timeout=10,
+                    )
+        except Exception as e:
+            logger.debug("[main] Telegram polling error: %s", e)
+        time.sleep(1)
 
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
+
+
+def _init_scheduler():
+    """Initialize scheduler and related components."""
+    global _scheduler_instance, _db_instance
+
+    from apify_client_wrapper import ApifyUsageTracker, IdealistaApifyClient
+    from casita_scheduler import CasitaScheduler
+    from database import Database
+    from notifier import TelegramNotifier
+
+    # Instanciar componentes
+    db = Database(DB_PATH)
+    _db_instance = db
+    notifier = TelegramNotifier(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, db=db)
+    tracker = ApifyUsageTracker(APIFY_USAGE_PATH)
+    apify = IdealistaApifyClient(APIFY_API_TOKEN, tracker)
+
+    scheduler = CasitaScheduler(
+        db=db,
+        notifier=notifier,
+        apify=apify,
+        gmail_address=GMAIL_ADDRESS,
+        gmail_app_password=GMAIL_APP_PASSWORD,
+    )
+
+    _scheduler_instance = scheduler
+
+    # Notificar arranque
+    radar_count = len(
+        db.get_radar_properties(min_score=_ALERT_THRESHOLD, limit=500).get("items", [])
+    )
+    notifier.send_status(
+        f"🚀 Casita Sueños arrancado · {radar_count} casas en el radar"
+    )
+
+    # Arrancar scheduler
+    scheduler.start()
+    logger.info("[main] Scheduler activo")
+
+    return db
 
 
 def main() -> None:
@@ -440,111 +525,35 @@ def main() -> None:
 
     logger.info("[main] ── Iniciando %s ──────────────────────────", PROCESS_NAME)
 
-    # Puerto del servidor HTTP de estado
-    STATUS_PORT = int(os.environ.get("CASITA_STATUS_PORT", "8001"))
+    # Inicializar scheduler en background
+    db = _init_scheduler()
 
-    # Importar aquí para que el logging esté configurado antes
-    from apify_client_wrapper import ApifyUsageTracker, IdealistaApifyClient
-    from casita_scheduler import CasitaScheduler
-    from database import Database
-    from notifier import TelegramNotifier
-
-    # Instanciar componentes
-    db = Database(DB_PATH)
-    notifier = TelegramNotifier(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, db=db)
-    tracker = ApifyUsageTracker(APIFY_USAGE_PATH)
-    apify = IdealistaApifyClient(APIFY_API_TOKEN, tracker)
-
-    scheduler = CasitaScheduler(
-        db=db,
-        notifier=notifier,
-        apify=apify,
-        gmail_address=GMAIL_ADDRESS,
-        gmail_app_password=GMAIL_APP_PASSWORD,
-    )
-
-    # Registrar referencia global para el servidor HTTP
-    global _scheduler_instance
-    _scheduler_instance = scheduler
-
-    # Arrancar polling de Telegram para registrar nuevos chats (/start)
-    def _telegram_polling() -> None:
-        import time as _time
-
-        import httpx
-
-        token = TELEGRAM_BOT_TOKEN
-        offset = 0
-        url = f"https://api.telegram.org/bot{token}/getUpdates"
-        logger.info("[main] Polling Telegram iniciado")
-        while True:
-            try:
-                resp = httpx.get(
-                    url, params={"offset": offset, "timeout": 30}, timeout=35
-                )
-                updates = resp.json().get("result", [])
-                for upd in updates:
-                    offset = upd["update_id"] + 1
-                    msg = upd.get("message", {})
-                    text = msg.get("text", "")
-                    chat = msg.get("chat", {})
-                    chat_id = str(chat.get("id", ""))
-                    username = chat.get("username", "") or chat.get("first_name", "")
-                    if chat_id and text.startswith("/start"):
-                        db.register_telegram_chat(chat_id, username)
-                        logger.info(
-                            "[main] Nuevo chat registrado via /start: %s (%s)",
-                            chat_id,
-                            username,
-                        )
-                        # Mensaje de bienvenida
-                        httpx.post(
-                            f"https://api.telegram.org/bot{token}/sendMessage",
-                            json={
-                                "chat_id": chat_id,
-                                "text": "Bienvenido/a a Casita Suenos! Recibiras alertas de nuevas casas en el radar.",
-                            },
-                            timeout=10,
-                        )
-            except Exception as e:
-                logger.debug("[main] Telegram polling error: %s", e)
-            _time.sleep(1)
-
+    # Arrancar polling de Telegram
     threading.Thread(
         target=_telegram_polling, daemon=True, name="telegram-polling"
     ).start()
 
-    # Arrancar servidor HTTP de estado (para dashboard)
-    _start_status_server(STATUS_PORT)
-
-    # Notificar arranque
-    radar_count = len(
-        db.get_radar_properties(min_score=_ALERT_THRESHOLD, limit=500).get("items", [])
-    )
-    notifier.send_status(
-        f"🚀 Casita Suenos arrancado · {radar_count} casas en el radar"
-    )
-
-    # Arrancar scheduler
-    scheduler.start()
-    logger.info("[main] Scheduler activo. Ctrl+C para detener.")
-
     # Graceful shutdown
     def _shutdown(signum, frame):
         logger.info("[main] Señal %s recibida — apagando", signum)
-        scheduler.stop()
-        db.close()
+        if _scheduler_instance:
+            _scheduler_instance.stop()
+        if db:
+            db.close()
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
 
-    # Mantener el proceso vivo
-    try:
-        while True:
-            time.sleep(60)
-    except KeyboardInterrupt:
-        _shutdown(None, None)
+    # Arrancar servidor con uvicorn
+    logger.info("[main] Servidor HTTP en puerto %d", STATUS_PORT)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",  # nosec B104 - internal container network
+        port=STATUS_PORT,
+        log_level="warning",
+        access_log=False,
+    )
 
 
 if __name__ == "__main__":

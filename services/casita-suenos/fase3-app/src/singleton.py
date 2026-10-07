@@ -91,7 +91,7 @@ def _ensure_singleton_windows(lock_path: str) -> None:
                 _ensure_singleton_windows(lock_path)
                 return
         except Exception:
-            pass
+            logger.debug("[singleton] Could not read/validate existing lock file")
         logger.error(
             "[singleton] Ya hay otra instancia corriendo (lock: %s). Terminando.",
             lock_path,

@@ -464,7 +464,7 @@ jobs:
         run: |
           if [[ -d "services/casita-suenos/fase3-app/tests" ]] && find services/casita-suenos/fase3-app/tests -name "test_*.py" | grep -q .; then
             pip install -r services/casita-suenos/fase3-app/requirements.txt --quiet 2>/dev/null || true
-            cd services/casita-suenos/fase3-app && PYTHONPATH=src python -m pytest tests/ -v --tb=short
+            cd services/casita-suenos/fase3-app && PYTHONPATH=src python -m pytest tests/ -v --tb=short --cov=src --cov-config=pytest.ini --cov-report=term-missing --cov-fail-under=80
           else
             echo "⏭️ No tests found"
           fi

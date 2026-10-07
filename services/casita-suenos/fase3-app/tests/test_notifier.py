@@ -300,3 +300,162 @@ class TestTelegramNotifier:
             chat_ids = notifier._get_chat_ids()
         
         assert chat_ids == ["fallback_456"]
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Additional notifier tests for coverage
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSendMethods:
+    """Tests for TelegramNotifier send methods."""
+
+    def test_send_without_chat_ids(self):
+        """Test that send fails gracefully without chat IDs."""
+        from notifier import TelegramNotifier
+        from unittest.mock import MagicMock
+
+        # Create notifier with mock bot
+        notifier = TelegramNotifier.__new__(TelegramNotifier)
+        notifier._bot = MagicMock()
+        notifier._bot.token = "fake_token"
+        notifier._fallback_chat_id = ""
+        notifier._db = None
+
+        # Should return False when no chat IDs
+        result = notifier.send_status("test message")
+        assert result is False
+
+    def test_send_status_format(self, monkeypatch):
+        """Test that send_status adds info emoji."""
+        from notifier import TelegramNotifier
+        from unittest.mock import MagicMock, patch
+
+        sent_texts = []
+
+        def mock_post(*args, **kwargs):
+            sent_texts.append(kwargs.get("json", {}).get("text", ""))
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = {"ok": True}
+            return mock_resp
+
+        # Create notifier with mock
+        notifier = TelegramNotifier.__new__(TelegramNotifier)
+        notifier._bot = MagicMock()
+        notifier._bot.token = "fake_token"
+        notifier._fallback_chat_id = "123456"
+        notifier._db = None
+
+        with patch("httpx.post", mock_post):
+            notifier.send_status("Test message")
+
+        assert len(sent_texts) == 1
+        assert "ℹ️" in sent_texts[0]
+        assert "Test message" in sent_texts[0]
+
+
+class TestFormattingHelpers:
+    """Tests for formatting helper functions."""
+
+    def test_escape_md_brackets(self):
+        """Test markdown escaping for brackets."""
+        from notifier import _escape_md
+
+        result = _escape_md("text [with] brackets")
+        assert "\\[" in result
+        assert "\\]" not in result  # only [ is escaped in current impl
+
+    def test_escape_md_combined(self):
+        """Test markdown escaping with multiple special chars."""
+        from notifier import _escape_md
+
+        result = _escape_md("*bold* _italic_ `code`")
+        assert "\\*" in result
+        assert "\\_" in result
+        assert "\\`" in result
+
+
+class TestWeeklySummaryFormatting:
+    """Tests for weekly summary formatting."""
+
+    def test_format_weekly_summary_with_rooms_and_size(self):
+        """Test summary includes rooms and size when available."""
+        from notifier import _format_weekly_summary
+
+        props = [
+            {
+                "price": 150000,
+                "score_total": 130.5,
+                "rooms": 4,
+                "size_m2": 120.0,
+                "zone_id": "zamora_meseta",
+                "url": "https://example.com/1",
+            }
+        ]
+        result = _format_weekly_summary(props)
+
+        assert "150.000€" in result
+        assert "130.5pts" in result
+        assert "4 hab." in result
+        assert "120m²" in result
+
+    def test_format_weekly_summary_missing_details(self):
+        """Test summary handles missing rooms/size."""
+        from notifier import _format_weekly_summary
+
+        props = [
+            {
+                "price": 100000,
+                "score_total": 120.0,
+                "rooms": None,
+                "size_m2": None,
+                "zone_id": "test_zone",
+                "url": "https://example.com/2",
+            }
+        ]
+        result = _format_weekly_summary(props)
+
+        assert "100.000€" in result
+        assert "120.0pts" in result
+
+
+class TestPriceDropFormatting:
+    """Tests for price drop alert formatting."""
+
+    def test_format_price_drop_shows_difference(self):
+        """Test price drop shows the delta."""
+        from notifier import _format_price_drop_alert
+        from models import PriceEvent
+        from datetime import datetime
+
+        event = PriceEvent(
+            property_uid="test:123",
+            old_price=200000,
+            new_price=180000,
+            detected_at=datetime.now(),
+        )
+
+        result = _format_price_drop_alert(event, "Test Casa", "https://example.com", "Zamora")
+
+        assert "📉" in result
+        assert "200.000€" in result
+        assert "180.000€" in result
+        assert "-20.000€" in result or "-20000€" in result
+
+    def test_format_price_increase(self):
+        """Test price increase shows upward arrow."""
+        from notifier import _format_price_drop_alert
+        from models import PriceEvent
+        from datetime import datetime
+
+        event = PriceEvent(
+            property_uid="test:123",
+            old_price=180000,
+            new_price=200000,
+            detected_at=datetime.now(),
+        )
+
+        result = _format_price_drop_alert(event, "Test Casa", "https://example.com", "Zamora")
+
+        assert "📈" in result
