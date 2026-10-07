@@ -19,7 +19,9 @@ class TestInvitationCreation:
 
     def test_create_invitation_sets_expiry(self, tmp_data_dir):
         """create_invitation should set expiry to 6 months."""
-        from gifts_controller import INVITATION_EXPIRY_DAYS, create_invitation
+        import config
+
+        from gifts_controller import create_invitation
 
         result = create_invitation("Expiring Guest")
 
@@ -29,7 +31,7 @@ class TestInvitationCreation:
 
         # Should be approximately 6 months
         diff_days = (expires - created).days
-        assert abs(diff_days - INVITATION_EXPIRY_DAYS) <= 1
+        assert abs(diff_days - config.INVITATION_EXPIRY_DAYS) <= 1
 
     def test_create_multiple_unique_tokens(self, tmp_data_dir):
         """Multiple invitations should have unique tokens."""
@@ -237,3 +239,91 @@ class TestReservationCounting:
         count = get_invitation_reservations(inv["token"])
 
         assert count == 0
+
+
+
+class TestInvitationExpiry:
+    """Tests for invitation expiry functionality."""
+
+    def test_expired_invitation_not_validated(self, tmp_data_dir):
+        """Expired invitation should not be validated."""
+        from datetime import datetime, timedelta
+
+        from gifts_controller import _get_db, create_invitation, validate_invitation
+
+        # Create invitation
+        created = create_invitation("Expired Guest")
+
+        # Manually set expiry to past
+        conn = _get_db()
+        past_date = (datetime.now() - timedelta(days=1)).isoformat()
+        conn.execute(
+            "UPDATE invitations SET expires_at = ? WHERE token = ?",
+            (past_date, created["token"]),
+        )
+        conn.commit()
+        conn.close()
+
+        # Should return None (expired)
+        result = validate_invitation(created["token"])
+        assert result is None
+
+    def test_list_invitations_marks_expired(self, tmp_data_dir):
+        """list_invitations should mark expired invitations."""
+        from datetime import datetime, timedelta
+
+        from gifts_controller import _get_db, create_invitation, list_invitations
+
+        # Create invitation
+        created = create_invitation("Expiring Guest")
+
+        # Set expiry to past
+        conn = _get_db()
+        past_date = (datetime.now() - timedelta(days=1)).isoformat()
+        conn.execute(
+            "UPDATE invitations SET expires_at = ? WHERE token = ?",
+            (past_date, created["token"]),
+        )
+        conn.commit()
+        conn.close()
+
+        # Check expired flag
+        invitations = list_invitations()
+        expired_inv = next(
+            inv for inv in invitations if inv["token"] == created["token"]
+        )
+        assert expired_inv["expired"] is True
+
+    def test_list_invitations_non_expired(self, tmp_data_dir):
+        """list_invitations should not mark non-expired invitations."""
+        from gifts_controller import create_invitation, list_invitations
+
+        created = create_invitation("Valid Guest")
+
+        invitations = list_invitations()
+        valid_inv = next(
+            inv for inv in invitations if inv["token"] == created["token"]
+        )
+        assert valid_inv["expired"] is False
+
+
+class TestGiftsDataEdgeCases:
+    """Tests for edge cases in gifts data handling."""
+
+    def test_load_gifts_handles_missing_file(self, tmp_data_dir):
+        """_load_gifts should return empty list if file doesn't exist."""
+        from gifts_controller import get_gifts_data
+
+        data = get_gifts_data()
+        assert data["gifts"] == []
+
+    def test_load_gifts_handles_corrupt_json(self, tmp_data_dir):
+        """_load_gifts should handle corrupt JSON gracefully."""
+        from gifts_controller import GIFTS_FILE, get_gifts_data
+
+        # Write corrupt JSON
+        GIFTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        GIFTS_FILE.write_text("{ this is not valid json", encoding="utf-8")
+
+        data = get_gifts_data()
+        assert data["gifts"] == []

@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 # Set test environment variables before importing modules
 os.environ["DATA_DIR"] = tempfile.mkdtemp()
+os.environ["TRUSTED_PROXY_IPS"] = "127.0.0.1,testclient"
 
 
 @pytest.fixture
@@ -20,31 +21,39 @@ def tmp_data_dir(tmp_path):
 
     This fixture ensures complete isolation between tests by:
     1. Using a fresh temp directory for each test
-    2. Resetting module-level variables
+    2. Resetting module-level variables in config
     3. Deleting any existing data files
     """
+    import config
     import gifts_controller
 
-    original_data_dir = gifts_controller.DATA_DIR
-    original_gifts_file = gifts_controller.GIFTS_FILE
-    original_db_file = gifts_controller.DB_FILE
+    # Save original values
+    original_data_dir = config.DATA_DIR
+    original_gifts_file = config.GIFTS_FILE
+    original_db_file = config.DB_FILE
 
-    # Set new paths for this test
+    # Set new paths in config
+    config.DATA_DIR = tmp_path
+    config.GIFTS_FILE = tmp_path / "gifts.json"
+    config.DB_FILE = tmp_path / "baby_gifts.db"
+
+    # Also update gifts_controller's references (it imports from config at module load)
     gifts_controller.DATA_DIR = tmp_path
     gifts_controller.GIFTS_FILE = tmp_path / "gifts.json"
     gifts_controller.DB_FILE = tmp_path / "baby_gifts.db"
 
     # Ensure no leftover data
-    if gifts_controller.GIFTS_FILE.exists():
-        gifts_controller.GIFTS_FILE.unlink()
-    if gifts_controller.DB_FILE.exists():
-        gifts_controller.DB_FILE.unlink()
+    if config.GIFTS_FILE.exists():
+        config.GIFTS_FILE.unlink()
+    if config.DB_FILE.exists():
+        config.DB_FILE.unlink()
 
     yield tmp_path
 
-    gifts_controller.DATA_DIR = original_data_dir
-    gifts_controller.GIFTS_FILE = original_gifts_file
-    gifts_controller.DB_FILE = original_db_file
+    # Restore original values
+    config.DATA_DIR = original_data_dir
+    config.GIFTS_FILE = original_gifts_file
+    config.DB_FILE = original_db_file
 
 
 @pytest.fixture

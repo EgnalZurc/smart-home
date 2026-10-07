@@ -4,19 +4,30 @@ import importlib
 from unittest.mock import MagicMock, patch
 
 
+def _reload_notifier_with_config(monkeypatch, token="", chat_id="", chat_ids=""):
+    """Helper to reload notifier with new config values."""
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", token)
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", chat_id)
+    monkeypatch.setenv("TELEGRAM_CHAT_IDS", chat_ids)
+
+    # Reload config first to pick up new env vars
+    import config
+
+    importlib.reload(config)
+
+    # Then reload notifier which imports from config
+    import notifier
+
+    importlib.reload(notifier)
+    return notifier
+
+
 class TestNotifier:
     """Tests for send_gift_notification function."""
 
     def test_notification_skipped_when_credentials_missing(self, monkeypatch):
         """Verify no error occurs when env vars are not set."""
-        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
-        monkeypatch.setenv("TELEGRAM_CHAT_IDS", "")
-
-        # Reload module to pick up new env vars
-        import notifier
-
-        importlib.reload(notifier)
+        notifier = _reload_notifier_with_config(monkeypatch, "", "", "")
 
         # Should return False but not raise any exception
         result = notifier.send_gift_notification("Test Gift", "John", "reserved")
@@ -24,13 +35,9 @@ class TestNotifier:
 
     def test_notification_message_format_reserved(self, monkeypatch):
         """Verify the message format for reserved action."""
-        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test_token")
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "test_chat_id")
-        monkeypatch.setenv("TELEGRAM_CHAT_IDS", "")
-
-        import notifier
-
-        importlib.reload(notifier)
+        notifier = _reload_notifier_with_config(
+            monkeypatch, "test_token", "test_chat_id", ""
+        )
 
         with patch("notifier.httpx.post") as mock_post:
             mock_response = MagicMock()
@@ -47,13 +54,9 @@ class TestNotifier:
 
     def test_notification_message_format_unreserved(self, monkeypatch):
         """Verify the message format for unreserved action."""
-        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test_token")
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "test_chat_id")
-        monkeypatch.setenv("TELEGRAM_CHAT_IDS", "")
-
-        import notifier
-
-        importlib.reload(notifier)
+        notifier = _reload_notifier_with_config(
+            monkeypatch, "test_token", "test_chat_id", ""
+        )
 
         with patch("notifier.httpx.post") as mock_post:
             mock_response = MagicMock()
@@ -70,13 +73,9 @@ class TestNotifier:
 
     def test_notification_sends_to_telegram(self, monkeypatch):
         """Verify correct URL and payload are sent to Telegram."""
-        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "my_bot_token")
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "123456789")
-        monkeypatch.setenv("TELEGRAM_CHAT_IDS", "")
-
-        import notifier
-
-        importlib.reload(notifier)
+        notifier = _reload_notifier_with_config(
+            monkeypatch, "my_bot_token", "123456789", ""
+        )
 
         with patch("notifier.httpx.post") as mock_post:
             mock_response = MagicMock()
@@ -103,13 +102,9 @@ class TestNotifier:
 
     def test_notification_handles_api_error(self, monkeypatch):
         """Verify the function handles API errors gracefully."""
-        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test_token")
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "test_chat_id")
-        monkeypatch.setenv("TELEGRAM_CHAT_IDS", "")
-
-        import notifier
-
-        importlib.reload(notifier)
+        notifier = _reload_notifier_with_config(
+            monkeypatch, "test_token", "test_chat_id", ""
+        )
 
         with patch("notifier.httpx.post") as mock_post:
             mock_response = MagicMock()
@@ -126,13 +121,9 @@ class TestNotifier:
 
     def test_notification_handles_timeout(self, monkeypatch):
         """Verify the function handles timeout gracefully."""
-        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test_token")
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "test_chat_id")
-        monkeypatch.setenv("TELEGRAM_CHAT_IDS", "")
-
-        import notifier
-
-        importlib.reload(notifier)
+        notifier = _reload_notifier_with_config(
+            monkeypatch, "test_token", "test_chat_id", ""
+        )
 
         import httpx
 
@@ -146,13 +137,9 @@ class TestNotifier:
 
     def test_notification_sends_to_multiple_chat_ids(self, monkeypatch):
         """Verify notifications are sent to all chat IDs in TELEGRAM_CHAT_IDS."""
-        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test_token")
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
-        monkeypatch.setenv("TELEGRAM_CHAT_IDS", "111,222,333")
-
-        import notifier
-
-        importlib.reload(notifier)
+        notifier = _reload_notifier_with_config(
+            monkeypatch, "test_token", "", "111,222,333"
+        )
 
         with patch("notifier.httpx.post") as mock_post:
             mock_response = MagicMock()
@@ -173,13 +160,9 @@ class TestNotifier:
 
     def test_chat_ids_takes_priority_over_chat_id(self, monkeypatch):
         """Verify TELEGRAM_CHAT_IDS takes priority over TELEGRAM_CHAT_ID."""
-        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test_token")
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "old_single_id")
-        monkeypatch.setenv("TELEGRAM_CHAT_IDS", "new_id_1,new_id_2")
-
-        import notifier
-
-        importlib.reload(notifier)
+        notifier = _reload_notifier_with_config(
+            monkeypatch, "test_token", "old_single_id", "new_id_1,new_id_2"
+        )
 
         with patch("notifier.httpx.post") as mock_post:
             mock_response = MagicMock()
@@ -198,13 +181,9 @@ class TestNotifier:
 
     def test_chat_ids_handles_whitespace(self, monkeypatch):
         """Verify TELEGRAM_CHAT_IDS handles whitespace correctly."""
-        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test_token")
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
-        monkeypatch.setenv("TELEGRAM_CHAT_IDS", " 111 , 222 , 333 ")
-
-        import notifier
-
-        importlib.reload(notifier)
+        notifier = _reload_notifier_with_config(
+            monkeypatch, "test_token", "", " 111 , 222 , 333 "
+        )
 
         with patch("notifier.httpx.post") as mock_post:
             mock_response = MagicMock()
@@ -221,13 +200,9 @@ class TestNotifier:
 
     def test_partial_failure_returns_false(self, monkeypatch):
         """Verify partial failures return False but continue sending."""
-        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test_token")
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
-        monkeypatch.setenv("TELEGRAM_CHAT_IDS", "good_id,bad_id")
-
-        import notifier
-
-        importlib.reload(notifier)
+        notifier = _reload_notifier_with_config(
+            monkeypatch, "test_token", "", "good_id,bad_id"
+        )
 
         def mock_post_side_effect(url, **kwargs):
             mock_response = MagicMock()

@@ -29,24 +29,21 @@ Invitation structure (SQLite):
 
 import json
 import logging
-import os
 import secrets
 import sqlite3
 import threading
 from datetime import datetime, timedelta
-from pathlib import Path
+
+import config
 
 logger = logging.getLogger(__name__)
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
-DATA_DIR = Path(os.environ.get("DATA_DIR", "/app/data"))
-GIFTS_FILE = DATA_DIR / "gifts.json"
-DB_FILE = DATA_DIR / "baby_gifts.db"
 _lock = threading.Lock()
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-INVITATION_EXPIRY_DAYS = 180  # 6 months
-FAMILIA_USERS = {"egnal", "virchu"}  # Users with FAMILIA permission
+# Module-level references that can be patched by tests
+DATA_DIR = config.DATA_DIR
+GIFTS_FILE = config.GIFTS_FILE
+DB_FILE = config.DB_FILE
 
 
 # ── Database setup ────────────────────────────────────────────────────────────
@@ -262,7 +259,7 @@ def toggle_gift_visibility(gift_id: str) -> dict:
 
 def is_familia_user(username: str) -> bool:
     """Check if a user has FAMILIA permission."""
-    return username.lower() in FAMILIA_USERS
+    return username.lower() in config.FAMILIA_USERS
 
 
 # ── Invitations ───────────────────────────────────────────────────────────────
@@ -270,7 +267,7 @@ def create_invitation(name: str) -> dict:
     """Create a new invitation with a unique token. Expires in 6 months."""
     token = secrets.token_urlsafe(24)  # 32 chars
     now = datetime.now()
-    expires_at = now + timedelta(days=INVITATION_EXPIRY_DAYS)
+    expires_at = now + timedelta(days=config.INVITATION_EXPIRY_DAYS)
 
     conn = _get_db()
     try:
@@ -397,8 +394,6 @@ def get_invitation_reservations(token: str) -> int:
 
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
-RATE_LIMIT_ATTEMPTS = 20
-RATE_LIMIT_WINDOW_SECONDS = 60
 
 
 def check_rate_limit(ip: str) -> bool:
@@ -412,7 +407,7 @@ def check_rate_limit(ip: str) -> bool:
         if row:
             window_start = datetime.fromisoformat(row["window_start"])
             elapsed = (now - window_start).total_seconds()
-            if elapsed > RATE_LIMIT_WINDOW_SECONDS:
+            if elapsed > config.RATE_LIMIT_WINDOW_SECONDS:
                 # Reset window
                 conn.execute(
                     "UPDATE rate_limits SET attempts = 1, window_start = ? WHERE ip = ?",
@@ -420,7 +415,7 @@ def check_rate_limit(ip: str) -> bool:
                 )
                 conn.commit()
                 return True
-            if row["attempts"] >= RATE_LIMIT_ATTEMPTS:
+            if row["attempts"] >= config.RATE_LIMIT_ATTEMPTS:
                 return False
             # Increment attempts
             conn.execute(
