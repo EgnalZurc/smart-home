@@ -91,6 +91,7 @@ jobs:
               - 'services/ac-service/**'
             baby-gifts:
               - 'services/baby-gifts-service/**'
+              - 'libs/notifications/**'
             portfolio-monitor:
               - 'services/portfolio-monitor/**'
             vacaciones:
@@ -197,7 +198,7 @@ jobs:
           [[ "${{ steps.changes.outputs.ac-service }}" == "true" ]] && \
             add_service "ac-service" "egnal/smart-home-ac-service" "./services/ac-service" "Dockerfile"
           [[ "${{ steps.changes.outputs.baby-gifts }}" == "true" ]] && \
-            add_service "baby-gifts-service" "egnal/smart-home-baby-gifts" "./services/baby-gifts-service" "Dockerfile"
+            add_service "baby-gifts-service" "egnal/smart-home-baby-gifts" "." "services/baby-gifts-service/Dockerfile"
           [[ "${{ steps.changes.outputs.portfolio-monitor }}" == "true" ]] && \
             add_service "portfolio-monitor" "egnal/smart-home-portfolio-monitor" "." "services/portfolio-monitor/Dockerfile"
           [[ "${{ steps.changes.outputs.vacaciones }}" == "true" ]] && \
@@ -347,7 +348,7 @@ jobs:
         run: |
           if [[ -d "services/baby-gifts-service/tests" ]] && find services/baby-gifts-service/tests -name "test_*.py" | grep -q .; then
             pip install -r services/baby-gifts-service/requirements.txt --quiet 2>/dev/null || true
-            cd services/baby-gifts-service && PYTHONPATH=src python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
+            cd services/baby-gifts-service && PYTHONPATH=src:../../libs python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
           else
             echo "⏭️ No tests found"
           fi
