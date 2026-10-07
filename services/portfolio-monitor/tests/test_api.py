@@ -257,8 +257,6 @@ class TestResponseScrubNaNSafety:
         assert data["etf"]["analysis"][0]["annual_vol"] is None
 
 
-
-
 class TestRateLimiting:
     """Tests for rate limiting on expensive endpoints."""
 
@@ -345,8 +343,12 @@ class TestExternalHealthChecks:
         # Mock the external checks to avoid real network calls
         with patch("api.routes.check_yahoo_finance", new_callable=AsyncMock) as mock_yf:
             with patch("api.routes.check_coingecko", new_callable=AsyncMock) as mock_cg:
-                with patch("api.routes.check_fear_greed", new_callable=AsyncMock) as mock_fg:
-                    with patch("api.routes.check_smtp", new_callable=AsyncMock) as mock_smtp:
+                with patch(
+                    "api.routes.check_fear_greed", new_callable=AsyncMock
+                ) as mock_fg:
+                    with patch(
+                        "api.routes.check_smtp", new_callable=AsyncMock
+                    ) as mock_smtp:
                         mock_yf.return_value = {"status": "ok"}
                         mock_cg.return_value = {"status": "ok"}
                         mock_fg.return_value = {"status": "ok", "current_value": 50}
@@ -363,8 +365,12 @@ class TestExternalHealthChecks:
         """External health reports degraded status."""
         with patch("api.routes.check_yahoo_finance", new_callable=AsyncMock) as mock_yf:
             with patch("api.routes.check_coingecko", new_callable=AsyncMock) as mock_cg:
-                with patch("api.routes.check_fear_greed", new_callable=AsyncMock) as mock_fg:
-                    with patch("api.routes.check_smtp", new_callable=AsyncMock) as mock_smtp:
+                with patch(
+                    "api.routes.check_fear_greed", new_callable=AsyncMock
+                ) as mock_fg:
+                    with patch(
+                        "api.routes.check_smtp", new_callable=AsyncMock
+                    ) as mock_smtp:
                         mock_yf.return_value = {"status": "ok"}
                         mock_cg.return_value = {"status": "rate_limited"}  # Not OK
                         mock_fg.return_value = {"status": "ok"}
@@ -380,9 +386,16 @@ class TestExternalHealthChecks:
         """External health reports unhealthy when error."""
         with patch("api.routes.check_yahoo_finance", new_callable=AsyncMock) as mock_yf:
             with patch("api.routes.check_coingecko", new_callable=AsyncMock) as mock_cg:
-                with patch("api.routes.check_fear_greed", new_callable=AsyncMock) as mock_fg:
-                    with patch("api.routes.check_smtp", new_callable=AsyncMock) as mock_smtp:
-                        mock_yf.return_value = {"status": "error", "message": "Connection failed"}
+                with patch(
+                    "api.routes.check_fear_greed", new_callable=AsyncMock
+                ) as mock_fg:
+                    with patch(
+                        "api.routes.check_smtp", new_callable=AsyncMock
+                    ) as mock_smtp:
+                        mock_yf.return_value = {
+                            "status": "error",
+                            "message": "Connection failed",
+                        }
                         mock_cg.return_value = {"status": "ok"}
                         mock_fg.return_value = {"status": "ok"}
                         mock_smtp.return_value = {"status": "ok"}
@@ -494,3 +507,440 @@ class TestNotificationEndpoint:
         data = response.json()
         assert "enabled" in data
         assert "type" in data
+
+
+class TestExternalHealthChecksFunctions:
+    """Additional tests for external health check sync functions."""
+
+    def test_check_yahoo_degraded_no_price(self):
+        """Yahoo Finance returns degraded when no price data."""
+        from api.routes import _check_yahoo_sync
+
+        mock_ticker = MagicMock()
+        mock_ticker.fast_info = MagicMock(spec=[])  # No last_price attribute
+
+        with patch("yfinance.Ticker", return_value=mock_ticker):
+            result = _check_yahoo_sync()
+
+        assert result["status"] == "degraded"
+
+    def test_check_yahoo_error_exception(self):
+        """Yahoo Finance returns error on exception."""
+        from api.routes import _check_yahoo_sync
+
+        with patch("yfinance.Ticker", side_effect=Exception("Network error")):
+            result = _check_yahoo_sync()
+
+        assert result["status"] == "error"
+        assert "network error" in result["message"].lower()
+
+    def test_check_coingecko_other_error_code(self):
+        """CoinGecko returns error for non-200/429 codes."""
+        from api.routes import _check_coingecko_sync
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+
+        with patch("requests.get", return_value=mock_response):
+            result = _check_coingecko_sync()
+
+        assert result["status"] == "error"
+        assert result["http_code"] == 500
+
+    def test_check_coingecko_timeout(self):
+        """CoinGecko returns timeout on request timeout."""
+        import requests
+        from api.routes import _check_coingecko_sync
+
+        with patch("requests.get", side_effect=requests.Timeout("Timeout")):
+            result = _check_coingecko_sync()
+
+        assert result["status"] == "timeout"
+
+    def test_check_coingecko_exception(self):
+        """CoinGecko returns error on generic exception."""
+        from api.routes import _check_coingecko_sync
+
+        with patch("requests.get", side_effect=RuntimeError("Unexpected")):
+            result = _check_coingecko_sync()
+
+        assert result["status"] == "error"
+        assert "unexpected" in result["message"].lower()
+
+    def test_check_fear_greed_error_code(self):
+        """Fear & Greed returns error for non-200 codes."""
+        from api.routes import _check_fear_greed_sync
+
+        mock_response = MagicMock()
+        mock_response.status_code = 503
+
+        with patch("requests.get", return_value=mock_response):
+            result = _check_fear_greed_sync()
+
+        assert result["status"] == "error"
+        assert result["http_code"] == 503
+
+    def test_check_fear_greed_exception(self):
+        """Fear & Greed returns error on exception."""
+        from api.routes import _check_fear_greed_sync
+
+        with patch("requests.get", side_effect=ConnectionError("Failed")):
+            result = _check_fear_greed_sync()
+
+        assert result["status"] == "error"
+
+    def test_check_smtp_sync_success(self):
+        """SMTP sync check returns OK on successful connection."""
+        from api.routes import _check_smtp_sync
+
+        mock_socket = MagicMock()
+        with patch("socket.create_connection", return_value=mock_socket):
+            result = _check_smtp_sync("smtp.test.com", 587)
+
+        assert result["status"] == "ok"
+        assert result["host"] == "smtp.test.com"
+        assert result["port"] == 587
+        mock_socket.close.assert_called_once()
+
+    def test_check_smtp_sync_timeout(self):
+        """SMTP sync check returns timeout on connection timeout."""
+        from api.routes import _check_smtp_sync
+
+        with patch("socket.create_connection", side_effect=TimeoutError("Timed out")):
+            result = _check_smtp_sync("smtp.test.com", 587)
+
+        assert result["status"] == "timeout"
+
+    def test_check_smtp_sync_error(self):
+        """SMTP sync check returns error on connection error."""
+        from api.routes import _check_smtp_sync
+
+        with patch(
+            "socket.create_connection", side_effect=OSError("Connection refused")
+        ):
+            result = _check_smtp_sync("smtp.test.com", 587)
+
+        assert result["status"] == "error"
+
+    @pytest.mark.asyncio
+    async def test_check_yahoo_finance_async_wrapper(self):
+        """check_yahoo_finance async wrapper handles results."""
+        from api.routes import check_yahoo_finance
+
+        mock_ticker = MagicMock()
+        mock_ticker.fast_info = MagicMock(last_price=150.0)
+
+        with patch("yfinance.Ticker", return_value=mock_ticker):
+            result = await check_yahoo_finance()
+
+        assert result["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_check_yahoo_finance_async_exception(self):
+        """check_yahoo_finance async wrapper handles exceptions."""
+        from api.routes import check_yahoo_finance
+
+        with patch("api.routes._check_yahoo_sync", side_effect=Exception("Error")):
+            result = await check_yahoo_finance()
+
+        assert result["status"] == "error"
+
+    @pytest.mark.asyncio
+    async def test_check_coingecko_async_wrapper(self):
+        """check_coingecko async wrapper handles results."""
+        from api.routes import check_coingecko
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        with patch("requests.get", return_value=mock_response):
+            result = await check_coingecko()
+
+        assert result["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_check_coingecko_async_exception(self):
+        """check_coingecko async wrapper handles exceptions."""
+        from api.routes import check_coingecko
+
+        with patch("api.routes._check_coingecko_sync", side_effect=Exception("Error")):
+            result = await check_coingecko()
+
+        assert result["status"] == "error"
+
+    @pytest.mark.asyncio
+    async def test_check_fear_greed_async_wrapper(self):
+        """check_fear_greed async wrapper handles results."""
+        from api.routes import check_fear_greed
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": [{"value": "50"}]}
+
+        with patch("requests.get", return_value=mock_response):
+            result = await check_fear_greed()
+
+        assert result["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_check_fear_greed_async_exception(self):
+        """check_fear_greed async wrapper handles exceptions."""
+        from api.routes import check_fear_greed
+
+        with patch("api.routes._check_fear_greed_sync", side_effect=Exception("Error")):
+            result = await check_fear_greed()
+
+        assert result["status"] == "error"
+
+    @pytest.mark.asyncio
+    async def test_check_smtp_configured(self):
+        """SMTP check works when configured."""
+        from api.routes import check_smtp
+
+        with patch.dict("os.environ", {"SMTP_USER": "user@test.com"}):
+            mock_socket = MagicMock()
+            with patch("socket.create_connection", return_value=mock_socket):
+                result = await check_smtp()
+
+        assert result["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_check_smtp_async_exception(self):
+        """check_smtp async wrapper handles exceptions."""
+        from api.routes import check_smtp
+
+        with patch.dict("os.environ", {"SMTP_USER": "user@test.com"}):
+            with patch("api.routes._check_smtp_sync", side_effect=Exception("Error")):
+                result = await check_smtp()
+
+        assert result["status"] == "error"
+
+
+class TestHealthExternalExceptions:
+    """Test health/external endpoint handling of exceptions."""
+
+    def test_health_external_handles_exception_results(self, client):
+        """External health handles Exception objects from gather."""
+        with patch("api.routes.check_yahoo_finance", new_callable=AsyncMock) as mock_yf:
+            with patch("api.routes.check_coingecko", new_callable=AsyncMock) as mock_cg:
+                with patch(
+                    "api.routes.check_fear_greed", new_callable=AsyncMock
+                ) as mock_fg:
+                    with patch(
+                        "api.routes.check_smtp", new_callable=AsyncMock
+                    ) as mock_smtp:
+                        # Simulate an exception being returned from gather
+                        mock_yf.side_effect = Exception("Yahoo failed")
+                        mock_cg.return_value = {"status": "ok"}
+                        mock_fg.return_value = {"status": "ok"}
+                        mock_smtp.return_value = {"status": "ok"}
+
+                        response = client.get("/api/portfolio/health/external")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["services"]["yahoo_finance"]["status"] == "error"
+
+
+class TestRefreshMonitorEndpoint:
+    """Tests for refresh single monitor endpoint."""
+
+    def test_refresh_unknown_monitor(self, client):
+        """Refresh with unknown monitor returns 404."""
+        response = client.post("/api/portfolio/refresh/unknown")
+        assert response.status_code == 404
+        assert "unknown" in response.json()["detail"].lower()
+
+    def test_refresh_etf_monitor(self, client):
+        """Refresh ETF monitor returns 200 and starts background task."""
+        from api.routes import _refresh_limiter
+
+        _refresh_limiter._requests.clear()
+
+        # Mock the orchestrator to avoid actual monitor execution
+        with patch("api.routes.get_orchestrator") as mock_get_orch:
+            mock_orch = MagicMock()
+            mock_orch.run_monitor = AsyncMock()
+            mock_get_orch.return_value = mock_orch
+
+            response = client.post("/api/portfolio/refresh/etf")
+
+        assert response.status_code == 200
+        assert response.json()["monitor"] == "etf"
+        assert response.json()["status"] == "refresh_started"
+
+    def test_refresh_crypto_monitor(self, client):
+        """Refresh crypto monitor returns 200."""
+        from api.routes import _refresh_limiter
+
+        _refresh_limiter._requests.clear()
+
+        with patch("api.routes.get_orchestrator") as mock_get_orch:
+            mock_orch = MagicMock()
+            mock_orch.run_monitor = AsyncMock()
+            mock_get_orch.return_value = mock_orch
+
+            response = client.post("/api/portfolio/refresh/crypto")
+
+        assert response.status_code == 200
+        assert response.json()["monitor"] == "crypto"
+
+    def test_refresh_savings_monitor(self, client):
+        """Refresh savings monitor returns 200."""
+        from api.routes import _refresh_limiter
+
+        _refresh_limiter._requests.clear()
+
+        with patch("api.routes.get_orchestrator") as mock_get_orch:
+            mock_orch = MagicMock()
+            mock_orch.run_monitor = AsyncMock()
+            mock_get_orch.return_value = mock_orch
+
+            response = client.post("/api/portfolio/refresh/savings")
+
+        assert response.status_code == 200
+        assert response.json()["monitor"] == "savings"
+
+    def test_refresh_monitor_rate_limited(self, client):
+        """Single monitor refresh is rate limited."""
+        from api.routes import _refresh_limiter
+
+        _refresh_limiter._requests.clear()
+
+        with patch("api.routes.get_orchestrator") as mock_get_orch:
+            mock_orch = MagicMock()
+            mock_orch.run_monitor = AsyncMock()
+            mock_get_orch.return_value = mock_orch
+
+            # Exhaust rate limit
+            for _ in range(5):
+                resp = client.post("/api/portfolio/refresh/etf")
+                assert resp.status_code == 200
+
+            response = client.post("/api/portfolio/refresh/crypto")
+
+        assert response.status_code == 429
+
+
+class TestNotificationTestEndpoint:
+    """Tests for notification test endpoint."""
+
+    def test_notification_test_disabled(self, client):
+        """Test notification returns 503 when email disabled."""
+        from api.routes import _config_limiter
+
+        _config_limiter._requests.clear()
+
+        with patch("email_notifier.EmailNotifier") as mock_notifier_class:
+            mock_notifier = MagicMock()
+            mock_notifier.enabled = False
+            mock_notifier_class.return_value = mock_notifier
+
+            response = client.post("/api/portfolio/notifications/test")
+
+        assert response.status_code == 503
+
+    def test_notification_test_success(self, client):
+        """Test notification returns success when email works."""
+        from api.routes import _config_limiter
+
+        _config_limiter._requests.clear()
+
+        with patch("email_notifier.EmailNotifier") as mock_notifier_class:
+            mock_notifier = MagicMock()
+            mock_notifier.enabled = True
+            mock_notifier.send_test.return_value = MagicMock(
+                success=True, message="Email sent"
+            )
+            mock_notifier_class.return_value = mock_notifier
+
+            response = client.post("/api/portfolio/notifications/test")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "sent"
+
+    def test_notification_test_failure(self, client):
+        """Test notification returns 500 when email fails."""
+        from api.routes import _config_limiter
+
+        _config_limiter._requests.clear()
+
+        with patch("email_notifier.EmailNotifier") as mock_notifier_class:
+            mock_notifier = MagicMock()
+            mock_notifier.enabled = True
+            mock_notifier.send_test.return_value = MagicMock(
+                success=False, message="SMTP error"
+            )
+            mock_notifier_class.return_value = mock_notifier
+
+            response = client.post("/api/portfolio/notifications/test")
+
+        assert response.status_code == 500
+
+    def test_notification_test_rate_limited(self, client):
+        """Test notification is rate limited."""
+        from api.routes import _config_limiter
+
+        _config_limiter._requests.clear()
+
+        # Exhaust rate limit (uses config limiter, 2 req/min)
+        for _ in range(2):
+            client.post("/api/portfolio/reload-config")
+
+        response = client.post("/api/portfolio/notifications/test")
+        assert response.status_code == 429
+
+
+class TestSerializeAlert:
+    """Tests for _serialize_alert function."""
+
+    def test_serialize_alert_calls_alerts_module(self):
+        """_serialize_alert delegates to alerts.serialize_alert."""
+        from api.routes import _serialize_alert
+
+        # Create a minimal mock alert to test
+        mock_alert = MagicMock()
+        mock_alert.id = "test-id"
+        mock_alert.title = "Test Alert"
+
+        with patch("alerts.serialize_alert") as mock_serialize:
+            mock_serialize.return_value = {"id": "test", "title": "Test Alert"}
+            result = _serialize_alert(mock_alert)
+
+        mock_serialize.assert_called_once_with(mock_alert)
+        assert result["id"] == "test"
+
+
+class TestCompleteAlertEndpoint:
+    """Additional tests for complete alert endpoint."""
+
+    def test_complete_alert_success(self, client):
+        """Complete alert succeeds when alert exists and date arrived."""
+        with patch("alerts.mark_alert_completed", return_value=True):
+            with patch("api.routes.get_orchestrator") as mock_get_orch:
+                mock_orch = MagicMock()
+                mock_get_orch.return_value = mock_orch
+
+                response = client.post("/api/portfolio/alerts/valid-alert-id/complete")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "completed"
+        mock_orch._load_upcoming_alerts.assert_called_once()
+
+
+class TestRateLimiterWindowExpiry:
+    """Tests for rate limiter window expiration."""
+
+    def test_rate_limiter_window_expires(self):
+        """Rate limiter allows requests after window expires."""
+        from api.routes import RateLimiter
+
+        limiter = RateLimiter(max_requests=1, window_seconds=1)
+
+        assert limiter.is_allowed("test-key") is True
+        assert limiter.is_allowed("test-key") is False
+
+        # Wait for window to expire
+        time.sleep(1.1)
+
+        assert limiter.is_allowed("test-key") is True
