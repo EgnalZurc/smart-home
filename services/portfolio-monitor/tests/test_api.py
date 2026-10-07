@@ -1,8 +1,15 @@
 """
 Test API endpoints.
 
-Basic smoke tests for API endpoints to ensure they respond correctly.
+Includes:
+- Basic smoke tests for API endpoints
+- Rate limiting tests
+- External health check tests
+- JSON serialization safety tests
 """
+
+import time
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,6 +21,18 @@ def client():
     from main import app
 
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiters():
+    """Reset rate limiters before each test."""
+    from api.routes import _config_limiter, _refresh_limiter
+
+    _refresh_limiter._requests.clear()
+    _config_limiter._requests.clear()
+    yield
+    _refresh_limiter._requests.clear()
+    _config_limiter._requests.clear()
 
 
 class TestHealthEndpoint:
@@ -236,3 +255,242 @@ class TestResponseScrubNaNSafety:
         data = response.json()
         assert data["etf"]["analysis"][0]["ohlc"][0][2] is None
         assert data["etf"]["analysis"][0]["annual_vol"] is None
+
+
+
+
+class TestRateLimiting:
+    """Tests for rate limiting on expensive endpoints."""
+
+    def test_rate_limiter_allows_initial_requests(self):
+        """Rate limiter allows requests under the limit."""
+        from api.routes import RateLimiter
+
+        limiter = RateLimiter(max_requests=3, window_seconds=60)
+
+        assert limiter.is_allowed("test-key") is True
+        assert limiter.is_allowed("test-key") is True
+        assert limiter.is_allowed("test-key") is True
+
+    def test_rate_limiter_blocks_excess_requests(self):
+        """Rate limiter blocks requests over the limit."""
+        from api.routes import RateLimiter
+
+        limiter = RateLimiter(max_requests=2, window_seconds=60)
+
+        assert limiter.is_allowed("test-key") is True
+        assert limiter.is_allowed("test-key") is True
+        assert limiter.is_allowed("test-key") is False
+
+    def test_rate_limiter_separate_keys(self):
+        """Different keys have separate limits."""
+        from api.routes import RateLimiter
+
+        limiter = RateLimiter(max_requests=1, window_seconds=60)
+
+        assert limiter.is_allowed("key-1") is True
+        assert limiter.is_allowed("key-2") is True
+        assert limiter.is_allowed("key-1") is False
+        assert limiter.is_allowed("key-2") is False
+
+    def test_rate_limiter_time_until_allowed(self):
+        """Time until allowed is calculated correctly."""
+        from api.routes import RateLimiter
+
+        limiter = RateLimiter(max_requests=1, window_seconds=60)
+
+        assert limiter.time_until_allowed("new-key") == 0
+        limiter.is_allowed("new-key")
+        wait_time = limiter.time_until_allowed("new-key")
+        assert wait_time > 0
+        assert wait_time <= 60
+
+    def test_refresh_endpoint_rate_limited(self, client):
+        """Refresh endpoint returns 429 after too many requests."""
+        from api.routes import _refresh_limiter
+
+        _refresh_limiter._requests.clear()
+
+        # Make requests up to the limit
+        for _ in range(5):
+            response = client.post("/api/portfolio/refresh")
+            assert response.status_code in (200, 202)
+
+        # Next request should be rate limited
+        response = client.post("/api/portfolio/refresh")
+        assert response.status_code == 429
+        assert "Retry-After" in response.headers
+
+    def test_reload_config_rate_limited(self, client):
+        """Reload config endpoint is rate limited."""
+        from api.routes import _config_limiter
+
+        _config_limiter._requests.clear()
+
+        # Make requests up to the limit (2)
+        for _ in range(2):
+            response = client.post("/api/portfolio/reload-config")
+            assert response.status_code == 200
+
+        # Next request should be rate limited
+        response = client.post("/api/portfolio/reload-config")
+        assert response.status_code == 429
+
+
+class TestExternalHealthChecks:
+    """Tests for external service health checks."""
+
+    def test_health_external_endpoint_exists(self, client):
+        """External health endpoint should exist."""
+        # Mock the external checks to avoid real network calls
+        with patch("api.routes.check_yahoo_finance", new_callable=AsyncMock) as mock_yf:
+            with patch("api.routes.check_coingecko", new_callable=AsyncMock) as mock_cg:
+                with patch("api.routes.check_fear_greed", new_callable=AsyncMock) as mock_fg:
+                    with patch("api.routes.check_smtp", new_callable=AsyncMock) as mock_smtp:
+                        mock_yf.return_value = {"status": "ok"}
+                        mock_cg.return_value = {"status": "ok"}
+                        mock_fg.return_value = {"status": "ok", "current_value": 50}
+                        mock_smtp.return_value = {"status": "ok"}
+
+                        response = client.get("/api/portfolio/health/external")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "overall" in data
+        assert "services" in data
+
+    def test_health_external_reports_degraded(self, client):
+        """External health reports degraded status."""
+        with patch("api.routes.check_yahoo_finance", new_callable=AsyncMock) as mock_yf:
+            with patch("api.routes.check_coingecko", new_callable=AsyncMock) as mock_cg:
+                with patch("api.routes.check_fear_greed", new_callable=AsyncMock) as mock_fg:
+                    with patch("api.routes.check_smtp", new_callable=AsyncMock) as mock_smtp:
+                        mock_yf.return_value = {"status": "ok"}
+                        mock_cg.return_value = {"status": "rate_limited"}  # Not OK
+                        mock_fg.return_value = {"status": "ok"}
+                        mock_smtp.return_value = {"status": "not_configured"}
+
+                        response = client.get("/api/portfolio/health/external")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["overall"] == "degraded"
+
+    def test_health_external_reports_unhealthy(self, client):
+        """External health reports unhealthy when error."""
+        with patch("api.routes.check_yahoo_finance", new_callable=AsyncMock) as mock_yf:
+            with patch("api.routes.check_coingecko", new_callable=AsyncMock) as mock_cg:
+                with patch("api.routes.check_fear_greed", new_callable=AsyncMock) as mock_fg:
+                    with patch("api.routes.check_smtp", new_callable=AsyncMock) as mock_smtp:
+                        mock_yf.return_value = {"status": "error", "message": "Connection failed"}
+                        mock_cg.return_value = {"status": "ok"}
+                        mock_fg.return_value = {"status": "ok"}
+                        mock_smtp.return_value = {"status": "ok"}
+
+                        response = client.get("/api/portfolio/health/external")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["overall"] == "unhealthy"
+
+    @pytest.mark.asyncio
+    async def test_check_yahoo_finance_success(self):
+        """Yahoo Finance check returns OK on success."""
+        from api.routes import _check_yahoo_sync
+
+        mock_ticker = MagicMock()
+        mock_ticker.fast_info = MagicMock(last_price=150.0)
+
+        with patch("yfinance.Ticker", return_value=mock_ticker):
+            result = _check_yahoo_sync()
+
+        assert result["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_check_coingecko_success(self):
+        """CoinGecko check returns OK on success."""
+        from api.routes import _check_coingecko_sync
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        with patch("requests.get", return_value=mock_response):
+            result = _check_coingecko_sync()
+
+        assert result["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_check_coingecko_rate_limited(self):
+        """CoinGecko check reports rate limited."""
+        from api.routes import _check_coingecko_sync
+
+        mock_response = MagicMock()
+        mock_response.status_code = 429
+
+        with patch("requests.get", return_value=mock_response):
+            result = _check_coingecko_sync()
+
+        assert result["status"] == "rate_limited"
+
+    @pytest.mark.asyncio
+    async def test_check_fear_greed_success(self):
+        """Fear & Greed check returns value on success."""
+        from api.routes import _check_fear_greed_sync
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": [{"value": "65"}]}
+
+        with patch("requests.get", return_value=mock_response):
+            result = _check_fear_greed_sync()
+
+        assert result["status"] == "ok"
+        assert result["current_value"] == 65
+
+    @pytest.mark.asyncio
+    async def test_check_smtp_not_configured(self):
+        """SMTP check reports not configured when no credentials."""
+        from api.routes import check_smtp
+
+        with patch.dict("os.environ", {"SMTP_USER": "", "AUTH_SMTP_USER": ""}):
+            result = await check_smtp()
+
+        assert result["status"] == "not_configured"
+
+
+class TestAlertsEndpoint:
+    """Tests for alerts endpoints."""
+
+    def test_get_alerts_endpoint(self, client):
+        """Get alerts endpoint returns list."""
+        response = client.get("/api/portfolio/alerts")
+        assert response.status_code == 200
+        data = response.json()
+        assert "upcoming" in data
+        assert "count" in data
+
+    def test_complete_alert_not_found(self, client):
+        """Complete alert returns 400 for non-existent alert."""
+        response = client.post("/api/portfolio/alerts/nonexistent-alert-id/complete")
+        assert response.status_code == 400
+
+
+class TestSavingsEndpoint:
+    """Tests for savings endpoint."""
+
+    def test_savings_endpoint_exists(self, client):
+        """Savings endpoint should exist."""
+        response = client.get("/api/portfolio/savings")
+        assert response.status_code != 404
+
+
+class TestNotificationEndpoint:
+    """Tests for notification endpoints."""
+
+    def test_notification_status_endpoint(self, client):
+        """Notification status endpoint returns status."""
+        response = client.get("/api/portfolio/notifications/status")
+        assert response.status_code == 200
+        data = response.json()
+        assert "enabled" in data
+        assert "type" in data

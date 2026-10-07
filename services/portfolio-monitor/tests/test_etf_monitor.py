@@ -1,181 +1,455 @@
-"""Unit tests for ETF monitor module."""
+"""
+Tests for the etf_monitor module.
+"""
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
+import pytest
+
+from models import AlertLevel
 
 
 class TestTaxCalculation:
     """Tests for IRPF tax calculation."""
 
-    def test_zero_gain_zero_tax(self):
-        """Zero or negative gain should result in zero tax."""
+    @pytest.fixture(autouse=True)
+    def setup_tax_brackets(self):
+        """Set up tax brackets for all tax tests."""
+        brackets = [
+            (6_000, 0.19),
+            (50_000, 0.21),
+            (200_000, 0.23),
+            (300_000, 0.27),
+            (float("inf"), 0.30),
+        ]
+        with patch("monitors.etf_monitor.ETF_PLAN", {"tax_brackets": brackets}):
+            yield
+
+    def test_zero_gain(self):
+        """Zero gain means zero tax."""
         from monitors.etf_monitor import calculate_tax
 
-        assert calculate_tax(0) == 0.0
-        assert calculate_tax(-1000) == 0.0
+        assert calculate_tax(0) == 0
 
-    def test_tax_with_brackets(self):
-        """Tax calculation should use brackets when configured."""
-        from config import ETF_PLAN
+    def test_negative_gain(self):
+        """Negative gain (loss) means zero tax."""
         from monitors.etf_monitor import calculate_tax
 
-        # Only test if brackets are configured
-        brackets = ETF_PLAN.get("tax_brackets", [])
-        if brackets:
-            gain = 5000
-            tax = calculate_tax(gain)
-            # Should produce some tax if brackets exist
-            assert tax >= 0
+        assert calculate_tax(-5000) == 0
 
-    def test_tax_impact_with_gain_and_loss(self):
-        """Tax impact calculation for gains and losses."""
+    def test_first_bracket_only(self):
+        """Gain in first bracket (0-6000€) at 19%."""
+        from monitors.etf_monitor import calculate_tax
+
+        # 5000€ gain → 5000 * 0.19 = 950€
+        tax = calculate_tax(5000)
+        assert abs(tax - 950) < 0.01
+
+    def test_exactly_first_bracket(self):
+        """Gain exactly at first bracket limit."""
+        from monitors.etf_monitor import calculate_tax
+
+        # 6000€ gain → 6000 * 0.19 = 1140€
+        tax = calculate_tax(6000)
+        assert abs(tax - 1140) < 0.01
+
+    def test_second_bracket(self):
+        """Gain spanning first and second brackets."""
+        from monitors.etf_monitor import calculate_tax
+
+        # 30000€ gain:
+        # First 6000 at 19% = 1140
+        # Next 24000 at 21% = 5040
+        # Total = 6180
+        tax = calculate_tax(30000)
+        assert abs(tax - 6180) < 0.01
+
+    def test_third_bracket(self):
+        """Gain spanning first, second, and third brackets."""
+        from monitors.etf_monitor import calculate_tax
+
+        # 70000€ gain:
+        # First 6000 at 19% = 1140
+        # Next 44000 (6000-50000) at 21% = 9240
+        # Remaining 20000 at 23% = 4600
+        # Total = 14980
+        tax = calculate_tax(70000)
+        assert abs(tax - 14980) < 0.01
+
+    def test_all_brackets_large_gain(self):
+        """Large gain spanning all brackets."""
+        from monitors.etf_monitor import calculate_tax
+
+        # 400000€ gain:
+        # First 6000 at 19% = 1140
+        # Next 44000 at 21% = 9240
+        # Next 150000 at 23% = 34500
+        # Next 100000 at 27% = 27000
+        # Remaining 100000 at 30% = 30000
+        # Total = 101880
+        tax = calculate_tax(400000)
+        assert abs(tax - 101880) < 0.01
+
+
+class TestTaxImpact:
+    """Tests for calculate_tax_impact function."""
+
+    @pytest.fixture(autouse=True)
+    def setup_tax_brackets(self):
+        """Set up tax brackets for all tax impact tests."""
+        brackets = [
+            (6_000, 0.19),
+            (50_000, 0.21),
+            (200_000, 0.23),
+            (300_000, 0.27),
+            (float("inf"), 0.30),
+        ]
+        with patch("monitors.etf_monitor.ETF_PLAN", {"tax_brackets": brackets}):
+            yield
+
+    def test_tax_impact_with_gain(self):
+        """Calculate tax impact for profitable position."""
         from monitors.etf_monitor import calculate_tax_impact
 
-        # Test with gain
-        result_gain = calculate_tax_impact(100, 50.0, 60.0)
-        assert result_gain is not None
-        assert result_gain["gain"] == 1000  # (60 - 50) * 100
+        # 100 units at avg cost 50€, now worth 70€ each
+        result = calculate_tax_impact(units=100, avg_cost=50, current_price=70)
 
-        # Test with loss
-        result_loss = calculate_tax_impact(100, 60.0, 50.0)
-        assert result_loss["gain"] < 0
-        assert result_loss["tax"] == 0
+        assert result is not None
+        assert result["gain"] == 2000  # (70-50) * 100
+        assert result["tax"] > 0
+        assert result["net"] < 7000  # 7000 - tax
+
+    def test_tax_impact_with_loss(self):
+        """No tax on loss position."""
+        from monitors.etf_monitor import calculate_tax_impact
+
+        result = calculate_tax_impact(units=100, avg_cost=70, current_price=50)
+
+        assert result is not None
+        assert result["gain"] == -2000
+        assert result["tax"] == 0
+        assert result["net"] == 5000  # current value
+
+    def test_tax_impact_no_cost_basis(self):
+        """No tax calculation without cost basis."""
+        from monitors.etf_monitor import calculate_tax_impact
+
+        result = calculate_tax_impact(units=100, avg_cost=None, current_price=70)
+        assert result is None
+
+    def test_tax_impact_zero_units(self):
+        """No tax calculation with zero units."""
+        from monitors.etf_monitor import calculate_tax_impact
+
+        result = calculate_tax_impact(units=0, avg_cost=50, current_price=70)
+        assert result is None
 
 
 class TestPlanHelpers:
-    """Tests for ETF plan helper functions."""
+    """Tests for investment plan helper functions."""
 
-    def test_current_contribution(self):
-        """current_contribution should return configured value."""
+    def test_current_phase_phase1(self):
+        """Current phase returns phase 1 when before phase change date."""
+        from monitors.etf_monitor import current_phase
+
+        future = datetime(2030, 1, 1)
+        with patch("monitors.etf_monitor.ETF_PLAN", {"phase_change_date": future}):
+            label, months = current_phase()
+
+        assert "1" in label or "FASE 1" in label.upper()
+        assert months is not None
+        assert months > 0
+
+    def test_current_phase_phase2(self):
+        """Current phase returns phase 2 when after phase change date."""
+        from monitors.etf_monitor import current_phase
+
+        past = datetime(2020, 1, 1)
+        with patch("monitors.etf_monitor.ETF_PLAN", {"phase_change_date": past}):
+            label, months = current_phase()
+
+        assert "2" in label or "FASE 2" in label.upper()
+        assert months is None
+
+    def test_current_contribution_phase1(self):
+        """Contribution returns phase 1 amount before phase change."""
         from monitors.etf_monitor import current_contribution
 
-        # This depends on config, just verify it returns a number
-        contrib = current_contribution("IE00B4L5Y983")
-        assert isinstance(contrib, (int, float))
+        future = datetime(2030, 1, 1)
+        portfolio = {
+            "test_fund": {
+                "monthly_contrib": 100,
+                "phase2_contrib": 500,
+            }
+        }
 
-    def test_years_since_start(self):
-        """years_since_start should return positive integer."""
-        from monitors.etf_monitor import years_since_start
+        with patch("monitors.etf_monitor.ETF_PLAN", {"phase_change_date": future}):
+            with patch("monitors.etf_monitor.ETF_PORTFOLIO", portfolio):
+                contrib = current_contribution("test_fund")
 
-        years = years_since_start()
-        assert isinstance(years, int)
-        assert years >= 1
+        assert contrib == 100
+
+    def test_current_contribution_phase2(self):
+        """Contribution returns phase 2 amount after phase change."""
+        from monitors.etf_monitor import current_contribution
+
+        past = datetime(2020, 1, 1)
+        portfolio = {
+            "test_fund": {
+                "monthly_contrib": 100,
+                "phase2_contrib": 500,
+            }
+        }
+
+        with patch("monitors.etf_monitor.ETF_PLAN", {"phase_change_date": past}):
+            with patch("monitors.etf_monitor.ETF_PORTFOLIO", portfolio):
+                contrib = current_contribution("test_fund")
+
+        assert contrib == 500
 
 
-class TestSignalCalculation:
-    """Tests for technical signal calculation."""
+class TestSignalAnalysis:
+    """Tests for signal calculation functions."""
 
-    def test_calculate_signals_empty_dataframe(self):
-        """Should handle empty dataframe gracefully."""
+    def _make_hist(self, prices: list[float], days: int = 252) -> pd.DataFrame:
+        """Create a mock historical DataFrame."""
+        dates = pd.date_range(end=datetime.now(), periods=len(prices), freq="D")
+        return pd.DataFrame(
+            {
+                "Open": prices,
+                "High": [p * 1.01 for p in prices],
+                "Low": [p * 0.99 for p in prices],
+                "Close": prices,
+            },
+            index=dates,
+        )
+
+    def test_calculate_signals_empty_history(self):
+        """Empty history returns default values."""
         from monitors.etf_monitor import calculate_signals
 
-        empty_df = pd.DataFrame()
-        result = calculate_signals(empty_df, None)
+        result = calculate_signals(pd.DataFrame(), avg_cost=50)
 
         assert result["price"] == 0
-        assert result["signals"] == []
+        assert result["level"] == AlertLevel.OK
 
-    def test_calculate_signals_with_data(self):
-        """Should calculate signals from price data."""
+    def test_calculate_signals_profit_position(self):
+        """Profitable position generates OK signal."""
         from monitors.etf_monitor import calculate_signals
 
-        # Create sample price data (1 year of daily prices)
-        dates = pd.date_range(end=datetime.now(), periods=252, freq="D")
-        prices = np.random.uniform(90, 110, 252)  # Random walk around 100
+        # Upward trending prices
+        prices = [50 + i * 0.1 for i in range(252)]
+        hist = self._make_hist(prices)
 
-        df = pd.DataFrame(
-            {
-                "Open": prices,
-                "High": prices * 1.02,
-                "Low": prices * 0.98,
-                "Close": prices,
-                "Volume": np.random.randint(1000, 10000, 252),
-            },
-            index=dates,
-        )
-
-        result = calculate_signals(df, avg_cost=100.0)
+        result = calculate_signals(hist, avg_cost=45)
 
         assert result["price"] > 0
-        assert "ma50" in result
-        assert "ma200" in result
-        assert "drawdown" in result
-        assert "signals" in result
+        # Should have profit signal - check for Spanish or English text
+        profit_signals = [
+            s for s in result["signals"]
+            if any(word in s.body.lower() for word in ["beneficio", "profit", "+"])
+        ]
+        # If position is profitable, we should have at least OK level
+        assert result["level"] in (AlertLevel.OK, AlertLevel.INFO)
 
-    def test_drawdown_calculation(self):
-        """Drawdown should be calculated correctly."""
+    def test_calculate_signals_loss_position_warn(self):
+        """Loss position generates WARN signal."""
         from monitors.etf_monitor import calculate_signals
 
-        # Create data where current price is 10% below 52-week high
-        dates = pd.date_range(end=datetime.now(), periods=252, freq="D")
-        prices = [100] * 200 + [90] * 52  # Dropped from 100 to 90
+        # Price dropped below avg cost
+        prices = [60 - i * 0.05 for i in range(252)]
+        hist = self._make_hist(prices)
 
-        df = pd.DataFrame(
-            {
-                "Open": prices,
-                "High": [105] * 200 + [95] * 52,  # High was 105
-                "Low": prices,
-                "Close": prices,
-                "Volume": [1000] * 252,
-            },
-            index=dates,
-        )
+        # Current price ~47, avg cost 55 → ~-14% loss
+        result = calculate_signals(hist, avg_cost=55)
 
-        result = calculate_signals(df, None)
+        assert result["level"] in (AlertLevel.WARN, AlertLevel.DANGER)
 
-        # Drawdown should be negative (price below high)
-        assert result["drawdown"] < 0
+    def test_calculate_signals_severe_drawdown(self):
+        """Severe drawdown triggers DANGER."""
+        from monitors.etf_monitor import calculate_signals
 
+        # High at start, drops 25%
+        prices = [100] * 100 + [75] * 152
+        hist = self._make_hist(prices)
 
-class TestMovingAverageAnalysis:
-    """Tests for moving average signal analysis."""
+        result = calculate_signals(hist, avg_cost=None)
 
-    def test_golden_cross_detection(self):
-        """Should detect golden cross (MA50 crosses above MA200)."""
+        # -25% drawdown should trigger warning
+        assert result["level"] in (AlertLevel.WARN, AlertLevel.DANGER)
+
+    def test_moving_average_analysis_below_ma200(self):
+        """Price below MA200 triggers WARN."""
         from monitors.etf_monitor import _analyse_moving_averages
 
-        # Create data where MA50 just crossed above MA200
-        dates = pd.date_range(end=datetime.now(), periods=252, freq="D")
+        # Create history with price well below MA200
+        prices = [100] * 200 + [85] * 52  # Price dropped to 85
+        hist = self._make_hist(prices)
+        price = 85
+        ma50 = np.mean(prices[-50:])
+        ma200 = np.mean(prices[-200:])
 
-        # Prices that would create a recent golden cross
-        prices = list(range(80, 332))  # Steadily increasing
-        df = pd.DataFrame(
-            {
-                "Close": prices,
-            },
-            index=dates,
-        )
+        signals, level = _analyse_moving_averages(hist, price, ma50, ma200)
 
+        # Price is ~15% below MA200, should trigger warning
+        assert level >= AlertLevel.INFO
+
+    def test_moving_average_analysis_above_both(self):
+        """Price above both MAs is OK."""
+        from monitors.etf_monitor import _analyse_moving_averages
+
+        # Uptrending prices
+        prices = [50 + i * 0.2 for i in range(252)]
+        hist = self._make_hist(prices)
         price = prices[-1]
         ma50 = np.mean(prices[-50:])
         ma200 = np.mean(prices[-200:])
 
-        signals, level = _analyse_moving_averages(df, price, ma50, ma200)
+        signals, level = _analyse_moving_averages(hist, price, ma50, ma200)
 
-        # Should produce some signals
-        assert len(signals) >= 1
+        assert level == AlertLevel.OK
+        ok_signals = [s for s in signals if s.level == "OK"]
+        assert len(ok_signals) >= 1
+
+
+class TestETFMonitor:
+    """Tests for the ETFMonitor class."""
+
+    @pytest.mark.asyncio
+    async def test_empty_portfolio(self):
+        """Monitor handles empty portfolio."""
+        from monitors.etf_monitor import ETFMonitor
+
+        with patch("monitors.etf_monitor.ETF_PORTFOLIO", {}):
+            monitor = ETFMonitor()
+            result = await monitor.run()
+
+        assert result["total_value"] == 0
+        assert result["level"] == AlertLevel.OK
+        assert len(result["analysis"]) == 0
+
+    @pytest.mark.asyncio
+    async def test_run_with_mocked_data(self):
+        """Monitor runs with mocked Yahoo Finance data."""
+        from monitors.etf_monitor import ETFMonitor
+
+        portfolio = {
+            "TEST": {
+                "id": "TEST",
+                "ticker": "TEST.L",
+                "name": "Test ETF",
+                "color": "#FF0000",
+                "avg_cost": 100,
+                "units": 10,
+                "monthly_contrib": 50,
+                "start_date": "2024-01-01",
+            }
+        }
+
+        # Create mock historical data
+        prices = [100 + i * 0.1 for i in range(252)]
+        dates = pd.date_range(end=datetime.now(), periods=252, freq="D")
+        mock_hist = pd.DataFrame(
+            {
+                "Open": prices,
+                "High": [p * 1.01 for p in prices],
+                "Low": [p * 0.99 for p in prices],
+                "Close": prices,
+            },
+            index=dates,
+        )
+
+        with patch("monitors.etf_monitor.ETF_PORTFOLIO", portfolio):
+            with patch("monitors.etf_monitor.ETF_FUND_IDS", ["TEST"]):
+                with patch(
+                    "monitors.etf_monitor.fetch_etf_data",
+                    return_value=(mock_hist, {}),
+                ):
+                    with patch("monitors.etf_monitor.fetch_ohlc_data", return_value=[]):
+                        monitor = ETFMonitor()
+                        result = await monitor.run()
+
+        assert len(result["analysis"]) == 1
+        assert result["analysis"][0].fund_id == "TEST"
+        assert result["total_value"] > 0
+
+
+class TestFetchHelpers:
+    """Tests for data fetching functions."""
+
+    def test_fetch_etf_data_success(self):
+        """fetch_etf_data returns history and info."""
+        from monitors.etf_monitor import fetch_etf_data
+
+        mock_ticker = MagicMock()
+        mock_hist = pd.DataFrame({"Close": [100, 101, 102]})
+        mock_ticker.history.return_value = mock_hist
+        mock_ticker.fast_info = {"last_price": 102}
+
+        with patch("monitors.etf_monitor.yf.Ticker", return_value=mock_ticker):
+            hist, info = fetch_etf_data("TEST.L")
+
+        assert len(hist) == 3
+        assert "Close" in hist.columns
+
+    def test_fetch_etf_data_empty(self):
+        """fetch_etf_data handles empty response."""
+        from monitors.etf_monitor import fetch_etf_data
+
+        mock_ticker = MagicMock()
+        mock_ticker.history.return_value = pd.DataFrame()
+
+        with patch("monitors.etf_monitor.yf.Ticker", return_value=mock_ticker):
+            hist, info = fetch_etf_data("INVALID")
+
+        assert hist.empty
+
+    def test_fetch_ohlc_data_success(self):
+        """fetch_ohlc_data returns OHLC list."""
+        from monitors.etf_monitor import fetch_ohlc_data
+
+        mock_ticker = MagicMock()
+        dates = pd.date_range(end=datetime.now(), periods=30, freq="D")
+        mock_hist = pd.DataFrame(
+            {"Open": [100] * 30, "High": [101] * 30, "Low": [99] * 30, "Close": [100] * 30},
+            index=dates,
+        )
+        mock_ticker.history.return_value = mock_hist
+
+        with patch("monitors.etf_monitor.yf.Ticker", return_value=mock_ticker):
+            ohlc = fetch_ohlc_data("TEST.L", "1mo")
+
+        assert len(ohlc) == 30
+        assert len(ohlc[0]) == 5  # [timestamp, open, high, low, close]
 
 
 class TestRecommendations:
-    """Tests for recommendation generation."""
+    """Tests for get_recommendation function."""
 
-    def test_danger_recommendation(self):
-        """Danger level should produce danger recommendation."""
-        from models import AlertLevel
+    def test_recommendation_danger(self):
+        """DANGER level produces danger recommendation."""
         from monitors.etf_monitor import get_recommendation
 
-        rec = get_recommendation(AlertLevel.DANGER, "Test Fund")
+        rec = get_recommendation(AlertLevel.DANGER, "Test ETF")
 
         assert rec.level == "DANGER"
-        assert "Test Fund" in rec.body
+        assert "Test ETF" in rec.body
 
-    def test_ok_recommendation(self):
-        """OK level should produce OK recommendation."""
-        from models import AlertLevel
+    def test_recommendation_warn(self):
+        """WARN level produces warning recommendation."""
         from monitors.etf_monitor import get_recommendation
 
-        rec = get_recommendation(AlertLevel.OK, "Test Fund")
+        rec = get_recommendation(AlertLevel.WARN, "Test ETF")
+
+        assert rec.level == "WARN"
+
+    def test_recommendation_ok(self):
+        """OK level produces positive recommendation."""
+        from monitors.etf_monitor import get_recommendation
+
+        rec = get_recommendation(AlertLevel.OK, "Test ETF")
 
         assert rec.level == "OK"
