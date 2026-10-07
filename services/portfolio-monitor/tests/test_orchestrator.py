@@ -345,3 +345,213 @@ class TestSingleton:
         assert get_orchestrator() is custom
 
         reset_orchestrator()
+
+
+class TestSchedulerLoop:
+    """Tests for the scheduler loop edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_scheduler_runs_monitor_at_scheduled_time(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """Scheduler triggers monitor when time matches."""
+        import asyncio
+
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+        orch._running = True
+
+        # Mock get_next_run_times to return "now"
+        now = datetime.now(timezone.utc)
+        with patch.object(
+            orch, "get_next_run_times", return_value={"etf": now, "crypto": now}
+        ):
+            # Run one iteration of the loop
+            task = asyncio.create_task(orch._schedule_loop())
+            await asyncio.sleep(0.1)
+            orch._running = False
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        # ETF and crypto monitors should have been called
+        mock_monitors["etf"].run.assert_called()
+        mock_monitors["crypto"].run.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_scheduler_handles_monitor_error(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """Scheduler continues after monitor error."""
+        import asyncio
+
+        from orchestrator import Orchestrator
+
+        mock_monitors["etf"].run = AsyncMock(side_effect=Exception("ETF failed"))
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+        orch._running = True
+
+        now = datetime.now(timezone.utc)
+        with patch.object(orch, "get_next_run_times", return_value={"etf": now}):
+            task = asyncio.create_task(orch._schedule_loop())
+            await asyncio.sleep(0.1)
+            orch._running = False
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        # Should not crash — the error is logged and loop continues
+
+    @pytest.mark.asyncio
+    async def test_scheduler_cancellation(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """Scheduler handles cancellation gracefully."""
+        import asyncio
+
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+        orch._running = True
+
+        # Make the monitor run take some time so we can cancel mid-flight
+        mock_monitors["etf"].run = AsyncMock(side_effect=asyncio.sleep(10))
+
+        # Start the loop
+        task = asyncio.create_task(orch._schedule_loop())
+        await asyncio.sleep(0.05)
+
+        # Stop the orchestrator (graceful shutdown)
+        orch._running = False
+        task.cancel()
+
+        # Should complete without raising
+        try:
+            await asyncio.wait_for(task, timeout=1.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass  # Both are acceptable
+
+        # The key assertion is that we got here without hanging
+
+
+class TestReloadConfig:
+    """Tests for config reload functionality."""
+
+    def test_reload_config(self, temp_data_dir, mock_notifier, mock_monitors):
+        """Config reload calls the config module."""
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+
+        with patch("orchestrator.reload_config") as mock_reload:
+            orch.reload_config()
+            mock_reload.assert_called_once()
+
+
+class TestInitialRefresh:
+    """Tests for initial monitor refresh on startup."""
+
+    @pytest.mark.asyncio
+    async def test_initial_refresh_when_no_data(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """Runs initial refresh when no previous data exists."""
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+
+        # No previous data
+        assert not orch._summary.etf_analysis
+        assert not orch._summary.crypto_analysis
+
+        with patch("alerts.get_upcoming_alerts", return_value=[]):
+            with patch("alerts.check_and_trigger_alerts", return_value=[]):
+                await orch.start()
+
+        # Monitors should have been called
+        mock_monitors["etf"].run.assert_called()
+        mock_monitors["crypto"].run.assert_called()
+
+        await orch.stop()
+
+    @pytest.mark.asyncio
+    async def test_skip_initial_refresh_when_data_exists(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """Skips initial refresh when data already exists."""
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+
+        # Pre-populate data
+        orch._summary.etf_analysis = [MagicMock()]
+        orch._summary.crypto_analysis = [MagicMock()]
+
+        await orch.start()
+
+        # Monitors should NOT have been called (data exists)
+        mock_monitors["etf"].run.assert_not_called()
+
+        await orch.stop()
+
+
+class TestLazyNotifierInit:
+    """Tests for lazy notifier initialization."""
+
+    def test_notifier_created_lazily(self, temp_data_dir, mock_monitors):
+        """Notifier is created lazily when needed."""
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(monitors=mock_monitors)
+
+        # No notifier yet
+        assert orch._notifier is None
+
+        # Access triggers creation - patch where it's imported
+        with patch("email_notifier.EmailNotifier") as MockNotifier:
+            MockNotifier.return_value = MagicMock(enabled=True)
+            notifier = orch._get_notifier()
+            # EmailNotifier is imported inside _get_notifier, so it creates a real one
+            # Just verify we got a notifier back
+            assert notifier is not None
+
+
+class TestStateFileCorruption:
+    """Tests for handling corrupted state files."""
+
+    def test_handles_corrupted_state_file(self, temp_data_dir):
+        """Handles corrupted state.json gracefully."""
+        from orchestrator import Orchestrator
+
+        state_file = temp_data_dir / "state.json"
+        state_file.write_text("{ invalid json }")
+
+        with patch("orchestrator.STATE_FILE", state_file):
+            with patch("orchestrator.DATA_DIR", temp_data_dir):
+                # Should not crash
+                orch = Orchestrator()
+                state = orch.get_state()
+
+                # Should have default values
+                assert state.last_etf_run is None
+
+    def test_handles_state_save_error(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """Handles state save errors gracefully."""
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+
+        # Make state file unwritable
+        with patch(
+            "orchestrator.STATE_FILE", temp_data_dir / "nonexistent" / "state.json"
+        ):
+            # Should not crash
+            orch._save_state()

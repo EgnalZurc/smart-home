@@ -55,15 +55,66 @@ _cg_client = RetryClient(default_headers=_cg_headers, config=_retry_config)
 _generic_client = RetryClient(config=_retry_config)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Simple TTL Cache for API responses
+# CoinGecko Demo plan: 30 calls/min, 10k/month — cache reduces rate limit risk
+# ─────────────────────────────────────────────────────────────────────────────
+class TTLCache:
+    """Simple in-memory cache with per-entry TTL expiration."""
+
+    def __init__(self, default_ttl_seconds: int = 300):
+        self._cache: dict[str, tuple[Any, datetime]] = {}
+        self._default_ttl = default_ttl_seconds
+
+    def get(self, key: str) -> Any | None:
+        """Return cached value if not expired, else None."""
+        if key not in self._cache:
+            return None
+        value, expires_at = self._cache[key]
+        if datetime.now(timezone.utc) >= expires_at:
+            del self._cache[key]
+            return None
+        return value
+
+    def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
+        """Store value with TTL (defaults to cache default)."""
+        ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
+        self._cache[key] = (value, expires_at)
+
+    def clear(self) -> None:
+        """Clear all cached entries."""
+        self._cache.clear()
+
+
+# Cache instances with different TTLs per data type
+# Market data: 5 min (prices update ~every minute, but we don't need real-time)
+# OHLC: 15 min (historical data, rarely changes)
+# Fear & Greed: 30 min (updates ~daily)
+_market_cache = TTLCache(default_ttl_seconds=300)  # 5 min
+_ohlc_cache = TTLCache(default_ttl_seconds=900)  # 15 min
+_fg_cache = TTLCache(default_ttl_seconds=1800)  # 30 min
+
+
 def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
     """Fetch price, 24h change, ATH, 14d and 30d changes for all coins."""
     if not coingecko_ids:
         return {}
 
+    # Create a stable cache key from sorted IDs
+    ids_sorted = sorted(set(coingecko_ids))
+    cache_key = ",".join(ids_sorted)
+
+    # Check cache first
+    cached = _market_cache.get(cache_key)
+    if cached is not None:
+        logger.debug(f"Cache hit for market data: {cache_key[:30]}...")
+        return cached
+
     ids = ",".join(dict.fromkeys(coingecko_ids))
     try:
         rows = _cg_client.get(_MARKETS_URL.format(ids=ids)).json()
-        return {
+        result = {
             row["id"]: {
                 "eur": row.get("current_price", 0),
                 "eur_24h_change": row.get("price_change_percentage_24h", 0),
@@ -75,6 +126,9 @@ def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
             }
             for row in rows
         }
+        # Cache successful response
+        _market_cache.set(cache_key, result)
+        return result
     except Exception as e:
         logger.error(f"Error fetching prices: {e}")
         return {}
@@ -82,8 +136,19 @@ def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
 
 def fetch_ohlc(coingecko_id: str, days: int = 30) -> list[list[float]]:
     """Fetch OHLC data for sparkline charts."""
+    cache_key = f"{coingecko_id}:{days}"
+
+    # Check cache first
+    cached = _ohlc_cache.get(cache_key)
+    if cached is not None:
+        logger.debug(f"Cache hit for OHLC: {cache_key}")
+        return cached
+
     try:
-        return _cg_client.get(_OHLC_URL.format(id=coingecko_id, days=days)).json()
+        result = _cg_client.get(_OHLC_URL.format(id=coingecko_id, days=days)).json()
+        # Cache successful response
+        _ohlc_cache.set(cache_key, result)
+        return result
     except Exception as e:
         logger.error(f"Error fetching OHLC for {coingecko_id}: {e}")
         return []
@@ -91,9 +156,20 @@ def fetch_ohlc(coingecko_id: str, days: int = 30) -> list[list[float]]:
 
 def fetch_fear_greed() -> tuple[int | None, str | None]:
     """Fetch the current Fear & Greed index value and label."""
+    cache_key = "fear_greed"
+
+    # Check cache first
+    cached = _fg_cache.get(cache_key)
+    if cached is not None:
+        logger.debug("Cache hit for Fear & Greed")
+        return cached
+
     try:
         data = _generic_client.get(_FG_URL).json()
-        return int(data["data"][0]["value"]), data["data"][0]["value_classification"]
+        result = int(data["data"][0]["value"]), data["data"][0]["value_classification"]
+        # Cache successful response
+        _fg_cache.set(cache_key, result)
+        return result
     except Exception as e:
         logger.error(f"Error fetching Fear & Greed: {e}")
         return None, None

@@ -444,7 +444,9 @@ class TestFetchHelpers:
 
     def test_fetch_fear_greed_error(self):
         """fetch_fear_greed handles errors gracefully."""
-        from monitors.crypto_monitor import fetch_fear_greed
+        from monitors.crypto_monitor import _fg_cache, fetch_fear_greed
+
+        _fg_cache.clear()  # Clear cache to ensure API is called
 
         with patch("monitors.crypto_monitor._generic_client") as mock_client:
             mock_client.get.side_effect = Exception("Network error")
@@ -452,3 +454,151 @@ class TestFetchHelpers:
 
         assert value is None
         assert label is None
+
+
+class TestTTLCache:
+    """Tests for the TTL cache implementation."""
+
+    def test_cache_stores_and_retrieves(self):
+        """Cache stores and retrieves values."""
+        from monitors.crypto_monitor import TTLCache
+
+        cache = TTLCache(default_ttl_seconds=60)
+        cache.set("key", {"data": "value"})
+
+        result = cache.get("key")
+        assert result == {"data": "value"}
+
+    def test_cache_returns_none_for_missing_key(self):
+        """Cache returns None for missing keys."""
+        from monitors.crypto_monitor import TTLCache
+
+        cache = TTLCache()
+        result = cache.get("nonexistent")
+        assert result is None
+
+    def test_cache_expires_entries(self):
+        """Cache entries expire after TTL."""
+        from monitors.crypto_monitor import TTLCache
+
+        cache = TTLCache(default_ttl_seconds=1)
+        cache.set("key", "value")
+
+        # Manually expire the entry
+        cache._cache["key"] = (
+            "value",
+            datetime.now(timezone.utc) - timedelta(seconds=10),
+        )
+
+        result = cache.get("key")
+        assert result is None
+
+    def test_cache_custom_ttl(self):
+        """Cache respects custom TTL per entry."""
+        from monitors.crypto_monitor import TTLCache
+
+        cache = TTLCache(default_ttl_seconds=300)
+        cache.set("short", "value", ttl_seconds=1)
+        cache.set("long", "value", ttl_seconds=3600)
+
+        # Manually expire short entry
+        cache._cache["short"] = (
+            "value",
+            datetime.now(timezone.utc) - timedelta(seconds=10),
+        )
+
+        assert cache.get("short") is None
+        assert cache.get("long") == "value"
+
+    def test_cache_clear(self):
+        """Cache clear removes all entries."""
+        from monitors.crypto_monitor import TTLCache
+
+        cache = TTLCache()
+        cache.set("key1", "value1")
+        cache.set("key2", "value2")
+
+        cache.clear()
+
+        assert cache.get("key1") is None
+        assert cache.get("key2") is None
+
+
+class TestCachedFetchFunctions:
+    """Tests for cached fetch functions."""
+
+    def test_fetch_market_batch_uses_cache(self):
+        """fetch_market_batch returns cached data on second call."""
+        from monitors.crypto_monitor import _market_cache, fetch_market_batch
+
+        _market_cache.clear()
+
+        mock_response = [
+            {
+                "id": "bitcoin",
+                "current_price": 50000,
+                "price_change_percentage_24h": 2.5,
+            }
+        ]
+
+        with patch("monitors.crypto_monitor._cg_client") as mock_client:
+            mock_client.get.return_value.json.return_value = mock_response
+
+            # First call - hits API
+            result1 = fetch_market_batch(["bitcoin"])
+            assert mock_client.get.call_count == 1
+
+            # Second call - should use cache
+            result2 = fetch_market_batch(["bitcoin"])
+            assert mock_client.get.call_count == 1  # No additional API call
+
+            assert result1 == result2
+
+        _market_cache.clear()
+
+    def test_fetch_ohlc_uses_cache(self):
+        """fetch_ohlc returns cached data on second call."""
+        from monitors.crypto_monitor import _ohlc_cache, fetch_ohlc
+
+        _ohlc_cache.clear()
+
+        mock_ohlc = [[1234567890, 50000, 51000, 49000, 50500]]
+
+        with patch("monitors.crypto_monitor._cg_client") as mock_client:
+            mock_client.get.return_value.json.return_value = mock_ohlc
+
+            # First call - hits API
+            result1 = fetch_ohlc("bitcoin", days=30)
+            assert mock_client.get.call_count == 1
+
+            # Second call - should use cache
+            result2 = fetch_ohlc("bitcoin", days=30)
+            assert mock_client.get.call_count == 1  # No additional API call
+
+            assert result1 == result2
+
+        _ohlc_cache.clear()
+
+    def test_fetch_fear_greed_uses_cache(self):
+        """fetch_fear_greed returns cached data on second call."""
+        from monitors.crypto_monitor import _fg_cache, fetch_fear_greed
+
+        _fg_cache.clear()
+
+        mock_data = {"data": [{"value": "65", "value_classification": "Greed"}]}
+
+        with patch("monitors.crypto_monitor._generic_client") as mock_client:
+            mock_client.get.return_value.json.return_value = mock_data
+
+            # First call - hits API
+            val1, label1 = fetch_fear_greed()
+            assert mock_client.get.call_count == 1
+
+            # Second call - should use cache
+            val2, label2 = fetch_fear_greed()
+            assert mock_client.get.call_count == 1  # No additional API call
+
+            assert val1 == val2 == 65
+            assert label1 == label2 == "Greed"
+
+        _fg_cache.clear()

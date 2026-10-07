@@ -40,5 +40,9 @@ services:
     environment:
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
+      # Include libs/ in PYTHONPATH so services that depend on shared libraries
+      # (like portfolio-monitor using http_client) can import them during tests.
+      # This mirrors the CI setup: PYTHONPATH=src:../../libs
+      - PYTHONPATH=/workspace/libs
     # Do not auto-restart; it is an on-demand tool container.
     restart: "no"
