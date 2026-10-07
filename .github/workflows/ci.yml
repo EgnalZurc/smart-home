@@ -100,6 +100,7 @@ jobs:
               - 'services/vaultwarden/**'
             valheim-admin:
               - 'services/valheim-admin/**'
+              - 'libs/async_http_client/**'
             pc-agent:
               - 'tools/pc-agent/**'
             nginx:
@@ -205,7 +206,7 @@ jobs:
           [[ "${{ steps.changes.outputs.vaultwarden }}" == "true" ]] && \
             add_service "vaultwarden" "egnal/smart-home-vaultwarden" "./services/vaultwarden" "Dockerfile"
           [[ "${{ steps.changes.outputs.valheim-admin }}" == "true" ]] && \
-            add_service "valheim-admin" "egnal/smart-home-valheim-admin" "./services/valheim-admin" "Dockerfile"
+            add_service "valheim-admin" "egnal/smart-home-valheim-admin" "." "services/valheim-admin/Dockerfile"
           
           SERVICES="$SERVICES]"
           echo "services=$SERVICES" >> $GITHUB_OUTPUT
