@@ -1,4 +1,4 @@
-"""Tests for the Telegram notifier module."""
+"""Tests for the Telegram notifier module (baby-gifts wrapper)."""
 
 import importlib
 from unittest.mock import MagicMock, patch
@@ -10,15 +10,16 @@ def _reload_notifier_with_config(monkeypatch, token="", chat_id="", chat_ids="")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", chat_id)
     monkeypatch.setenv("TELEGRAM_CHAT_IDS", chat_ids)
 
-    # Reload config first to pick up new env vars
-    import config
-
-    importlib.reload(config)
-
-    # Then reload notifier which imports from config
+    # Reset the cached notifier instance
     import notifier
 
-    importlib.reload(notifier)
+    notifier.reset_notifier()
+
+    # Reload the TelegramNotifier to pick up new env
+    from libs.notifications import telegram
+
+    importlib.reload(telegram)
+
     return notifier
 
 
@@ -39,7 +40,7 @@ class TestNotifier:
             monkeypatch, "test_token", "test_chat_id", ""
         )
 
-        with patch("notifier.httpx.post") as mock_post:
+        with patch("libs.notifications.telegram.httpx.post") as mock_post:
             mock_response = MagicMock()
             mock_response.json.return_value = {"ok": True}
             mock_post.return_value = mock_response
@@ -58,7 +59,7 @@ class TestNotifier:
             monkeypatch, "test_token", "test_chat_id", ""
         )
 
-        with patch("notifier.httpx.post") as mock_post:
+        with patch("libs.notifications.telegram.httpx.post") as mock_post:
             mock_response = MagicMock()
             mock_response.json.return_value = {"ok": True}
             mock_post.return_value = mock_response
@@ -77,7 +78,7 @@ class TestNotifier:
             monkeypatch, "my_bot_token", "123456789", ""
         )
 
-        with patch("notifier.httpx.post") as mock_post:
+        with patch("libs.notifications.telegram.httpx.post") as mock_post:
             mock_response = MagicMock()
             mock_response.json.return_value = {"ok": True}
             mock_post.return_value = mock_response
@@ -106,7 +107,7 @@ class TestNotifier:
             monkeypatch, "test_token", "test_chat_id", ""
         )
 
-        with patch("notifier.httpx.post") as mock_post:
+        with patch("libs.notifications.telegram.httpx.post") as mock_post:
             mock_response = MagicMock()
             mock_response.json.return_value = {
                 "ok": False,
@@ -127,7 +128,7 @@ class TestNotifier:
 
         import httpx
 
-        with patch("notifier.httpx.post") as mock_post:
+        with patch("libs.notifications.telegram.httpx.post") as mock_post:
             mock_post.side_effect = httpx.TimeoutException("Timeout")
 
             result = notifier.send_gift_notification("Test", "User", "reserved")
@@ -141,7 +142,7 @@ class TestNotifier:
             monkeypatch, "test_token", "", "111,222,333"
         )
 
-        with patch("notifier.httpx.post") as mock_post:
+        with patch("libs.notifications.telegram.httpx.post") as mock_post:
             mock_response = MagicMock()
             mock_response.json.return_value = {"ok": True}
             mock_post.return_value = mock_response
@@ -164,7 +165,7 @@ class TestNotifier:
             monkeypatch, "test_token", "old_single_id", "new_id_1,new_id_2"
         )
 
-        with patch("notifier.httpx.post") as mock_post:
+        with patch("libs.notifications.telegram.httpx.post") as mock_post:
             mock_response = MagicMock()
             mock_response.json.return_value = {"ok": True}
             mock_post.return_value = mock_response
@@ -185,7 +186,7 @@ class TestNotifier:
             monkeypatch, "test_token", "", " 111 , 222 , 333 "
         )
 
-        with patch("notifier.httpx.post") as mock_post:
+        with patch("libs.notifications.telegram.httpx.post") as mock_post:
             mock_response = MagicMock()
             mock_response.json.return_value = {"ok": True}
             mock_post.return_value = mock_response
@@ -215,7 +216,7 @@ class TestNotifier:
                 mock_response.json.return_value = {"ok": True}
             return mock_response
 
-        with patch("notifier.httpx.post") as mock_post:
+        with patch("libs.notifications.telegram.httpx.post") as mock_post:
             mock_post.side_effect = mock_post_side_effect
 
             result = notifier.send_gift_notification("Regalo", "Luis", "reserved")
