@@ -7,6 +7,6 @@ Provides a simple HTTP client with:
 - Logging of retry attempts
 """
 
-from .client import RetryClient, get_with_retry
+from .client import RetryClient, RetryConfig, get_with_retry
 
-__all__ = ["RetryClient", "get_with_retry"]
+__all__ = ["RetryClient", "RetryConfig", "get_with_retry"]

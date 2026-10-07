@@ -2,16 +2,11 @@
 Tests for the orchestrator module.
 """
 
-import asyncio
-import json
-import tempfile
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from models import AlertLevel, MonitorState, PortfolioSummary
+from models import AlertLevel
 
 
 @pytest.fixture
@@ -151,7 +146,9 @@ class TestRunMonitor:
         assert orch._summary.etf_total_value == 10000
 
     @pytest.mark.asyncio
-    async def test_run_crypto_monitor(self, temp_data_dir, mock_notifier, mock_monitors):
+    async def test_run_crypto_monitor(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
         """Running crypto monitor updates state."""
         from orchestrator import Orchestrator
 
@@ -164,7 +161,9 @@ class TestRunMonitor:
         assert orch._summary.crypto_fear_greed == 55
 
     @pytest.mark.asyncio
-    async def test_run_savings_monitor(self, temp_data_dir, mock_notifier, mock_monitors):
+    async def test_run_savings_monitor(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
         """Running savings monitor updates state."""
         from orchestrator import Orchestrator
 
@@ -175,7 +174,9 @@ class TestRunMonitor:
         assert orch._summary.savings_total_balance == 20000
 
     @pytest.mark.asyncio
-    async def test_run_unknown_monitor(self, temp_data_dir, mock_notifier, mock_monitors):
+    async def test_run_unknown_monitor(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
         """Running unknown monitor raises error."""
         from orchestrator import Orchestrator
 

@@ -3,10 +3,9 @@ Tests for the crypto_monitor module.
 """
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 from models import AlertLevel
 
 
@@ -112,7 +111,9 @@ class TestComputeSignals:
         signals, level = compute_signals(pos, price_data, fear_greed_val=None)
 
         assert level == AlertLevel.OK
-        pump_signals = [s for s in signals if "Subida" in s.body or "surge" in s.body.lower()]
+        pump_signals = [
+            s for s in signals if "Subida" in s.body or "surge" in s.body.lower()
+        ]
         assert len(pump_signals) >= 1
 
     def test_ath_proximity_info(self):
@@ -167,7 +168,11 @@ class TestComputeSignals:
         signals, level = compute_signals(pos, price_data, fear_greed_val=None)
 
         assert level == AlertLevel.OK
-        bull_signals = [s for s in signals if "30" in s.body and ("bull" in s.body.lower() or "Subida" in s.body)]
+        bull_signals = [
+            s
+            for s in signals
+            if "30" in s.body and ("bull" in s.body.lower() or "Subida" in s.body)
+        ]
         assert len(bull_signals) >= 1
 
 
@@ -188,7 +193,9 @@ class TestStakingRiskSignals:
         signals, level = compute_staking_risk_signals(pos, {}, maturity_warn_days=7)
 
         assert len(signals) >= 1
-        assert any("vence" in s.body.lower() or "matures" in s.body.lower() for s in signals)
+        assert any(
+            "vence" in s.body.lower() or "matures" in s.body.lower() for s in signals
+        )
 
     def test_staking_already_matured(self):
         """Matured staking produces WARN signal."""
@@ -204,7 +211,9 @@ class TestStakingRiskSignals:
         signals, level = compute_staking_risk_signals(pos, {})
 
         assert level == AlertLevel.WARN
-        assert any("vencido" in s.body.lower() or "matured" in s.body.lower() for s in signals)
+        assert any(
+            "vencido" in s.body.lower() or "matured" in s.body.lower() for s in signals
+        )
 
     def test_exchange_trust_critical(self):
         """Critical trust score produces DANGER."""
@@ -253,7 +262,9 @@ class TestStakingRiskSignals:
 
         signals, level = compute_staking_risk_signals(pos, {})
 
-        assert any("custodia" in s.body.lower() or "custody" in s.body.lower() for s in signals)
+        assert any(
+            "custodia" in s.body.lower() or "custody" in s.body.lower() for s in signals
+        )
 
 
 class TestDateHelpers:
@@ -366,13 +377,16 @@ class TestCryptoMonitorRun:
                 "monitors.crypto_monitor.fetch_market_batch", return_value=market_data
             ):
                 with patch(
-                    "monitors.crypto_monitor.fetch_fear_greed", return_value=(55, "Greed")
+                    "monitors.crypto_monitor.fetch_fear_greed",
+                    return_value=(55, "Greed"),
                 ):
                     with patch(
                         "monitors.crypto_monitor.fetch_exchange_trust_score",
                         return_value=None,
                     ):
-                        with patch("monitors.crypto_monitor.fetch_ohlc", return_value=[]):
+                        with patch(
+                            "monitors.crypto_monitor.fetch_ohlc", return_value=[]
+                        ):
                             monitor = CryptoMonitor()
                             result = await monitor.run()
 
@@ -400,8 +414,8 @@ class TestFetchHelpers:
             }
         ]
 
-        with patch("monitors.crypto_monitor._get") as mock_get:
-            mock_get.return_value.json.return_value = mock_response
+        with patch("monitors.crypto_monitor._cg_client") as mock_client:
+            mock_client.get.return_value.json.return_value = mock_response
             result = fetch_market_batch(["bitcoin"])
 
         assert "bitcoin" in result
@@ -421,9 +435,8 @@ class TestFetchHelpers:
 
         mock_data = {"data": [{"value": "65", "value_classification": "Greed"}]}
 
-        with patch("requests.get") as mock_get:
-            mock_get.return_value.status_code = 200
-            mock_get.return_value.json.return_value = mock_data
+        with patch("monitors.crypto_monitor._generic_client") as mock_client:
+            mock_client.get.return_value.json.return_value = mock_data
             value, label = fetch_fear_greed()
 
         assert value == 65
@@ -433,7 +446,8 @@ class TestFetchHelpers:
         """fetch_fear_greed handles errors gracefully."""
         from monitors.crypto_monitor import fetch_fear_greed
 
-        with patch("requests.get", side_effect=Exception("Network error")):
+        with patch("monitors.crypto_monitor._generic_client") as mock_client:
+            mock_client.get.side_effect = Exception("Network error")
             value, label = fetch_fear_greed()
 
         assert value is None

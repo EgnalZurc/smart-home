@@ -17,7 +17,7 @@ Copy `data/settings.example.toml` to `data/settings.toml` and configure your pos
 Environment variables:
 - `MONITOR_LANG`: Language (es/en), default: es
 - `SMTP_USER`, `SMTP_PASSWORD`: Email notifications
-- `CG_API_KEY`: CoinGecko API key (optional, for higher rate limits)
+- `COINGECKO_API_KEY`: CoinGecko API key (optional, for higher rate limits)
 
 ## API Endpoints
 
@@ -30,10 +30,16 @@ Environment variables:
 
 ## Development
 
-Tests:
+Tests (via dev container):
+```bash
+# From repo root
+.\dev.ps1 ci portfolio-monitor
+```
+
+Direct tests:
 ```bash
 cd services/portfolio-monitor
-PYTHONPATH=src pytest tests/ -v --cov=src
+PYTHONPATH=src:../../libs pytest tests/ -v --cov=src --cov-fail-under=80
 ```
 
 Lint:
@@ -42,13 +48,36 @@ ruff check src/ tests/
 ruff format src/ tests/
 ```
 
-## Architecture Notes
+## Architecture
 
-### Current Design
+### Design Principles
+
+- **Separation of Concerns**: Monitors, Orchestrator, Config clearly separated
+- **Dependency Injection**: `NotifierProtocol`, `MonitorProtocol` for testability
+- **Shared Libraries**: Reusable code in `libs/` (http_client, notifications)
+- **Externalized i18n**: JSON files in `locales/` (es.json, en.json)
+
+### Current Deployment
 
 - Single-instance deployment on Raspberry Pi
 - In-memory rate limiting (sufficient for single instance)
 - Internal API only (behind nginx, not exposed publicly)
+
+### Quality Metrics
+
+| Metric | Value | Status |
+|--------|-------|--------|
+| Test Coverage | 87%+ | ✅ |
+| Security (Bandit) | 0 issues | ✅ |
+| Lint (Ruff) | Clean | ✅ |
+| Tests | 246+ passing | ✅ |
+
+### Shared Libraries Used
+
+| Library | Purpose | Notes |
+|---------|---------|-------|
+| `libs/http_client/` | HTTP with retry/backoff | Used by crypto_monitor for CoinGecko API |
+| `libs/notifications/` | Email sending | Used by email_notifier |
 
 ### Future Improvements (when needed)
 
@@ -64,7 +93,7 @@ ruff format src/ tests/
      - API key authentication
      - Integrate with existing dashboard auth
 
-### Shared Libraries
-
-- `libs/notifications/`: Email sending (used by this service)
-- `libs/http_client/`: HTTP client with retry/backoff (available for use)
+3. **Template Extraction**
+   - Required if: email templates need frequent updates
+   - Implementation: Move HTML from `email_notifier.py` to Jinja2 templates
+   - Package: `jinja2`

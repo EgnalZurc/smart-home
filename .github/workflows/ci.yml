@@ -187,25 +187,25 @@ jobs:
           
           add_service() {
             if [[ "$FIRST" == "true" ]]; then FIRST=false; else SERVICES="$SERVICES,"; fi
-            SERVICES="$SERVICES{\"name\":\"$1\",\"image\":\"$2\",\"context\":\"$3\"}"
+            SERVICES="$SERVICES{\"name\":\"$1\",\"image\":\"$2\",\"context\":\"$3\",\"dockerfile\":\"$4\"}"
           }
           
           [[ "${{ steps.changes.outputs.dashboard }}" == "true" ]] && \
-            add_service "smart-home-backend" "egnal/smart-home-dashboard" "./dashboard"
+            add_service "smart-home-backend" "egnal/smart-home-dashboard" "./dashboard" "Dockerfile"
           [[ "${{ steps.changes.outputs.ac-service }}" == "true" ]] && \
-            add_service "ac-service" "egnal/smart-home-ac-service" "./services/ac-service"
+            add_service "ac-service" "egnal/smart-home-ac-service" "./services/ac-service" "Dockerfile"
           [[ "${{ steps.changes.outputs.baby-gifts }}" == "true" ]] && \
-            add_service "baby-gifts-service" "egnal/smart-home-baby-gifts" "./services/baby-gifts-service"
+            add_service "baby-gifts-service" "egnal/smart-home-baby-gifts" "./services/baby-gifts-service" "Dockerfile"
           [[ "${{ steps.changes.outputs.portfolio-monitor }}" == "true" ]] && \
-            add_service "portfolio-monitor" "egnal/smart-home-portfolio-monitor" "./services/portfolio-monitor"
+            add_service "portfolio-monitor" "egnal/smart-home-portfolio-monitor" "." "services/portfolio-monitor/Dockerfile"
           [[ "${{ steps.changes.outputs.vacaciones }}" == "true" ]] && \
-            add_service "vacaciones-service" "egnal/smart-home-vacaciones" "./services/vacaciones-service"
+            add_service "vacaciones-service" "egnal/smart-home-vacaciones" "./services/vacaciones-service" "Dockerfile"
           [[ "${{ steps.changes.outputs.casita }}" == "true" ]] && \
-            add_service "casita-suenos" "egnal/smart-home-casita-suenos" "./services/casita-suenos/fase3-app"
+            add_service "casita-suenos" "egnal/smart-home-casita-suenos" "./services/casita-suenos/fase3-app" "Dockerfile"
           [[ "${{ steps.changes.outputs.vaultwarden }}" == "true" ]] && \
-            add_service "vaultwarden" "egnal/smart-home-vaultwarden" "./services/vaultwarden"
+            add_service "vaultwarden" "egnal/smart-home-vaultwarden" "./services/vaultwarden" "Dockerfile"
           [[ "${{ steps.changes.outputs.valheim-admin }}" == "true" ]] && \
-            add_service "valheim-admin" "egnal/smart-home-valheim-admin" "./services/valheim-admin"
+            add_service "valheim-admin" "egnal/smart-home-valheim-admin" "./services/valheim-admin" "Dockerfile"
           
           SERVICES="$SERVICES]"
           echo "services=$SERVICES" >> $GITHUB_OUTPUT
@@ -384,7 +384,7 @@ jobs:
         run: |
           if [[ -d "services/portfolio-monitor/tests" ]] && find services/portfolio-monitor/tests -name "test_*.py" | grep -q .; then
             pip install -r services/portfolio-monitor/requirements.txt --quiet 2>/dev/null || true
-            cd services/portfolio-monitor && PYTHONPATH=src python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
+            cd services/portfolio-monitor && PYTHONPATH=src:../../libs python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
           else
             echo "⏭️ No tests found"
           fi
@@ -661,6 +661,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.context }}/${{ matrix.service.dockerfile }}
           push: true
           tags: |
             ${{ matrix.service.image }}:latest

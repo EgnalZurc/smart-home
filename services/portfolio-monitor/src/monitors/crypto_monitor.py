@@ -5,16 +5,22 @@ Fetches data from CoinGecko and tracks staking positions.
 
 import logging
 import os
-import time
+import sys
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import requests
 from config import CRYPTO_POSITIONS, CRYPTO_THRESHOLDS
 from i18n import t
 from models import AlertLevel, CryptoAnalysis, Signal
 
 from . import BaseMonitor, register_monitor
+
+# Add libs to path for shared library import
+_LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
+if _LIBS_PATH not in sys.path:
+    sys.path.insert(0, _LIBS_PATH)
+
+from http_client import RetryClient, RetryConfig  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -37,31 +43,16 @@ _OHLC_URL = (
 )
 _FG_URL = "https://api.alternative.me/fng/?limit=1"
 
-
 # ─────────────────────────────────────────────────────────────────────────────
-# API Helpers
+# HTTP Client with retry (uses shared library)
 # ─────────────────────────────────────────────────────────────────────────────
-def _get(url: str, use_cg_key: bool = True) -> requests.Response:
-    """GET with exponential backoff retry on 429/403."""
-    headers = {}
-    if use_cg_key and _CG_API_KEY and "coingecko.com" in url:
-        headers["x-cg-demo-api-key"] = _CG_API_KEY
+_cg_headers = {"x-cg-demo-api-key": _CG_API_KEY} if _CG_API_KEY else {}
+_retry_config = RetryConfig(
+    timeout=_TIMEOUT, max_retries=_RETRIES, initial_backoff=_BACKOFF
+)
 
-    delay = _BACKOFF
-    for attempt in range(1, _RETRIES + 1):
-        r = requests.get(url, headers=headers, timeout=_TIMEOUT)
-        if r.status_code in (429, 403):
-            logger.debug(
-                f"Rate limited ({r.status_code}), retrying in {delay:.0f}s "
-                f"(attempt {attempt}/{_RETRIES})"
-            )
-            time.sleep(delay)
-            delay *= 2
-            continue
-        r.raise_for_status()
-        return r
-    r.raise_for_status()
-    return r
+_cg_client = RetryClient(default_headers=_cg_headers, config=_retry_config)
+_generic_client = RetryClient(config=_retry_config)
 
 
 def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
@@ -71,7 +62,7 @@ def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
 
     ids = ",".join(dict.fromkeys(coingecko_ids))
     try:
-        rows = _get(_MARKETS_URL.format(ids=ids)).json()
+        rows = _cg_client.get(_MARKETS_URL.format(ids=ids)).json()
         return {
             row["id"]: {
                 "eur": row.get("current_price", 0),
@@ -92,7 +83,7 @@ def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
 def fetch_ohlc(coingecko_id: str, days: int = 30) -> list[list[float]]:
     """Fetch OHLC data for sparkline charts."""
     try:
-        return _get(_OHLC_URL.format(id=coingecko_id, days=days)).json()
+        return _cg_client.get(_OHLC_URL.format(id=coingecko_id, days=days)).json()
     except Exception as e:
         logger.error(f"Error fetching OHLC for {coingecko_id}: {e}")
         return []
@@ -101,9 +92,7 @@ def fetch_ohlc(coingecko_id: str, days: int = 30) -> list[list[float]]:
 def fetch_fear_greed() -> tuple[int | None, str | None]:
     """Fetch the current Fear & Greed index value and label."""
     try:
-        r = requests.get(_FG_URL, timeout=_TIMEOUT)
-        r.raise_for_status()
-        data = r.json()
+        data = _generic_client.get(_FG_URL).json()
         return int(data["data"][0]["value"]), data["data"][0]["value_classification"]
     except Exception as e:
         logger.error(f"Error fetching Fear & Greed: {e}")
@@ -167,7 +156,7 @@ def fetch_exchange_trust_score(exchange: str) -> int | None:
 
     url = f"https://api.coingecko.com/api/v3/exchanges/{exchange_id}"
     try:
-        data = _get(url).json()
+        data = _cg_client.get(url).json()
         return data.get("trust_score")
     except Exception as e:
         logger.warning(f"Could not fetch trust score for {exchange}: {e}")
