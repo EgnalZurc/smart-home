@@ -13,6 +13,7 @@ mosquitto_data/
 # Config con credenciales (sensibles)
 config.yaml
 .env
+.env.immich
 
 # Runtime data (centralized)
 data/
