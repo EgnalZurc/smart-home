@@ -1,127 +1,70 @@
-# 📊 Portfolio Monitor Service
+# portfolio-monitor
 
-Servicio de monitorización de cartera de inversiones para el ecosistema Smart Home. Monitoriza ETFs y posiciones de staking de criptomonedas.
+Portfolio monitoring service with ETF, crypto staking, and savings tracking.
 
-## ⚠️ Disclaimer
+## Features
 
-Este servicio proporciona **información descriptiva**, no asesoramiento financiero. Las señales y métricas son herramientas de análisis técnico con limitaciones conocidas:
+- **ETF Monitor**: Yahoo Finance data, technical analysis (MA50/MA200), signals
+- **Crypto Monitor**: CoinGecko data, staking APY tracking, Fear & Greed index
+- **Savings Monitor**: Bank account tracking with interest projections
+- **Email Notifications**: Alert emails for significant changes
+- **Scheduled Alerts**: Recurring reminders (contributions, distributions)
 
-- **Fear & Greed**: Indicador de sentimiento, no predictor de precios
-- **Golden/Death Cross**: Indicadores retrasados, mejor para confirmar tendencias que para timing de entrada
-- **Proximidad a ATH**: Informativo, no implica necesidad de vender
-- **Cálculos IRPF**: Estimaciones basadas en legislación vigente, consulta con un asesor fiscal
+## Configuration
 
-La filosofía del servicio es **informar sin prescribir**. Las decisiones de inversión son tuyas.
+Copy `data/settings.example.toml` to `data/settings.toml` and configure your positions.
 
-## Características
-
-### Monitor de ETFs
-- Descarga datos de Yahoo Finance
-- Análisis técnico (medias móviles 50/200 días, Golden/Death Cross)
-- Alertas de caída desde máximos y pérdidas vs precio medio
-- Cálculo de impuestos IRPF sobre plusvalías
-- Seguimiento de plan de inversión por fases
-- Comparación con hitos proyectados
-
-### Monitor de Crypto Staking
-- Datos de precios via CoinGecko API
-- Índice Fear & Greed
-- Seguimiento de posiciones flexibles y a plazo fijo
-- Cálculo de recompensas diarias y acumuladas
-- Alertas de mercado (cambios 24h/30d, proximidad a ATH)
-- Días hasta redención/vencimiento
-
-## Configuración
-
-El servicio lee su configuración de `/app/data/settings.toml`. Ver `settings.example.toml` para la estructura completa.
-
-### Variables de entorno
-
-| Variable | Descripción | Default |
-|----------|-------------|---------|
-| `MONITOR_LANG` | Idioma de los reportes (`es` o `en`) | `es` |
-| `LOG_LEVEL` | Nivel de logging (`DEBUG`, `INFO`, `WARNING`) | `INFO` |
-| `DATA_DIR` | Directorio de datos | `/app/data` |
-
-### Notificaciones por Email
-
-El servicio envía alertas por email **solo cuando hay señales WARN o DANGER**. 
-Esto evita spam y te notifica solo cuando necesitas revisar algo.
-
-Puedes probar con `POST /api/portfolio/notifications/test`
+Environment variables:
+- `MONITOR_LANG`: Language (es/en), default: es
+- `SMTP_USER`, `SMTP_PASSWORD`: Email notifications
+- `CG_API_KEY`: CoinGecko API key (optional, for higher rate limits)
 
 ## API Endpoints
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/smart-home/portfolio` | Dashboard SPA |
-| GET | `/api/portfolio/summary` | Resumen completo |
-| GET | `/api/portfolio/etf` | Análisis ETFs |
-| GET | `/api/portfolio/crypto` | Análisis Crypto |
-| POST | `/api/portfolio/refresh` | Actualizar todos los monitores |
-| POST | `/api/portfolio/refresh/{name}` | Actualizar monitor específico |
-| GET | `/api/portfolio/schedule` | Ver programación |
-| POST | `/api/portfolio/reload-config` | Recargar configuración |
-| GET | `/api/portfolio/notifications/status` | Estado del notificador |
-| POST | `/api/portfolio/notifications/test` | Enviar notificación de prueba |
-| GET | `/health` | Health check |
+- `GET /api/portfolio/summary` - Full portfolio summary
+- `GET /api/portfolio/etf` - ETF positions
+- `GET /api/portfolio/crypto` - Crypto staking positions
+- `GET /api/portfolio/savings` - Savings accounts
+- `GET /api/portfolio/health/external` - External service health checks
+- `POST /api/portfolio/refresh` - Trigger manual refresh (rate limited)
 
-## Desarrollo local
+## Development
 
+Tests:
 ```bash
 cd services/portfolio-monitor
-pip install -r requirements.txt
-uvicorn src.main:app --reload --port 8010
+PYTHONPATH=src pytest tests/ -v --cov=src
 ```
 
-## Docker
-
+Lint:
 ```bash
-docker build -t portfolio-monitor .
-docker run -p 8010:8010 -v ./data:/app/data portfolio-monitor
+ruff check src/ tests/
+ruff format src/ tests/
 ```
 
-## Arquitectura
+## Architecture Notes
 
-```
-portfolio-monitor/
-├── src/
-│   ├── main.py              # FastAPI app + endpoints
-│   ├── config.py            # Carga de configuración TOML
-│   ├── models.py            # Dataclasses y enums
-│   ├── i18n.py              # Traducciones es/en
-│   ├── orchestrator.py      # Orquestador + scheduler
-│   ├── api/
-│   │   └── routes.py        # API routes
-│   ├── monitors/
-│   │   ├── __init__.py      # Registry de monitores
-│   │   ├── etf_monitor.py   # Monitor ETFs
-│   │   └── crypto_monitor.py # Monitor Crypto
-│   └── static/
-│       └── portfolio.html   # Dashboard SPA
-├── Dockerfile
-├── requirements.txt
-└── README.md
-```
+### Current Design
 
-## Extensibilidad
+- Single-instance deployment on Raspberry Pi
+- In-memory rate limiting (sufficient for single instance)
+- Internal API only (behind nginx, not exposed publicly)
 
-Para añadir un nuevo monitor:
+### Future Improvements (when needed)
 
-1. Crear archivo en `monitors/new_monitor.py`
-2. Extender `BaseMonitor` e implementar `run()`, `get_level()`, `get_last_update()`
-3. Usar el decorador `@register_monitor`
-4. El orquestador lo detectará automáticamente
+1. **Distributed Rate Limiting (Redis)**
+   - Required if: scaling to multiple instances
+   - Implementation: Replace `RateLimiter` class in `routes.py` with Redis-backed sliding window
+   - Package: `redis` or `aioredis`
 
-```python
-from monitors import BaseMonitor, register_monitor
+2. **API Authentication**
+   - Required if: exposing API publicly
+   - Options:
+     - OAuth2 with JWT tokens (FastAPI `Depends`)
+     - API key authentication
+     - Integrate with existing dashboard auth
 
+### Shared Libraries
 
-@register_monitor
-class NewMonitor(BaseMonitor):
-    name = "new"
-
-    async def run(self) -> dict:
-        # Tu lógica aquí
-        pass
-```
+- `libs/notifications/`: Email sending (used by this service)
+- `libs/http_client/`: HTTP client with retry/backoff (available for use)
