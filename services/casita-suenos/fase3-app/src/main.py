@@ -435,9 +435,7 @@ def _telegram_polling() -> None:
 
     while True:
         try:
-            resp = httpx.get(
-                url, params={"offset": offset, "timeout": 30}, timeout=35
-            )
+            resp = httpx.get(url, params={"offset": offset, "timeout": 30}, timeout=35)
             updates = resp.json().get("result", [])
             for upd in updates:
                 offset = upd["update_id"] + 1

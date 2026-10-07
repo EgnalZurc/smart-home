@@ -590,7 +590,9 @@ class CasitaScheduler:
                     imap_conn.close()
                     imap_conn.logout()
                 except Exception:
-                    logger.debug("[casita] IMAP logout failed (connection may be stale)")
+                    logger.debug(
+                        "[casita] IMAP logout failed (connection may be stale)"
+                    )
             return
         logger.info("[casita] %d anuncios de Idealista desde Gmail", len(alerts))
         processed_email_ids, total_new, new_by_zone = [], 0, {}
@@ -707,7 +709,9 @@ class CasitaScheduler:
                     imap_conn.close()
                     imap_conn.logout()
                 except Exception:
-                    logger.debug("[casita] IMAP logout failed (connection may be stale)")
+                    logger.debug(
+                        "[casita] IMAP logout failed (connection may be stale)"
+                    )
             return
 
         logger.info("[casita] %d anuncios de Fotocasa desde Gmail", len(alerts))
