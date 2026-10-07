@@ -690,14 +690,8 @@ jobs:
             cd ~/smart-home-prod
             echo "=== Deploying ${{ matrix.service.name }} ==="
             docker compose pull ${{ matrix.service.name }}
-            
-            if docker compose ps ${{ matrix.service.name }} --status running -q | grep -q .; then
-              docker compose up -d --force-recreate ${{ matrix.service.name }}
-              echo "✅ Service recreated with new image"
-            else
-              echo "⏸️ Service was stopped - image updated but not started"
-            fi
-            
+            docker compose up -d --force-recreate ${{ matrix.service.name }}
+            echo "✅ Service deployed with new image"
             docker ps --filter "name=${{ matrix.service.name }}" --format "table {{.Names}}\t{{.Status}}"
 
   # ─────────────────────────────────────────────────────────────────────────────
