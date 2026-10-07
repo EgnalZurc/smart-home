@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -161,7 +161,14 @@ if STATIC_DIR.exists():
     app.mount("/static/casita", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-# ── Health & Status endpoints ─────────────────────────────────────────────────
+# ── API Router con prefijo /api/casita ────────────────────────────────────────
+# El frontend espera las rutas en /api/casita/status, /api/casita/radar, etc.
+# nginx hace proxy de /api/casita/* a casita-suenos:8001/api/casita/*
+
+api = APIRouter(prefix="/api/casita")
+
+
+# ── Health endpoint (sin prefijo, para Docker healthcheck) ────────────────────
 
 
 @app.get("/health")
@@ -169,7 +176,10 @@ async def health():
     return {"online": True}
 
 
-@app.get("/status")
+# ── Status endpoint ───────────────────────────────────────────────────────────
+
+
+@api.get("/status")
 async def status():
     if _scheduler_instance is None:
         raise HTTPException(status_code=503, detail="Scheduler not ready")
@@ -230,7 +240,7 @@ async def status():
 # ── Radar & Properties endpoints ──────────────────────────────────────────────
 
 
-@app.get("/radar")
+@api.get("/radar")
 async def get_radar(
     limit: int = 20,
     offset: int = 0,
@@ -255,14 +265,14 @@ async def get_radar(
     )
 
 
-@app.get("/dismissed")
+@api.get("/dismissed")
 async def get_dismissed():
     if _scheduler_instance is None:
         raise HTTPException(status_code=503, detail="Not ready")
     return {"properties": _scheduler_instance.get_dismissed()}
 
 
-@app.post("/dismiss")
+@api.post("/dismiss")
 async def dismiss_property(req: PropertyUid):
     if _scheduler_instance is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -272,7 +282,7 @@ async def dismiss_property(req: PropertyUid):
     return {"ok": True, "uid": req.uid}
 
 
-@app.post("/undismiss")
+@api.post("/undismiss")
 async def undismiss_property(req: PropertyUid):
     if _scheduler_instance is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -282,7 +292,7 @@ async def undismiss_property(req: PropertyUid):
     return {"ok": True, "uid": req.uid}
 
 
-@app.post("/mark-viewed")
+@api.post("/mark-viewed")
 async def mark_viewed(req: PropertyUid):
     if _scheduler_instance is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -292,7 +302,7 @@ async def mark_viewed(req: PropertyUid):
     return {"ok": True, "uid": req.uid}
 
 
-@app.post("/save-comment")
+@api.post("/save-comment")
 async def save_comment(req: CommentRequest):
     if _scheduler_instance is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -305,14 +315,14 @@ async def save_comment(req: CommentRequest):
 # ── Schedule endpoints ────────────────────────────────────────────────────────
 
 
-@app.get("/schedule")
+@api.get("/schedule")
 async def get_schedule():
     if _scheduler_instance is None:
         raise HTTPException(status_code=503, detail="Not ready")
     return _scheduler_instance.get_schedule_config()
 
 
-@app.post("/schedule")
+@api.post("/schedule")
 async def save_schedule(config: ScheduleConfig):
     if _scheduler_instance is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -324,7 +334,7 @@ async def save_schedule(config: ScheduleConfig):
     return {"ok": True}
 
 
-@app.get("/summary")
+@api.get("/summary")
 async def get_summary():
     if _scheduler_instance is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -335,7 +345,7 @@ async def get_summary():
 # ── Manual trigger endpoints ──────────────────────────────────────────────────
 
 
-@app.post("/run-scraping")
+@api.post("/run-scraping")
 async def run_scraping():
     if _scheduler_instance is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -347,7 +357,7 @@ async def run_scraping():
     return {"ok": True, "message": "Scraping iniciado"}
 
 
-@app.post("/run-gmail-check")
+@api.post("/run-gmail-check")
 async def run_gmail_check():
     if _scheduler_instance is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -359,7 +369,7 @@ async def run_gmail_check():
     return {"ok": True, "message": "Gmail check iniciado"}
 
 
-@app.post("/run-fotocasa-check")
+@api.post("/run-fotocasa-check")
 async def run_fotocasa_check():
     if _scheduler_instance is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -371,7 +381,7 @@ async def run_fotocasa_check():
     return {"ok": True, "message": "Fotocasa check iniciado"}
 
 
-@app.post("/run-summary")
+@api.post("/run-summary")
 async def run_summary():
     if _scheduler_instance is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -386,7 +396,7 @@ async def run_summary():
 # ── Telegram webhook ──────────────────────────────────────────────────────────
 
 
-@app.post("/telegram-webhook")
+@api.post("/telegram-webhook")
 async def telegram_webhook(request: Request):
     if _scheduler_instance is None:
         return {"ok": True}
@@ -406,6 +416,10 @@ async def telegram_webhook(request: Request):
         logger.debug("[telegram] Webhook error: %s", e)
 
     return {"ok": True}
+
+
+# ── Incluir router API ────────────────────────────────────────────────────────
+app.include_router(api)
 
 
 # ── Frontend routes ───────────────────────────────────────────────────────────
