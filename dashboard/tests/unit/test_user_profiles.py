@@ -12,28 +12,31 @@ def isolated_user_profiles():
     """Create isolated user_profiles module with temp database."""
     import sys
 
-    # Reimport with fresh module
-    if "user_profiles" in sys.modules:
-        del sys.modules["user_profiles"]
+    # Clear all profile-related modules to get fresh imports
+    for mod in list(sys.modules.keys()):
+        if mod.startswith("profiles") or mod == "user_profiles":
+            del sys.modules[mod]
 
+    # Import after cleanup
+    import profiles.db as profiles_db
     import user_profiles
 
     temp_dir = tempfile.mkdtemp()
     db_path = str(Path(temp_dir) / "test_profiles.db")
 
     # Store originals
-    orig_db = user_profiles.AUTH_DB_PATH
+    orig_db = profiles_db.AUTH_DB_PATH
 
-    # Set test path
-    user_profiles.AUTH_DB_PATH = db_path
+    # Set test path (profiles.db is the actual storage)
+    profiles_db.AUTH_DB_PATH = db_path
 
     # Initialize schema and builtins
-    user_profiles._ensure_builtin_profiles()
+    profiles_db._ensure_builtin_profiles()
 
     yield {"module": user_profiles, "db_path": db_path, "temp_dir": temp_dir}
 
     # Restore
-    user_profiles.AUTH_DB_PATH = orig_db
+    profiles_db.AUTH_DB_PATH = orig_db
     shutil.rmtree(temp_dir, ignore_errors=True)
 
 

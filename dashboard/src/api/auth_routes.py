@@ -41,6 +41,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 # ---------------------------------------------------------------------------
+# Login rate limiter (brute-force protection)
+# ---------------------------------------------------------------------------
+# Using in-memory rate limiter (resets on restart, but provides protection)
+# 5 failed attempts per 5 minutes per IP
+from smart_home_common import InMemoryRateLimiter
+
+_login_limiter = InMemoryRateLimiter(max_requests=5, window_seconds=300)
+
+# ---------------------------------------------------------------------------
 # Injected configuration (set by main.py lifespan)
 # ---------------------------------------------------------------------------
 SMTP_HOST: str = "smtp.gmail.com"
@@ -193,12 +202,26 @@ async def post_token(
          → Issue standard 24h JWT only.
 
     Sanitises the next_url redirect to relative paths only.
+
+    Rate limiting: 5 attempts per 5 minutes per IP address.
     """
+    # Rate limiting check
+    client_ip = request.client.host if request.client else "unknown"
+    if not _login_limiter.is_allowed(client_ip):
+        logger.warning(
+            "Rate limit exceeded for IP %s attempting login as %r",
+            client_ip,
+            username,
+        )
+        return _serve_login_html(
+            error="Demasiados intentos. Espera unos minutos e inténtalo de nuevo."
+        )
+
     if not auth_users.authenticate_user(username, password):
         logger.warning(
             "Failed login for user %r from %s",
             username,
-            request.client.host if request.client else "unknown",
+            client_ip,
         )
         return _serve_login_html(error="Usuario o contraseña incorrectos")
 
