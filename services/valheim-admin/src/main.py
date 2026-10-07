@@ -16,11 +16,10 @@ import time
 from pathlib import Path
 
 import httpx
+from async_http_client import AsyncServiceClient, ServiceClientConfig
 from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-
-from async_http_client import AsyncServiceClient, ServiceClientConfig
 
 logging.basicConfig(
     level=logging.INFO,
