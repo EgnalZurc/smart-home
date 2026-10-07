@@ -12,6 +12,7 @@ Auth: nginx handles auth_request — this service trusts all incoming requests.
 
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -19,6 +20,11 @@ import httpx
 from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+
+# Add libs to path for shared library imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "libs"))
+
+from async_http_client import AsyncServiceClient, ServiceClientConfig  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,65 +38,15 @@ PC_AGENT_URL = os.environ.get("PC_AGENT_URL", "http://192.168.1.164:8090")
 PC_AGENT_TOKEN = os.environ.get("PC_AGENT_TOKEN", "")
 PC_AGENT_TIMEOUT = float(os.environ.get("PC_AGENT_TIMEOUT", "30.0"))
 
-app = FastAPI(title="Valheim Admin", version="2.0.0")
+# Create shared async client for pc-agent communication
+_client_config = ServiceClientConfig(
+    base_url=PC_AGENT_URL,
+    token=PC_AGENT_TOKEN,
+    timeout=PC_AGENT_TIMEOUT,
+)
+pc_agent = AsyncServiceClient(_client_config)
 
-
-# ── pc-agent HTTP client ──────────────────────────────────────────────────────
-
-
-def _headers() -> dict[str, str]:
-    """Headers for pc-agent requests."""
-    h = {}
-    if PC_AGENT_TOKEN:
-        h["X-Api-Token"] = PC_AGENT_TOKEN
-    return h
-
-
-async def _get(path: str) -> dict:
-    """GET request to pc-agent."""
-    try:
-        async with httpx.AsyncClient(timeout=PC_AGENT_TIMEOUT) as client:
-            r = await client.get(f"{PC_AGENT_URL}{path}", headers=_headers())
-            r.raise_for_status()
-            return r.json()
-    except httpx.ConnectError:
-        raise HTTPException(503, "PC unreachable")
-    except httpx.TimeoutException:
-        raise HTTPException(504, "PC timeout")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, e.response.text)
-
-
-async def _post(path: str, data: dict | None = None) -> dict:
-    """POST request to pc-agent."""
-    try:
-        async with httpx.AsyncClient(timeout=PC_AGENT_TIMEOUT) as client:
-            r = await client.post(
-                f"{PC_AGENT_URL}{path}", headers=_headers(), data=data
-            )
-            r.raise_for_status()
-            return r.json()
-    except httpx.ConnectError:
-        raise HTTPException(503, "PC unreachable")
-    except httpx.TimeoutException:
-        raise HTTPException(504, "PC timeout")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, e.response.text)
-
-
-async def _delete(path: str) -> dict:
-    """DELETE request to pc-agent."""
-    try:
-        async with httpx.AsyncClient(timeout=PC_AGENT_TIMEOUT) as client:
-            r = await client.delete(f"{PC_AGENT_URL}{path}", headers=_headers())
-            r.raise_for_status()
-            return r.json()
-    except httpx.ConnectError:
-        raise HTTPException(503, "PC unreachable")
-    except httpx.TimeoutException:
-        raise HTTPException(504, "PC timeout")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, e.response.text)
+app = FastAPI(title="Valheim Admin", version="2.1.0")
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -98,8 +54,43 @@ async def _delete(path: str) -> dict:
 
 @app.get("/health")
 def health():
-    """Health check for valheim-admin (Pi side)."""
+    """Health check for valheim-admin (Pi side). Always returns online."""
     return {"online": True, "service": "valheim-admin"}
+
+
+@app.get("/health/ready")
+async def health_ready():
+    """
+    Readiness check that verifies connectivity to pc-agent.
+
+    Returns 200 if pc-agent is reachable, 503 otherwise.
+    Useful for kubernetes-style readiness probes.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                f"{PC_AGENT_URL}/health",
+                headers={"X-Api-Token": PC_AGENT_TOKEN} if PC_AGENT_TOKEN else {},
+            )
+            if response.status_code == 200:
+                return {
+                    "ready": True,
+                    "service": "valheim-admin",
+                    "backend": "pc-agent",
+                    "backend_status": "reachable",
+                }
+    except (httpx.ConnectError, httpx.TimeoutException):
+        pass
+
+    raise HTTPException(
+        status_code=503,
+        detail={
+            "ready": False,
+            "service": "valheim-admin",
+            "backend": "pc-agent",
+            "backend_status": "unreachable",
+        },
+    )
 
 
 # ── Static / SPA ──────────────────────────────────────────────────────────────
@@ -126,7 +117,7 @@ async def serve_index():
 async def get_status():
     """Get Valheim server status."""
     try:
-        return await _get("/valheim/status")
+        return await pc_agent.get("/valheim/status")
     except HTTPException:
         return {
             "running": False,
@@ -138,19 +129,19 @@ async def get_status():
 @app.post("/api/server/start")
 async def start_server():
     """Start Valheim server."""
-    return await _post("/valheim/start")
+    return await pc_agent.post("/valheim/start")
 
 
 @app.post("/api/server/stop")
 async def stop_server():
     """Stop Valheim server."""
-    return await _post("/valheim/stop")
+    return await pc_agent.post("/valheim/stop")
 
 
 @app.post("/api/server/restart")
 async def restart_server():
     """Restart Valheim server."""
-    return await _post("/valheim/restart")
+    return await pc_agent.post("/valheim/restart")
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -159,7 +150,7 @@ async def restart_server():
 @app.get("/api/config")
 async def get_config():
     """Get Valheim server configuration."""
-    return await _get("/valheim/config")
+    return await pc_agent.get("/valheim/config")
 
 
 @app.post("/api/config")
@@ -173,7 +164,7 @@ async def update_config(
     backups: int = Form(4),
 ):
     """Update Valheim server configuration."""
-    return await _post(
+    return await pc_agent.post(
         "/valheim/config",
         {
             "server_name": server_name,
@@ -193,7 +184,7 @@ async def update_config(
 @app.get("/api/logs")
 async def get_logs(lines: int = 80):
     """Get recent server logs."""
-    return await _get(f"/valheim/logs?lines={lines}")
+    return await pc_agent.get("/valheim/logs", params={"lines": str(lines)})
 
 
 # ── Worlds ────────────────────────────────────────────────────────────────────
@@ -202,25 +193,25 @@ async def get_logs(lines: int = 80):
 @app.get("/api/worlds")
 async def list_worlds():
     """List available worlds."""
-    return await _get("/valheim/worlds")
+    return await pc_agent.get("/valheim/worlds")
 
 
 @app.post("/api/worlds/new")
 async def create_world(world_name: str = Form(...)):
     """Create a new world."""
-    return await _post("/valheim/worlds/new", {"world_name": world_name})
+    return await pc_agent.post("/valheim/worlds/new", {"world_name": world_name})
 
 
 @app.post("/api/worlds/activate")
 async def activate_world(world_name: str = Form(...)):
     """Activate a world."""
-    return await _post("/valheim/worlds/activate", {"world_name": world_name})
+    return await pc_agent.post("/valheim/worlds/activate", {"world_name": world_name})
 
 
 @app.delete("/api/worlds/{world_name}")
 async def delete_world(world_name: str):
     """Delete a world."""
-    return await _delete(f"/valheim/worlds/{world_name}")
+    return await pc_agent.delete(f"/valheim/worlds/{world_name}")
 
 
 # ── PC Control ────────────────────────────────────────────────────────────────
@@ -230,7 +221,7 @@ async def delete_world(world_name: str):
 async def get_pc_status():
     """Get PC agent status."""
     try:
-        return await _get("/health")
+        return await pc_agent.get("/health")
     except HTTPException:
         return {"online": False, "docker": False}
 
@@ -238,7 +229,7 @@ async def get_pc_status():
 @app.get("/api/pc/mode")
 async def get_pc_mode():
     """Get current PC power profile."""
-    return await _get("/system/mode")
+    return await pc_agent.get("/system/mode")
 
 
 @app.post("/api/pc/mode/{mode}")
@@ -246,7 +237,7 @@ async def set_pc_mode(mode: str):
     """Set PC power profile."""
     if mode not in ("gaming", "servidor", "balanced"):
         raise HTTPException(400, "Invalid mode")
-    return await _post(f"/system/mode/{mode}")
+    return await pc_agent.post(f"/system/mode/{mode}")
 
 
 # ── Static files ──────────────────────────────────────────────────────────────
