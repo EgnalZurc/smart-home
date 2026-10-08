@@ -1,16 +1,18 @@
 """
-Garantiza que solo corre una instancia del proceso casita-suenos.
+Ensure only a single instance of a process runs at a time.
 
-Usa un fichero de bloqueo con flock (Linux/Raspberry) o CreateMutex (Windows)
-según la plataforma. Si ya hay otra instancia corriendo, termina con código 1.
+Uses a lock file via flock (Linux/Raspberry) or an exclusive open (Windows)
+depending on the platform. If another instance already holds the lock, the
+current process exits with code 1.
 
-Por qué no confiamos solo en Docker:
-- docker-compose restart puede provocar un overlap breve entre contenedores
-- El scheduler tiene jobs largos; un segundo arranque durante un scraping
-  duplicaría peticiones y corrompería la DB
+Why not rely on Docker alone:
+- docker-compose restart can cause a brief overlap between containers
+- A scheduler with long-running jobs would, on a second startup during a
+  scraping run, duplicate requests and corrupt the DB
 
-Uso:
-    from singleton import ensure_singleton
+Usage:
+    from smart_home_common.singleton import ensure_singleton
+
     ensure_singleton("/app/data/casita.lock")
 """
 
@@ -28,9 +30,11 @@ logger = logging.getLogger(__name__)
 
 def ensure_singleton(lock_path: str) -> None:
     """
-    Intenta obtener un bloqueo exclusivo sobre `lock_path`.
-    Si otra instancia ya tiene el bloqueo, escribe un log de error y termina el proceso.
-    El bloqueo se libera automáticamente cuando el proceso termina (incluido kill).
+    Acquire an exclusive lock on `lock_path`.
+
+    If another instance already holds the lock, log an error and terminate the
+    process. The lock is released automatically when the process exits
+    (including on kill).
     """
     Path(lock_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -41,34 +45,30 @@ def ensure_singleton(lock_path: str) -> None:
 
 
 def _ensure_singleton_unix(lock_path: str) -> None:
-    """Implementación Unix usando fcntl.flock — funciona en Raspberry Pi (Linux)."""
+    """Unix implementation using fcntl.flock — works on the Raspberry Pi (Linux)."""
     import fcntl
 
     try:
         lock_file = open(lock_path, "w")
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        # Escribir el PID para diagnóstico
+        # Write the PID for diagnostics
         lock_file.write(str(os.getpid()))
         lock_file.flush()
-        # Guardar referencia para que no se cierre (y libere el lock) al GC
+        # Keep a reference so the GC does not close the file (and release the lock)
         _hold_lock_ref(lock_file)
-        logger.info(
-            "[singleton] Bloqueo obtenido en %s (PID %d)", lock_path, os.getpid()
-        )
+        logger.info("[singleton] Lock acquired on %s (PID %d)", lock_path, os.getpid())
     except OSError:
         logger.error(
-            "[singleton] Ya hay otra instancia de casita-suenos corriendo. "
-            "Fichero de bloqueo: %s — terminando.",
+            "[singleton] Another instance is already running. Lock file: %s — terminating.",
             lock_path,
         )
         sys.exit(1)
 
 
 def _ensure_singleton_windows(lock_path: str) -> None:
-    """Implementación Windows usando un fichero con open() exclusivo."""
+    """Windows implementation using an exclusive open()."""
     try:
-        # En Windows, abrir con 'x' falla si el fichero ya existe
-        # Alternativa: intentar abrir con O_CREAT | O_EXCL
+        # On Windows, opening with O_CREAT | O_EXCL fails if the file already exists
         fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         handle = os.fdopen(fd, "w")
         handle.write(str(os.getpid()))
@@ -78,22 +78,20 @@ def _ensure_singleton_windows(lock_path: str) -> None:
         import atexit
 
         atexit.register(_cleanup_lock_windows, lock_path)
-        logger.info(
-            "[singleton] Bloqueo obtenido en %s (PID %d)", lock_path, os.getpid()
-        )
+        logger.info("[singleton] Lock acquired on %s (PID %d)", lock_path, os.getpid())
     except FileExistsError:
-        # Comprobar si el proceso aún existe
+        # Check whether the process still exists
         try:
             pid = int(Path(lock_path).read_text().strip())
             if not _pid_alive(pid):
-                # Proceso muerto — limpiar lock huérfano y reintentar
+                # Dead process — clean the orphaned lock and retry
                 os.remove(lock_path)
                 _ensure_singleton_windows(lock_path)
                 return
         except Exception:
             logger.debug("[singleton] Could not read/validate existing lock file")
         logger.error(
-            "[singleton] Ya hay otra instancia corriendo (lock: %s). Terminando.",
+            "[singleton] Another instance is already running (lock: %s). Terminating.",
             lock_path,
         )
         sys.exit(1)
@@ -105,7 +103,7 @@ def _cleanup_lock_windows(lock_path: str) -> None:
 
 
 def _pid_alive(pid: int) -> bool:
-    """Comprueba si un PID sigue vivo."""
+    """Return True if the given PID is still alive."""
     try:
         os.kill(pid, 0)
         return True
@@ -113,7 +111,7 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
-# Mantiene la referencia al fichero abierto para evitar que el GC lo cierre
+# Keeps a reference to the open lock file so the GC does not close it
 _lock_file_handle = None
 
 

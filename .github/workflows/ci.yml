@@ -101,6 +101,7 @@ jobs:
               - 'services/vacaciones-service/**'
             casita:
               - 'services/casita-suenos/**'
+              - 'libs/smart_home_common/**'
             vaultwarden:
               - 'services/vaultwarden/**'
             valheim-admin:
@@ -213,7 +214,7 @@ jobs:
           [[ "${{ steps.changes.outputs.vacaciones }}" == "true" ]] && \
             add_service "vacaciones-service" "egnal/smart-home-vacaciones" "./services/vacaciones-service" "Dockerfile"
           [[ "${{ steps.changes.outputs.casita }}" == "true" ]] && \
-            add_service "casita-suenos" "egnal/smart-home-casita-suenos" "./services/casita-suenos/fase3-app" "Dockerfile"
+            add_service "casita-suenos" "egnal/smart-home-casita-suenos" "." "services/casita-suenos/fase3-app/Dockerfile"
           [[ "${{ steps.changes.outputs.vaultwarden }}" == "true" ]] && \
             add_service "vaultwarden" "egnal/smart-home-vaultwarden" "./services/vaultwarden" "Dockerfile"
           [[ "${{ steps.changes.outputs.valheim-admin }}" == "true" ]] && \
@@ -479,6 +480,7 @@ jobs:
         run: |
           if [[ -d "services/casita-suenos/fase3-app/tests" ]] && find services/casita-suenos/fase3-app/tests -name "test_*.py" | grep -q .; then
             pip install -r services/casita-suenos/fase3-app/requirements.txt --quiet 2>/dev/null || true
+            pip install -e libs/smart_home_common --quiet 2>/dev/null || true
             cd services/casita-suenos/fase3-app && PYTHONPATH=src python -m pytest tests/ -v --tb=short --cov=src --cov-config=pytest.ini --cov-report=term-missing --cov-fail-under=80
           else
             echo "⏭️ No tests found"
