@@ -3,7 +3,7 @@ Tests for the etf_monitor module.
 """
 
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
 import pandas as pd
@@ -453,3 +453,190 @@ class TestRecommendations:
         rec = get_recommendation(AlertLevel.OK, "Test ETF")
 
         assert rec.level == "OK"
+
+
+class TestTTLCache:
+    """Tests for the in-memory TTL cache."""
+
+    def test_set_and_get(self):
+        """A stored value is returned before it expires."""
+        from monitors.etf_monitor import TTLCache
+
+        cache = TTLCache(default_ttl_seconds=60)
+        cache.set("key", "value")
+
+        assert cache.get("key") == "value"
+
+    def test_missing_key_returns_none(self):
+        """Unknown keys return None."""
+        from monitors.etf_monitor import TTLCache
+
+        cache = TTLCache()
+        assert cache.get("nope") is None
+
+    def test_expired_entry_returns_none(self):
+        """An entry past its TTL is evicted and returns None."""
+        from monitors.etf_monitor import TTLCache
+
+        cache = TTLCache(default_ttl_seconds=0)  # expires immediately
+        cache.set("key", "value")
+
+        # TTL of 0 → expires_at == now, and get() uses >= comparison
+        assert cache.get("key") is None
+        # Confirm the entry was evicted from the backing dict
+        assert "key" not in cache._cache
+
+    def test_per_entry_ttl_override(self):
+        """set() accepts a per-entry TTL that overrides the default."""
+        from monitors.etf_monitor import TTLCache
+
+        cache = TTLCache(default_ttl_seconds=300)
+        cache.set("short", "value", ttl_seconds=0)
+
+        assert cache.get("short") is None
+
+    def test_clear(self):
+        """clear() removes all entries."""
+        from monitors.etf_monitor import TTLCache
+
+        cache = TTLCache()
+        cache.set("a", 1)
+        cache.set("b", 2)
+        cache.clear()
+
+        assert cache.get("a") is None
+        assert cache.get("b") is None
+
+
+class TestFetchCaching:
+    """Tests that fetch helpers use the TTL cache."""
+
+    def setup_method(self):
+        """Clear module caches before each test for isolation."""
+        from monitors import etf_monitor
+
+        etf_monitor._history_cache.clear()
+        etf_monitor._ohlc_cache.clear()
+
+    def test_fetch_etf_data_caches_result(self):
+        """Second call for the same ticker is served from cache (no re-download)."""
+        from monitors.etf_monitor import fetch_etf_data
+
+        mock_ticker = MagicMock()
+        mock_hist = pd.DataFrame({"Close": [100, 101, 102]})
+        mock_ticker.history.return_value = mock_hist
+        mock_ticker.fast_info = {"last_price": 102}
+
+        with patch(
+            "monitors.etf_monitor.yf.Ticker", return_value=mock_ticker
+        ) as mock_cls:
+            first_hist, _ = fetch_etf_data("TEST.L")
+            second_hist, _ = fetch_etf_data("TEST.L")
+
+        # yf.Ticker constructed exactly once → second call hit the cache
+        assert mock_cls.call_count == 1
+        assert len(first_hist) == 3
+        assert len(second_hist) == 3
+
+    def test_fetch_etf_data_empty_not_cached(self):
+        """Empty history is not cached, so a later populated call still downloads."""
+        from monitors.etf_monitor import fetch_etf_data
+
+        mock_ticker = MagicMock()
+        mock_ticker.history.return_value = pd.DataFrame()
+
+        with patch(
+            "monitors.etf_monitor.yf.Ticker", return_value=mock_ticker
+        ) as mock_cls:
+            fetch_etf_data("EMPTY.L")
+            fetch_etf_data("EMPTY.L")
+
+        # Not cached → constructed twice
+        assert mock_cls.call_count == 2
+
+    def test_fetch_ohlc_data_caches_result(self):
+        """Second OHLC call for the same (ticker, period) hits the cache."""
+        from monitors.etf_monitor import fetch_ohlc_data
+
+        mock_ticker = MagicMock()
+        dates = pd.date_range(end=datetime.now(), periods=5, freq="D")
+        mock_hist = pd.DataFrame(
+            {
+                "Open": [100] * 5,
+                "High": [101] * 5,
+                "Low": [99] * 5,
+                "Close": [100] * 5,
+            },
+            index=dates,
+        )
+        mock_ticker.history.return_value = mock_hist
+
+        with patch(
+            "monitors.etf_monitor.yf.Ticker", return_value=mock_ticker
+        ) as mock_cls:
+            first = fetch_ohlc_data("TEST.L", "1mo")
+            second = fetch_ohlc_data("TEST.L", "1mo")
+
+        assert mock_cls.call_count == 1
+        assert first == second
+        assert len(first) == 5
+
+
+class TestNonBlockingRun:
+    """Tests that the monitor offloads blocking I/O to a thread."""
+
+    @pytest.mark.asyncio
+    async def test_run_offloads_fetches_to_thread(self):
+        """run() calls fetch helpers via asyncio.to_thread (non-blocking)."""
+        from monitors.etf_monitor import ETFMonitor
+
+        portfolio = {
+            "TEST": {
+                "id": "TEST",
+                "ticker": "TEST.L",
+                "name": "Test ETF",
+                "color": "#FF0000",
+                "avg_cost": 100,
+                "units": 10,
+                "monthly_contrib": 50,
+                "start_date": "2024-01-01",
+            }
+        }
+
+        prices = [100 + i * 0.1 for i in range(252)]
+        dates = pd.date_range(end=datetime.now(), periods=252, freq="D")
+        mock_hist = pd.DataFrame(
+            {
+                "Open": prices,
+                "High": [p * 1.01 for p in prices],
+                "Low": [p * 0.99 for p in prices],
+                "Close": prices,
+            },
+            index=dates,
+        )
+
+        with patch("config.ETF_PORTFOLIO", portfolio):
+            with patch("config.ETF_FUND_IDS", ["TEST"]):
+                with patch(
+                    "monitors.etf_monitor.fetch_etf_data",
+                    return_value=(mock_hist, {}),
+                ):
+                    with patch(
+                        "monitors.etf_monitor.fetch_ohlc_data", return_value=[]
+                    ):
+                        with patch(
+                            "monitors.etf_monitor.asyncio.to_thread",
+                            new_callable=AsyncMock,
+                        ) as mock_to_thread:
+                            # Delegate to the real functions so results are valid
+                            async def _call(fn, *args, **kwargs):
+                                return fn(*args, **kwargs)
+
+                            mock_to_thread.side_effect = _call
+
+                            monitor = ETFMonitor()
+                            result = await monitor.run()
+
+        # Both blocking downloads were routed through asyncio.to_thread
+        assert mock_to_thread.await_count == 2
+        assert len(result["analysis"]) == 1

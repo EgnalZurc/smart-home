@@ -19,18 +19,26 @@ RUN pip install --user --no-cache-dir --no-compile -r requirements.txt && \
 # Stage 2: Runtime (minimal)
 FROM python:3.12-slim
 
+# Create non-root user
+RUN adduser --disabled-password --gecos '' --uid 1000 appuser
+
 # Prevent Python from writing bytecode and buffering stdout/stderr
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH=/root/.local/bin:$PATH
+    PATH=/home/appuser/.local/bin:$PATH
 
 WORKDIR /app
 
-# Copy installed packages from builder
-COPY --from=builder /root/.local /root/.local
+# Copy installed packages from builder into the non-root user's home
+COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 
 # Copy only source code (no tests, no docs)
-COPY dashboard/src/ .
+COPY --chown=appuser:appuser dashboard/src/ .
+
+# Writable data dir for the bind-mounted volume (./data/backend:/app/data)
+RUN mkdir -p /app/data && chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8080
 

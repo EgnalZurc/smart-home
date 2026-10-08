@@ -3,8 +3,9 @@ Portfolio Monitor — ETF Monitor.
 Downloads market data from Yahoo Finance and calculates technical signals.
 """
 
+import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import config
@@ -17,6 +18,51 @@ from models import AlertLevel, ETFAnalysis, Signal
 from . import BaseMonitor, register_monitor
 
 logger = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Simple TTL Cache for Yahoo Finance responses
+#
+# yfinance hits Yahoo Finance on every call; a scheduled run plus any dashboard
+# refresh can download the same 1-year history repeatedly. Caching per ticker
+# for a few minutes removes redundant network round-trips (and the risk of
+# Yahoo throttling) without affecting the daily signal cadence.
+#
+# Mirrors the TTLCache used in crypto_monitor for consistency.
+# ─────────────────────────────────────────────────────────────────────────────
+class TTLCache:
+    """Simple in-memory cache with per-entry TTL expiration."""
+
+    def __init__(self, default_ttl_seconds: int = 300):
+        self._cache: dict[str, tuple[Any, datetime]] = {}
+        self._default_ttl = default_ttl_seconds
+
+    def get(self, key: str) -> Any | None:
+        """Return cached value if not expired, else None."""
+        if key not in self._cache:
+            return None
+        value, expires_at = self._cache[key]
+        if datetime.now(timezone.utc) >= expires_at:
+            del self._cache[key]
+            return None
+        return value
+
+    def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
+        """Store value with TTL (defaults to cache default)."""
+        ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
+        self._cache[key] = (value, expires_at)
+
+    def clear(self) -> None:
+        """Clear all cached entries."""
+        self._cache.clear()
+
+
+# ETF history is used for signals that update daily; 5 min is plenty to collapse
+# bursts of requests while staying fresh. OHLC (sparklines) is purely cosmetic
+# historical data, so it can live a bit longer.
+_history_cache = TTLCache(default_ttl_seconds=300)  # 5 min
+_ohlc_cache = TTLCache(default_ttl_seconds=900)  # 15 min
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -138,7 +184,17 @@ def calculate_tax_impact(
 # Data download
 # ─────────────────────────────────────────────────────────────────────────────
 def fetch_etf_data(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Download one year of historical data for an ETF."""
+    """Download one year of historical data for an ETF.
+
+    Results are cached per ticker for a few minutes so repeated runs (or a
+    scheduled run overlapping a dashboard refresh) reuse the same download
+    instead of hitting Yahoo Finance again.
+    """
+    cached = _history_cache.get(ticker_sym)
+    if cached is not None:
+        logger.debug(f"Cache hit for ETF history: {ticker_sym}")
+        return cached
+
     try:
         ticker = yf.Ticker(ticker_sym)
         hist = ticker.history(period="1y")
@@ -153,14 +209,26 @@ def fetch_etf_data(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
         except (AttributeError, KeyError, ValueError, TypeError):
             logger.debug(f"Info not available for {ticker_sym}")
 
-        return hist, info
+        result = (hist, info)
+        _history_cache.set(ticker_sym, result)
+        return result
     except Exception as e:
         logger.error(f"Error downloading {ticker_sym}: {e}")
         raise
 
 
 def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
-    """Fetch OHLC data for sparkline charts."""
+    """Fetch OHLC data for sparkline charts.
+
+    Cached per (ticker, period) since sparkline history rarely changes within
+    a single monitoring window.
+    """
+    cache_key = f"{ticker_sym}:{period}"
+    cached = _ohlc_cache.get(cache_key)
+    if cached is not None:
+        logger.debug(f"Cache hit for OHLC: {cache_key}")
+        return cached
+
     try:
         ticker = yf.Ticker(ticker_sym)
         hist = ticker.history(period=period)
@@ -173,6 +241,7 @@ def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
             ts = int(idx.timestamp() * 1000) if hasattr(idx, "timestamp") else 0
             ohlc.append([ts, row["Open"], row["High"], row["Low"], row["Close"]])
 
+        _ohlc_cache.set(cache_key, ohlc)
         return ohlc
     except Exception as e:
         logger.error(f"Error fetching OHLC for {ticker_sym}: {e}")
@@ -486,7 +555,9 @@ class ETFMonitor(BaseMonitor):
             logger.info(f"  → {fund_id} ({ticker})...")
 
             try:
-                hist, info = fetch_etf_data(ticker)
+                # yfinance performs blocking network I/O; run it off the event
+                # loop so the API stays responsive while data downloads.
+                hist, info = await asyncio.to_thread(fetch_etf_data, ticker)
                 if hist.empty:
                     continue
 
@@ -505,6 +576,9 @@ class ETFMonitor(BaseMonitor):
                 # Projection
                 milestone = projected_milestone(fund_id)
                 year = years_since_start()
+
+                # OHLC download is blocking network I/O too → offload it.
+                ohlc = await asyncio.to_thread(fetch_ohlc_data, ticker, "1mo")
 
                 analysis = ETFAnalysis(
                     fund_id=fund_id,
@@ -543,7 +617,7 @@ class ETFMonitor(BaseMonitor):
                     recommendation=get_recommendation(
                         analysis_data["level"], cfg["name"]
                     ),
-                    ohlc=fetch_ohlc_data(ticker, "1mo"),
+                    ohlc=ohlc,
                 )
 
                 results.append(analysis)
