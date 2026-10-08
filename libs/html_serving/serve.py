@@ -35,6 +35,23 @@ NO_CACHE_HEADERS = {
 }
 
 
+def _json_for_script(value: object) -> str:
+    """JSON-encode ``value`` safely for embedding inside a ``<script>`` block.
+
+    ``json.dumps`` escapes quotes but leaves ``<``, ``>`` and ``/`` intact, so a
+    value containing ``</script>`` would otherwise terminate the script element
+    and allow HTML/JS injection (XSS). We escape those characters to their
+    ``\\uXXXX`` form, which is still valid JSON/JS and decodes to the same string
+    in the browser, but can never break out of the script context.
+    """
+    return (
+        json.dumps(value)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("/", "\\u002f")
+    )
+
+
 def serve_html(
     static_dir: Path,
     filename: str,
@@ -73,13 +90,13 @@ def serve_html(
     if guest_token:
         content = content.replace(
             "window.GUEST_TOKEN = null;",
-            f"window.GUEST_TOKEN = {json.dumps(guest_token)};",
+            f"window.GUEST_TOKEN = {_json_for_script(guest_token)};",
         )
 
     if auth_user:
         content = content.replace(
             "window.AUTH_USER = null;",
-            f"window.AUTH_USER = {json.dumps(auth_user)};",
+            f"window.AUTH_USER = {_json_for_script(auth_user)};",
         )
 
     return HTMLResponse(content=content, headers=dict(NO_CACHE_HEADERS))
