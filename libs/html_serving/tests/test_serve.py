@@ -1,6 +1,7 @@
 """Tests for serve_html — the shared static-HTML serving helper."""
 
 import json
+import re
 
 import pytest
 from fastapi.responses import HTMLResponse
@@ -74,6 +75,38 @@ def test_injects_both_token_and_user(static_dir):
     )
     assert 'window.GUEST_TOKEN = "tok";' in body
     assert 'window.AUTH_USER = {"username": "bob"};' in body
+
+
+def test_escapes_script_breakout_in_auth_user(static_dir):
+    """A ``</script>`` inside auth_user must not break out of the script tag.
+
+    ``json.dumps`` alone leaves ``<``, ``>`` and ``/`` unescaped, so a crafted
+    username could close the <script> element and inject markup. The helper
+    must emit the \\uXXXX-escaped form instead.
+    """
+    user = {"username": "</script><script>alert(1)</script>"}
+    body = _body(serve_html(static_dir, "index.html", auth_user=user))
+
+    # No raw break-out token survived into the injected value.
+    assert "</script><script>alert(1)</script>" not in body
+    # The payload is present only in escaped form.
+    assert "\\u003c\\u002fscript\\u003e" in body
+    # And it still round-trips back to the original value in the browser.
+    match = re.search(r"window\.AUTH_USER = (.*?);", body)
+    assert match is not None
+    assert json.loads(match.group(1)) == user
+
+
+def test_escapes_script_breakout_in_guest_token(static_dir):
+    """A ``</script>`` inside guest_token must also be escaped."""
+    token = "</script><script>alert(1)</script>"
+    body = _body(serve_html(static_dir, "index.html", guest_token=token))
+
+    assert "</script><script>alert(1)</script>" not in body
+    assert "\\u003c\\u002fscript\\u003e" in body
+    match = re.search(r"window\.GUEST_TOKEN = (.*?);", body)
+    assert match is not None
+    assert json.loads(match.group(1)) == token
 
 
 def test_missing_file_raises_without_not_found_html(static_dir):
