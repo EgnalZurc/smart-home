@@ -15,6 +15,7 @@ from api.auth import admin as auth_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from profiles import db as profiles_db
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import RedirectResponse as StarletteRedirect
 
@@ -58,11 +59,22 @@ async def lifespan(app: FastAPI):
     auth_users.AUTH_DB_PATH = AUTH_DB_PATH
     auth_users.TRUST_SECRET = AUTH_SECRET
     auth_devices.AUTH_DB_PATH = AUTH_DB_PATH
+    profiles_db.AUTH_DB_PATH = AUTH_DB_PATH
     auth_routes.SMTP_USER = AUTH_SMTP_USER
     auth_routes.SMTP_PASSWORD = AUTH_SMTP_PASS
     auth_routes.ADMIN_EMAIL = AUTH_ADMIN_EMAIL
     auth_routes.BASE_URL = AUTH_BASE_URL
     routes.set_firms_key(FIRMS_MAP_KEY)
+
+    # DB initialisation (must run AFTER AUTH_DB_PATH is injected above).
+    # Previously these ran at import time, before the path was set, so they
+    # initialised the wrong (default) database file.
+    try:
+        auth_users._migrate_from_htpasswd()
+    except Exception as exc:
+        logger.warning("User migration from .htpasswd failed: %s", exc)
+    profiles_db.init_database()
+
     logger.info("=== Smart Home Backend ready (auth + dashboard) ===")
     yield
     logger.info("=== Smart Home Backend shutdown ===")

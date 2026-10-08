@@ -123,13 +123,6 @@ def _migrate_from_htpasswd():
         logger.info("Migration complete")
 
 
-# Run migration on module load
-try:
-    _migrate_from_htpasswd()
-except Exception as e:
-    logger.warning("User migration failed: %s", e)
-
-
 # ---------------------------------------------------------------------------
 # User management
 # ---------------------------------------------------------------------------
