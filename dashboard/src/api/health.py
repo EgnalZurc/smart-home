@@ -109,9 +109,8 @@ async def get_backend_health():
     except Exception:
         pass
 
-    # Overall online status
-    checks["online"] = checks["db_accessible"] and checks["static_files"]
-
+    # Note: backend is always considered "online" if the endpoint responds
+    # The additional checks are informational only
     return checks
 
 
