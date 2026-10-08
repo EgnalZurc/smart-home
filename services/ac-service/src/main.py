@@ -42,11 +42,11 @@ from fastapi.staticfiles import StaticFiles
 from outdoor import build_outdoor_fetcher
 from pydantic import BaseModel
 from smart_home_common.clients.melcloud import MelCloudClient
+from smart_home_common.clients.zigbee import Zigbee2MQTTClient
 from smart_home_common.mqtt.handler import MqttHandler
 from smart_home_common.mqtt.subscription import SubscriptionConfig, SubscriptionManager
 from smart_home_common.utils.error_tracker import ErrorTracker
 from spa import serve_html
-from zigbee2mqtt_client import Zigbee2MQTTClient
 
 logging.basicConfig(
     level=logging.INFO,
