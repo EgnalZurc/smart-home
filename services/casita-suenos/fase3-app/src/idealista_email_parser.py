@@ -30,29 +30,33 @@ Política de errores:
 
 from __future__ import annotations
 
-import contextlib
 import email
-import email.header
 import imaplib
 import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
 
+import imap_base
+from imap_base import (
+    ROOMS_PATTERN as _ROOMS_PATTERN,
+)
+from imap_base import (
+    SIZE_PATTERN as _SIZE_PATTERN,
+)
+from imap_base import (
+    collect_messages,
+    connect_imap,
+    decode_subject,
+    delete_processed,
+    get_body,
+    parse_price_value,
+)
+
 logger = logging.getLogger(__name__)
 
+_LOG_PREFIX = "gmail"
 _IDEALISTA_SENDER = "noresponder@idealista.com"
-_IMAP_HOST = "imap.gmail.com"
-_IMAP_PORT = 993
-# "Casas" es una etiqueta/carpeta personalizada donde el usuario mueve
-# automáticamente los emails de Fotocasa e Idealista con una regla de Gmail.
-_SEARCH_FOLDERS = [
-    "Casas",
-    "INBOX",
-    "[Gmail]/Todos",
-    "[Gmail]/Papelera",
-    "[Gmail]/Spam",
-]
 
 _URL_PATTERN = re.compile(
     r"https://www\.idealista\.com/inmueble/(\d+)/?", re.IGNORECASE
@@ -65,11 +69,8 @@ _ZONE_FROM_SUBJECT = re.compile(
     re.IGNORECASE,
 )
 
-# Precio: "205.000 €", "205.000 &euro;", con separador de miles
-_PRICE_PATTERN = re.compile(
-    r"([\d]{2,3}[.\xa0\s]?\d{3})\s*(?:\u20ac|&euro;|&#8364;|EUR)",
-    re.IGNORECASE,
-)
+# Precio estándar: compartido con el resto de parsers.
+_PRICE_PATTERN = imap_base.PRICE_PATTERN
 
 # Bajada de precio: "de 150.000 a 130.000 €" → captura 130.000
 _PRICE_DROP_CURRENT = re.compile(
@@ -77,9 +78,6 @@ _PRICE_DROP_CURRENT = re.compile(
     r"([\d]{2,3}[.\s]?\d{3})\s*(?:\u20ac|&euro;|&#8364;)",
     re.IGNORECASE,
 )
-
-_ROOMS_PATTERN = re.compile(r"(\d+)\s+hab", re.IGNORECASE)
-_SIZE_PATTERN = re.compile(r"([\d]+[,.]?\d*)\s*m[\u00b22]", re.IGNORECASE)
 
 
 class EmailType(str, Enum):
@@ -110,38 +108,12 @@ class IdealistaAlert:
 
 
 def _connect_imap(email_address: str, app_password: str) -> imaplib.IMAP4_SSL:
-    imap = imaplib.IMAP4_SSL(_IMAP_HOST, _IMAP_PORT)
-    imap.login(email_address, app_password)
-    logger.info("[gmail] Conectado a IMAP como %s", email_address)
-    return imap
+    return connect_imap(email_address, app_password, log_prefix=_LOG_PREFIX)
 
 
-def _decode_subject(subject_raw: str) -> str:
-    parts = email.header.decode_header(subject_raw)
-    result = ""
-    for part, enc in parts:
-        if isinstance(part, bytes):
-            result += part.decode(enc or "utf-8", errors="ignore")
-        else:
-            result += str(part)
-    return result
-
-
-def _get_body(msg: email.message.Message) -> str:
-    parts = []
-    if msg.is_multipart():
-        for part in msg.walk():
-            if part.get_content_type() in ("text/plain", "text/html"):
-                with contextlib.suppress(Exception):
-                    parts.append(
-                        part.get_payload(decode=True).decode("utf-8", errors="ignore")
-                    )
-    else:
-        try:
-            parts.append(msg.get_payload(decode=True).decode("utf-8", errors="ignore"))
-        except Exception:
-            parts.append(str(msg.get_payload()))
-    return "\n".join(parts)
+# Alias a los helpers compartidos (mantienen el nombre interno histórico).
+_decode_subject = decode_subject
+_get_body = get_body
 
 
 def _classify_email(subject: str) -> EmailType:
@@ -189,18 +161,7 @@ def _parse_price(text: str) -> int | None:
     if not match:
         return None
 
-    raw = (
-        match.group(group)
-        .replace(".", "")
-        .replace(" ", "")
-        .replace("\xa0", "")
-        .replace(",", "")
-    )
-    try:
-        val = int(raw)
-        return val if 10_000 <= val <= 10_000_000 else None
-    except ValueError:
-        return None
+    return parse_price_value(match.group(group))
 
 
 def _extract_price_from_body(
@@ -331,49 +292,11 @@ def fetch_new_alerts(
         return [], [], None
 
     all_alerts: list[IdealistaAlert] = []
-    all_errors: list[str] = []
     seen_property_ids: set[str] = set()
-    # Email IDs que tuvieron error — NO se eliminarán
-    failed_email_ids: set[str] = set()
 
-    search_criteria = f'(FROM "{_IDEALISTA_SENDER}")'
-    collected = []
-
-    for folder in _SEARCH_FOLDERS:
-        try:
-            status, _ = imap.select(folder)
-            if status != "OK":
-                continue
-            # Para Papelera/Spam: solo emails no leídos (evita reprocesar)
-            trash_folders = {
-                "[Gmail]/Papelera",
-                "[Gmail]/Spam",
-                "[Gmail]/Trash",
-                "[Gmail]/Junk",
-            }
-            if folder in trash_folders:
-                criteria_folder = f"(UNSEEN {search_criteria[1:-1]})"
-            else:
-                criteria_folder = search_criteria
-            _, message_numbers = imap.search(None, criteria_folder)
-            if not message_numbers or not message_numbers[0]:
-                continue
-            ids = message_numbers[0].split()
-            logger.info("[gmail] %s: %d emails de Idealista", folder, len(ids))
-            for msg_id in ids:
-                try:
-                    _, msg_data = imap.fetch(msg_id, "(RFC822)")
-                    if not msg_data or not msg_data[0]:
-                        continue
-                    msg = email.message_from_bytes(msg_data[0][1])
-                    collected.append((msg, msg_id.decode(), folder))
-                except Exception as e:
-                    err = f"Error leyendo email {msg_id.decode()}: {e}"
-                    logger.warning("[gmail] %s", err)
-                    all_errors.append(err)
-                    failed_email_ids.add(msg_id.decode())
-        except Exception as e:
-            logger.warning("[gmail] Error en carpeta %s: %s", folder, e)
+    collected, all_errors, failed_email_ids = collect_messages(
+        imap, _IDEALISTA_SENDER, log_prefix=_LOG_PREFIX
+    )
 
     # Individuales primero (tienen zona en subject)
     def _is_summary(m: email.message.Message) -> bool:
@@ -435,55 +358,7 @@ def delete_processed_emails(
     Elimina SOLO los emails procesados con éxito.
     Los emails con error (en failed_ids) se conservan.
     """
-    if not imap or not alerts:
-        return
-
-    by_folder: dict[str, set[str]] = {}
-    seen_folder: dict[str, set[str]] = {}
-    for a in alerts:
-        # No eliminar si el email tuvo error o si no hay property_id (no procesado)
-        if not a.property_id:
-            continue
-        if failed_ids and a.email_id in failed_ids:
-            logger.info("[gmail] Email %s conservado (tuvo error)", a.email_id)
-            continue
-        # No eliminar emails de Papelera/Spam — ya están descartados.
-        # Los marcamos como leídos (\Seen) para no reprocesarlos.
-        if a.folder in (
-            "[Gmail]/Papelera",
-            "[Gmail]/Spam",
-            "[Gmail]/Trash",
-            "[Gmail]/Junk",
-        ):
-            seen_folder.setdefault(a.folder, set()).add(a.email_id)
-            continue
-        by_folder.setdefault(a.folder, set()).add(a.email_id)
-
-    for folder, ids in by_folder.items():
-        try:
-            imap.select(folder)
-            for msg_id in ids:
-                imap.store(msg_id.encode(), "+FLAGS", "\\Deleted")
-            imap.expunge()
-            logger.info("[gmail] %d emails eliminados de %s", len(ids), folder)
-        except Exception as e:
-            logger.warning("[gmail] Error eliminando de %s: %s", folder, e)
-    for folder, ids in seen_folder.items():
-        try:
-            imap.select(folder)
-            for msg_id in ids:
-                imap.store(msg_id.encode(), "+FLAGS", "\\Seen")
-            logger.info(
-                "[gmail] %d emails marcados como leídos en %s", len(ids), folder
-            )
-        except Exception as e:
-            logger.warning("[gmail] Error marcando como leídos en %s: %s", folder, e)
-
-    try:
-        imap.close()
-        imap.logout()
-    except Exception:
-        logger.debug("[idealista_parser] IMAP logout failed")
+    delete_processed(imap, alerts, failed_ids, log_prefix=_LOG_PREFIX)
 
 
 # Compatibilidad legacy
