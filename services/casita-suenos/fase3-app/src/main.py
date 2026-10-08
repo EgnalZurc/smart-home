@@ -540,7 +540,7 @@ def main() -> None:
     _set_process_name()
 
     # ── Singleton: una sola instancia ────────────────────────────────────────
-    from singleton import ensure_singleton
+    from smart_home_common.singleton import ensure_singleton
 
     LOCK_PATH = os.environ.get("CASITA_LOCK_PATH", f"{DATA_DIR}/casita.lock")
     ensure_singleton(LOCK_PATH)

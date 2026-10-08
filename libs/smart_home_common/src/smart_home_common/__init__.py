@@ -7,6 +7,7 @@ from .rate_limiter import (
     RateLimitStatus,
     SqliteRateLimiter,
 )
+from .singleton import ensure_singleton
 
 __version__ = "0.1.0"
 
@@ -16,4 +17,5 @@ __all__ = [
     "RateLimitStatus",
     "SqliteRateLimiter",
     "TTLCache",
+    "ensure_singleton",
 ]
