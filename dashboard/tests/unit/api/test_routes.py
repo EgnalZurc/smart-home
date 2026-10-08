@@ -242,7 +242,7 @@ class TestHealthEndpoints:
 
 class TestCasitaProxies:
     def test_casita_status_success(self, client):
-        with patch("api.proxy.base.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.json.return_value = {
                 "online": True,
@@ -259,7 +259,7 @@ class TestCasitaProxies:
             assert response.json()["online"] is True
 
     def test_casita_status_failure(self, client):
-        with patch("api.proxy.base.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                 side_effect=Exception("Timeout")
             )
@@ -272,7 +272,7 @@ class TestCasitaProxies:
             assert "error" in data
 
     def test_casita_radar(self, client):
-        with patch("api.proxy.base.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.json.return_value = {"items": [], "total": 0}
             mock_response.status_code = 200
@@ -358,7 +358,7 @@ class TestContainerEndpoints:
 
 class TestACProxies:
     def test_ac_status(self, client):
-        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.json.return_value = {"state": "off", "setpoint": 24.0}
             mock_response.status_code = 200
@@ -370,7 +370,7 @@ class TestACProxies:
             assert response.status_code == 200
 
     def test_ac_sensors(self, client):
-        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.json.return_value = {"sensors": []}
             mock_response.status_code = 200
@@ -382,7 +382,7 @@ class TestACProxies:
             assert response.status_code == 200
 
     def test_ac_config_get(self, client):
-        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.json.return_value = {"target_temperature": 25.0}
             mock_response.status_code = 200
@@ -394,7 +394,7 @@ class TestACProxies:
             assert response.status_code == 200
 
     def test_ac_config_post(self, client):
-        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = {"status": "ok"}
@@ -408,7 +408,7 @@ class TestACProxies:
             assert response.status_code == 200
 
     def test_ac_control(self, client):
-        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = {"mode": "auto"}
@@ -427,7 +427,7 @@ class TestACProxies:
 
 class TestVacacionesProxies:
     def test_vacaciones_get(self, client):
-        with patch("api.proxy.base.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.json.return_value = {"years": [2024, 2025]}
             mock_response.status_code = 200
@@ -439,7 +439,7 @@ class TestVacacionesProxies:
             assert response.status_code == 200
 
     def test_vacaciones_config(self, client):
-        with patch("api.proxy.base.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.json.return_value = {"nucleos": []}
             mock_response.status_code = 200
@@ -458,7 +458,7 @@ class TestVacacionesProxies:
 
 class TestPortfolioProxies:
     def test_portfolio_summary(self, client):
-        with patch("api.proxy.base.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.json.return_value = {"total_value": 10000}
             mock_response.status_code = 200
@@ -470,7 +470,7 @@ class TestPortfolioProxies:
             assert response.status_code == 200
 
     def test_portfolio_etf(self, client):
-        with patch("api.proxy.base.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.json.return_value = {"etfs": []}
             mock_response.status_code = 200
@@ -489,7 +489,7 @@ class TestPortfolioProxies:
 
 class TestPCControl:
     def test_pc_status_offline(self, client):
-        with patch("api.proxy.base.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                 side_effect=Exception("Timeout")
             )
@@ -500,7 +500,7 @@ class TestPCControl:
             assert response.json()["online"] is False
 
     def test_pc_mode_get(self, client):
-        with patch("api.proxy.base.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.json.return_value = {"mode": "balanced"}
             mock_response.status_code = 200
@@ -516,7 +516,7 @@ class TestPCControl:
         assert response.status_code == 400
 
     def test_pc_mode_set_valid(self, client):
-        with patch("api.proxy.base.httpx.AsyncClient") as mock_client:
+        with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.json.return_value = {"mode": "gaming"}
             mock_response.status_code = 200
