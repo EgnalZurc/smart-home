@@ -628,7 +628,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install tools
-        run: pip install ruff bandit pytest pytest-asyncio
+        run: pip install ruff bandit pytest pytest-asyncio pytest-cov
 
       - name: Ruff - Code Quality
         run: ruff check libs/smart_home_common/src --output-format=github
@@ -642,7 +642,7 @@ jobs:
       - name: Run Tests
         run: |
           pip install -e libs/smart_home_common
-          cd libs/smart_home_common && python -m pytest tests/ -v --tb=short
+          cd libs/smart_home_common && python -m pytest tests/ -v --tb=short --cov=src/smart_home_common --cov-report=term-missing --cov-fail-under=80
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Quality Gate: verify all lint-and-test-* jobs passed
