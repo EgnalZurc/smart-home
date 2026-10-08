@@ -39,21 +39,8 @@ router.include_router(containers_router)
 router.include_router(stats_router)
 
 
-# Module-level FIRMS_MAP_KEY that forwards to external module
-# This allows main.py to do: routes.FIRMS_MAP_KEY = "value"
-class _FirmsKeyProxy:
-    """Proxy class to allow setting FIRMS_MAP_KEY on this module."""
-
-    def __get__(self, obj, objtype=None):
-        return _external_module.FIRMS_MAP_KEY
-
-    def __set__(self, obj, value):
-        _external_module.FIRMS_MAP_KEY = value
-
-
-# Create instance at module level
-# main.py can do: routes.FIRMS_MAP_KEY = "value"
-# We use a simple approach: just re-export from external and update there
+# Module-level FIRMS_MAP_KEY, re-exported from the external module.
+# main.py sets it via set_firms_key() during the lifespan startup.
 FIRMS_MAP_KEY = ""  # Will be set by main.py
 
 
