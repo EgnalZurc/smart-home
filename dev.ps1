@@ -186,7 +186,7 @@ function Invoke-Ci {
 
     # Services that import the shared smart_home_common library must install it
     # (editable) before pytest, mirroring the matching ci.yml job.
-    $installCommon = if ($Service -in @('dashboard', 'ac-service')) {
+    $installCommon = if ($Service -in @('dashboard', 'ac-service', 'portfolio-monitor')) {
         "pip install -e libs/smart_home_common --quiet 2>/dev/null || true`n"
     } else { '' }
 
