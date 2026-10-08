@@ -8,8 +8,6 @@ Includes:
 """
 
 import math
-import time
-from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime
 from functools import wraps
@@ -19,51 +17,31 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse
 from models import AlertLevel
 from orchestrator import get_orchestrator
+from smart_home_common.rate_limiter import InMemoryRateLimiter
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Rate Limiting
+#
+# Uses the shared thread-safe InMemoryRateLimiter from smart_home_common instead
+# of a service-local implementation, so every service enforces limits the same
+# way. The shared limiter uses a fixed window and exposes get_status(), which we
+# use to compute the Retry-After header.
 # ─────────────────────────────────────────────────────────────────────────────
-class RateLimiter:
-    """Simple in-memory rate limiter using sliding window."""
-
-    def __init__(self, max_requests: int = 5, window_seconds: int = 60):
-        self.max_requests = max_requests
-        self.window_seconds = window_seconds
-        self._requests: dict[str, list[float]] = defaultdict(list)
-
-    def is_allowed(self, key: str) -> bool:
-        """Check if request is allowed and record it."""
-        now = time.time()
-        window_start = now - self.window_seconds
-
-        # Clean old requests
-        self._requests[key] = [t for t in self._requests[key] if t > window_start]
-
-        # Check limit
-        if len(self._requests[key]) >= self.max_requests:
-            return False
-
-        # Record request
-        self._requests[key].append(now)
-        return True
-
-    def time_until_allowed(self, key: str) -> float:
-        """Return seconds until next request is allowed."""
-        if not self._requests[key]:
-            return 0
-        oldest = min(self._requests[key])
-        return max(0, oldest + self.window_seconds - time.time())
-
-
 # Rate limiters for different endpoint groups
-_refresh_limiter = RateLimiter(max_requests=5, window_seconds=60)
-_config_limiter = RateLimiter(max_requests=2, window_seconds=60)
+_refresh_limiter = InMemoryRateLimiter(max_requests=5, window_seconds=60)
+_config_limiter = InMemoryRateLimiter(max_requests=2, window_seconds=60)
 
 
-def rate_limit(limiter: RateLimiter):
+def _retry_after_seconds(limiter: InMemoryRateLimiter, key: str) -> int:
+    """Seconds a client should wait before retrying, for the Retry-After header."""
+    reset_at = limiter.get_status(key).reset_at
+    return max(0, int((reset_at - datetime.now()).total_seconds())) + 1
+
+
+def rate_limit(limiter: InMemoryRateLimiter):
     """Decorator to apply rate limiting to an endpoint."""
 
     def decorator(func: Callable):
@@ -75,7 +53,7 @@ def rate_limit(limiter: RateLimiter):
                 client_ip = request.client.host if request.client else "unknown"
 
             if not limiter.is_allowed(client_ip):
-                retry_after = int(limiter.time_until_allowed(client_ip)) + 1
+                retry_after = _retry_after_seconds(limiter, client_ip)
                 raise HTTPException(
                     status_code=429,
                     detail=f"Rate limit exceeded. Try again in {retry_after} seconds.",
@@ -428,7 +406,7 @@ async def refresh_all(request: Request, background_tasks: BackgroundTasks):
     # Manual rate limit check (can't use decorator easily with BackgroundTasks)
     client_ip = request.client.host if request.client else "unknown"
     if not _refresh_limiter.is_allowed(client_ip):
-        retry_after = int(_refresh_limiter.time_until_allowed(client_ip)) + 1
+        retry_after = _retry_after_seconds(_refresh_limiter, client_ip)
         raise HTTPException(
             status_code=429,
             detail=f"Rate limit exceeded. Try again in {retry_after} seconds.",
@@ -455,7 +433,7 @@ async def refresh_monitor(
 
     client_ip = request.client.host if request.client else "unknown"
     if not _refresh_limiter.is_allowed(client_ip):
-        retry_after = int(_refresh_limiter.time_until_allowed(client_ip)) + 1
+        retry_after = _retry_after_seconds(_refresh_limiter, client_ip)
         raise HTTPException(
             status_code=429,
             detail=f"Rate limit exceeded. Try again in {retry_after} seconds.",
@@ -477,7 +455,7 @@ async def reload_config(request: Request):
     """Reload configuration from disk. Rate limited: 2 req/min."""
     client_ip = request.client.host if request.client else "unknown"
     if not _config_limiter.is_allowed(client_ip):
-        retry_after = int(_config_limiter.time_until_allowed(client_ip)) + 1
+        retry_after = _retry_after_seconds(_config_limiter, client_ip)
         raise HTTPException(
             status_code=429,
             detail=f"Rate limit exceeded. Try again in {retry_after} seconds.",
@@ -534,7 +512,7 @@ async def test_notification(request: Request):
     """Send a test notification to verify email setup. Rate limited."""
     client_ip = request.client.host if request.client else "unknown"
     if not _config_limiter.is_allowed(client_ip):
-        retry_after = int(_config_limiter.time_until_allowed(client_ip)) + 1
+        retry_after = _retry_after_seconds(_config_limiter, client_ip)
         raise HTTPException(
             status_code=429,
             detail=f"Rate limit exceeded. Try again in {retry_after} seconds.",

@@ -5,7 +5,7 @@ Downloads market data from Yahoo Finance and calculates technical signals.
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import config
@@ -14,6 +14,7 @@ import pandas as pd
 import yfinance as yf
 from i18n import t
 from models import AlertLevel, ETFAnalysis, Signal
+from smart_home_common.cache import TTLCache
 
 from . import BaseMonitor, register_monitor
 
@@ -21,43 +22,13 @@ logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Simple TTL Cache for Yahoo Finance responses
+# TTL Cache for Yahoo Finance responses (shared implementation)
 #
 # yfinance hits Yahoo Finance on every call; a scheduled run plus any dashboard
 # refresh can download the same 1-year history repeatedly. Caching per ticker
 # for a few minutes removes redundant network round-trips (and the risk of
 # Yahoo throttling) without affecting the daily signal cadence.
-#
-# Mirrors the TTLCache used in crypto_monitor for consistency.
 # ─────────────────────────────────────────────────────────────────────────────
-class TTLCache:
-    """Simple in-memory cache with per-entry TTL expiration."""
-
-    def __init__(self, default_ttl_seconds: int = 300):
-        self._cache: dict[str, tuple[Any, datetime]] = {}
-        self._default_ttl = default_ttl_seconds
-
-    def get(self, key: str) -> Any | None:
-        """Return cached value if not expired, else None."""
-        if key not in self._cache:
-            return None
-        value, expires_at = self._cache[key]
-        if datetime.now(timezone.utc) >= expires_at:
-            del self._cache[key]
-            return None
-        return value
-
-    def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
-        """Store value with TTL (defaults to cache default)."""
-        ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
-        self._cache[key] = (value, expires_at)
-
-    def clear(self) -> None:
-        """Clear all cached entries."""
-        self._cache.clear()
-
-
 # ETF history is used for signals that update daily; 5 min is plenty to collapse
 # bursts of requests while staying fresh. OHLC (sparklines) is purely cosmetic
 # historical data, so it can live a bit longer.

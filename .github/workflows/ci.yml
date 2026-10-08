@@ -96,6 +96,7 @@ jobs:
               - 'libs/notifications/**'
             portfolio-monitor:
               - 'services/portfolio-monitor/**'
+              - 'libs/smart_home_common/**'
             vacaciones:
               - 'services/vacaciones-service/**'
             casita:
@@ -397,6 +398,7 @@ jobs:
         run: |
           if [[ -d "services/portfolio-monitor/tests" ]] && find services/portfolio-monitor/tests -name "test_*.py" | grep -q .; then
             pip install -r services/portfolio-monitor/requirements.txt --quiet 2>/dev/null || true
+            pip install -e libs/smart_home_common --quiet 2>/dev/null || true
             cd services/portfolio-monitor && PYTHONPATH=src:../../libs python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
           else
             echo "⏭️ No tests found"

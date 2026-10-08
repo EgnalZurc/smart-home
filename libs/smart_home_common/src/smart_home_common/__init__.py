@@ -1,5 +1,6 @@
 """Smart Home Common Library - Shared utilities for all services."""
 
+from .cache import TTLCache
 from .rate_limiter import (
     BaseRateLimiter,
     InMemoryRateLimiter,
@@ -14,4 +15,5 @@ __all__ = [
     "InMemoryRateLimiter",
     "RateLimitStatus",
     "SqliteRateLimiter",
+    "TTLCache",
 ]

@@ -12,6 +12,7 @@ from typing import Any
 import config
 from i18n import t
 from models import AlertLevel, CryptoAnalysis, Signal
+from smart_home_common.cache import TTLCache
 
 from . import BaseMonitor, register_monitor
 
@@ -56,37 +57,9 @@ _generic_client = RetryClient(config=_retry_config)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Simple TTL Cache for API responses
+# TTL Cache for API responses (shared implementation)
 # CoinGecko Demo plan: 30 calls/min, 10k/month — cache reduces rate limit risk
 # ─────────────────────────────────────────────────────────────────────────────
-class TTLCache:
-    """Simple in-memory cache with per-entry TTL expiration."""
-
-    def __init__(self, default_ttl_seconds: int = 300):
-        self._cache: dict[str, tuple[Any, datetime]] = {}
-        self._default_ttl = default_ttl_seconds
-
-    def get(self, key: str) -> Any | None:
-        """Return cached value if not expired, else None."""
-        if key not in self._cache:
-            return None
-        value, expires_at = self._cache[key]
-        if datetime.now(timezone.utc) >= expires_at:
-            del self._cache[key]
-            return None
-        return value
-
-    def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
-        """Store value with TTL (defaults to cache default)."""
-        ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
-        self._cache[key] = (value, expires_at)
-
-    def clear(self) -> None:
-        """Clear all cached entries."""
-        self._cache.clear()
-
-
 # Cache instances with different TTLs per data type
 # Market data: 5 min (prices update ~every minute, but we don't need real-time)
 # OHLC: 15 min (historical data, rarely changes)

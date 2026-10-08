@@ -28,11 +28,11 @@ def reset_rate_limiters():
     """Reset rate limiters before each test."""
     from api.routes import _config_limiter, _refresh_limiter
 
-    _refresh_limiter._requests.clear()
-    _config_limiter._requests.clear()
+    _refresh_limiter._data.clear()
+    _config_limiter._data.clear()
     yield
-    _refresh_limiter._requests.clear()
-    _config_limiter._requests.clear()
+    _refresh_limiter._data.clear()
+    _config_limiter._data.clear()
 
 
 class TestHealthEndpoint:
@@ -262,9 +262,9 @@ class TestRateLimiting:
 
     def test_rate_limiter_allows_initial_requests(self):
         """Rate limiter allows requests under the limit."""
-        from api.routes import RateLimiter
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
 
-        limiter = RateLimiter(max_requests=3, window_seconds=60)
+        limiter = InMemoryRateLimiter(max_requests=3, window_seconds=60)
 
         assert limiter.is_allowed("test-key") is True
         assert limiter.is_allowed("test-key") is True
@@ -272,9 +272,9 @@ class TestRateLimiting:
 
     def test_rate_limiter_blocks_excess_requests(self):
         """Rate limiter blocks requests over the limit."""
-        from api.routes import RateLimiter
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
 
-        limiter = RateLimiter(max_requests=2, window_seconds=60)
+        limiter = InMemoryRateLimiter(max_requests=2, window_seconds=60)
 
         assert limiter.is_allowed("test-key") is True
         assert limiter.is_allowed("test-key") is True
@@ -282,32 +282,39 @@ class TestRateLimiting:
 
     def test_rate_limiter_separate_keys(self):
         """Different keys have separate limits."""
-        from api.routes import RateLimiter
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
 
-        limiter = RateLimiter(max_requests=1, window_seconds=60)
+        limiter = InMemoryRateLimiter(max_requests=1, window_seconds=60)
 
         assert limiter.is_allowed("key-1") is True
         assert limiter.is_allowed("key-2") is True
         assert limiter.is_allowed("key-1") is False
         assert limiter.is_allowed("key-2") is False
 
-    def test_rate_limiter_time_until_allowed(self):
-        """Time until allowed is calculated correctly."""
-        from api.routes import RateLimiter
+    def test_rate_limiter_status_reports_reset(self):
+        """get_status exposes a reset time used for the Retry-After header."""
+        from datetime import datetime
 
-        limiter = RateLimiter(max_requests=1, window_seconds=60)
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
 
-        assert limiter.time_until_allowed("new-key") == 0
-        limiter.is_allowed("new-key")
-        wait_time = limiter.time_until_allowed("new-key")
-        assert wait_time > 0
-        assert wait_time <= 60
+        limiter = InMemoryRateLimiter(max_requests=1, window_seconds=60)
+
+        # Fresh key: allowed with a future reset window.
+        status = limiter.get_status("new-key")
+        assert status.allowed is True
+        assert status.reset_at > datetime.now()
+
+        # After exhausting the limit, the key is no longer allowed.
+        assert limiter.is_allowed("new-key") is True
+        blocked = limiter.get_status("new-key")
+        assert blocked.allowed is False
+        assert blocked.remaining == 0
 
     def test_refresh_endpoint_rate_limited(self, client):
         """Refresh endpoint returns 429 after too many requests."""
         from api.routes import _refresh_limiter
 
-        _refresh_limiter._requests.clear()
+        _refresh_limiter._data.clear()
 
         # Make requests up to the limit
         for _ in range(5):
@@ -323,7 +330,7 @@ class TestRateLimiting:
         """Reload config endpoint is rate limited."""
         from api.routes import _config_limiter
 
-        _config_limiter._requests.clear()
+        _config_limiter._data.clear()
 
         # Make requests up to the limit (2)
         for _ in range(2):
@@ -755,7 +762,7 @@ class TestRefreshMonitorEndpoint:
         """Refresh ETF monitor returns 200 and starts background task."""
         from api.routes import _refresh_limiter
 
-        _refresh_limiter._requests.clear()
+        _refresh_limiter._data.clear()
 
         # Mock the orchestrator to avoid actual monitor execution
         with patch("api.routes.get_orchestrator") as mock_get_orch:
@@ -773,7 +780,7 @@ class TestRefreshMonitorEndpoint:
         """Refresh crypto monitor returns 200."""
         from api.routes import _refresh_limiter
 
-        _refresh_limiter._requests.clear()
+        _refresh_limiter._data.clear()
 
         with patch("api.routes.get_orchestrator") as mock_get_orch:
             mock_orch = MagicMock()
@@ -789,7 +796,7 @@ class TestRefreshMonitorEndpoint:
         """Refresh savings monitor returns 200."""
         from api.routes import _refresh_limiter
 
-        _refresh_limiter._requests.clear()
+        _refresh_limiter._data.clear()
 
         with patch("api.routes.get_orchestrator") as mock_get_orch:
             mock_orch = MagicMock()
@@ -805,7 +812,7 @@ class TestRefreshMonitorEndpoint:
         """Single monitor refresh is rate limited."""
         from api.routes import _refresh_limiter
 
-        _refresh_limiter._requests.clear()
+        _refresh_limiter._data.clear()
 
         with patch("api.routes.get_orchestrator") as mock_get_orch:
             mock_orch = MagicMock()
@@ -829,7 +836,7 @@ class TestNotificationTestEndpoint:
         """Test notification returns 503 when email disabled."""
         from api.routes import _config_limiter
 
-        _config_limiter._requests.clear()
+        _config_limiter._data.clear()
 
         with patch("email_notifier.EmailNotifier") as mock_notifier_class:
             mock_notifier = MagicMock()
@@ -844,7 +851,7 @@ class TestNotificationTestEndpoint:
         """Test notification returns success when email works."""
         from api.routes import _config_limiter
 
-        _config_limiter._requests.clear()
+        _config_limiter._data.clear()
 
         with patch("email_notifier.EmailNotifier") as mock_notifier_class:
             mock_notifier = MagicMock()
@@ -863,7 +870,7 @@ class TestNotificationTestEndpoint:
         """Test notification returns 500 when email fails."""
         from api.routes import _config_limiter
 
-        _config_limiter._requests.clear()
+        _config_limiter._data.clear()
 
         with patch("email_notifier.EmailNotifier") as mock_notifier_class:
             mock_notifier = MagicMock()
@@ -881,7 +888,7 @@ class TestNotificationTestEndpoint:
         """Test notification is rate limited."""
         from api.routes import _config_limiter
 
-        _config_limiter._requests.clear()
+        _config_limiter._data.clear()
 
         # Exhaust rate limit (uses config limiter, 2 req/min)
         for _ in range(2):
@@ -933,9 +940,9 @@ class TestRateLimiterWindowExpiry:
 
     def test_rate_limiter_window_expires(self):
         """Rate limiter allows requests after window expires."""
-        from api.routes import RateLimiter
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
 
-        limiter = RateLimiter(max_requests=1, window_seconds=1)
+        limiter = InMemoryRateLimiter(max_requests=1, window_seconds=1)
 
         assert limiter.is_allowed("test-key") is True
         assert limiter.is_allowed("test-key") is False
