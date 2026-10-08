@@ -56,7 +56,7 @@ SMTP_HOST: str = "smtp.gmail.com"
 SMTP_PORT: int = 587
 SMTP_USER: str = ""
 SMTP_PASSWORD: str = ""
-ADMIN_EMAIL: str = "acmlsn@gmail.com"
+ADMIN_EMAIL: str = ""  # Set from AUTH_ADMIN_EMAIL env var
 BASE_URL: str = "https://raspberrypi.tailaa37cd.ts.net"
 
 

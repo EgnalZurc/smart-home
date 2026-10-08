@@ -285,3 +285,297 @@ class TestRouterConfiguration:
     def test_router_has_ac_tag(self):
         """Router is tagged as AC."""
         assert "AC" in router.tags
+
+
+
+class TestErrorHandlingPaths:
+    """Tests for error handling paths to improve coverage."""
+
+    @pytest.mark.asyncio
+    async def test_get_sensors_network_error(self):
+        """Raises 503 on network error getting sensors."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_ac_sensors()
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_get_sensors_history_network_error(self):
+        """Raises 503 on network error getting history."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_ac_sensors_history()
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_get_history_network_error(self):
+        """Raises 503 on network error getting action history."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_ac_history()
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_get_config_network_error(self):
+        """Raises 503 on network error getting config."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_ac_config()
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_get_real_network_error(self):
+        """Raises 503 on network error getting real state."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_ac_real()
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_get_outdoor_network_error(self):
+        """Raises 503 on network error getting outdoor data."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_ac_outdoor()
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_get_errors_network_error(self):
+        """Raises 503 on network error getting errors."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_ac_errors()
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_get_energy_current_network_error(self):
+        """Raises 503 on network error getting current energy."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_ac_energy_current()
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_get_energy_hourly_network_error(self):
+        """Raises 503 on network error getting hourly energy."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_ac_energy_hourly()
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_get_energy_monthly_network_error(self):
+        """Raises 503 on network error getting monthly energy."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_ac_energy_monthly()
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_get_subscriptions_stats_network_error(self):
+        """Raises 503 on network error getting subscription stats."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_ac_subscriptions_stats()
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_update_config_network_error(self):
+        """Raises 503 on network error updating config."""
+        request = make_mock_request(json_data={"target_temp": 24})
+
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await update_ac_config(request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_set_control_mode_network_error(self):
+        """Raises 503 on network error setting control mode."""
+        request = make_mock_request(json_data={"mode": "auto"})
+
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await set_ac_control_mode(request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_set_control_mode_validation_error(self):
+        """Raises HTTPException on validation error setting control mode."""
+        request = make_mock_request(json_data={"mode": "invalid"})
+
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = make_mock_response(
+                {"detail": "Invalid mode"}, 400
+            )
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await set_ac_control_mode(request)
+            assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_set_manual_params_network_error(self):
+        """Raises 503 on network error setting manual params."""
+        request = make_mock_request(json_data={"temp": 22})
+
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await set_ac_manual_params(request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_set_manual_params_validation_error(self):
+        """Raises HTTPException on validation error setting manual params."""
+        request = make_mock_request(json_data={"temp": "invalid"})
+
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = make_mock_response(
+                {"detail": "Invalid temperature"}, 400
+            )
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await set_ac_manual_params(request)
+            assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_update_manual_param_network_error(self):
+        """Raises 503 on network error updating single param."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.side_effect = Exception("Connection refused")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await update_ac_manual_param("temp", "22")
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_update_manual_param_validation_error(self):
+        """Raises HTTPException on validation error updating param."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = make_mock_response(
+                {"detail": "Invalid param"}, 400
+            )
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await update_ac_manual_param("invalid", "value")
+            assert exc.value.status_code == 400
+
+
+class TestHistoryParameters:
+    """Tests for history endpoint parameter handling."""
+
+    @pytest.mark.asyncio
+    async def test_history_with_no_params(self):
+        """History works with no optional params."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.return_value = make_mock_response([])
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            await get_ac_sensors_history()
+
+            # Verify empty params
+            call_args = mock_instance.get.call_args
+            assert call_args.kwargs["params"] == {}
+
+    @pytest.mark.asyncio
+    async def test_history_with_start_only(self):
+        """History with start param only."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.return_value = make_mock_response([])
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            await get_ac_sensors_history(start=1000.0)
+
+            call_args = mock_instance.get.call_args
+            assert call_args.kwargs["params"] == {"start": 1000.0}
+
+    @pytest.mark.asyncio
+    async def test_history_with_end_only(self):
+        """History with end param only."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.return_value = make_mock_response([])
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            await get_ac_sensors_history(end=2000.0)
+
+            call_args = mock_instance.get.call_args
+            assert call_args.kwargs["params"] == {"end": 2000.0}
+
+    @pytest.mark.asyncio
+    async def test_history_with_last_only(self):
+        """History with last param only."""
+        with patch("api.proxy.ac.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.return_value = make_mock_response([])
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            await get_ac_sensors_history(last=50)
+
+            call_args = mock_instance.get.call_args
+            assert call_args.kwargs["params"] == {"last": 50}

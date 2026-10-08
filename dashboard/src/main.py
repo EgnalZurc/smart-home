@@ -35,6 +35,7 @@ AUTH_DB_PATH = os.environ.get("AUTH_DB_PATH", "/app/data/auth.db")
 AUTH_SESSION_TTL = int(os.environ.get("AUTH_SESSION_TTL", "86400"))
 AUTH_SMTP_USER = os.environ.get("AUTH_SMTP_USER", "")
 AUTH_SMTP_PASS = os.environ.get("AUTH_SMTP_PASSWORD", "")
+AUTH_ADMIN_EMAIL = os.environ.get("AUTH_ADMIN_EMAIL", AUTH_SMTP_USER)  # Defaults to SMTP user
 AUTH_BASE_URL = os.environ.get("AUTH_BASE_URL", "https://raspberrypi.tailaa37cd.ts.net")
 FIRMS_MAP_KEY = os.environ.get("FIRMS_MAP_KEY", "")
 
@@ -57,6 +58,7 @@ async def lifespan(app: FastAPI):
     auth_devices.AUTH_DB_PATH = AUTH_DB_PATH
     auth_routes.SMTP_USER = AUTH_SMTP_USER
     auth_routes.SMTP_PASSWORD = AUTH_SMTP_PASS
+    auth_routes.ADMIN_EMAIL = AUTH_ADMIN_EMAIL
     auth_routes.BASE_URL = AUTH_BASE_URL
     routes.set_firms_key(FIRMS_MAP_KEY)
     logger.info("=== Smart Home Backend ready (auth + dashboard) ===")

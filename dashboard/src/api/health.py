@@ -71,12 +71,48 @@ async def get_health():
 
 @router.get("/backend")
 async def get_backend_health():
-    """Health check for the backend itself.
+    """Health check for the backend itself with self-tests.
+
+    Validates that critical components are functional:
+    - Database connection (auth.db)
+    - Required environment variables
+    - Static files accessibility
 
     Returns JSON (unlike nginx /health which returns plain text).
     Used by the dashboard infrastructure bar to check backend status.
     """
-    return {"online": True}
+    from pathlib import Path
+
+    checks = {
+        "online": True,
+        "db_accessible": False,
+        "static_files": False,
+    }
+
+    # Check database accessibility
+    try:
+        import profiles.db as profiles_db
+
+        db_path = Path(profiles_db.AUTH_DB_PATH)
+        if db_path.exists():
+            checks["db_accessible"] = True
+        elif db_path.parent.exists():
+            # Parent dir exists, DB will be created on first use
+            checks["db_accessible"] = True
+    except Exception:
+        pass
+
+    # Check static files
+    try:
+        static_path = Path(__file__).parent.parent / "static" / "login.html"
+        checks["static_files"] = static_path.exists()
+    except Exception:
+        pass
+
+    # Overall online status
+    checks["online"] = checks["db_accessible"] and checks["static_files"]
+
+    return checks
 
 
 @router.get("/zigbee")

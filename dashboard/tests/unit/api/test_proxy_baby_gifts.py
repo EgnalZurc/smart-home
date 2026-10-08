@@ -384,3 +384,384 @@ class TestRouterConfiguration:
     def test_router_has_baby_gifts_tag(self):
         """Router is tagged as Baby Gifts."""
         assert "Baby Gifts" in router.tags
+
+
+
+class TestErrorHandlingPaths:
+    """Tests for error handling paths to improve coverage."""
+
+    @pytest.mark.asyncio
+    async def test_create_gift_network_error(self):
+        """Raises 503 on network error during create."""
+        request = make_mock_request(json_data={"name": "Gift"})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await create_baby_gift(request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_update_gift_network_error(self):
+        """Raises 503 on network error during update."""
+        request = make_mock_request(json_data={"name": "Updated"})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.put.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await update_baby_gift("1", request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_delete_gift_network_error(self):
+        """Raises 503 on network error during delete."""
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.delete.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await delete_baby_gift("1")
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_admin_unreserve_network_error(self):
+        """Raises 503 on network error during admin unreserve."""
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await admin_unreserve_baby_gift("1")
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_admin_unreserve_service_error(self):
+        """Raises HTTPException on 4xx during admin unreserve."""
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = make_mock_response(
+                {"detail": "Not found"}, 404
+            )
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await admin_unreserve_baby_gift("999")
+            assert exc.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_update_categories_network_error(self):
+        """Raises 503 on network error during update categories."""
+        request = make_mock_request(json_data={"categories": []})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.put.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await update_baby_gifts_categories(request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_get_invitations_network_error(self):
+        """Raises 503 on network error getting invitations."""
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_baby_gifts_invitations()
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_create_invitation_network_error(self):
+        """Raises 503 on network error creating invitation."""
+        request = make_mock_request(json_data={"name": "Guest"})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await create_baby_gifts_invitation(request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_create_invitation_service_error(self):
+        """Raises HTTPException on service error creating invitation."""
+        request = make_mock_request(json_data={"name": ""})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = make_mock_response(
+                {"detail": "Name required"}, 400
+            )
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await create_baby_gifts_invitation(request)
+            assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_delete_invitation_network_error(self):
+        """Raises 503 on network error deleting invitation."""
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.delete.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await delete_baby_gifts_invitation("abc123")
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_delete_invitation_service_error(self):
+        """Raises HTTPException on service error deleting invitation."""
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.delete.return_value = make_mock_response(
+                {"detail": "Not found"}, 404
+            )
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await delete_baby_gifts_invitation("invalid")
+            assert exc.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_revoke_invitation_network_error(self):
+        """Raises 503 on network error revoking invitation."""
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await revoke_baby_gifts_invitation("abc123")
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_revoke_invitation_service_error(self):
+        """Raises HTTPException on service error revoking invitation."""
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = make_mock_response(
+                {"detail": "Already revoked"}, 400
+            )
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await revoke_baby_gifts_invitation("abc123")
+            assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_get_gifts_for_user_network_error(self):
+        """Raises 503 on network error getting user gifts."""
+        request = make_mock_request(headers={})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_baby_gifts_for_user(request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_get_gifts_for_user_service_error(self):
+        """Raises HTTPException on service error getting user gifts."""
+        request = make_mock_request(headers={})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.return_value = make_mock_response(
+                {"detail": "Unauthorized"}, 401
+            )
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_baby_gifts_for_user(request)
+            assert exc.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_user_reserve_network_error(self):
+        """Raises 503 on network error during user reserve."""
+        request = make_mock_request(headers={})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await user_reserve_baby_gift("1", request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_user_reserve_service_error(self):
+        """Raises HTTPException on service error during user reserve."""
+        request = make_mock_request(headers={})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = make_mock_response(
+                {"detail": "Already reserved"}, 409
+            )
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await user_reserve_baby_gift("1", request)
+            assert exc.value.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_user_unreserve_network_error(self):
+        """Raises 503 on network error during user unreserve."""
+        request = make_mock_request(headers={})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await user_unreserve_baby_gift("1", request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_user_unreserve_service_error(self):
+        """Raises HTTPException on service error during user unreserve."""
+        request = make_mock_request(headers={})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = make_mock_response(
+                {"detail": "Not your reservation"}, 403
+            )
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await user_unreserve_baby_gift("1", request)
+            assert exc.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_guest_get_gifts_network_error(self):
+        """Raises 503 on network error getting guest gifts."""
+        request = make_mock_request(headers={})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await get_baby_gifts_for_guest("abc123", request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_guest_reserve_network_error(self):
+        """Raises 503 on network error during guest reserve."""
+        request = make_mock_request(headers={})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await guest_reserve_baby_gift("abc123", "1", request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_guest_reserve_service_error(self):
+        """Raises HTTPException on service error during guest reserve."""
+        request = make_mock_request(headers={})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = make_mock_response(
+                {"detail": "Already reserved"}, 409
+            )
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await guest_reserve_baby_gift("abc123", "1", request)
+            assert exc.value.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_guest_unreserve_network_error(self):
+        """Raises 503 on network error during guest unreserve."""
+        request = make_mock_request(headers={})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await guest_unreserve_baby_gift("abc123", "1", request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_guest_unreserve_service_error(self):
+        """Raises HTTPException on service error during guest unreserve."""
+        request = make_mock_request(headers={})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = make_mock_response(
+                {"detail": "Not your reservation"}, 403
+            )
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            with pytest.raises(HTTPException) as exc:
+                await guest_unreserve_baby_gift("abc123", "1", request)
+            assert exc.value.status_code == 403
+
+
+class TestRequestWithoutHeaders:
+    """Tests for requests without optional headers."""
+
+    @pytest.mark.asyncio
+    async def test_get_user_gifts_without_auth_header(self):
+        """Handles request without X-Auth-User header."""
+        request = make_mock_request(headers={})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.return_value = make_mock_response([])
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            result = await get_baby_gifts_for_user(request)
+            assert result == []
+
+            # Verify no auth header was forwarded
+            call_args = mock_instance.get.call_args
+            assert call_args.kwargs["headers"] == {}
+
+    @pytest.mark.asyncio
+    async def test_guest_gifts_without_xff_header(self):
+        """Handles guest request without X-Forwarded-For header."""
+        request = make_mock_request(headers={})
+
+        with patch("api.proxy.baby_gifts.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.return_value = make_mock_response([])
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            result = await get_baby_gifts_for_guest("abc123", request)
+            assert result == []
+
+            # Verify no xff header was forwarded
+            call_args = mock_instance.get.call_args
+            assert call_args.kwargs["headers"] == {}
