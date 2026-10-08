@@ -7,7 +7,7 @@ and caching for services like MELCloud and outdoor temperature.
 import time
 from unittest.mock import MagicMock
 
-from subscription_manager import (
+from smart_home_common.mqtt.subscription import (
     CachedData,
     SubscriptionConfig,
     SubscriptionManager,

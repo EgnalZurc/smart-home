@@ -8,7 +8,7 @@ import json
 import time
 from unittest.mock import MagicMock, patch
 
-from mqtt_handler import MqttHandler, SensorReading
+from smart_home_common.mqtt.handler import MqttHandler, SensorReading
 
 
 class TestSensorReading:
@@ -85,7 +85,7 @@ class TestMqttHandlerInit:
         """Should store configuration values."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -126,7 +126,7 @@ class TestMqttHandlerInit:
         }
         persist_file.write_text(json.dumps(data), encoding="utf-8")
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -145,7 +145,7 @@ class TestMqttHandlerCallbacks:
         """Should subscribe to sensor topics on connect."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -165,7 +165,7 @@ class TestMqttHandlerCallbacks:
         """Should clear mqtt_disconnected error on connect."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -183,7 +183,7 @@ class TestMqttHandlerCallbacks:
         """Should set connected flag to False on disconnect."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -202,7 +202,7 @@ class TestMqttHandlerCallbacks:
         """Should register error on disconnect."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -222,7 +222,7 @@ class TestMqttHandlerCallbacks:
         """Should process sensor data from message."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -250,7 +250,7 @@ class TestMqttHandlerCallbacks:
         """Should ignore messages from unknown sensors."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -269,7 +269,7 @@ class TestMqttHandlerCallbacks:
         """Should ignore messages without temperature."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -288,7 +288,7 @@ class TestMqttHandlerCallbacks:
         """Should handle invalid JSON gracefully."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -310,7 +310,7 @@ class TestMqttHandlerHistory:
         """Should limit history to max_history entries."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -344,7 +344,7 @@ class TestMqttHandlerAverages:
         persist_file = tmp_path / "sensors.json"
         now = time.time()
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -365,7 +365,7 @@ class TestMqttHandlerAverages:
         persist_file = tmp_path / "sensors.json"
         now = time.time()
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -383,7 +383,7 @@ class TestMqttHandlerAverages:
         """Should return None if no active sensors."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -399,7 +399,7 @@ class TestMqttHandlerAverages:
         persist_file = tmp_path / "sensors.json"
         now = time.time()
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -422,7 +422,7 @@ class TestMqttHandlerActiveReadings:
         persist_file = tmp_path / "sensors.json"
         now = time.time()
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -448,7 +448,7 @@ class TestMqttHandlerRecordAcTemp:
         """Should add AC room temp to history."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -465,7 +465,7 @@ class TestMqttHandlerRecordAcTemp:
         """Should limit AC history to max_history."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
@@ -487,7 +487,7 @@ class TestMqttHandlerIsConnected:
         """Should return connection flag value."""
         persist_file = tmp_path / "sensors.json"
 
-        with patch("mqtt_handler.PERSIST_FILE", str(persist_file)):
+        with patch("smart_home_common.mqtt.handler.PERSIST_FILE", str(persist_file)):
             handler = MqttHandler(
                 broker="localhost",
                 port=1883,
