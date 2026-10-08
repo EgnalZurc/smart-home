@@ -91,9 +91,7 @@ class Zigbee2MQTTClient:
                 elapsed += poll_interval
 
             if not self.response_received:
-                raise Exception(
-                    f"Timeout waiting for Zigbee2MQTT response after {self.timeout}s"
-                )
+                raise Exception(f"Timeout waiting for Zigbee2MQTT response after {self.timeout}s")
 
             logger.info("Got %d devices from Zigbee2MQTT", len(self.devices))
             return self.devices
@@ -135,8 +133,7 @@ class Zigbee2MQTTClient:
                     or (
                         expose.get("type") == "climate"
                         and any(
-                            f.get("property") == "temperature"
-                            for f in expose.get("features", [])
+                            f.get("property") == "temperature" for f in expose.get("features", [])
                         )
                     )
                     for expose in exposes

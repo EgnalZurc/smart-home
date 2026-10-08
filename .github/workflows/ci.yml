@@ -72,6 +72,7 @@ jobs:
       valheim-admin: ${{ steps.changes.outputs.valheim-admin }}
       pc-agent: ${{ steps.changes.outputs.pc-agent }}
       async-http-client: ${{ steps.changes.outputs.async-http-client }}
+      smart-home-common: ${{ steps.changes.outputs.smart-home-common }}
       nginx: ${{ steps.changes.outputs.nginx }}
       compose: ${{ steps.changes.outputs.compose }}
       any-service: ${{ steps.changes.outputs.any-service }}
@@ -111,6 +112,8 @@ jobs:
               - 'tools/pc-agent/**'
             async-http-client:
               - 'libs/async_http_client/**'
+            smart-home-common:
+              - 'libs/smart_home_common/**'
             nginx:
               - 'infrastructure/nginx/**'
             compose:
@@ -129,6 +132,7 @@ jobs:
           VACACIONES=false; CASITA=false; VAULTWARDEN=false; VALHEIM_ADMIN=false
           PC_AGENT=false; NGINX=false; COMPOSE=false
           ASYNC_HTTP_CLIENT=false
+          SMART_HOME_COMMON=false
           
           case "$SERVICE" in
             all)
@@ -137,6 +141,7 @@ jobs:
               VACACIONES=true; CASITA=true; VAULTWARDEN=true; VALHEIM_ADMIN=true
               PC_AGENT=true; NGINX=true; COMPOSE=true
               ASYNC_HTTP_CLIENT=true
+              SMART_HOME_COMMON=true
               ;;
             dashboard)         echo "🎯 Processing: dashboard";         DASHBOARD=true ;;
             ac-service)        echo "🎯 Processing: ac-service";        AC_SERVICE=true ;;
@@ -161,6 +166,7 @@ jobs:
               NGINX=${{ steps.filter.outputs.nginx }}
               COMPOSE=${{ steps.filter.outputs.compose }}
               ASYNC_HTTP_CLIENT=${{ steps.filter.outputs.async-http-client }}
+              SMART_HOME_COMMON=${{ steps.filter.outputs.smart-home-common }}
               ;;
           esac
           
@@ -175,6 +181,7 @@ jobs:
           echo "valheim-admin=$VALHEIM_ADMIN" >> $GITHUB_OUTPUT
           echo "pc-agent=$PC_AGENT" >> $GITHUB_OUTPUT
           echo "async-http-client=$ASYNC_HTTP_CLIENT" >> $GITHUB_OUTPUT
+          echo "smart-home-common=$SMART_HOME_COMMON" >> $GITHUB_OUTPUT
           echo "nginx=$NGINX" >> $GITHUB_OUTPUT
           echo "compose=$COMPOSE" >> $GITHUB_OUTPUT
           
@@ -608,6 +615,36 @@ jobs:
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Lint & Test - smart_home_common (shared library, no Dockerfile / no deploy)
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint-and-test-smart-home-common:
+    name: Lint and Test smart_home_common
+    needs: prepare
+    if: ${{ needs.prepare.outputs.smart-home-common == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install tools
+        run: pip install ruff bandit pytest pytest-asyncio
+
+      - name: Ruff - Code Quality
+        run: ruff check libs/smart_home_common/src --output-format=github
+
+      - name: Ruff - Format Check
+        run: ruff format libs/smart_home_common/src --check
+
+      - name: Bandit - Security Check
+        run: bandit -r libs/smart_home_common/src -ll -ii --format txt
+
+      - name: Run Tests
+        run: |
+          pip install -e libs/smart_home_common
+          cd libs/smart_home_common && python -m pytest tests/ -v --tb=short
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Quality Gate: verify all lint-and-test-* jobs passed
   # ─────────────────────────────────────────────────────────────────────────────
   quality-gate:
@@ -623,6 +660,7 @@ jobs:
       - lint-and-test-valheim-admin
       - lint-and-test-pc-agent
       - lint-and-test-async-http-client
+      - lint-and-test-smart-home-common
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -662,6 +700,7 @@ jobs:
           check_job "Valheim Admin" "${{ needs.lint-and-test-valheim-admin.result }}" "${{ needs.prepare.outputs.valheim-admin }}"
           check_job "PC Agent" "${{ needs.lint-and-test-pc-agent.result }}" "${{ needs.prepare.outputs.pc-agent }}"
           check_job "Async HTTP Client" "${{ needs.lint-and-test-async-http-client.result }}" "${{ needs.prepare.outputs.async-http-client }}"
+          check_job "Smart Home Common" "${{ needs.lint-and-test-smart-home-common.result }}" "${{ needs.prepare.outputs.smart-home-common }}"
           
           echo "" >> $GITHUB_STEP_SUMMARY
           

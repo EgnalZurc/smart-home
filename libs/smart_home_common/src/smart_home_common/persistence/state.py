@@ -90,9 +90,7 @@ def save_state(state: PersistedState) -> bool:
     try:
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         data = state.to_dict()
-        STATE_FILE.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        STATE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         logger.info("Controller state saved to %s", STATE_FILE)
         return True
     except Exception as e:

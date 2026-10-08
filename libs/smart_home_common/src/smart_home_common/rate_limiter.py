@@ -220,7 +220,7 @@ class SqliteRateLimiter(BaseRateLimiter):
                     attempts INTEGER DEFAULT 0,
                     window_start TEXT NOT NULL
                 )
-            """)
+            """)  # nosec B608 - table_name is a hardcoded identifier, not user input; SQL identifiers cannot be parameterized
             conn.commit()
         finally:
             conn.close()
@@ -231,7 +231,7 @@ class SqliteRateLimiter(BaseRateLimiter):
         try:
             now = datetime.now()
             row = conn.execute(
-                f"SELECT attempts, window_start FROM {self._table_name} WHERE key = ?",
+                f"SELECT attempts, window_start FROM {self._table_name} WHERE key = ?",  # nosec B608 - table_name is a hardcoded identifier, not user input
                 (key,),
             ).fetchone()
 
@@ -244,7 +244,7 @@ class SqliteRateLimiter(BaseRateLimiter):
                     sql = (
                         f"UPDATE {self._table_name} "
                         "SET attempts = 1, window_start = ? WHERE key = ?"
-                    )
+                    )  # nosec B608 - table_name is a hardcoded identifier, not user input
                     conn.execute(sql, (now.isoformat(), key))
                     conn.commit()
                     return True
@@ -253,14 +253,14 @@ class SqliteRateLimiter(BaseRateLimiter):
                     return False
 
                 # Increment attempts
-                sql = f"UPDATE {self._table_name} SET attempts = attempts + 1 WHERE key = ?"
+                sql = f"UPDATE {self._table_name} SET attempts = attempts + 1 WHERE key = ?"  # nosec B608 - table_name is a hardcoded identifier, not user input
                 conn.execute(sql, (key,))
                 conn.commit()
                 return True
             else:
                 # First attempt from this key
                 sql = (
-                    f"INSERT INTO {self._table_name} (key, attempts, window_start) VALUES (?, 1, ?)"
+                    f"INSERT INTO {self._table_name} (key, attempts, window_start) VALUES (?, 1, ?)"  # nosec B608 - table_name is a hardcoded identifier, not user input
                 )
                 conn.execute(sql, (key, now.isoformat()))
                 conn.commit()
@@ -274,7 +274,7 @@ class SqliteRateLimiter(BaseRateLimiter):
         try:
             now = datetime.now()
             row = conn.execute(
-                f"SELECT attempts, window_start FROM {self._table_name} WHERE key = ?",
+                f"SELECT attempts, window_start FROM {self._table_name} WHERE key = ?",  # nosec B608 - table_name is a hardcoded identifier, not user input
                 (key,),
             ).fetchone()
 
@@ -316,7 +316,7 @@ class SqliteRateLimiter(BaseRateLimiter):
         """Reset rate limit for a key."""
         conn = self._get_conn()
         try:
-            conn.execute(f"DELETE FROM {self._table_name} WHERE key = ?", (key,))
+            conn.execute(f"DELETE FROM {self._table_name} WHERE key = ?", (key,))  # nosec B608 - table_name is a hardcoded identifier, not user input
             conn.commit()
         finally:
             conn.close()
@@ -333,7 +333,8 @@ class SqliteRateLimiter(BaseRateLimiter):
 
             cutoff = (datetime.now() - timedelta(seconds=self._window_seconds)).isoformat()
             cursor = conn.execute(
-                f"DELETE FROM {self._table_name} WHERE window_start < ?", (cutoff,)
+                f"DELETE FROM {self._table_name} WHERE window_start < ?",  # nosec B608 - table_name is a hardcoded identifier, not user input
+                (cutoff,),
             )
             conn.commit()
             return cursor.rowcount
