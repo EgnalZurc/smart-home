@@ -15,6 +15,10 @@ config.yaml
 .env
 .env.immich
 
+# nginx TLS certificates and auth (rotated, not tracked)
+infrastructure/nginx/certs/
+infrastructure/nginx/.htpasswd
+
 # Runtime data (centralized)
 data/
 
