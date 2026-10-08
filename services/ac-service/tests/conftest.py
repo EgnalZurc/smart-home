@@ -7,6 +7,21 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+# smart_home_common is installed (pip install -e) in CI and via dev.ps1. When
+# running pytest directly without that install, fall back to the in-repo source
+# so the shared library resolves either way.
+try:
+    import smart_home_common  # noqa: F401
+except ModuleNotFoundError:
+    _common_src = (
+        Path(__file__).parent.parent.parent.parent
+        / "libs"
+        / "smart_home_common"
+        / "src"
+    )
+    if _common_src.exists():
+        sys.path.insert(0, str(_common_src))
+
 # Set required environment variables for tests
 os.environ.setdefault("MELCLOUD_EMAIL", "test@example.com")
 os.environ.setdefault("MELCLOUD_PASSWORD", "testpassword")

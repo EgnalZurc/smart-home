@@ -7,6 +7,7 @@ handles various failure scenarios correctly, including SSL timeouts.
 from unittest.mock import MagicMock, patch
 
 import httpx
+from outdoor import build_outdoor_fetcher
 
 
 class MockErrorTracker:
@@ -29,80 +30,11 @@ class MockErrorTracker:
 
 
 class TestFetchOutdoorTemp:
-    """Tests for fetch_outdoor_temp function."""
+    """Tests for the fetcher built by build_outdoor_fetcher."""
 
     def _create_fetch_function(self, error_tracker):
-        """Create the fetch function with injected dependencies.
-
-        This mirrors the structure in main.py but allows for testing.
-        """
-        LOCATION_LATITUDE = 40.396644
-        LOCATION_LONGITUDE = -3.622511
-
-        def fetch_outdoor_temp():
-            import httpx
-
-            timeout = httpx.Timeout(connect=15.0, read=10.0, write=10.0, pool=5.0)
-            transport = httpx.HTTPTransport(retries=2)
-
-            try:
-                with httpx.Client(timeout=timeout, transport=transport) as client:
-                    weather_resp = client.get(
-                        "https://api.open-meteo.com/v1/forecast",
-                        params={
-                            "latitude": LOCATION_LATITUDE,
-                            "longitude": LOCATION_LONGITUDE,
-                            "current": "temperature_2m,relative_humidity_2m",
-                            "timezone": "Europe/Madrid",
-                        },
-                    )
-                    weather_resp.raise_for_status()
-
-                    aqi_resp = client.get(
-                        "https://air-quality-api.open-meteo.com/v1/air-quality",
-                        params={
-                            "latitude": LOCATION_LATITUDE,
-                            "longitude": LOCATION_LONGITUDE,
-                            "current": "european_aqi",
-                            "timezone": "Europe/Madrid",
-                        },
-                    )
-                    aqi_resp.raise_for_status()
-
-                weather = weather_resp.json().get("current", {})
-                aqi_current = aqi_resp.json().get("current", {})
-                error_tracker.clear("outdoor_fetch")
-                return {
-                    "temperature": weather.get("temperature_2m"),
-                    "humidity": weather.get("relative_humidity_2m"),
-                    "aqi": aqi_current.get("european_aqi"),
-                }
-            except httpx.ConnectTimeout:
-                error_tracker.register(
-                    "outdoor_fetch",
-                    "warning",
-                    "Outdoor data unavailable: connection timeout",
-                    "outdoor",
-                )
-                return None
-            except httpx.HTTPStatusError as e:
-                error_tracker.register(
-                    "outdoor_fetch",
-                    "warning",
-                    f"Outdoor data unavailable: HTTP {e.response.status_code}",
-                    "outdoor",
-                )
-                return None
-            except Exception as e:
-                error_tracker.register(
-                    "outdoor_fetch",
-                    "warning",
-                    f"Outdoor data unavailable: {e}",
-                    "outdoor",
-                )
-                return None
-
-        return fetch_outdoor_temp
+        """Build the real outdoor fetcher with injected dependencies."""
+        return build_outdoor_fetcher(40.396644, -3.622511, error_tracker)
 
     def test_successful_fetch_returns_data(self):
         """Should return temperature, humidity and AQI on success."""

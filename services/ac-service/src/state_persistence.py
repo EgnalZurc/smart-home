@@ -6,10 +6,11 @@ can continue from where it left off after restarts.
 Goal: Minimize AC on/off cycles to protect the compressor.
 """
 
-import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+
+from smart_home_common.persistence import atomic_read_json, atomic_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -88,11 +89,8 @@ def save_state(state: PersistedState) -> bool:
         True if successful, False otherwise
     """
     try:
-        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         data = state.to_dict()
-        STATE_FILE.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        atomic_write_json(STATE_FILE, data)
         logger.info("Controller state saved to %s", STATE_FILE)
         return True
     except Exception as e:
@@ -107,11 +105,11 @@ def load_state() -> PersistedState | None:
         PersistedState if file exists and is valid, None otherwise
     """
     try:
-        if not STATE_FILE.exists():
+        data = atomic_read_json(STATE_FILE)
+        if data is None:
             logger.info("No persisted state found at %s (first boot)", STATE_FILE)
             return None
 
-        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
         state = PersistedState.from_dict(data)
         logger.info("Controller state loaded from %s", STATE_FILE)
         logger.info("  - State: %s", state.current_sm_state)

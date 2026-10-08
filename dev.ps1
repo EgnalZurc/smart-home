@@ -180,6 +180,14 @@ function Invoke-Ci {
     $path = Resolve-ServicePath -Service $Service
     $cov  = if ($Service -eq 'dashboard') {
         ' --cov=src --cov-report=term-missing --cov-fail-under=80'
+    } elseif ($Service -eq 'ac-service') {
+        ' --cov=src --cov-report=term-missing --cov-fail-under=80'
+    } else { '' }
+
+    # Services that import the shared smart_home_common library must install it
+    # (editable) before pytest, mirroring the matching ci.yml job.
+    $installCommon = if ($Service -in @('dashboard', 'ac-service')) {
+        "pip install -e libs/smart_home_common --quiet 2>/dev/null || true`n"
     } else { '' }
 
     # Build a bash -c pipeline that mirrors ci.yml steps for this service.
@@ -194,7 +202,7 @@ bandit -r $path/src -ll -ii --format txt
 echo '=== pytest ==='
 if [ -d "$path/tests" ] && find $path/tests -name 'test_*.py' | grep -q .; then
   pip install -r $path/requirements.txt --quiet 2>/dev/null || true
-  cd $path && PYTHONPATH=src python -m pytest tests/ -v --tb=short$cov
+  $installCommon  cd $path && PYTHONPATH=src python -m pytest tests/ -v --tb=short$cov
 else
   echo 'No tests found'
 fi
