@@ -1,6 +1,6 @@
 """Unit tests for api/auth/admin.py — Admin endpoints."""
 
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -123,6 +123,7 @@ class TestCreateUser:
 
             result = await create_user_endpoint(mock_request)
 
+            assert result["id"] == "new-uuid"
             mock_users.create_user.assert_called_once_with(
                 "newuser", "secret123", "New User"
             )
