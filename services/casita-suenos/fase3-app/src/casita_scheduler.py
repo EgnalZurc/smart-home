@@ -20,77 +20,37 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
 from datetime import datetime
-from datetime import time as dtime
 from typing import TYPE_CHECKING
 
 import fotocasa_scraper
 import habitaclia_scraper
 import pisos_scraper
+from scheduler import formatters, zone_inference
+from scheduler.config import GMAIL_CHECK_INTERVAL_SEC as _GMAIL_CHECK_INTERVAL_SEC
+from scheduler.config import LOOP_TICK_SEC as _LOOP_TICK_SEC
+from scheduler.config import SCRAPING_DAYS as _SCRAPING_DAYS
+from scheduler.config import SCRAPING_HOUR as _SCRAPING_HOUR
+from scheduler.config import SUMMARY_DAY as _SUMMARY_DAY
+from scheduler.config import SUMMARY_HOUR as _SUMMARY_HOUR
+from scheduler.config import TOP_ZONES_FOR_APIFY as _TOP_ZONES_FOR_APIFY
+from scheduler.idealista import scrape_idealista_property as _scrape_idealista_property
+from scheduler.models import SchedulerStatus, ScraperError
 from scorer import ALERT_THRESHOLD as _ALERT_THRESHOLD
 from scorer import evaluate, evaluate_from_email
-from zones import ZONE_COORDS, ZONES, Zone
+from zones import ZONES
 
 if TYPE_CHECKING:
     from apify_client_wrapper import IdealistaApifyClient
     from database import Database
     from notifier import TelegramNotifier
+    from zones import Zone
 
 logger = logging.getLogger(__name__)
 
-# Zonas top 8 por puntuación — para el scraping semanal de Apify (free tier)
-_TOP_ZONES_FOR_APIFY = [
-    "zamora_meseta",
-    "castellon_costa_norte",
-    "salamanca_alrededores",
-    "la_rioja_valle",
-    "valencia_costa_norte",
-    "palencia_alrededores",
-    "navarra_ribera",
-    "burgos_sur",
-]
-
-# Días de la semana para scraping completo (0=lunes, 3=jueves)
-_SCRAPING_DAYS = {0, 3}
-_SCRAPING_HOUR = dtime(7, 0)
-
-# Día del resumen semanal (6=domingo)
-_SUMMARY_DAY = 6
-_SUMMARY_HOUR = dtime(9, 0)
-
-# Intervalo del check de Gmail (segundos)
-_GMAIL_CHECK_INTERVAL_SEC = 30 * 60  # 30 minutos
-
-# Intervalo del loop principal (segundos) — cada minuto comprueba si toca algo
-_LOOP_TICK_SEC = 60
-
-
-@dataclass
-class ScraperError:
-    """Registro de un fallo de scraper para el estado del dashboard."""
-
-    portal: str
-    zone_id: str
-    error: str
-    detected_at: datetime = field(default_factory=datetime.now)
-
-
-@dataclass
-class SchedulerStatus:
-    """Estado del scheduler para el endpoint del dashboard."""
-
-    running: bool
-    last_scraping: datetime | None
-    last_gmail_check: datetime | None
-    last_fotocasa_check: datetime | None
-    last_summary: datetime | None
-    last_scraping_result: str  # "ok", "ok_with_errors", "error", "never"
-    total_properties: int
-    radar_count: int
-    dismissed_count: int
-    scraper_errors: list[ScraperError]
-    top_properties: list[dict]
+# Re-exportados desde scheduler.models para no romper los imports existentes
+# (``from casita_scheduler import ScraperError, SchedulerStatus``).
+__all__ = ["CasitaScheduler", "ScraperError", "SchedulerStatus"]
 
 
 class CasitaScheduler:
@@ -500,60 +460,21 @@ class CasitaScheduler:
         errors_count,
     ):
         """Envia resumen del scraping por Telegram al finalizar."""
-        result_emoji = {"ok": "✅", "ok_with_errors": "⚠️", "error": "❌"}.get(
-            result, "ℹ️"
-        )
-        portal_labels = {
-            "pisos": "Pisos.com",
-            "habitaclia": "Habitaclia",
-            "fotocasa": "Fotocasa",
-            "idealista": "Idealista",
-        }
-        if portals_active:
-            portals_str = ", ".join(
-                portal_labels.get(p, p) for p in sorted(portals_active)
+        self._notifier.send_status(
+            formatters.build_scraping_summary(
+                result=result,
+                elapsed_str=elapsed_str,
+                total_new=total_new,
+                total_price_drops=total_price_drops,
+                portals_active=portals_active,
+                new_by_zone=new_by_zone,
+                errors_count=errors_count,
             )
-        else:
-            portals_str = "ninguno"
-        lines = [
-            f"{result_emoji} *Scraping completado*",
-            f"⏱ Tiempo: {elapsed_str}",
-            f"📡 Portales: {portals_str}",
-            f"🏠 Nuevas en radar: *{total_new}*",
-        ]
-        if new_by_zone:
-            lines.append("")
-            lines.append("*Por zona:*")
-            for zid, count in sorted(new_by_zone.items(), key=lambda x: -x[1]):
-                zone = ZONES.get(zid)
-                zname = zone.name.split("(")[0].strip() if zone else zid
-                lines.append(f"  • {zname}: {count}")
-        if total_price_drops > 0:
-            lines.append("")
-            lines.append(f"📉 Bajadas de precio: {total_price_drops}")
-        if errors_count > 0:
-            lines.append("")
-            lines.append(f"🔧 Errores de scraper: {errors_count} (ver dashboard)")
-        if total_new == 0 and result == "ok":
-            lines.append("")
-            lines.append("_Sin casas nuevas por encima del umbral de 50 pts._")
-        lines.append("")
-        lines.append("https://raspberrypi.tailaa37cd.ts.net/smart-home/casita")
-        self._notifier.send_status("\n".join(lines))
+        )
 
     def _notify_scraper_errors(self, errors: list[ScraperError]) -> None:
         """Envía una notificación por Telegram para cada scraper que ha fallado."""
-        lines = ["🔧 *Errores de scraper detectados*", ""]
-        for err in errors:
-            lines.append(f"• *{err.portal}* / {err.zone_id}")
-            # Acortar el mensaje de error para que no sea enorme
-            short_err = err.error[:120] + "..." if len(err.error) > 120 else err.error
-            lines.append(f"  `{short_err}`")
-            lines.append("")
-        lines.append(
-            "_Revisa los scrapers correspondientes y actualiza los selectores si es necesario._"
-        )
-        self._notifier.send_status("\n".join(lines))
+        self._notifier.send_status(formatters.build_scraper_errors_message(errors))
 
     def _run_gmail_check(self) -> None:
         if self._gmail_check_running:
@@ -648,22 +569,14 @@ class CasitaScheduler:
                 logger.debug("[casita] IMAP logout failed (connection may be stale)")
         # Solo notificar si hay casas nuevas en el radar
         if total_new > 0:
-            lines = [
-                "Correo Idealista procesado",
-                f"Anuncios analizados: {len(alerts)}",
-                f"Nuevas en radar: {total_new}",
-            ]
-            if new_by_zone:
-                lines.append("")
-                for zid, cnt in sorted(new_by_zone.items(), key=lambda x: -x[1]):
-                    zn = ZONES.get(zid)
-                    lines.append(
-                        "  - {}: {}".format(
-                            zn.name.split("(")[0].strip() if zn else zid, cnt
-                        )
-                    )
-            lines += ["", "https://raspberrypi.tailaa37cd.ts.net/smart-home/casita"]
-            self._notifier.send_status("\n".join(lines))
+            self._notifier.send_status(
+                formatters.build_email_check_summary(
+                    portal_label="Idealista",
+                    total_alerts=len(alerts),
+                    total_new=total_new,
+                    new_by_zone=new_by_zone,
+                )
+            )
         else:
             logger.info("[casita] Gmail check sin nuevas casas para el radar")
 
@@ -824,275 +737,30 @@ class CasitaScheduler:
                 logger.debug("[casita] IMAP logout failed (connection may be stale)")
 
         if total_new > 0:
-            lines = [
-                "Correo Fotocasa procesado",
-                f"Anuncios analizados: {len(alerts)}",
-                f"Nuevas en radar: {total_new}",
-            ]
-            if new_by_zone:
-                lines.append("")
-                for zid, cnt in sorted(new_by_zone.items(), key=lambda x: -x[1]):
-                    zn = ZONES.get(zid)
-                    lines.append(
-                        "  - {}: {}".format(
-                            zn.name.split("(")[0].strip() if zn else zid, cnt
-                        )
-                    )
-            lines += ["", "https://raspberrypi.tailaa37cd.ts.net/smart-home/casita"]
-            self._notifier.send_status("\n".join(lines))
+            self._notifier.send_status(
+                formatters.build_email_check_summary(
+                    portal_label="Fotocasa",
+                    total_alerts=len(alerts),
+                    total_new=total_new,
+                    new_by_zone=new_by_zone,
+                )
+            )
         else:
             logger.info("[casita] Fotocasa check sin nuevas casas para el radar")
 
     def _infer_zone_from_hint(self, hint, url):
-        if hint:
-            hl = hint.lower().strip()
-            # 1. Buscar en fotocasa_municipios (match exacto del municipio)
-            for zone in ZONES.values():
-                if hasattr(zone, "fotocasa_municipios") and zone.fotocasa_municipios:
-                    if any(
-                        m.lower().replace("-", " ") == hl.replace("-", " ")
-                        for m in zone.fotocasa_municipios
-                    ):
-                        return zone
-            # 2. Buscar en idealista_alert_keywords
-            for zone in ZONES.values():
-                if any(kw.lower() in hl for kw in zone.idealista_alert_keywords):
-                    return zone
-                if any(w in hl for w in zone.name.lower().split() if len(w) > 4):
-                    return zone
-            # 3. Buscar municipio de Fotocasa como substring
-            for zone in ZONES.values():
-                if hasattr(zone, "fotocasa_municipios") and zone.fotocasa_municipios:
-                    if any(
-                        m.lower().replace("-", " ") in hl
-                        for m in zone.fotocasa_municipios
-                    ):
-                        return zone
-        ul = url.lower()
-        for zone in ZONES.values():
-            if any(
-                kw.lower().replace(" ", "-") in ul
-                for kw in zone.idealista_alert_keywords
-            ):
-                return zone
-            if hasattr(zone, "fotocasa_municipios") and zone.fotocasa_municipios:
-                if any(m.lower() in ul for m in zone.fotocasa_municipios):
-                    return zone
-        # 4. Fallback geográfico: Nominatim → zona más cercana
-        if hint:
-            zone = self._infer_zone_nominatim(hint)
-            if zone:
-                return zone
-        return None
+        """Delegado en :func:`scheduler.zone_inference.infer_zone_from_hint`."""
+        return zone_inference.infer_zone_from_hint(
+            hint, url, nominatim_fallback=self._infer_zone_nominatim
+        )
 
     def _infer_zone_nominatim(self, hint: str):
-        """
-        Fallback: usa Nominatim (OSM) para obtener coordenadas del municipio,
-        luego devuelve la zona más cercana geográficamente.
-        Solo se invoca cuando el mapeo por keywords falla.
-        Máx distancia: 200 km. Si está más lejos de todas las zonas → None.
-        """
-        import json
-        import math
-        import urllib.parse
-        import urllib.request
-
-        try:
-            q = urllib.parse.urlencode(
-                {
-                    "q": hint.replace("-", " ") + ", España",
-                    "format": "json",
-                    "limit": "1",
-                    "countrycodes": "es",
-                }
-            )
-            req = urllib.request.Request(
-                f"https://nominatim.openstreetmap.org/search?{q}",
-                headers={"User-Agent": "casita-suenos/1.0 (raspberrypi)"},
-            )
-            with urllib.request.urlopen(req, timeout=5) as r:  # nosec B310
-                data = json.loads(r.read().decode())
-            if not data:
-                logger.info("[casita] Nominatim: sin resultados para '%s'", hint)
-                return None
-            lat = float(data[0]["lat"])
-            lon = float(data[0]["lon"])
-            logger.info(
-                "[casita] Nominatim '%s' → (%.3f, %.3f) tipo=%s",
-                hint,
-                lat,
-                lon,
-                data[0].get("type", "?"),
-            )
-
-            def _haversine(lat1, lon1, lat2, lon2):
-                R = 6371.0
-                dlat = math.radians(lat2 - lat1)
-                dlon = math.radians(lon2 - lon1)
-                a = (
-                    math.sin(dlat / 2) ** 2
-                    + math.cos(math.radians(lat1))
-                    * math.cos(math.radians(lat2))
-                    * math.sin(dlon / 2) ** 2
-                )
-                return R * 2 * math.asin(math.sqrt(a))
-
-            best_zone = None
-            best_dist = float("inf")
-            for zone in ZONES.values():
-                coords = ZONE_COORDS.get(zone.id)
-                if not coords:
-                    continue
-                d = _haversine(lat, lon, coords[0], coords[1])
-                if d < best_dist:
-                    best_dist = d
-                    best_zone = zone
-
-            MAX_DIST_KM = 200.0
-            if best_zone and best_dist <= MAX_DIST_KM:
-                logger.info(
-                    "[casita] Nominatim fallback: '%s' → %s (%.0f km)",
-                    hint,
-                    best_zone.id,
-                    best_dist,
-                )
-                return best_zone
-            elif best_zone:
-                logger.info(
-                    "[casita] Nominatim '%s' demasiado lejos: %.0f km (zona más cercana: %s)",
-                    hint,
-                    best_dist,
-                    best_zone.id,
-                )
-                return None
-        except Exception as e:
-            logger.warning("[casita] Nominatim fallback falló para '%s': %s", hint, e)
-        return None
+        """Delegado en :func:`scheduler.zone_inference.infer_zone_nominatim`."""
+        return zone_inference.infer_zone_nominatim(hint)
 
     def _scrape_idealista_property(self, alert, zone):
-        from datetime import datetime as _dt
-
-        import httpx
-        from bs4 import BeautifulSoup
-        from models import Piscina, Portal, Property
-        from scraper_base import (
-            infer_ac,
-            infer_ac_type,
-            infer_garage_type,
-            infer_habitability,
-            infer_habitable,
-            infer_has_garage,
-            infer_has_garden,
-            infer_internet,
-            infer_piscina,
-            infer_terrain_m2,
-            parse_price,
-            parse_rooms,
-            parse_size,
-        )
-
-        title, price, rooms, size_m2, desc = (
-            alert.title,
-            alert.price,
-            alert.rooms,
-            alert.size_m2,
-            "",
-        )
-        has_garage, has_garden, has_ac_v, piscina = False, False, False, Piscina.NINGUNA
-        try:
-            hdrs = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept-Language": "es-ES,es;q=0.9",
-            }
-            with httpx.Client(
-                headers=hdrs, follow_redirects=True, timeout=15
-            ) as client:
-                r = client.get(alert.url)
-                if r.status_code == 200 and len(r.text) > 5000:
-                    soup = BeautifulSoup(r.text, "html.parser")
-                    h1 = soup.select_one("h1 .main-info__title-main, h1")
-                    if h1:
-                        title = h1.get_text(strip=True)
-                    pe = soup.select_one(
-                        ".info-data-price span, [class*=info-data-price]"
-                    )
-                    if pe:
-                        pp = parse_price(pe.get_text(strip=True))
-                        if pp:
-                            price = pp
-                    de = soup.select_one("div.comment, .adCommentsLanguage")
-                    if de:
-                        desc = de.get_text(" ", strip=True)
-                    feats = [
-                        f.get_text(strip=True)
-                        for f in soup.select(
-                            ".details-property-feature li, .feature-details li"
-                        )
-                    ]
-                    ft = desc + " " + " ".join(feats)
-                    r2 = parse_rooms(ft)
-                    if r2:
-                        rooms = r2
-                    s2 = parse_size(ft)
-                    if s2:
-                        size_m2 = s2
-                    has_garage = infer_has_garage(ft, feats)
-                    has_garden = infer_has_garden(ft, feats)
-                    has_ac_v = infer_ac(ft, feats)
-                    piscina = Piscina(infer_piscina(ft, feats))
-                    logger.info("[casita] Ficha Idealista OK: %s", alert.url)
-                else:
-                    logger.warning(
-                        "[casita] Idealista bloqueo status=%d: %s",
-                        r.status_code,
-                        alert.url,
-                    )
-        except Exception as e:
-            logger.warning("[casita] Error scraping %s: %s", alert.url, e)
-        # Fallback al precio del email si el scraping fue bloqueado (403)
-        if not price and alert.price:
-            price = alert.price
-            logger.info("[casita] Precio del email como fallback: %d EUR", price)
-        if not rooms and alert.rooms:
-            rooms = alert.rooms
-        if not size_m2 and alert.size_m2:
-            size_m2 = alert.size_m2
-        if not price:
-            logger.debug("[casita] Sin precio para %s, descartando", alert.url)
-            return None
-        if not has_garden:
-            has_garden = True  # Idealista ya filtro jardin
-        if not has_garage:
-            has_garage = True  # Idealista ya filtro garaje
-        return Property(
-            portal=Portal.IDEALISTA,
-            portal_id=alert.property_id,
-            url=alert.url,
-            zone_id=zone.id,
-            title=title or f"Idealista {alert.property_id}",
-            price=price,
-            size_m2=size_m2,
-            rooms=rooms,
-            has_garage=has_garage,
-            has_garden_or_plot=has_garden,
-            terrain_m2=infer_terrain_m2(desc, feats) if desc else None,
-            garage_type=infer_garage_type(desc, feats)
-            if desc
-            else ("edificio" if has_garage else "ninguno"),
-            habitability=infer_habitability(desc, title or "") if desc else None,
-            internet=infer_internet(desc, feats) if desc else None,
-            has_ac=(lambda t: t[0])(infer_ac_type(desc, feats)) if desc else has_ac_v,
-            has_ac_preinstalled=(lambda t: t[1])(infer_ac_type(desc, feats))
-            if desc
-            else False,
-            piscina=piscina,
-            has_internet_mention=True,
-            habitable=infer_habitable(desc, title or "") if desc else True,
-            description=desc,
-            source="gmail_idealista",
-            first_seen=_dt.now(),
-            last_seen=_dt.now(),
-        )
+        """Delegado en :func:`scheduler.idealista.scrape_idealista_property`."""
+        return _scrape_idealista_property(alert, zone)
 
     def _run_weekly_summary(self) -> None:
         """Envía el resumen semanal por Telegram y lo guarda en DB."""
@@ -1127,14 +795,5 @@ class CasitaScheduler:
     # ------------------------------------------------------------------
 
     def _infer_zone_from_url(self, url: str) -> Zone | None:
-        """
-        Intenta inferir a qué zona pertenece una URL de Idealista
-        buscando keywords de cada zona en la URL.
-        """
-        url_lower = url.lower()
-        for zone in ZONES.values():
-            for keyword in zone.idealista_alert_keywords:
-                if keyword.lower().replace(" ", "-") in url_lower:
-                    return zone
-        # Si no se puede inferir, usar la zona con más propiedades como fallback
-        return ZONES.get("zamora_meseta")
+        """Delegado en :func:`scheduler.zone_inference.infer_zone_from_url`."""
+        return zone_inference.infer_zone_from_url(url)
