@@ -76,6 +76,19 @@ SCHEDULE = {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Default IRPF brackets for 2025 (Ley 7/2024) - base liquidable del ahorro
+# Defined before the builder so both initial load and reload reuse the same list.
+# ─────────────────────────────────────────────────────────────────────────────
+_DEFAULT_TAX_BRACKETS = [
+    (6_000, 0.19),  # 0 - 6.000€: 19%
+    (50_000, 0.21),  # 6.000 - 50.000€: 21%
+    (200_000, 0.23),  # 50.000 - 200.000€: 23%
+    (300_000, 0.27),  # 200.000 - 300.000€: 27%
+    (float("inf"), 0.30),  # +300.000€: 30% (nuevo tramo 2025)
+]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ETF Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 def _build_fund_entry(raw: dict[str, Any]) -> dict[str, Any]:
@@ -96,118 +109,156 @@ def _build_fund_entry(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-ETF_PORTFOLIO: dict[str, dict[str, Any]] = {
-    fund["id"]: _build_fund_entry(fund)
-    for fund in _get(_S, "etf.funds", [])
-    if "id" in fund
-}
+# ─────────────────────────────────────────────────────────────────────────────
+# Builders — pure functions that derive runtime config from a raw settings dict.
+# Both the initial import and reload_config() go through the same code path, so
+# defaults (e.g. tax brackets) are applied identically every time.
+# ─────────────────────────────────────────────────────────────────────────────
+def _build_etf_portfolio(settings: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        fund["id"]: _build_fund_entry(fund)
+        for fund in _get(settings, "etf.funds", [])
+        if "id" in fund
+    }
+
+
+def _build_etf_plan(settings: dict[str, Any]) -> dict[str, Any]:
+    plan_raw = _get(settings, "etf.plan", {})
+    milestones = _get(settings, "etf.plan.milestones", {})
+    raw_brackets = _get(settings, "etf.tax.brackets", [])
+    return {
+        "phase_change_date": datetime.fromisoformat(
+            plan_raw.get("phase_change_date", "2027-03-01")
+        ),
+        "milestones": {int(k): tuple(v) for k, v in milestones.items()},
+        # Fall back to the built-in IRPF defaults when the TOML has no brackets.
+        # This must happen on reload too, otherwise reloading would wipe them.
+        "tax_brackets": [
+            (float("inf") if limit >= 999_999_999 else float(limit), rate)
+            for limit, rate in raw_brackets
+        ]
+        if raw_brackets
+        else list(_DEFAULT_TAX_BRACKETS),
+    }
+
+
+def _build_etf_thresholds(settings: dict[str, Any]) -> dict[str, Any]:
+    thr = _get(settings, "etf.thresholds", {})
+    return {
+        "ma_short": thr.get("ma_short", 50),
+        "ma_long": thr.get("ma_long", 200),
+        "drop_from_high_warn": thr.get("drop_from_high_warn", -0.15),
+        "loss_vs_cost_warn": thr.get("loss_vs_cost_warn", -0.10),
+        "critical_threshold": thr.get("critical_threshold", -0.20),
+    }
+
+
+def _build_crypto_thresholds(settings: dict[str, Any]) -> dict[str, Any]:
+    # Note: Fear & Greed is a sentiment indicator, not a price predictor
+    thr = _get(settings, "crypto.thresholds", {})
+    return {
+        "fg_extreme_greed": thr.get("fg_extreme_greed", 75),  # Adjusted from 80
+        "fg_high_greed": thr.get("fg_high_greed", 60),  # Adjusted from 65
+        "fg_extreme_fear": thr.get("fg_extreme_fear", 25),  # Adjusted from 20
+        "change_24h_danger": thr.get("change_24h_danger", -10),
+        "change_24h_warn": thr.get("change_24h_warn", -5),
+        "change_24h_pump": thr.get("change_24h_pump", 10),
+        "change_30d_bear": thr.get("change_30d_bear", -20),
+        "change_30d_bull": thr.get("change_30d_bull", 20),
+        "ath_danger_pct": thr.get("ath_danger_pct", -5),
+        "ath_warn_pct": thr.get("ath_warn_pct", -15),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Module-level config values.
+#
+# These are assigned once at import and reassigned on reload_config(). Because
+# `from config import X` binds a *copy* of the reference at import time, other
+# modules MUST NOT do that for values that can be reloaded — reassigning the
+# module global here would not update the already-imported name elsewhere.
+# Use the accessor functions below (or `import config; config.X`) at call time
+# so reloaded values are always observed.
+# ─────────────────────────────────────────────────────────────────────────────
+ETF_PORTFOLIO: dict[str, dict[str, Any]] = _build_etf_portfolio(_S)
 ETF_FUND_IDS: list[str] = list(ETF_PORTFOLIO.keys())
-
-# ETF Plan
-_plan_raw = _get(_S, "etf.plan", {})
-_milestones = _get(_S, "etf.plan.milestones", {})
-
-# Default IRPF brackets for 2025 (Ley 7/2024) - base liquidable del ahorro
-_DEFAULT_TAX_BRACKETS = [
-    (6_000, 0.19),  # 0 - 6.000€: 19%
-    (50_000, 0.21),  # 6.000 - 50.000€: 21%
-    (200_000, 0.23),  # 50.000 - 200.000€: 23%
-    (300_000, 0.27),  # 200.000 - 300.000€: 27%
-    (float("inf"), 0.30),  # +300.000€: 30% (nuevo tramo 2025)
-]
-
-_raw_brackets = _get(_S, "etf.tax.brackets", [])
-ETF_PLAN: dict[str, Any] = {
-    "phase_change_date": datetime.fromisoformat(
-        _plan_raw.get("phase_change_date", "2027-03-01")
-    ),
-    "milestones": {int(k): tuple(v) for k, v in _milestones.items()},
-    "tax_brackets": [
-        (float("inf") if limit >= 999_999_999 else float(limit), rate)
-        for limit, rate in _raw_brackets
-    ]
-    if _raw_brackets
-    else _DEFAULT_TAX_BRACKETS,
-}
-
-# ETF Thresholds
-_etf_thr = _get(_S, "etf.thresholds", {})
-ETF_THRESHOLDS = {
-    "ma_short": _etf_thr.get("ma_short", 50),
-    "ma_long": _etf_thr.get("ma_long", 200),
-    "drop_from_high_warn": _etf_thr.get("drop_from_high_warn", -0.15),
-    "loss_vs_cost_warn": _etf_thr.get("loss_vs_cost_warn", -0.10),
-    "critical_threshold": _etf_thr.get("critical_threshold", -0.20),
-}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Crypto Configuration
-# ─────────────────────────────────────────────────────────────────────────────
+ETF_PLAN: dict[str, Any] = _build_etf_plan(_S)
+ETF_THRESHOLDS: dict[str, Any] = _build_etf_thresholds(_S)
 CRYPTO_POSITIONS: list[dict[str, Any]] = _get(_S, "crypto.positions", [])
-
-# Crypto Thresholds
-# Note: Fear & Greed is a sentiment indicator, not a price predictor
-_crypto_thr = _get(_S, "crypto.thresholds", {})
-CRYPTO_THRESHOLDS = {
-    "fg_extreme_greed": _crypto_thr.get("fg_extreme_greed", 75),  # Adjusted from 80
-    "fg_high_greed": _crypto_thr.get("fg_high_greed", 60),  # Adjusted from 65
-    "fg_extreme_fear": _crypto_thr.get("fg_extreme_fear", 25),  # Adjusted from 20
-    "change_24h_danger": _crypto_thr.get("change_24h_danger", -10),
-    "change_24h_warn": _crypto_thr.get("change_24h_warn", -5),
-    "change_24h_pump": _crypto_thr.get("change_24h_pump", 10),
-    "change_30d_bear": _crypto_thr.get("change_30d_bear", -20),
-    "change_30d_bull": _crypto_thr.get("change_30d_bull", 20),
-    "ath_danger_pct": _crypto_thr.get("ath_danger_pct", -5),
-    "ath_warn_pct": _crypto_thr.get("ath_warn_pct", -15),
-}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Utility: Reload configuration
-# ─────────────────────────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────────────────
-# Savings Accounts Configuration
-# ─────────────────────────────────────────────────────────────────────────────
+CRYPTO_THRESHOLDS: dict[str, Any] = _build_crypto_thresholds(_S)
 SAVINGS_ACCOUNTS: list[dict[str, Any]] = _get(_S, "savings.accounts", [])
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Scheduled Alerts Configuration
-# ─────────────────────────────────────────────────────────────────────────────
 SCHEDULED_ALERTS: list[dict[str, Any]] = _get(_S, "alerts.scheduled", [])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Accessors — always return the CURRENT module-level value.
+#
+# Consumers should call these (instead of importing the globals) so they see
+# values refreshed by reload_config(). They are intentionally trivial wrappers.
+# ─────────────────────────────────────────────────────────────────────────────
+def get_etf_portfolio() -> dict[str, dict[str, Any]]:
+    return ETF_PORTFOLIO
+
+
+def get_etf_fund_ids() -> list[str]:
+    return ETF_FUND_IDS
+
+
+def get_etf_plan() -> dict[str, Any]:
+    return ETF_PLAN
+
+
+def get_etf_thresholds() -> dict[str, Any]:
+    return ETF_THRESHOLDS
+
+
+def get_crypto_positions() -> list[dict[str, Any]]:
+    return CRYPTO_POSITIONS
+
+
+def get_crypto_thresholds() -> dict[str, Any]:
+    return CRYPTO_THRESHOLDS
+
+
+def get_savings_accounts() -> list[dict[str, Any]]:
+    return SAVINGS_ACCOUNTS
+
+
+def get_scheduled_alerts() -> list[dict[str, Any]]:
+    return SCHEDULED_ALERTS
+
+
+def get_schedule() -> dict[str, str]:
+    return SCHEDULE
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Utility: Reload configuration
 # ─────────────────────────────────────────────────────────────────────────────
 def reload_config() -> dict[str, Any]:
-    """Reload settings from disk. Returns the raw config dict."""
-    global _S, ETF_PORTFOLIO, ETF_FUND_IDS, ETF_PLAN, CRYPTO_POSITIONS
+    """Reload settings from disk and refresh all derived config values.
+
+    Rebuilds every module-level value through the same builders used at import,
+    so defaults (tax brackets, thresholds, schedule) are preserved on reload.
+    Returns the raw settings dict.
+    """
+    global _S, SCHEDULE
+    global ETF_PORTFOLIO, ETF_FUND_IDS, ETF_PLAN, ETF_THRESHOLDS
+    global CRYPTO_POSITIONS, CRYPTO_THRESHOLDS
     global SAVINGS_ACCOUNTS, SCHEDULED_ALERTS
+
     _S = _load_settings()
 
-    ETF_PORTFOLIO = {
-        fund["id"]: _build_fund_entry(fund)
-        for fund in _get(_S, "etf.funds", [])
-        if "id" in fund
+    SCHEDULE = {
+        "etf_time": _get(_S, "schedule.etf_time", "18:00"),
+        "crypto_time": _get(_S, "schedule.crypto_time", "09:00"),
     }
+    ETF_PORTFOLIO = _build_etf_portfolio(_S)
     ETF_FUND_IDS = list(ETF_PORTFOLIO.keys())
-
-    _plan_raw = _get(_S, "etf.plan", {})
-    _milestones = _get(_S, "etf.plan.milestones", {})
-    ETF_PLAN = {
-        "phase_change_date": datetime.fromisoformat(
-            _plan_raw.get("phase_change_date", "2027-03-01")
-        ),
-        "milestones": {int(k): tuple(v) for k, v in _milestones.items()},
-        "tax_brackets": [
-            (float("inf") if limit >= 999_999_999 else float(limit), rate)
-            for limit, rate in _get(_S, "etf.tax.brackets", [])
-        ],
-    }
-
+    ETF_PLAN = _build_etf_plan(_S)
+    ETF_THRESHOLDS = _build_etf_thresholds(_S)
     CRYPTO_POSITIONS = _get(_S, "crypto.positions", [])
+    CRYPTO_THRESHOLDS = _build_crypto_thresholds(_S)
     SAVINGS_ACCOUNTS = _get(_S, "savings.accounts", [])
     SCHEDULED_ALERTS = _get(_S, "alerts.scheduled", [])
 

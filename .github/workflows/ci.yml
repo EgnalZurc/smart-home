@@ -71,6 +71,7 @@ jobs:
       vaultwarden: ${{ steps.changes.outputs.vaultwarden }}
       valheim-admin: ${{ steps.changes.outputs.valheim-admin }}
       pc-agent: ${{ steps.changes.outputs.pc-agent }}
+      async-http-client: ${{ steps.changes.outputs.async-http-client }}
       nginx: ${{ steps.changes.outputs.nginx }}
       compose: ${{ steps.changes.outputs.compose }}
       any-service: ${{ steps.changes.outputs.any-service }}
@@ -105,6 +106,8 @@ jobs:
               - 'libs/async_http_client/**'
             pc-agent:
               - 'tools/pc-agent/**'
+            async-http-client:
+              - 'libs/async_http_client/**'
             nginx:
               - 'infrastructure/nginx/**'
             compose:
@@ -122,6 +125,7 @@ jobs:
           DASHBOARD=false; AC_SERVICE=false; BABY_GIFTS=false; PORTFOLIO_MONITOR=false
           VACACIONES=false; CASITA=false; VAULTWARDEN=false; VALHEIM_ADMIN=false
           PC_AGENT=false; NGINX=false; COMPOSE=false
+          ASYNC_HTTP_CLIENT=false
           
           case "$SERVICE" in
             all)
@@ -129,6 +133,7 @@ jobs:
               DASHBOARD=true; AC_SERVICE=true; BABY_GIFTS=true; PORTFOLIO_MONITOR=true
               VACACIONES=true; CASITA=true; VAULTWARDEN=true; VALHEIM_ADMIN=true
               PC_AGENT=true; NGINX=true; COMPOSE=true
+              ASYNC_HTTP_CLIENT=true
               ;;
             dashboard)         echo "🎯 Processing: dashboard";         DASHBOARD=true ;;
             ac-service)        echo "🎯 Processing: ac-service";        AC_SERVICE=true ;;
@@ -152,6 +157,7 @@ jobs:
               PC_AGENT=${{ steps.filter.outputs.pc-agent }}
               NGINX=${{ steps.filter.outputs.nginx }}
               COMPOSE=${{ steps.filter.outputs.compose }}
+              ASYNC_HTTP_CLIENT=${{ steps.filter.outputs.async-http-client }}
               ;;
           esac
           
@@ -165,6 +171,7 @@ jobs:
           echo "vaultwarden=$VAULTWARDEN" >> $GITHUB_OUTPUT
           echo "valheim-admin=$VALHEIM_ADMIN" >> $GITHUB_OUTPUT
           echo "pc-agent=$PC_AGENT" >> $GITHUB_OUTPUT
+          echo "async-http-client=$ASYNC_HTTP_CLIENT" >> $GITHUB_OUTPUT
           echo "nginx=$NGINX" >> $GITHUB_OUTPUT
           echo "compose=$COMPOSE" >> $GITHUB_OUTPUT
           
@@ -564,6 +571,37 @@ jobs:
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Lint & Test - async_http_client (shared library, no Dockerfile / no deploy)
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint-and-test-async-http-client:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.async-http-client == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install tools
+        run: pip install -r requirements-dev.txt
+
+      - name: Ruff - Code Quality
+        run: |
+          ruff check libs/async_http_client --output-format=github
+          ruff format libs/async_http_client --check --diff
+
+      - name: Bandit - Security Check
+        run: bandit -r libs/async_http_client -ll -ii --format txt
+
+      - name: Run Tests
+        run: |
+          if [[ -d "libs/async_http_client/tests" ]] && find libs/async_http_client/tests -name "test_*.py" | grep -q .; then
+            PYTHONPATH=. python -m pytest libs/async_http_client/tests -v --tb=short
+          else
+            echo "⏭️ No tests found"
+          fi
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Quality Gate: verify all lint-and-test-* jobs passed
   # ─────────────────────────────────────────────────────────────────────────────
   quality-gate:
@@ -578,6 +616,7 @@ jobs:
       - lint-and-test-vaultwarden
       - lint-and-test-valheim-admin
       - lint-and-test-pc-agent
+      - lint-and-test-async-http-client
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -616,6 +655,7 @@ jobs:
           check_job "Vaultwarden" "${{ needs.lint-and-test-vaultwarden.result }}" "${{ needs.prepare.outputs.vaultwarden }}"
           check_job "Valheim Admin" "${{ needs.lint-and-test-valheim-admin.result }}" "${{ needs.prepare.outputs.valheim-admin }}"
           check_job "PC Agent" "${{ needs.lint-and-test-pc-agent.result }}" "${{ needs.prepare.outputs.pc-agent }}"
+          check_job "Async HTTP Client" "${{ needs.lint-and-test-async-http-client.result }}" "${{ needs.prepare.outputs.async-http-client }}"
           
           echo "" >> $GITHUB_STEP_SUMMARY
           

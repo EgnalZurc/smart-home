@@ -114,7 +114,7 @@ class TestGetAlerts:
         """Get all configured alerts."""
         from alerts import get_all_alerts
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             alerts = get_all_alerts()
 
         assert len(alerts) == 4
@@ -133,7 +133,7 @@ class TestGetAlerts:
             }
         )
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             alerts = get_all_alerts()
 
         alert_1 = next(a for a in alerts if a.alert_id == "alert-1")
@@ -144,7 +144,7 @@ class TestGetAlerts:
         """Get alerts within next N days."""
         from alerts import get_upcoming_alerts
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             # Default 5 days should include alert-1, alert-2, alert-3 (overdue)
             # but not alert-4 (10 days away)
             upcoming = get_upcoming_alerts(days=5)
@@ -163,7 +163,7 @@ class TestGetAlerts:
 
         _save_alerts_state({"alert-1": {"completed": True}})
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             upcoming = get_upcoming_alerts(days=5)
 
         ids = [a.alert_id for a in upcoming]
@@ -173,7 +173,7 @@ class TestGetAlerts:
         """Get alerts due today or overdue."""
         from alerts import get_alerts_due
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             due = get_alerts_due(include_overdue=True)
 
         ids = [a.alert_id for a in due]
@@ -190,7 +190,7 @@ class TestGetAlerts:
 
         _save_alerts_state({"alert-1": {"triggered": True}})
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             due = get_alerts_due()
 
         ids = [a.alert_id for a in due]
@@ -215,7 +215,7 @@ class TestMarkAlerts:
         """Can complete an alert due today."""
         from alerts import _load_alerts_state, mark_alert_completed
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             result = mark_alert_completed("alert-1")
 
         assert result is True
@@ -226,7 +226,7 @@ class TestMarkAlerts:
         """Can complete an overdue alert."""
         from alerts import mark_alert_completed
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             result = mark_alert_completed("alert-3")
 
         assert result is True
@@ -235,7 +235,7 @@ class TestMarkAlerts:
         """Cannot complete an alert that hasn't arrived."""
         from alerts import mark_alert_completed
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             result = mark_alert_completed("alert-4")
 
         assert result is False
@@ -244,7 +244,7 @@ class TestMarkAlerts:
         """Cannot complete an alert that doesn't exist."""
         from alerts import mark_alert_completed
 
-        with patch("alerts.SCHEDULED_ALERTS", []):
+        with patch("config.SCHEDULED_ALERTS", []):
             result = mark_alert_completed("nonexistent")
 
         assert result is False
@@ -260,7 +260,7 @@ class TestCheckAndTriggerAlerts:
         mock_notifier = MagicMock()
         mock_notifier.send_scheduled_alert.return_value = MagicMock(success=True)
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             triggered = check_and_trigger_alerts(mock_notifier)
 
         # Should trigger alert-1 (today) and alert-3 (overdue)
@@ -290,7 +290,7 @@ class TestCheckAndTriggerAlerts:
 
         mock_notifier = MagicMock()
 
-        with patch("alerts.SCHEDULED_ALERTS", config):
+        with patch("config.SCHEDULED_ALERTS", config):
             triggered = check_and_trigger_alerts(mock_notifier)
 
         assert len(triggered) == 0
@@ -305,7 +305,7 @@ class TestCheckAndTriggerAlerts:
         mock_notifier = MagicMock()
         mock_notifier.send_scheduled_alert.return_value = MagicMock(success=False)
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             triggered = check_and_trigger_alerts(mock_notifier)
 
         assert len(triggered) == 0
@@ -320,7 +320,7 @@ class TestSerializeAlert:
         """Serialize an alert due today."""
         from alerts import get_all_alerts, serialize_alert
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             alerts = get_all_alerts()
 
         alert = next(a for a in alerts if a.alert_id == "alert-1")
@@ -334,7 +334,7 @@ class TestSerializeAlert:
         """Serialize a future alert."""
         from alerts import get_all_alerts, serialize_alert
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             alerts = get_all_alerts()
 
         alert = next(a for a in alerts if a.alert_id == "alert-2")
@@ -348,7 +348,7 @@ class TestSerializeAlert:
         """Serialize an overdue alert."""
         from alerts import get_all_alerts, serialize_alert
 
-        with patch("alerts.SCHEDULED_ALERTS", sample_alerts_config):
+        with patch("config.SCHEDULED_ALERTS", sample_alerts_config):
             alerts = get_all_alerts()
 
         alert = next(a for a in alerts if a.alert_id == "alert-3")

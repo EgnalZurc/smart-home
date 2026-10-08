@@ -92,7 +92,6 @@ class TestMarkdownEscaping:
 class TestNewPropertyAlert:
     """Tests for new property alert formatting."""
 
-    @pytest.mark.skip(reason="notifier.py uses legacy Score model (p3_distance, etc.) but models.py has new ScoreBreakdown (r1_rooms, etc.) - needs migration")
     def test_format_new_property_alert_structure(self):
         """Should format alert with all sections."""
         from notifier import _format_new_property_alert

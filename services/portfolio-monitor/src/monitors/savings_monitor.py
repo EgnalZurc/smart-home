@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from config import SAVINGS_ACCOUNTS
+import config
 from models import AlertLevel, SavingsAnalysis
 
 from . import BaseMonitor, register_monitor
@@ -71,7 +71,8 @@ class SavingsMonitor(BaseMonitor):
         """Execute the savings monitor."""
         logger.info("Starting savings monitor...")
 
-        if not SAVINGS_ACCOUNTS:
+        accounts = config.get_savings_accounts()
+        if not accounts:
             logger.info("No savings accounts configured.")
             return {
                 "analysis": [],
@@ -85,7 +86,7 @@ class SavingsMonitor(BaseMonitor):
         total_balance = 0.0
         total_yearly = 0.0
 
-        for account in SAVINGS_ACCOUNTS:
+        for account in accounts:
             account_id = account.get("id", "")
             logger.info(f"  → Processing {account_id}...")
 

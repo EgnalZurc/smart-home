@@ -24,7 +24,7 @@ class TestTaxCalculation:
             (300_000, 0.27),
             (float("inf"), 0.30),
         ]
-        with patch("monitors.etf_monitor.ETF_PLAN", {"tax_brackets": brackets}):
+        with patch("config.ETF_PLAN", {"tax_brackets": brackets}):
             yield
 
     def test_zero_gain(self):
@@ -106,7 +106,7 @@ class TestTaxImpact:
             (300_000, 0.27),
             (float("inf"), 0.30),
         ]
-        with patch("monitors.etf_monitor.ETF_PLAN", {"tax_brackets": brackets}):
+        with patch("config.ETF_PLAN", {"tax_brackets": brackets}):
             yield
 
     def test_tax_impact_with_gain(self):
@@ -155,7 +155,7 @@ class TestPlanHelpers:
         from monitors.etf_monitor import current_phase
 
         future = datetime(2030, 1, 1)
-        with patch("monitors.etf_monitor.ETF_PLAN", {"phase_change_date": future}):
+        with patch("config.ETF_PLAN", {"phase_change_date": future}):
             label, months = current_phase()
 
         assert "1" in label or "FASE 1" in label.upper()
@@ -167,7 +167,7 @@ class TestPlanHelpers:
         from monitors.etf_monitor import current_phase
 
         past = datetime(2020, 1, 1)
-        with patch("monitors.etf_monitor.ETF_PLAN", {"phase_change_date": past}):
+        with patch("config.ETF_PLAN", {"phase_change_date": past}):
             label, months = current_phase()
 
         assert "2" in label or "FASE 2" in label.upper()
@@ -185,8 +185,8 @@ class TestPlanHelpers:
             }
         }
 
-        with patch("monitors.etf_monitor.ETF_PLAN", {"phase_change_date": future}):
-            with patch("monitors.etf_monitor.ETF_PORTFOLIO", portfolio):
+        with patch("config.ETF_PLAN", {"phase_change_date": future}):
+            with patch("config.ETF_PORTFOLIO", portfolio):
                 contrib = current_contribution("test_fund")
 
         assert contrib == 100
@@ -203,8 +203,8 @@ class TestPlanHelpers:
             }
         }
 
-        with patch("monitors.etf_monitor.ETF_PLAN", {"phase_change_date": past}):
-            with patch("monitors.etf_monitor.ETF_PORTFOLIO", portfolio):
+        with patch("config.ETF_PLAN", {"phase_change_date": past}):
+            with patch("config.ETF_PORTFOLIO", portfolio):
                 contrib = current_contribution("test_fund")
 
         assert contrib == 500
@@ -318,7 +318,7 @@ class TestETFMonitor:
         """Monitor handles empty portfolio."""
         from monitors.etf_monitor import ETFMonitor
 
-        with patch("monitors.etf_monitor.ETF_PORTFOLIO", {}):
+        with patch("config.ETF_PORTFOLIO", {}):
             monitor = ETFMonitor()
             result = await monitor.run()
 
@@ -357,8 +357,8 @@ class TestETFMonitor:
             index=dates,
         )
 
-        with patch("monitors.etf_monitor.ETF_PORTFOLIO", portfolio):
-            with patch("monitors.etf_monitor.ETF_FUND_IDS", ["TEST"]):
+        with patch("config.ETF_PORTFOLIO", portfolio):
+            with patch("config.ETF_FUND_IDS", ["TEST"]):
                 with patch(
                     "monitors.etf_monitor.fetch_etf_data",
                     return_value=(mock_hist, {}),

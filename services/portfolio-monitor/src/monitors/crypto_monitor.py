@@ -9,7 +9,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from config import CRYPTO_POSITIONS, CRYPTO_THRESHOLDS
+import config
 from i18n import t
 from models import AlertLevel, CryptoAnalysis, Signal
 
@@ -375,7 +375,7 @@ def compute_signals(
     ath_pct = price_info.get("ath_change_pct")
     change_30d = price_info.get("price_change_30d")
 
-    thr = CRYPTO_THRESHOLDS
+    thr = config.get_crypto_thresholds()
 
     # ─────────────────────────────────────────────────────────────────────────
     # Fear & Greed - INFORMATIONAL ONLY
@@ -488,7 +488,8 @@ class CryptoMonitor(BaseMonitor):
         """Execute the crypto monitor."""
         logger.info("Starting crypto monitor...")
 
-        if not CRYPTO_POSITIONS:
+        positions = config.get_crypto_positions()
+        if not positions:
             logger.info("No crypto positions configured.")
             return {
                 "analysis": [],
@@ -505,15 +506,13 @@ class CryptoMonitor(BaseMonitor):
         self._fear_greed, self._fear_greed_label = fetch_fear_greed()
 
         # Fetch market data for all positions
-        coingecko_ids = [
-            p["coingecko_id"] for p in CRYPTO_POSITIONS if "coingecko_id" in p
-        ]
+        coingecko_ids = [p["coingecko_id"] for p in positions if "coingecko_id" in p]
         logger.info(f"  → Fetching market data for {len(coingecko_ids)} coins...")
         market_data = fetch_market_batch(coingecko_ids)
 
         # Fetch exchange trust scores for all exchanges in use
         exchanges_in_use = {
-            p.get("exchange", "").lower() for p in CRYPTO_POSITIONS if p.get("exchange")
+            p.get("exchange", "").lower() for p in positions if p.get("exchange")
         }
         exchange_trust: dict[str, int | None] = {}
         for exchange in exchanges_in_use:
@@ -521,14 +520,16 @@ class CryptoMonitor(BaseMonitor):
             exchange_trust[exchange] = fetch_exchange_trust_score(exchange)
 
         # Get maturity warning threshold from config
-        maturity_warn_days = CRYPTO_THRESHOLDS.get("staking_maturity_warn_days", 7)
+        maturity_warn_days = config.get_crypto_thresholds().get(
+            "staking_maturity_warn_days", 7
+        )
 
         results: list[CryptoAnalysis] = []
         overall_level = AlertLevel.OK
         total_value = 0.0
         total_daily_gain = 0.0
 
-        for pos in CRYPTO_POSITIONS:
+        for pos in positions:
             cg_id = pos.get("coingecko_id", "")
             symbol = pos.get("symbol", "")
             logger.info(f"  → Processing {symbol}...")

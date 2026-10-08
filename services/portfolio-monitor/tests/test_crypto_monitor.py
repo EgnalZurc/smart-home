@@ -336,7 +336,7 @@ class TestCryptoMonitorRun:
         """Monitor handles empty positions."""
         from monitors.crypto_monitor import CryptoMonitor
 
-        with patch("monitors.crypto_monitor.CRYPTO_POSITIONS", []):
+        with patch("config.CRYPTO_POSITIONS", []):
             monitor = CryptoMonitor()
             result = await monitor.run()
 
@@ -372,7 +372,7 @@ class TestCryptoMonitorRun:
             }
         }
 
-        with patch("monitors.crypto_monitor.CRYPTO_POSITIONS", positions):
+        with patch("config.CRYPTO_POSITIONS", positions):
             with patch(
                 "monitors.crypto_monitor.fetch_market_batch", return_value=market_data
             ):

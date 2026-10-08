@@ -358,17 +358,24 @@ class TestConfigValidation:
         with pytest.raises(SystemExit):
             main_module._validate_config()
 
-    def test_validate_config_missing_apify(self, monkeypatch):
-        """Test that missing APIFY_API_TOKEN is detected."""
+    def test_validate_config_missing_apify_is_optional(self, monkeypatch, caplog):
+        """Missing APIFY_API_TOKEN must NOT be fatal (Idealista/Apify is disabled)."""
         import main as main_module
+        import logging
 
         monkeypatch.setattr(main_module, "TELEGRAM_BOT_TOKEN", "bot_token")
         monkeypatch.setattr(main_module, "TELEGRAM_CHAT_ID", "123")
         monkeypatch.setattr(main_module, "APIFY_API_TOKEN", "")
         monkeypatch.setattr(main_module, "GMAIL_ADDRESS", "test@gmail.com")
+        monkeypatch.setattr(main_module, "GMAIL_APP_PASSWORD", "pw")
 
-        with pytest.raises(SystemExit):
+        with caplog.at_level(logging.WARNING):
+            # Should not raise SystemExit anymore
             main_module._validate_config()
+
+        assert any(
+            "APIFY_API_TOKEN" in record.message for record in caplog.records
+        )
 
     def test_validate_config_missing_gmail(self, monkeypatch):
         """Test that missing GMAIL_ADDRESS is detected."""

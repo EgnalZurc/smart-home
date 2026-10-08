@@ -10,10 +10,14 @@ Day 6 is a wildcard to balance the year between family nuclei.
 """
 
 import json
+import logging
 import os as _os
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 DATA_FILE = Path(_os.environ.get("VACACIONES_DATA_FILE", "/app/data/vacaciones.json"))
 
@@ -181,8 +185,18 @@ def _load_data() -> VacacionesData:
                     YearPlan(year=y["year"], comidas=comidas, notas=y.get("notas", ""))
                 )
             return VacacionesData(nucleos=nucleos, personas=personas, years=years)
-        except Exception:
-            pass
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            # Corrupt or unreadable data file: log it instead of silently
+            # swallowing the error, then fall through to sane defaults so the
+            # service stays usable. (A partial/corrupt file can happen after a
+            # crash mid-write — see _save_data for the atomic-write fix.)
+            logger.error(
+                "Failed to load vacaciones data from %s (%s): %s — "
+                "falling back to defaults",
+                DATA_FILE,
+                type(e).__name__,
+                e,
+            )
     return VacacionesData(
         nucleos=[],
         personas=[],
@@ -195,9 +209,39 @@ def _load_data() -> VacacionesData:
 
 
 def _save_data(data: VacacionesData):
+    """Persist data atomically.
+
+    Writes to a temporary file in the same directory, flushes it to disk, and
+    then atomically renames it over the target with os.replace(). A crash at any
+    point leaves either the old complete file or the new complete file on disk —
+    never a half-written one. The temp file must live on the same filesystem as
+    the target for the rename to be atomic, hence dir=DATA_FILE.parent.
+    """
     _ensure_data_dir()
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data.to_dict(), f, ensure_ascii=False, indent=2)
+    dir_path = DATA_FILE.parent
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=dir_path,
+            prefix=f".{DATA_FILE.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as f:
+            temp_path = f.name
+            json.dump(data.to_dict(), f, ensure_ascii=False, indent=2)
+            f.flush()
+            _os.fsync(f.fileno())
+        _os.replace(temp_path, DATA_FILE)  # atomic on POSIX and Windows
+        temp_path = None
+    finally:
+        # If replace never ran (exception during write), drop the stray temp file.
+        if temp_path is not None and _os.path.exists(temp_path):
+            try:
+                _os.remove(temp_path)
+            except OSError as e:
+                logger.warning("Could not remove temp file %s: %s", temp_path, e)
 
 
 def get_vacaciones_data() -> dict[str, Any]:

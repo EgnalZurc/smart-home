@@ -118,3 +118,84 @@ class TestScheduleConfig:
         assert time_pattern.match(SCHEDULE["crypto_time"]), (
             f"Invalid crypto_time format: {SCHEDULE['crypto_time']}"
         )
+
+
+class TestConfigReloadPropagation:
+    """Regression tests for the reload_config() propagation bug (T08).
+
+    Before the fix, reload_config() reassigned module-level globals but
+    consumer modules had bound them at import time via `from config import X`,
+    so POST /reload-config had no visible effect. Consumers now read values
+    through accessor functions, so reloaded values propagate. The reload also
+    used to drop the default tax brackets when the settings file had none.
+    """
+
+    def _write_settings(self, tmp_path, body: str):
+        settings = tmp_path / "settings.toml"
+        settings.write_text(body, encoding="utf-8")
+        return settings
+
+    def test_reload_preserves_default_tax_brackets(self, tmp_path, monkeypatch):
+        """Reloading a settings file with no [etf.tax] keeps IRPF defaults."""
+        import config
+
+        settings = self._write_settings(
+            tmp_path,
+            "[general]\nlang = 'es'\n",  # no etf.tax.brackets
+        )
+        monkeypatch.setattr(config, "SETTINGS_PATH", settings)
+
+        try:
+            config.reload_config()
+            # Defaults must survive the reload, not become an empty list.
+            assert config.ETF_PLAN["tax_brackets"] == config._DEFAULT_TAX_BRACKETS
+            assert config.get_etf_plan()["tax_brackets"][-1] == (float("inf"), 0.30)
+        finally:
+            # Restore real config so other tests see production values.
+            monkeypatch.undo()
+            config.reload_config()
+
+    def test_reload_propagates_to_consumer_via_accessor(self, tmp_path, monkeypatch):
+        """A consumer reading via the accessor sees reloaded portfolio data."""
+        import config
+        from monitors import etf_monitor
+
+        settings = self._write_settings(
+            tmp_path,
+            "[[etf.funds]]\n"
+            "id = 'RELOADED'\n"
+            "ticker = 'RLD.L'\n"
+            "name = 'Reloaded Fund'\n"
+            "inicio = '2024-01-01'\n",
+        )
+        monkeypatch.setattr(config, "SETTINGS_PATH", settings)
+
+        try:
+            config.reload_config()
+            # The accessor-backed helper must observe the freshly loaded fund.
+            assert "RELOADED" in config.get_etf_portfolio()
+            assert "RELOADED" in config.get_etf_fund_ids()
+            # A function in the consumer module (which no longer binds the
+            # global at import) reads config at call time, so it works too.
+            assert etf_monitor.years_since_start() >= 1
+        finally:
+            monkeypatch.undo()
+            config.reload_config()
+
+    def test_reload_updates_schedule(self, tmp_path, monkeypatch):
+        """Reloading applies a new schedule, observable via get_schedule()."""
+        import config
+
+        settings = self._write_settings(
+            tmp_path,
+            "[schedule]\netf_time = '07:30'\ncrypto_time = '21:15'\n",
+        )
+        monkeypatch.setattr(config, "SETTINGS_PATH", settings)
+
+        try:
+            config.reload_config()
+            assert config.get_schedule()["etf_time"] == "07:30"
+            assert config.get_schedule()["crypto_time"] == "21:15"
+        finally:
+            monkeypatch.undo()
+            config.reload_config()
