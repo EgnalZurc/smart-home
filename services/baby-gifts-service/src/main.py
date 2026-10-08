@@ -40,7 +40,7 @@ import logging
 from pathlib import Path
 
 from config import TRUSTED_PROXY_IPS
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from gifts_controller import (
     add_gift,
@@ -130,6 +130,20 @@ def _get_client_ip(request: Request) -> str:
     if forwarded and client_ip in TRUSTED_PROXY_IPS:
         return forwarded.split(",")[0].strip()
 
+    return client_ip
+
+
+def require_rate_limit(request: Request) -> str:
+    """FastAPI dependency: enforce the per-IP rate limit for guest endpoints.
+
+    Resolves the client IP (honouring trusted proxies) and raises 429 when the
+    limit is exceeded. Returns the resolved client IP so handlers can reuse it.
+    """
+    client_ip = _get_client_ip(request)
+    if not check_rate_limit(client_ip):
+        raise HTTPException(
+            status_code=429, detail="Demasiados intentos. Espera un momento."
+        )
     return client_ip
 
 
@@ -432,19 +446,16 @@ def user_toggle_visibility(gift_id: str, request: Request):
 # Guest API (public, token-based)
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/baby-gifts/guest/{token}")
-def get_gifts_for_guest(token: str, request: Request):
+def get_gifts_for_guest(
+    token: str,
+    client_ip: str = Depends(require_rate_limit),
+):
     """Get gifts for a guest.
 
     Shows what's reserved but not by whom (except own).
     Hidden gifts are not shown to guests.
     Gifts are sorted by price descending.
     """
-    client_ip = _get_client_ip(request)
-    if not check_rate_limit(client_ip):
-        raise HTTPException(
-            status_code=429, detail="Demasiados intentos. Espera un momento."
-        )
-
     guest = validate_invitation(token)
     if not guest:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
@@ -482,14 +493,12 @@ def get_gifts_for_guest(token: str, request: Request):
 
 
 @app.post("/api/baby-gifts/guest/{token}/reserve/{gift_id}")
-def guest_reserve(token: str, gift_id: str, request: Request):
+def guest_reserve(
+    token: str,
+    gift_id: str,
+    client_ip: str = Depends(require_rate_limit),
+):
     """Reserve a gift as a guest."""
-    client_ip = _get_client_ip(request)
-    if not check_rate_limit(client_ip):
-        raise HTTPException(
-            status_code=429, detail="Demasiados intentos. Espera un momento."
-        )
-
     guest = validate_invitation(token)
     if not guest:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
@@ -504,14 +513,12 @@ def guest_reserve(token: str, gift_id: str, request: Request):
 
 
 @app.post("/api/baby-gifts/guest/{token}/unreserve/{gift_id}")
-def guest_unreserve(token: str, gift_id: str, request: Request):
+def guest_unreserve(
+    token: str,
+    gift_id: str,
+    client_ip: str = Depends(require_rate_limit),
+):
     """Cancel own reservation as a guest."""
-    client_ip = _get_client_ip(request)
-    if not check_rate_limit(client_ip):
-        raise HTTPException(
-            status_code=429, detail="Demasiados intentos. Espera un momento."
-        )
-
     guest = validate_invitation(token)
     if not guest:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
