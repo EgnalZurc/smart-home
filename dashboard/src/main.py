@@ -10,7 +10,7 @@ from pathlib import Path
 import auth as auth_core
 import auth_devices
 import auth_users
-from api import auth_routes, routes
+from api import auth_routes, routes, trust_routes
 from api.auth import admin as auth_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -249,6 +249,9 @@ app.add_middleware(
 
 # Auth routes (API endpoints under /api/auth)
 app.include_router(auth_routes.router)
+
+# Trust-device email-link routes (under /api/auth/trust)
+app.include_router(trust_routes.router)
 
 # Admin routes (user/profile management under /api/auth/admin)
 app.include_router(auth_admin.router)
