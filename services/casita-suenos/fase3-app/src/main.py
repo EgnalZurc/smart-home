@@ -42,6 +42,14 @@ logger = logging.getLogger(__name__)
 # Telegram
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+# Notificación de arranque en Telegram: desactivada por defecto para evitar spam
+# en cada reinicio del contenedor. Las alertas reales de propiedades no se ven
+# afectadas. Pon CASITA_NOTIFY_ON_STARTUP=true para reactivarla.
+NOTIFY_ON_STARTUP = os.environ.get("CASITA_NOTIFY_ON_STARTUP", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 # Apify
 APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN", "")
@@ -517,13 +525,22 @@ def _init_scheduler():
 
     _scheduler_instance = scheduler
 
-    # Notificar arranque
-    radar_count = len(
-        db.get_radar_properties(min_score=_ALERT_THRESHOLD, limit=500).get("items", [])
-    )
-    notifier.send_status(
-        f"🚀 Casita Sueños arrancado · {radar_count} casas en el radar"
-    )
+    # Notificar arranque (opt-in; desactivado por defecto para no spamear Telegram
+    # en cada reinicio del contenedor)
+    if NOTIFY_ON_STARTUP:
+        radar_count = len(
+            db.get_radar_properties(min_score=_ALERT_THRESHOLD, limit=500).get(
+                "items", []
+            )
+        )
+        notifier.send_status(
+            f"🚀 Casita Sueños arrancado · {radar_count} casas en el radar"
+        )
+    else:
+        logger.info(
+            "[main] Notificación de arranque Telegram omitida "
+            "(CASITA_NOTIFY_ON_STARTUP no activado)"
+        )
 
     # Arrancar scheduler
     scheduler.start()
