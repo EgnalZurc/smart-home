@@ -36,14 +36,11 @@ Serves:
 Port: 8004
 """
 
-import json
 import logging
-import time
 from pathlib import Path
 
 from config import TRUSTED_PROXY_IPS
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from gifts_controller import (
     add_gift,
@@ -66,6 +63,16 @@ from gifts_controller import (
 from notifier import send_gift_notification
 from pydantic import BaseModel
 from utils import parse_price
+
+# Import serve_html from shared lib (path added via PYTHONPATH in Dockerfile/CI;
+# fallback inserts repo root for local development — mirrors notifier.py).
+try:
+    from libs.html_serving import serve_html
+except ImportError:  # pragma: no cover
+    import sys
+
+    sys.path.insert(0, str(__file__).replace("\\", "/").split("/services/")[0])
+    from libs.html_serving import serve_html
 
 logging.basicConfig(
     level=logging.INFO,
@@ -107,38 +114,7 @@ class InvitationCreate(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════════
-def _serve_html(
-    filename: str, guest_token: str | None = None, auth_user: dict | None = None
-) -> HTMLResponse:
-    """Serve an HTML file with no-cache headers and optional token/user injection."""
-    path = Path(__file__).parent / "static" / filename
-    content = path.read_text(encoding="utf-8")
-
-    # Inject cache buster
-    content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")
-
-    # Inject guest token if provided (for guest view)
-    if guest_token:
-        content = content.replace(
-            "window.GUEST_TOKEN = null;",
-            f"window.GUEST_TOKEN = {json.dumps(guest_token)};",
-        )
-
-    # Inject auth user if provided (for authenticated user view)
-    if auth_user:
-        content = content.replace(
-            "window.AUTH_USER = null;",
-            f"window.AUTH_USER = {json.dumps(auth_user)};",
-        )
-
-    return HTMLResponse(
-        content=content,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        },
-    )
+_STATIC_DIR = Path(__file__).parent / "static"
 
 
 def _get_client_ip(request: Request) -> str:
@@ -196,9 +172,11 @@ async def serve_admin(request: Request):
     """
     username = _get_auth_user(request)
     if username:
-        return _serve_html("baby-gifts.html", auth_user={"username": username})
+        return serve_html(
+            _STATIC_DIR, "baby-gifts.html", auth_user={"username": username}
+        )
     else:
-        return _serve_html("baby-gifts.html")
+        return serve_html(_STATIC_DIR, "baby-gifts.html")
 
 
 @app.get("/guest/baby-gifts/{token}")
@@ -216,7 +194,7 @@ async def serve_guest(token: str, request: Request):
     logger.info(
         f"Guest access: {guest['name']} (token: {_truncate_token(token)}) from {client_ip}"
     )
-    return _serve_html("baby-gifts.html", guest_token=token)
+    return serve_html(_STATIC_DIR, "baby-gifts.html", guest_token=token)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -553,8 +531,7 @@ def guest_unreserve(token: str, gift_id: str, request: Request):
 # ═══════════════════════════════════════════════════════════════════════════════
 # Static assets
 # ═══════════════════════════════════════════════════════════════════════════════
-_static_dir = Path(__file__).parent / "static"
-if _static_dir.exists():
+if _STATIC_DIR.exists():
     app.mount(
-        "/static/baby-gifts", StaticFiles(directory=str(_static_dir)), name="static"
+        "/static/baby-gifts", StaticFiles(directory=str(_STATIC_DIR)), name="static"
     )

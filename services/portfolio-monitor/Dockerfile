@@ -23,6 +23,7 @@ COPY --chown=appuser:appuser services/portfolio-monitor/src/ .
 COPY --chown=appuser:appuser services/portfolio-monitor/locales/ /app/locales/
 COPY --chown=appuser:appuser libs/http_client/ /app/libs/http_client/
 COPY --chown=appuser:appuser libs/notifications/ /app/libs/notifications/
+COPY --chown=appuser:appuser libs/html_serving/ /app/libs/html_serving/
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8010
