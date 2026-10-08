@@ -1,12 +1,19 @@
-"""Tests for api/proxy/base.py (ServiceProxy class)."""
+"""Tests for api/proxy/base.py (ServiceProxy class).
+
+After the migration to ``libs/service_proxy``, ``api.proxy.base`` is a thin
+re-export shim. These tests exercise the shared implementation via the shim's
+public surface to validate it behaves identically to the old hand-copied class.
+"""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 from fastapi import HTTPException
 
 from api.proxy.base import ServiceProxy
+
+# Patch target: httpx lives inside the shared library's proxy module.
+PROXY_HTTPX = "libs.service_proxy.proxy.httpx.AsyncClient"
 
 
 class TestServiceProxyInit:
@@ -40,7 +47,7 @@ class TestServiceProxyGet:
         mock_response.json.return_value = {"status": "ok"}
         mock_response.status_code = 200
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch(PROXY_HTTPX) as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                 return_value=mock_response
             )
@@ -58,7 +65,7 @@ class TestServiceProxyGet:
         mock_response.json.return_value = {"data": []}
         mock_response.status_code = 200
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch(PROXY_HTTPX) as mock_client:
             mock_get = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__.return_value.get = mock_get
 
@@ -77,7 +84,7 @@ class TestServiceProxyGet:
         mock_response.status_code = 404
         mock_response.json.return_value = {"detail": "Not found"}
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch(PROXY_HTTPX) as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                 return_value=mock_response
             )
@@ -92,7 +99,7 @@ class TestServiceProxyGet:
         """GET should return default value when raise_on_error=False."""
         proxy = ServiceProxy("http://service:8000")
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch(PROXY_HTTPX) as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                 side_effect=Exception("Connection refused")
             )
@@ -110,7 +117,7 @@ class TestServiceProxyGet:
         """GET should raise 503 on connection errors."""
         proxy = ServiceProxy("http://service:8000")
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch(PROXY_HTTPX) as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                 side_effect=Exception("Connection refused")
             )
@@ -133,7 +140,7 @@ class TestServiceProxyPost:
         mock_response.json.return_value = {"id": 123}
         mock_response.status_code = 201
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch(PROXY_HTTPX) as mock_client:
             mock_post = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__.return_value.post = mock_post
 
@@ -153,7 +160,7 @@ class TestServiceProxyPost:
         mock_response.status_code = 400
         mock_response.json.return_value = {"detail": "Invalid data"}
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch(PROXY_HTTPX) as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(
                 return_value=mock_response
             )
@@ -176,7 +183,7 @@ class TestServiceProxyPut:
         mock_response.json.return_value = {"updated": True}
         mock_response.status_code = 200
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch(PROXY_HTTPX) as mock_client:
             mock_put = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__.return_value.put = mock_put
 
@@ -197,7 +204,7 @@ class TestServiceProxyDelete:
         mock_response.json.return_value = {"deleted": True}
         mock_response.status_code = 200
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch(PROXY_HTTPX) as mock_client:
             mock_client.return_value.__aenter__.return_value.delete = AsyncMock(
                 return_value=mock_response
             )
@@ -223,7 +230,7 @@ class TestServiceProxyForwardRequest:
         mock_response.json.return_value = {"items": []}
         mock_response.status_code = 200
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch(PROXY_HTTPX) as mock_client:
             mock_req = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__.return_value.request = mock_req
 
@@ -248,7 +255,7 @@ class TestServiceProxyForwardRequest:
         mock_response.json.return_value = {"success": True}
         mock_response.status_code = 200
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch(PROXY_HTTPX) as mock_client:
             mock_req = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__.return_value.request = mock_req
 

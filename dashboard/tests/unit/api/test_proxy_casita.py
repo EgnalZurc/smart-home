@@ -42,7 +42,7 @@ def make_mock_request(json_data=None, query_params=None):
 
 
 # All tests mock httpx at the base module level since ServiceProxy uses httpx
-HTTPX_PATCH = "api.proxy.base.httpx.AsyncClient"
+HTTPX_PATCH = "libs.service_proxy.proxy.httpx.AsyncClient"
 
 
 class TestGetEndpoints:
