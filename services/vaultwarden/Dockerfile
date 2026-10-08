@@ -1,12 +1,11 @@
 # Vaultwarden — Self-hosted Bitwarden-compatible password manager
 # Wrapper image with environment pre-configured for Cuchi Casa deployment
 #
-# Base: vaultwarden/server:latest (official image)
+# Base: vaultwarden/server:1.37.4 (official image, Debian-based)
 # Customization: Environment variables baked in for subpath deployment
 #
 # ADMIN_TOKEN is NOT included here — passed via runtime secret
-# hadolint ignore=DL3007
-FROM vaultwarden/server:latest
+FROM vaultwarden/server:1.37.4
 
 # Timezone
 ENV TZ=Europe/Madrid

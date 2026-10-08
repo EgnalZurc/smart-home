@@ -12,6 +12,7 @@ Auth: nginx handles auth_request — this service trusts all incoming requests.
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 
@@ -42,6 +43,40 @@ _client_config = ServiceClientConfig(
 pc_agent = AsyncServiceClient(_client_config)
 
 app = FastAPI(title="Valheim Admin", version="2.1.0")
+
+
+# ── Validation ──────────────────────────────────────────────────────────────
+
+# world_name is forwarded to pc-agent, which uses it to build filesystem paths
+# and URL path segments. Restrict it to a safe charset to prevent path traversal
+# and injection (e.g. "../", slashes, shell metacharacters).
+WORLD_NAME_MAX_LENGTH = 64
+_WORLD_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def validate_world_name(world_name: str) -> str:
+    """Validate a world name before forwarding it to pc-agent.
+
+    Allowed: ASCII alphanumerics, underscore and hyphen, 1..64 chars.
+    Raises HTTPException(400) if the value is empty, too long, or contains
+    any other character.
+    """
+    if not world_name or len(world_name) > WORLD_NAME_MAX_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid world_name: must be 1 to {WORLD_NAME_MAX_LENGTH} characters."
+            ),
+        )
+    if not _WORLD_NAME_RE.match(world_name):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Invalid world_name: only letters, digits, underscore and "
+                "hyphen are allowed."
+            ),
+        )
+    return world_name
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -159,6 +194,7 @@ async def update_config(
     backups: int = Form(4),
 ):
     """Update Valheim server configuration."""
+    validate_world_name(world_name)
     return await pc_agent.post(
         "/valheim/config",
         {
@@ -194,18 +230,21 @@ async def list_worlds():
 @app.post("/api/worlds/new")
 async def create_world(world_name: str = Form(...)):
     """Create a new world."""
+    validate_world_name(world_name)
     return await pc_agent.post("/valheim/worlds/new", {"world_name": world_name})
 
 
 @app.post("/api/worlds/activate")
 async def activate_world(world_name: str = Form(...)):
     """Activate a world."""
+    validate_world_name(world_name)
     return await pc_agent.post("/valheim/worlds/activate", {"world_name": world_name})
 
 
 @app.delete("/api/worlds/{world_name}")
 async def delete_world(world_name: str):
     """Delete a world."""
+    validate_world_name(world_name)
     return await pc_agent.delete(f"/valheim/worlds/{world_name}")
 
 

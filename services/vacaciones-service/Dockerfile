@@ -1,6 +1,9 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # Vacaciones Service - Production Dockerfile
 # Multi-stage build for minimal image size
+#
+# Build context: service directory (no shared libs/ needed)
+# docker build -f Dockerfile ./services/vacaciones-service
 # ═══════════════════════════════════════════════════════════════════════════════
 
 FROM python:3.12-slim AS builder

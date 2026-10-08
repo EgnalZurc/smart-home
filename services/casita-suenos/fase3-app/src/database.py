@@ -494,6 +494,10 @@ class Database:
             "zone": "p.zone_id",
             "date": "p.first_seen",
         }
+        # SQL-injection safe: sort_by is resolved through the _SORT_MAP
+        # whitelist (unknown keys fall back to s.score_total), and sort_dir
+        # collapses to one of two hardcoded literals. User input never reaches
+        # the interpolated f-string below; only trusted constants do.
         order_col = _SORT_MAP.get(sort_by, "s.score_total")
         order_dir = "DESC" if sort_dir.lower() == "desc" else "ASC"
 
