@@ -552,9 +552,123 @@ class TestPCModeSetEndpoint:
         assert response.status_code == 400
 
 
+# ── world_name Validation ─────────────────────────────────────────────────────
+
+
+class TestWorldNameValidation:
+    """Tests for the validate_world_name helper and the endpoints using it."""
+
+    def test_validate_accepts_valid_names(self):
+        """Alphanumeric names with underscore/hyphen should pass unchanged."""
+        from src.main import validate_world_name
+
+        for name in ("MyWorld", "world_1", "a-b-c", "A1_2-3", "x" * 64):
+            assert validate_world_name(name) == name
+
+    def test_validate_rejects_empty(self):
+        """Empty names should raise 400."""
+        from src.main import validate_world_name
+
+        with pytest.raises(HTTPException) as exc:
+            validate_world_name("")
+        assert exc.value.status_code == 400
+
+    def test_validate_rejects_too_long(self):
+        """Names longer than 64 chars should raise 400."""
+        from src.main import validate_world_name
+
+        with pytest.raises(HTTPException) as exc:
+            validate_world_name("x" * 65)
+        assert exc.value.status_code == 400
+
+    @pytest.mark.parametrize(
+        "bad_name",
+        [
+            "../etc/passwd",
+            "world/sub",
+            "world name",
+            "world;rm -rf /",
+            "world$(whoami)",
+            "world`id`",
+            "world|cat",
+            "world&echo",
+            "world.bak",
+            "wörld",
+            "world\x00",
+        ],
+    )
+    def test_validate_rejects_injection_chars(self, bad_name):
+        """Path traversal and shell metacharacters should raise 400."""
+        from src.main import validate_world_name
+
+        with pytest.raises(HTTPException) as exc:
+            validate_world_name(bad_name)
+        assert exc.value.status_code == 400
+
+    def test_update_config_rejects_bad_world_name(self):
+        """POST /api/config with an invalid world_name should return 400."""
+        from src.main import app, pc_agent
+
+        with patch.object(pc_agent, "post", new_callable=AsyncMock) as mock_post:
+            client = TestClient(app)
+            response = client.post(
+                "/api/config",
+                data={
+                    "server_name": "New Server",
+                    "world_name": "../evil",
+                    "server_pass": "newpass",
+                    "server_public": "false",
+                    "crossplay": "true",
+                    "save_interval": "900",
+                    "backups": "3",
+                },
+            )
+
+            assert response.status_code == 400
+            mock_post.assert_not_called()
+
+    def test_create_world_rejects_bad_world_name(self):
+        """POST /api/worlds/new with an invalid world_name should return 400."""
+        from src.main import app, pc_agent
+
+        with patch.object(pc_agent, "post", new_callable=AsyncMock) as mock_post:
+            client = TestClient(app)
+            response = client.post(
+                "/api/worlds/new", data={"world_name": "world;rm -rf /"}
+            )
+
+            assert response.status_code == 400
+            mock_post.assert_not_called()
+
+    def test_activate_world_rejects_bad_world_name(self):
+        """POST /api/worlds/activate with an invalid world_name returns 400."""
+        from src.main import app, pc_agent
+
+        with patch.object(pc_agent, "post", new_callable=AsyncMock) as mock_post:
+            client = TestClient(app)
+            response = client.post(
+                "/api/worlds/activate", data={"world_name": "bad name"}
+            )
+
+            assert response.status_code == 400
+            mock_post.assert_not_called()
+
+    def test_delete_world_rejects_bad_world_name(self):
+        """DELETE /api/worlds/{name} with an invalid world_name returns 400."""
+        from src.main import app, pc_agent
+
+        with patch.object(pc_agent, "delete", new_callable=AsyncMock) as mock_delete:
+            client = TestClient(app)
+            # A single path segment that reaches the handler but fails validation
+            # (contains a shell metacharacter). Encoded slashes would 404 at the
+            # router before reaching the handler, so we test the handler guard here.
+            response = client.delete("/api/worlds/world$(whoami)")
+
+            assert response.status_code == 400
+            mock_delete.assert_not_called()
+
+
 # ── Dockerfile Structure ──────────────────────────────────────────────────────
-
-
 class TestDockerfileStructure:
     """Tests for Dockerfile structure."""
 

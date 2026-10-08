@@ -346,6 +346,26 @@ class TestRadar:
 
         assert len(db.get_radar_properties(min_score=0.0, limit=3)["items"]) == 3
 
+    def test_radar_sort_params_are_injection_safe(self, db, sample_property, sample_zone):
+        """Malicious sort_by/sort_dir must not break out of the query.
+
+        sort_by is whitelisted via _SORT_MAP (unknown -> score fallback) and
+        sort_dir collapses to DESC/ASC, so injection payloads are inert: the
+        call still returns the normal result set instead of erroring or
+        dropping the table.
+        """
+        self._insert(db, sample_property, sample_zone, score_total=100.0)
+
+        malicious = db.get_radar_properties(
+            min_score=0.0,
+            sort_by="s.score_total; DROP TABLE properties;--",
+            sort_dir="DESC; DROP TABLE scored_properties;--",
+        )
+        assert len(malicious["items"]) == 1
+
+        # Tables survived: a follow-up query still works.
+        assert len(db.get_radar_properties(min_score=0.0)["items"]) == 1
+
 
 # ── Tests del resumen semanal ─────────────────────────────────────────────────
 
