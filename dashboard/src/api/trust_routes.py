@@ -11,6 +11,7 @@ issuing flow itself lives in ``auth_routes.py`` (the ``POST /api/auth/token``
 handler), since it is part of the login path.
 """
 
+import html
 import logging
 
 import auth_users
@@ -49,7 +50,7 @@ async def trust_approve(token: str, sig: str):
     return HTMLResponse(
         _result_page(
             "Solicitud aprobada",
-            f"La solicitud de <strong>{username}</strong> ha sido aprobada. "
+            f"La solicitud de <strong>{html.escape(username)}</strong> ha sido aprobada. "
             "En el próximo inicio de sesión con «Recordar dispositivo» marcado "
             "recibirá su token de dispositivo.",
             success=True,
@@ -78,7 +79,7 @@ async def trust_reject(token: str, sig: str):
     return HTMLResponse(
         _result_page(
             "Solicitud rechazada",
-            f"La solicitud de confianza de <strong>{username}</strong> ha sido rechazada.",
+            f"La solicitud de confianza de <strong>{html.escape(username)}</strong> ha sido rechazada.",
             success=False,
         )
     )
