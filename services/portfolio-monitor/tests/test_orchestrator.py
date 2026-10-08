@@ -129,6 +129,34 @@ class TestStateManagement:
 
         assert state.last_etf_run is not None
 
+    @pytest.mark.asyncio
+    async def test_save_state_async_persists(self, temp_data_dir):
+        """Async save writes the same state the sync path would."""
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator()
+        orch._state.last_etf_run = datetime.now(timezone.utc)
+        await orch._save_state_async()
+
+        orch2 = Orchestrator()
+        assert orch2.get_state().last_etf_run is not None
+
+    @pytest.mark.asyncio
+    async def test_save_state_async_offloads_to_thread(self, temp_data_dir):
+        """Async save routes the blocking write through asyncio.to_thread."""
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator()
+
+        with patch(
+            "orchestrator.asyncio.to_thread", new_callable=AsyncMock
+        ) as mock_to_thread:
+            await orch._save_state_async()
+
+        mock_to_thread.assert_awaited_once()
+        # The sync _save_state bound method is what gets offloaded
+        assert mock_to_thread.await_args.args[0] == orch._save_state
+
 
 class TestRunMonitor:
     """Tests for running individual monitors."""

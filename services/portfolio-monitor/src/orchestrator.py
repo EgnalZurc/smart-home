@@ -97,13 +97,21 @@ class Orchestrator:
             logger.warning(f"Could not load state: {e}")
 
     def _save_state(self):
-        """Persist state to disk."""
+        """Persist state to disk (synchronous)."""
         try:
             STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(STATE_FILE, "w") as f:
                 json.dump(self._state.to_dict(), f, indent=2)
         except Exception as e:
             logger.error(f"Could not save state: {e}")
+
+    async def _save_state_async(self):
+        """Persist state without blocking the event loop.
+
+        _save_state does synchronous file I/O; when called from an async code
+        path we offload it to a worker thread so the event loop stays free.
+        """
+        await asyncio.to_thread(self._save_state)
 
     async def _init_monitors(self):
         """Initialize monitor instances if not injected."""
@@ -168,7 +176,7 @@ class Orchestrator:
                 self._summary.savings_analysis = result.get("analysis", [])
                 self._summary.savings_last_update = result.get("last_update")
 
-            self._save_state()
+            await self._save_state_async()
             logger.info(f"Monitor {name} completed successfully")
 
             return result
@@ -378,7 +386,7 @@ class Orchestrator:
             except asyncio.CancelledError:
                 pass
 
-        self._save_state()
+        await self._save_state_async()
         logger.info("Orchestrator stopped")
 
     def reload_config(self):
