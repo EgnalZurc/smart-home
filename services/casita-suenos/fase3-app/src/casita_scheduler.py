@@ -742,10 +742,11 @@ class CasitaScheduler:
                     processed_email_ids.append(alert.email_id)
                     continue
 
-                # Los filtros de Fotocasa ya garantizan jardín/garaje si están en la URL
-                # Si no están en la URL, asumir True (el usuario ya configuró el filtro)
-                has_garden = alert.has_garden or True  # filtro Fotocasa ya aplicado
-                has_garage = alert.has_garage or True  # filtro Fotocasa ya aplicado
+                # Los filtros de Fotocasa que aparecen en la URL ya han sido
+                # inferidos por el parser (has_garden/has_garage). Usamos esos
+                # valores reales en lugar de forzarlos a True, que inflaba el score.
+                has_garden = alert.has_garden
+                has_garage = alert.has_garage
 
                 # Inferir garage_type desde has_garage del alert
                 garage_t = GarageType.EXTERIOR if has_garage else GarageType.NINGUNO

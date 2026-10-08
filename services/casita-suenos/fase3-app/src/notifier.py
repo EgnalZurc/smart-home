@@ -11,7 +11,7 @@ import logging
 from datetime import datetime
 
 import telegram
-from models import PriceEvent, ScoredProperty
+from models import PriceEvent, ScoreBreakdown, ScoredProperty
 
 logger = logging.getLogger(__name__)
 _SCORE_EMOJI = {
@@ -55,7 +55,7 @@ def _format_new_property_alert(scored: ScoredProperty) -> str:
     safe_zone = _escape_md(scored.zone.name)
     piscina = _PISCINA_EMOJI.get(prop.piscina.value, "")
     lines = [
-        f"{emoji} Nueva vivienda — {scored.total_score:.1f}/84 pts",
+        f"{emoji} Nueva vivienda — {scored.total_score:.1f}/{ScoreBreakdown.MAX_SCORE:.0f} pts",
         f"📍 {safe_zone}",
         f"💰 {_format_price(prop.price)}",
         "",
@@ -74,19 +74,19 @@ def _format_new_property_alert(scored: ScoredProperty) -> str:
         lines.append("")
     lines.append("📊 *Puntuacion*")
     lines.append(
-        f"  P3 Madrid: {s.p3_distance:.0f}  "
-        f"P4 Playa: {s.p4_beach:.0f}  "
-        f"P5 Nat: {s.p5_pools:.0f}"
+        f"  Madrid: {s.r12_madrid:.0f}  "
+        f"Playa: {s.r13_beach:.0f}  "
+        f"Nat: {s.r14_pools:.0f}"
     )
     lines.append(
-        f"  P6 Super: {s.p6_supermarket:.0f}  "
-        f"P7 CS: {s.p7_health:.0f}  "
-        f"P8 Hosp: {s.p8_hospital:.0f}"
+        f"  Super: {s.r8_supermarket:.0f}  "
+        f"CS: {s.r9_health:.0f}  "
+        f"Hosp: {s.r10_hospital:.0f}"
     )
     lines.append(
-        f"  P9 Precio: {s.p9_price:.0f}  "
-        f"P10 Incendio: {s.p10_fire:.0f}  "
-        f"P11 Zona: {getattr(s, 'p11_preference', 0.0):.0f}"
+        f"  Precio: {s.r7_price:.0f}  "
+        f"Incendio: {s.r15_fire:.0f}  "
+        f"Costa: {s.r17_coast:.0f}"
     )
     lines.append("")
     lines.append(f"🔗 {prop.url}")

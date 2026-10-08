@@ -107,7 +107,7 @@ class TestSavingsMonitor:
         """Monitor handles empty accounts list."""
         from monitors.savings_monitor import SavingsMonitor
 
-        with patch("monitors.savings_monitor.SAVINGS_ACCOUNTS", []):
+        with patch("config.SAVINGS_ACCOUNTS", []):
             monitor = SavingsMonitor()
             result = await monitor.run()
 
@@ -134,7 +134,7 @@ class TestSavingsMonitor:
             }
         ]
 
-        with patch("monitors.savings_monitor.SAVINGS_ACCOUNTS", accounts):
+        with patch("config.SAVINGS_ACCOUNTS", accounts):
             monitor = SavingsMonitor()
             result = await monitor.run()
 
@@ -170,7 +170,7 @@ class TestSavingsMonitor:
             },
         ]
 
-        with patch("monitors.savings_monitor.SAVINGS_ACCOUNTS", accounts):
+        with patch("config.SAVINGS_ACCOUNTS", accounts):
             monitor = SavingsMonitor()
             result = await monitor.run()
 
@@ -184,7 +184,7 @@ class TestSavingsMonitor:
         """Monitor always returns OK level for savings."""
         from monitors.savings_monitor import SavingsMonitor
 
-        with patch("monitors.savings_monitor.SAVINGS_ACCOUNTS", []):
+        with patch("config.SAVINGS_ACCOUNTS", []):
             monitor = SavingsMonitor()
             await monitor.run()
 
@@ -205,7 +205,7 @@ class TestSavingsMonitor:
             }
         ]
 
-        with patch("monitors.savings_monitor.SAVINGS_ACCOUNTS", accounts):
+        with patch("config.SAVINGS_ACCOUNTS", accounts):
             monitor = SavingsMonitor()
 
             # Before run
@@ -234,7 +234,7 @@ class TestSavingsMonitor:
             {"id": "invalid"},
         ]
 
-        with patch("monitors.savings_monitor.SAVINGS_ACCOUNTS", accounts):
+        with patch("config.SAVINGS_ACCOUNTS", accounts):
             monitor = SavingsMonitor()
             result = await monitor.run()
 

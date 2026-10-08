@@ -7,10 +7,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
+import config
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from config import ETF_FUND_IDS, ETF_PLAN, ETF_PORTFOLIO, ETF_THRESHOLDS
 from i18n import t
 from models import AlertLevel, ETFAnalysis, Signal
 
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 def current_phase() -> tuple[str, int | None]:
     """Return (phase label, months remaining) tuple."""
     today = datetime.today()
-    phase_date = ETF_PLAN.get("phase_change_date", datetime(2027, 3, 1))
+    phase_date = config.get_etf_plan().get("phase_change_date", datetime(2027, 3, 1))
 
     if today >= phase_date:
         return t("etf.phase2"), None
@@ -36,8 +36,8 @@ def current_phase() -> tuple[str, int | None]:
 
 def current_contribution(fund_id: str) -> float:
     """Return the active monthly contribution for a fund."""
-    cfg = ETF_PORTFOLIO.get(fund_id, {})
-    phase_date = ETF_PLAN.get("phase_change_date", datetime(2027, 3, 1))
+    cfg = config.get_etf_portfolio().get(fund_id, {})
+    phase_date = config.get_etf_plan().get("phase_change_date", datetime(2027, 3, 1))
 
     if datetime.today() >= phase_date:
         return cfg.get("phase2_contrib", 0.0)
@@ -47,7 +47,8 @@ def current_contribution(fund_id: str) -> float:
 def years_since_start() -> int:
     """Return years elapsed since the first ETF purchase."""
     try:
-        first_fund = list(ETF_PORTFOLIO.values())[0] if ETF_PORTFOLIO else {}
+        portfolio = config.get_etf_portfolio()
+        first_fund = list(portfolio.values())[0] if portfolio else {}
         start = datetime.fromisoformat(first_fund.get("start_date", ""))
         return max(1, round((datetime.today() - start).days / 365))
     except (ValueError, KeyError, IndexError):
@@ -57,12 +58,13 @@ def years_since_start() -> int:
 def projected_milestone(fund_id: str) -> float | None:
     """Return the projected EUR milestone for the current year."""
     try:
-        milestones = ETF_PLAN.get("milestones", {})
+        milestones = config.get_etf_plan().get("milestones", {})
         year = min(years_since_start(), max(milestones.keys()) if milestones else 1)
         milestone = milestones.get(year)
         if milestone is None:
             return None
-        idx = ETF_FUND_IDS.index(fund_id) if fund_id in ETF_FUND_IDS else 0
+        fund_ids = config.get_etf_fund_ids()
+        idx = fund_ids.index(fund_id) if fund_id in fund_ids else 0
         return milestone[idx] if idx < len(milestone) else None
     except (KeyError, IndexError, TypeError, ValueError):
         return None
@@ -88,7 +90,7 @@ def calculate_tax(gain: float) -> float:
     if gain <= 0:
         return 0.0
 
-    brackets = ETF_PLAN.get("tax_brackets", [])
+    brackets = config.get_etf_plan().get("tax_brackets", [])
     if not brackets:
         return 0.0
 
@@ -239,8 +241,9 @@ def _analyse_moving_averages(
         )
 
     # Check for crossovers
-    ma_short = ETF_THRESHOLDS["ma_short"]
-    ma_long = ETF_THRESHOLDS["ma_long"]
+    thresholds = config.get_etf_thresholds()
+    ma_short = thresholds["ma_short"]
+    ma_long = thresholds["ma_long"]
 
     try:
         if len(hist) > ma_long:
@@ -273,9 +276,9 @@ def _analyse_drawdown_and_cost(
     signals: list[Signal] = []
     level = AlertLevel.OK
 
-    critical = ETF_THRESHOLDS["critical_threshold"]
-    drop_warn = ETF_THRESHOLDS["drop_from_high_warn"]
-    loss_warn = ETF_THRESHOLDS["loss_vs_cost_warn"]
+    critical = config.get_etf_thresholds()["critical_threshold"]
+    drop_warn = config.get_etf_thresholds()["drop_from_high_warn"]
+    loss_warn = config.get_etf_thresholds()["loss_vs_cost_warn"]
 
     # Drawdown from high
     if drawdown < critical:
@@ -353,8 +356,9 @@ def calculate_signals(hist: pd.DataFrame, avg_cost: float | None) -> dict[str, A
     if hist.empty or len(hist) < 2:
         return empty
 
-    ma_short = ETF_THRESHOLDS["ma_short"]
-    ma_long = ETF_THRESHOLDS["ma_long"]
+    thresholds = config.get_etf_thresholds()
+    ma_short = thresholds["ma_short"]
+    ma_long = thresholds["ma_long"]
 
     # Basic price data
     price = float(hist["Close"].iloc[-1])
@@ -477,7 +481,7 @@ class ETFMonitor(BaseMonitor):
         total_value = 0.0
         total_invested = 0.0
 
-        for fund_id, cfg in ETF_PORTFOLIO.items():
+        for fund_id, cfg in config.get_etf_portfolio().items():
             ticker = cfg["ticker"]
             logger.info(f"  → {fund_id} ({ticker})...")
 

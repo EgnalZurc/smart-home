@@ -70,14 +70,22 @@ def _validate_config() -> None:
         errors.append("TELEGRAM_BOT_TOKEN no configurado")
     if not TELEGRAM_CHAT_ID:
         errors.append("TELEGRAM_CHAT_ID no configurado")
-    if not APIFY_API_TOKEN:
-        errors.append("APIFY_API_TOKEN no configurado")
     if not GMAIL_ADDRESS:
         errors.append("GMAIL_ADDRESS no configurado")
     if errors:
         for e in errors:
             logger.error("[main] %s", e)
         sys.exit(1)
+
+    # APIFY_API_TOKEN es opcional: el módulo Idealista/Apify está deshabilitado
+    # (DataDome bloquea el scraping). Sin token el servicio funciona igual, así que
+    # no debe provocar un crashloop — solo avisamos.
+    if not APIFY_API_TOKEN:
+        logger.warning(
+            "[main] APIFY_API_TOKEN no configurado. "
+            "El scraping de Idealista está deshabilitado de todas formas; "
+            "se continúa sin él."
+        )
 
     if not GMAIL_APP_PASSWORD:
         logger.warning(

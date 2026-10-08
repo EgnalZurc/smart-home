@@ -15,7 +15,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from config import DATA_DIR, SCHEDULED_ALERTS
+import config
+from config import DATA_DIR
 from models import ScheduledAlert
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ def get_all_alerts() -> list[ScheduledAlert]:
     state = _load_alerts_state()
     alerts = []
 
-    for raw in SCHEDULED_ALERTS:
+    for raw in config.get_scheduled_alerts():
         try:
             alert_id = raw.get("id", "")
             alert_state = state.get(alert_id, {})

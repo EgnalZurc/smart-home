@@ -330,3 +330,83 @@ class TestDataclasses:
         assert result["personas"] == ["p1", "p2"]
         assert result["personas_por_nucleo"] == {"n1": ["p1"], "n2": ["p2"]}
         assert result["notas"] == "Test note"
+
+
+
+class TestAtomicSave:
+    """Regression tests for the atomic _save_data fix (T09).
+
+    Before the fix, _save_data wrote directly to the target file, so a crash
+    mid-write could leave a truncated/corrupt JSON file. _load_data also did
+    `except Exception: pass`, silently hiding that corruption. The fix writes
+    to a temp file in the same directory and os.replace()s it into place, and
+    logs (instead of swallowing) load failures.
+    """
+
+    def test_save_leaves_no_temp_files(self, tmp_data_file):
+        """A successful save must not leave stray .tmp files behind."""
+        from vacaciones_controller import NucleoFamiliar, VacacionesData, _save_data
+
+        _save_data(
+            VacacionesData(
+                nucleos=[NucleoFamiliar(id="n1", nombre="N1")],
+                personas=[],
+                years=[],
+            )
+        )
+
+        leftovers = list(tmp_data_file.parent.glob("*.tmp"))
+        assert leftovers == [], f"Unexpected temp files left: {leftovers}"
+        assert tmp_data_file.exists()
+
+    def test_failed_write_preserves_existing_file(self, tmp_data_file, monkeypatch):
+        """If serialization fails mid-write, the original file is untouched."""
+        import vacaciones_controller
+        from vacaciones_controller import NucleoFamiliar, VacacionesData, _save_data
+
+        # Write a known-good file first.
+        good = VacacionesData(
+            nucleos=[NucleoFamiliar(id="good", nombre="Good")],
+            personas=[],
+            years=[],
+        )
+        _save_data(good)
+        original_bytes = tmp_data_file.read_bytes()
+
+        # Make json.dump blow up partway through the next save.
+        def boom(*_args, **_kwargs):
+            raise ValueError("serialization failed")
+
+        monkeypatch.setattr(vacaciones_controller.json, "dump", boom)
+
+        bad = VacacionesData(
+            nucleos=[NucleoFamiliar(id="bad", nombre="Bad")],
+            personas=[],
+            years=[],
+        )
+        with pytest.raises(ValueError, match="serialization failed"):
+            _save_data(bad)
+
+        # Original file is intact (atomic replace never happened)...
+        assert tmp_data_file.read_bytes() == original_bytes
+        # ...and no half-written temp file is left behind.
+        assert list(tmp_data_file.parent.glob("*.tmp")) == []
+
+    def test_corrupt_file_logs_and_falls_back(self, tmp_data_file, caplog):
+        """A corrupt data file is logged (not silenced) and defaults load."""
+        import logging
+
+        from vacaciones_controller import _load_data
+
+        tmp_data_file.write_text("{ this is not valid json", encoding="utf-8")
+
+        with caplog.at_level(logging.ERROR, logger="vacaciones_controller"):
+            data = _load_data()
+
+        # Error was logged rather than swallowed by `except Exception: pass`.
+        assert any(
+            "Failed to load vacaciones data" in r.message for r in caplog.records
+        )
+        # And the service still gets usable defaults.
+        assert data.nucleos == []
+        assert len(data.years) == 1

@@ -12,7 +12,8 @@ import logging
 from datetime import datetime, time, timedelta, timezone
 from typing import Any, Protocol
 
-from config import DATA_DIR, SCHEDULE, reload_config
+import config
+from config import DATA_DIR, reload_config
 from models import AlertLevel, MonitorState, PortfolioSummary
 
 logger = logging.getLogger(__name__)
@@ -286,7 +287,7 @@ class Orchestrator:
 
     def get_schedule(self) -> dict[str, str]:
         """Get the monitoring schedule."""
-        return SCHEDULE.copy()
+        return config.get_schedule().copy()
 
     def get_next_run_times(self) -> dict[str, datetime | None]:
         """Calculate next scheduled run times for each monitor."""
@@ -295,8 +296,9 @@ class Orchestrator:
 
         result = {}
 
+        schedule = config.get_schedule()
         for monitor_name in ["etf", "crypto"]:
-            time_str = SCHEDULE.get(f"{monitor_name}_time", "00:00")
+            time_str = schedule.get(f"{monitor_name}_time", "00:00")
             hour, minute = map(int, time_str.split(":"))
             scheduled_time = time(hour, minute)
 
