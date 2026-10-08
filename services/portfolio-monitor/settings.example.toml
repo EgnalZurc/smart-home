@@ -166,10 +166,16 @@ coingecko_id           = "bitcoin"
 fg_extreme_greed  = 75    # Fear & Greed: caution above this (market euphoria)
 fg_high_greed     = 60    # Fear & Greed: elevated sentiment
 fg_extreme_fear   = 25    # Fear & Greed: extreme pessimism (potential opportunity)
-change_24h_danger = -10   # 24h change: significant drop
-change_24h_warn   = -5    # 24h change: notable drop
+change_24h_danger = -10   # 24h change: flash-crash level drop (DANGER)
+change_24h_warn   = -5    # 24h change: significant drop (WARN)
+change_24h_info   = -3    # 24h change: normal volatility (INFO)
 change_24h_pump   = 10    # 24h change: rapid rise (watch for correction)
-change_30d_bear   = -20   # 30d change: sustained bearish trend
+change_30d_danger = -50   # 30d change: severe crash, e.g. Luna/FTX (DANGER)
+change_30d_warn   = -35   # 30d change: confirmed bear market (WARN)
+change_30d_bear   = -20   # 30d change: normal correction (INFO)
 change_30d_bull   = 20    # 30d change: sustained bullish trend
 ath_danger_pct    = -5    # ATH: very close to all-time high
 ath_warn_pct      = -15   # ATH: approaching all-time high
+
+# Staking maturity warning window: alert when a fixed stake matures within N days
+staking_maturity_warn_days = 7
