@@ -178,9 +178,7 @@ function Resolve-ServicePath {
 function Invoke-Ci {
     param([string]$Service = 'dashboard')
     $path = Resolve-ServicePath -Service $Service
-    $cov  = if ($Service -eq 'dashboard') {
-        ' --cov=src --cov-report=term-missing --cov-fail-under=80'
-    } elseif ($Service -eq 'ac-service') {
+    $cov  = if ($Service -in @('dashboard', 'ac-service', 'portfolio-monitor', 'casita', 'baby-gifts', 'vacaciones', 'valheim-admin')) {
         ' --cov=src --cov-report=term-missing --cov-fail-under=80'
     } else { '' }
 
@@ -207,6 +205,10 @@ else
   echo 'No tests found'
 fi
 "@
+    # The here-string above carries CRLF line endings on Windows; strip the
+    # carriage returns so bash -c inside the Linux container does not choke on
+    # the stray \r characters.
+    $script = $script -replace "`r`n", "`n"
     return (Invoke-InContainer -ContainerArgs @('bash', '-c', $script))
 }
 
