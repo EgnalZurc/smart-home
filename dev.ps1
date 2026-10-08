@@ -188,6 +188,20 @@ function Invoke-Ci {
         "pip install -e libs/smart_home_common --quiet 2>/dev/null || true`n"
     } else { '' }
 
+    # PYTHONPATH mirrors ci.yml per service. Services that import shared code
+    # from libs/ by top-level name (e.g. `from libs.notifications ...`,
+    # `from html_serving ...`) need the repo-root `libs/` dir on the path. The
+    # relative `../../libs` only resolves for services nested TWO levels under
+    # the repo root (services/<name>/). Deeper services (casita lives at
+    # services/casita-suenos/fase3-app) and the repo-root `dashboard/` instead
+    # get smart_home_common via the editable install above and run with
+    # PYTHONPATH=src -- exactly as their ci.yml jobs do. Keeping this in
+    # lockstep with ci.yml is the whole point of the helper: a green
+    # `.\dev.ps1 ci <svc>` must mean a green CI job.
+    $pythonPath = if ($Service -in @('portfolio-monitor', 'baby-gifts', 'valheim-admin')) {
+        'src:../../libs'
+    } else { 'src' }
+
     # Build a bash -c pipeline that mirrors ci.yml steps for this service.
     $script = @"
 set -e
@@ -200,7 +214,7 @@ bandit -r $path/src -ll -ii --format txt
 echo '=== pytest ==='
 if [ -d "$path/tests" ] && find $path/tests -name 'test_*.py' | grep -q .; then
   pip install -r $path/requirements.txt --quiet 2>/dev/null || true
-  $installCommon  cd $path && PYTHONPATH=src python -m pytest tests/ -v --tb=short$cov
+  $installCommon  cd $path && PYTHONPATH=$pythonPath python -m pytest tests/ -v --tb=short$cov
 else
   echo 'No tests found'
 fi
