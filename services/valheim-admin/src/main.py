@@ -45,6 +45,12 @@ pc_agent = AsyncServiceClient(_client_config)
 app = FastAPI(title="Valheim Admin", version="2.1.0")
 
 
+@app.on_event("shutdown")
+async def _close_clients():
+    """Close the shared pc-agent HTTP client on application shutdown."""
+    await pc_agent.aclose()
+
+
 # ── Validation ──────────────────────────────────────────────────────────────
 
 # world_name is forwarded to pc-agent, which uses it to build filesystem paths
