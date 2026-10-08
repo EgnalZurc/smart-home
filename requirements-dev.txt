@@ -28,3 +28,4 @@ numpy==2.2.1
 pandas==2.2.3
 yfinance==0.2.50
 tomli==2.2.1
+python-telegram-bot==21.10

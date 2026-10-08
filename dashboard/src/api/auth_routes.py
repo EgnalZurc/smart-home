@@ -27,6 +27,7 @@ Device-token flow
 4. On logout → device token is revoked from DB.
 """
 
+import html
 import logging
 import smtplib
 import ssl
@@ -123,18 +124,25 @@ def _send_trust_email(username: str, user_agent: str, ip: str, token: str) -> No
     reject_url = auth_users.make_action_url(BASE_URL, token, "reject")
 
     subject = f"[Cuchi Casa] Solicitud de dispositivo de confianza — {username}"
+
+    # Escape all user-controlled values before interpolating into the HTML body
+    # to prevent HTML/script injection (user_agent is fully attacker-controlled).
+    username_esc = html.escape(username)
+    ip_esc = html.escape(ip)
+    user_agent_esc = html.escape(user_agent)
+
     body_html = f"""
     <html><body style="font-family:sans-serif;color:#1e293b;max-width:520px;margin:auto">
       <h2 style="color:#4f46e5">🏠 Cuchi Casa — Dispositivo de confianza</h2>
-      <p>El usuario <strong>{username}</strong> ha solicitado que su dispositivo
+      <p>El usuario <strong>{username_esc}</strong> ha solicitado que su dispositivo
          sea marcado como <em>de confianza</em> (sesión de 1 año).</p>
       <table style="border-collapse:collapse;width:100%;margin:16px 0">
         <tr><td style="padding:6px 12px;background:#f1f5f9;font-weight:600">Usuario</td>
-            <td style="padding:6px 12px">{username}</td></tr>
+            <td style="padding:6px 12px">{username_esc}</td></tr>
         <tr><td style="padding:6px 12px;background:#f1f5f9;font-weight:600">IP</td>
-            <td style="padding:6px 12px">{ip}</td></tr>
+            <td style="padding:6px 12px">{ip_esc}</td></tr>
         <tr><td style="padding:6px 12px;background:#f1f5f9;font-weight:600">Dispositivo</td>
-            <td style="padding:6px 12px;word-break:break-all">{user_agent}</td></tr>
+            <td style="padding:6px 12px;word-break:break-all">{user_agent_esc}</td></tr>
       </table>
       <p style="margin-top:24px">
         <a href="{approve_url}"
