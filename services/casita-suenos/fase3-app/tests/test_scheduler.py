@@ -484,3 +484,644 @@ class TestSchedulerDelegation:
 
         scheduler._db.get_dismissed.assert_called_once()
         assert result == [{"uid": "test:1"}]
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Coverage expansion (T13): lifecycle, run_scraping, gmail/fotocasa checks,
+# zone inference (hint + nominatim), idealista scraping, weekly summary, status.
+# These tests exercise the previously-omitted code paths of casita_scheduler.py.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from models import (
+    GarageType,
+    Habitability,
+    Internet,
+    Piscina,
+    Portal,
+    Property,
+    ScoreBreakdown,
+    ScoredProperty,
+)
+from zones import ZONES
+
+
+def _make_property(zone_id: str = "zamora_meseta", price: int = 150_000) -> Property:
+    """Build a minimal valid Property for scheduler processing tests."""
+    return Property(
+        portal=Portal.PISOS,
+        portal_id="p-1",
+        url="https://www.pisos.com/casa-1/",
+        zone_id=zone_id,
+        title="Casa de prueba",
+        price=price,
+        size_m2=120.0,
+        rooms=4,
+        has_garden_or_plot=True,
+        terrain_m2=300.0,
+        garage_type=GarageType.EDIFICIO,
+        piscina=Piscina.NINGUNA,
+        habitability=Habitability.BUENO,
+        internet=Internet.FIBRA,
+        has_garage=True,
+    )
+
+
+def _high_score(prop: Property, zone) -> ScoredProperty:
+    """A ScoredProperty guaranteed to pass the alert threshold (all 10s)."""
+    breakdown = ScoreBreakdown(
+        r1_rooms=10, r2_terrain=10, r3_garage=10, r4_habitability=10,
+        r5_piscina=10, r6_ac=10, r7_price=10, r8_supermarket=10,
+        r9_health=10, r10_hospital=10, r11_internet=10, r12_madrid=10,
+        r13_beach=10, r14_pools=10, r15_fire=10, r16_flood=10,
+        r17_coast=10, r18_beach_plot=10,
+    )
+    return ScoredProperty(prop=prop, zone=zone, score=breakdown)
+
+
+# ── Lifecycle ─────────────────────────────────────────────────────────────────
+
+
+class TestLifecycle:
+    def test_start_launches_thread_and_sets_running(self, scheduler):
+        with patch.object(scheduler, "_loop") as mock_loop:
+            scheduler.start()
+            assert scheduler._running is True
+            assert scheduler._thread is not None
+            # join so the daemon thread (which just calls the mocked _loop) finishes
+            scheduler._thread.join(timeout=2)
+            mock_loop.assert_called_once()
+
+    def test_stop_clears_running(self, scheduler):
+        scheduler._running = True
+        scheduler.stop()
+        assert scheduler._running is False
+
+
+# ── Loop (single iteration) ─────────────────────────────────────────────────
+
+
+class TestLoopIteration:
+    def test_loop_triggers_all_jobs_when_due(self, scheduler):
+        """One loop pass on summary day/hour that also triggers scraping + checks."""
+        # Sunday 2026-08-30 is weekday 6; use a config where everything fires.
+        fixed_now = datetime(2026, 8, 30, 9, 0, 0)
+        scheduler._db.get_schedule_config.return_value = {
+            "scraping_enabled": True,
+            "scraping_days": [6],  # make scraping fire on Sunday too
+            "scraping_hour": 9,
+            "gmail_check_enabled": True,
+            "gmail_interval_min": 30,
+            "summary_enabled": True,
+            "summary_day": 6,
+            "summary_hour": 9,
+        }
+
+        call_count = {"n": 0}
+
+        class _FakeDateTime:
+            @staticmethod
+            def now():
+                return fixed_now
+
+        scheduler._running = True
+
+        def _fake_sleep(_secs):
+            # No-op for the grace sleep; the loop is stopped by _run_weekly_summary
+            # below (the last job in the iteration) so the body runs exactly once.
+            call_count["n"] += 1
+
+        def _stop_loop():
+            scheduler._running = False
+
+        with (
+            patch("casita_scheduler.datetime", _FakeDateTime),
+            patch("casita_scheduler.time.sleep", side_effect=_fake_sleep),
+            patch.object(scheduler, "_run_scraping") as m_scrap,
+            patch.object(scheduler, "_run_gmail_check") as m_gmail,
+            patch.object(scheduler, "_run_fotocasa_check") as m_foto,
+            patch.object(
+                scheduler, "_run_weekly_summary", side_effect=_stop_loop
+            ) as m_sum,
+        ):
+            scheduler._loop()
+
+        m_scrap.assert_called_once()
+        m_gmail.assert_called_once()
+        m_foto.assert_called_once()
+        m_sum.assert_called_once()
+
+    def test_loop_skips_jobs_when_disabled(self, scheduler):
+        fixed_now = datetime(2026, 9, 1, 12, 0, 0)  # Tuesday noon, nothing due
+        scheduler._db.get_schedule_config.return_value = {
+            "scraping_enabled": False,
+            "gmail_check_enabled": False,
+            "summary_enabled": False,
+        }
+
+        class _FakeDateTime:
+            @staticmethod
+            def now():
+                return fixed_now
+
+        scheduler._running = True
+
+        def _fake_sleep(_secs):
+            scheduler._running = False
+
+        with (
+            patch("casita_scheduler.datetime", _FakeDateTime),
+            patch("casita_scheduler.time.sleep", side_effect=_fake_sleep),
+            patch.object(scheduler, "_run_scraping") as m_scrap,
+            patch.object(scheduler, "_run_gmail_check") as m_gmail,
+            patch.object(scheduler, "_run_weekly_summary") as m_sum,
+        ):
+            scheduler._loop()
+
+        m_scrap.assert_not_called()
+        m_gmail.assert_not_called()
+        m_sum.assert_not_called()
+
+
+# ── run_scraping ──────────────────────────────────────────────────────────────
+
+
+class TestRunScraping:
+    def test_scraping_processes_props_and_sends_summary(self, scheduler):
+        prop = _make_property()
+        zone = ZONES["zamora_meseta"]
+
+        scheduler._db.upsert_property.return_value = None
+        scheduler._db.is_alerted.return_value = False
+        scheduler._apify.scrape_zone.return_value = []
+
+        with (
+            patch(
+                "casita_scheduler.pisos_scraper.scrape_zone", return_value=[prop]
+            ),
+            patch(
+                "casita_scheduler.fotocasa_scraper.scrape_zone", return_value=[]
+            ),
+            patch(
+                "casita_scheduler.habitaclia_scraper.scrape_zone", return_value=[]
+            ),
+            patch("casita_scheduler.evaluate", return_value=_high_score(prop, zone)),
+        ):
+            scheduler.run_scraping_now()
+
+        # A property passed the threshold → marked alerted; a summary is sent.
+        scheduler._db.mark_alerted.assert_called()
+        scheduler._notifier.send_status.assert_called()
+        assert scheduler._last_scraping_result in ("ok", "ok_with_errors")
+
+    def test_scraping_marks_error_when_zero_scored(self, scheduler):
+        with (
+            patch("casita_scheduler.pisos_scraper.scrape_zone", return_value=[]),
+            patch("casita_scheduler.fotocasa_scraper.scrape_zone", return_value=[]),
+            patch("casita_scheduler.habitaclia_scraper.scrape_zone", return_value=[]),
+        ):
+            scheduler._apify.scrape_zone.return_value = []
+            scheduler.run_scraping_now()
+
+        assert scheduler._last_scraping_result == "error"
+
+    def test_scraping_records_scraper_errors(self, scheduler):
+        with (
+            patch(
+                "casita_scheduler.pisos_scraper.scrape_zone",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch("casita_scheduler.fotocasa_scraper.scrape_zone", return_value=[]),
+            patch("casita_scheduler.habitaclia_scraper.scrape_zone", return_value=[]),
+        ):
+            scheduler._apify.scrape_zone.return_value = []
+            scheduler.run_scraping_now()
+
+        status = scheduler.get_status()
+        assert any(e.portal == "pisos" for e in status.scraper_errors)
+        assert scheduler._last_scraping_result == "error"
+
+    def test_scraping_handles_apify_error(self, scheduler):
+        with (
+            patch("casita_scheduler.pisos_scraper.scrape_zone", return_value=[]),
+            patch("casita_scheduler.fotocasa_scraper.scrape_zone", return_value=[]),
+            patch("casita_scheduler.habitaclia_scraper.scrape_zone", return_value=[]),
+        ):
+            scheduler._apify.scrape_zone.side_effect = RuntimeError("apify down")
+            scheduler.run_scraping_now()
+
+        status = scheduler.get_status()
+        assert any(e.portal == "idealista_apify" for e in status.scraper_errors)
+
+    def test_scraping_sends_price_drop_alert(self, scheduler):
+        prop = _make_property()
+        zone = ZONES["zamora_meseta"]
+        from models import PriceEvent
+
+        price_event = PriceEvent(
+            property_uid=prop.unique_id, old_price=200_000, new_price=180_000
+        )
+        scheduler._db.upsert_property.return_value = price_event
+
+        with (
+            patch("casita_scheduler.pisos_scraper.scrape_zone", return_value=[prop]),
+            patch("casita_scheduler.fotocasa_scraper.scrape_zone", return_value=[]),
+            patch("casita_scheduler.habitaclia_scraper.scrape_zone", return_value=[]),
+            patch("casita_scheduler.evaluate", return_value=_high_score(prop, zone)),
+        ):
+            scheduler._apify.scrape_zone.return_value = []
+            scheduler.run_scraping_now()
+
+        scheduler._notifier.send_price_drop_alert.assert_called()
+
+
+# ── Gmail check ───────────────────────────────────────────────────────────────
+
+
+class TestRunGmailCheck:
+    def test_gmail_check_guard_against_concurrent(self, scheduler):
+        scheduler._gmail_check_running = True
+        with patch.object(scheduler, "_do_gmail_check") as m_do:
+            scheduler._run_gmail_check()
+            m_do.assert_not_called()
+
+    def test_gmail_check_resets_flag_after_run(self, scheduler):
+        with patch.object(scheduler, "_do_gmail_check"):
+            scheduler._run_gmail_check()
+        assert scheduler._gmail_check_running is False
+
+    def test_do_gmail_check_fetch_error_returns_early(self, scheduler):
+        with patch(
+            "idealista_email_parser.fetch_new_alerts",
+            side_effect=RuntimeError("imap fail"),
+        ):
+            scheduler._do_gmail_check()
+        scheduler._db.upsert_property.assert_not_called()
+
+    def test_do_gmail_check_no_alerts_closes_connection(self, scheduler):
+        imap = MagicMock()
+        with patch(
+            "idealista_email_parser.fetch_new_alerts",
+            return_value=([], [], imap),
+        ):
+            scheduler._do_gmail_check()
+        imap.close.assert_called_once()
+        imap.logout.assert_called_once()
+
+    def test_do_gmail_check_reports_parse_errors(self, scheduler):
+        with patch(
+            "idealista_email_parser.fetch_new_alerts",
+            return_value=([], ["parse error 1"], None),
+        ):
+            scheduler._do_gmail_check()
+        scheduler._notifier.send_status.assert_called()
+
+    def test_do_gmail_check_processes_alert_and_notifies(self, scheduler):
+        from idealista_email_parser import IdealistaAlert
+
+        alert = IdealistaAlert(
+            url="https://www.idealista.com/inmueble/1/zamora/",
+            property_id="1",
+            email_id="e1",
+            folder="INBOX",
+            location_hint="zamora",
+            price=150_000,
+            rooms=4,
+            size_m2=120.0,
+            title="Casa Zamora",
+        )
+        imap = MagicMock()
+        prop = _make_property()
+        zone = ZONES["zamora_meseta"]
+
+        with (
+            patch(
+                "idealista_email_parser.fetch_new_alerts",
+                return_value=([alert], [], imap),
+            ),
+            patch("idealista_email_parser.delete_processed_emails"),
+            patch.object(scheduler, "_scrape_idealista_property", return_value=prop),
+            patch(
+                "casita_scheduler.evaluate_from_email",
+                return_value=_high_score(prop, zone),
+            ),
+        ):
+            scheduler._db.is_alerted.return_value = False
+            scheduler._do_gmail_check()
+
+        scheduler._db.upsert_score.assert_called()
+        scheduler._db.mark_alerted.assert_called()
+        scheduler._notifier.send_status.assert_called()
+
+    def test_do_gmail_check_skips_when_no_zone(self, scheduler):
+        from idealista_email_parser import IdealistaAlert
+
+        alert = IdealistaAlert(
+            url="https://x/",
+            property_id="2",
+            email_id="e2",
+            folder="INBOX",
+            location_hint="unknownville",
+        )
+        imap = MagicMock()
+        with (
+            patch(
+                "idealista_email_parser.fetch_new_alerts",
+                return_value=([alert], [], imap),
+            ),
+            patch("idealista_email_parser.delete_processed_emails"),
+            patch.object(scheduler, "_infer_zone_from_hint", return_value=None),
+        ):
+            scheduler._do_gmail_check()
+        scheduler._db.upsert_score.assert_not_called()
+
+
+# ── Fotocasa check ───────────────────────────────────────────────────────────
+
+
+class TestRunFotocasaCheck:
+    def test_fotocasa_check_guard_against_concurrent(self, scheduler):
+        scheduler._fotocasa_check_running = True
+        with patch.object(scheduler, "_do_fotocasa_check") as m_do:
+            scheduler._run_fotocasa_check()
+            m_do.assert_not_called()
+
+    def test_do_fotocasa_fetch_error_returns_early(self, scheduler):
+        with patch(
+            "fotocasa_email_parser.fetch_new_fotocasa_alerts",
+            side_effect=RuntimeError("imap fail"),
+        ):
+            scheduler._do_fotocasa_check()
+        scheduler._db.upsert_property.assert_not_called()
+
+    def test_do_fotocasa_no_alerts_closes_connection(self, scheduler):
+        imap = MagicMock()
+        with patch(
+            "fotocasa_email_parser.fetch_new_fotocasa_alerts",
+            return_value=([], [], imap),
+        ):
+            scheduler._do_fotocasa_check()
+        imap.close.assert_called_once()
+
+    def test_do_fotocasa_processes_alert(self, scheduler):
+        from fotocasa_email_parser import FotocasaAlert
+
+        alert = FotocasaAlert(
+            url="https://www.fotocasa.es/zamora/1/",
+            property_id="1",
+            email_id="f1",
+            folder="INBOX",
+            location_hint="zamora",
+            price=140_000,
+            rooms=4,
+            size_m2=110.0,
+            has_garden=True,
+            has_garage=True,
+            has_ac=True,
+        )
+        imap = MagicMock()
+
+        with (
+            patch(
+                "fotocasa_email_parser.fetch_new_fotocasa_alerts",
+                return_value=([alert], [], imap),
+            ),
+            patch("fotocasa_email_parser.delete_processed_fotocasa_emails"),
+            patch(
+                "casita_scheduler.evaluate_from_email",
+                side_effect=lambda p, z: _high_score(p, z),
+            ),
+        ):
+            scheduler._db.is_alerted.return_value = False
+            scheduler._do_fotocasa_check()
+
+        scheduler._db.upsert_score.assert_called()
+        scheduler._db.mark_alerted.assert_called()
+
+    def test_do_fotocasa_skips_alert_with_parse_error(self, scheduler):
+        from fotocasa_email_parser import FotocasaAlert
+
+        alert = FotocasaAlert(
+            url="https://www.fotocasa.es/zamora/2/",
+            property_id="2",
+            email_id="f2",
+            folder="INBOX",
+            location_hint="zamora",
+            parse_error="broken",
+        )
+        imap = MagicMock()
+        with (
+            patch(
+                "fotocasa_email_parser.fetch_new_fotocasa_alerts",
+                return_value=([alert], [], imap),
+            ),
+            patch("fotocasa_email_parser.delete_processed_fotocasa_emails"),
+        ):
+            scheduler._do_fotocasa_check()
+        scheduler._db.upsert_score.assert_not_called()
+
+    def test_do_fotocasa_skips_alert_without_price(self, scheduler):
+        from fotocasa_email_parser import FotocasaAlert
+
+        alert = FotocasaAlert(
+            url="https://www.fotocasa.es/zamora/3/",
+            property_id="3",
+            email_id="f3",
+            folder="INBOX",
+            location_hint="zamora",
+            price=None,
+        )
+        imap = MagicMock()
+        with (
+            patch(
+                "fotocasa_email_parser.fetch_new_fotocasa_alerts",
+                return_value=([alert], [], imap),
+            ),
+            patch("fotocasa_email_parser.delete_processed_fotocasa_emails"),
+        ):
+            scheduler._do_fotocasa_check()
+        scheduler._db.upsert_score.assert_not_called()
+
+
+# ── Zone inference from hint ─────────────────────────────────────────────────
+
+
+class TestInferZoneFromHint:
+    def test_hint_matches_municipio(self, scheduler):
+        zone = scheduler._infer_zone_from_hint("zamora", "https://x/")
+        assert zone is not None
+        assert zone.id == "zamora_meseta"
+
+    def test_hint_matches_keyword(self, scheduler):
+        zone = scheduler._infer_zone_from_hint("potes", "https://x/")
+        assert zone is not None
+        assert zone.id == "cantabria_liebana"
+
+    def test_url_fallback_when_no_hint_match(self, scheduler):
+        zone = scheduler._infer_zone_from_hint(
+            None, "https://www.idealista.com/zamora/casa/"
+        )
+        assert zone is not None
+        assert zone.id == "zamora_meseta"
+
+    def test_nominatim_fallback_invoked(self, scheduler):
+        sentinel = ZONES["zamora_meseta"]
+        with patch.object(
+            scheduler, "_infer_zone_nominatim", return_value=sentinel
+        ) as m_nom:
+            zone = scheduler._infer_zone_from_hint("pueblo-raro-xyz", "https://x/")
+            m_nom.assert_called_once()
+        assert zone is sentinel
+
+    def test_returns_none_when_everything_fails(self, scheduler):
+        with patch.object(scheduler, "_infer_zone_nominatim", return_value=None):
+            zone = scheduler._infer_zone_from_hint("pueblo-raro-xyz", "https://x/")
+        assert zone is None
+
+
+# ── Zone inference via Nominatim ─────────────────────────────────────────────
+
+
+class TestInferZoneNominatim:
+    def test_nominatim_returns_nearest_zone(self, scheduler):
+        payload = [{"lat": "41.503", "lon": "-5.744", "type": "city"}]
+        resp = MagicMock()
+        resp.read.return_value = __import__("json").dumps(payload).encode()
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = lambda *a: False
+        with patch("urllib.request.urlopen", return_value=resp):
+            zone = scheduler._infer_zone_nominatim("zamora")
+        assert zone is not None
+        assert zone.id == "zamora_meseta"
+
+    def test_nominatim_no_results_returns_none(self, scheduler):
+        resp = MagicMock()
+        resp.read.return_value = b"[]"
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = lambda *a: False
+        with patch("urllib.request.urlopen", return_value=resp):
+            zone = scheduler._infer_zone_nominatim("nowhere")
+        assert zone is None
+
+    def test_nominatim_too_far_returns_none(self, scheduler):
+        # Canary Islands coords — >200 km from any peninsular zone.
+        payload = [{"lat": "28.291", "lon": "-16.629", "type": "city"}]
+        resp = MagicMock()
+        resp.read.return_value = __import__("json").dumps(payload).encode()
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = lambda *a: False
+        with patch("urllib.request.urlopen", return_value=resp):
+            zone = scheduler._infer_zone_nominatim("tenerife")
+        assert zone is None
+
+    def test_nominatim_exception_returns_none(self, scheduler):
+        with patch(
+            "urllib.request.urlopen", side_effect=RuntimeError("network down")
+        ):
+            zone = scheduler._infer_zone_nominatim("zamora")
+        assert zone is None
+
+
+# ── Idealista property scraping ──────────────────────────────────────────────
+
+
+class TestScrapeIdealistaProperty:
+    def _alert(self):
+        from idealista_email_parser import IdealistaAlert
+
+        return IdealistaAlert(
+            url="https://www.idealista.com/inmueble/1/",
+            property_id="1",
+            email_id="e1",
+            folder="INBOX",
+            location_hint="zamora",
+            price=150_000,
+            rooms=4,
+            size_m2=120.0,
+            title="Casa",
+        )
+
+    def test_scrape_blocked_uses_email_fallback(self, scheduler):
+        zone = ZONES["zamora_meseta"]
+        resp = MagicMock()
+        resp.status_code = 403
+        resp.text = ""
+        client_cm = MagicMock()
+        client_cm.__enter__.return_value.get.return_value = resp
+        with patch("httpx.Client", return_value=client_cm):
+            prop = scheduler._scrape_idealista_property(self._alert(), zone)
+        assert prop is not None
+        assert prop.price == 150_000
+        assert prop.portal == Portal.IDEALISTA
+
+    def test_scrape_returns_none_without_price(self, scheduler):
+        from idealista_email_parser import IdealistaAlert
+
+        zone = ZONES["zamora_meseta"]
+        alert = IdealistaAlert(
+            url="https://www.idealista.com/inmueble/9/",
+            property_id="9",
+            email_id="e9",
+            folder="INBOX",
+            location_hint="zamora",
+            price=None,
+        )
+        resp = MagicMock()
+        resp.status_code = 403
+        resp.text = ""
+        client_cm = MagicMock()
+        client_cm.__enter__.return_value.get.return_value = resp
+        with patch("httpx.Client", return_value=client_cm):
+            prop = scheduler._scrape_idealista_property(alert, zone)
+        assert prop is None
+
+    def test_scrape_handles_request_exception(self, scheduler):
+        zone = ZONES["zamora_meseta"]
+        with patch("httpx.Client", side_effect=RuntimeError("conn error")):
+            prop = scheduler._scrape_idealista_property(self._alert(), zone)
+        # Falls back to email data despite the exception.
+        assert prop is not None
+        assert prop.price == 150_000
+
+
+# ── Weekly summary ───────────────────────────────────────────────────────────
+
+
+class TestWeeklySummaryExtended:
+    def test_summary_saves_to_db(self, scheduler):
+        scheduler._db.get_top_scored.return_value = [
+            {
+                "score_total": 150.0,
+                "price": 120_000,
+                "zone_id": "zamora_meseta",
+                "url": "https://x/1",
+            }
+        ]
+        scheduler._db.count_by_zone.return_value = {"zamora_meseta": 5}
+        scheduler._db.count_properties.return_value = 5
+        scheduler.run_summary_now()
+        scheduler._db.save_weekly_summary.assert_called_once()
+
+    def test_summary_handles_db_exception(self, scheduler):
+        scheduler._db.get_top_scored.side_effect = RuntimeError("db error")
+        # Should swallow the exception, not raise.
+        scheduler.run_summary_now()
+        scheduler._notifier.send_weekly_summary.assert_not_called()
+
+
+# ── get_status ───────────────────────────────────────────────────────────────
+
+
+class TestGetStatus:
+    def test_status_reports_counts(self, scheduler):
+        scheduler._db.count_properties.return_value = 50
+        scheduler._db.get_radar_properties.return_value = {"total": 12}
+        scheduler._db.get_dismissed.return_value = [{"uid": "a"}, {"uid": "b"}]
+        scheduler._db.get_top_scored.return_value = []
+
+        status = scheduler.get_status()
+
+        assert status.total_properties == 50
+        assert status.radar_count == 12
+        assert status.dismissed_count == 2
+        assert status.running is False
