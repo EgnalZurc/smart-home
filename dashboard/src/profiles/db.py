@@ -9,6 +9,7 @@ This module handles all SQLite database interactions including:
 import logging
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 from .constants import BUILTIN_NAME_TO_ID, BUILTIN_PROFILES, DEFAULT_PROFILE_ID
@@ -24,8 +25,14 @@ AUTH_DB_PATH: str = "/app/data/auth.db"
 # ---------------------------------------------------------------------------
 # Database helpers
 # ---------------------------------------------------------------------------
-def _raw_db() -> sqlite3.Connection:
-    """Get raw DB connection without schema creation (for migrations)."""
+def _open_raw_db() -> sqlite3.Connection:
+    """Open a raw DB connection without schema creation (for migrations).
+
+    Returns a bare connection. Prefer the :func:`_raw_db` / :func:`_db` context
+    managers, which commit on success and ALWAYS close the connection so WAL
+    (-wal/-shm) file handles are released (prevents WinError 32 on Windows
+    temp-dir cleanup and state leaking between tests).
+    """
     db_path = Path(AUTH_DB_PATH)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
@@ -34,9 +41,12 @@ def _raw_db() -> sqlite3.Connection:
     return conn
 
 
-def _db() -> sqlite3.Connection:
-    """Get DB connection, creating tables if needed."""
-    conn = _raw_db()
+def _open_db() -> sqlite3.Connection:
+    """Open a DB connection, creating tables if needed.
+
+    Returns a bare connection. Prefer the :func:`_db` context manager.
+    """
+    conn = _open_raw_db()
 
     # Profiles table with UUID primary key
     conn.execute("""
@@ -60,6 +70,32 @@ def _db() -> sqlite3.Connection:
 
     conn.commit()
     return conn
+
+
+@contextmanager
+def _raw_db():
+    """Yield a raw DB connection, committing on success and always closing."""
+    conn = _open_raw_db()
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@contextmanager
+def _db():
+    """Yield a schema-ensured DB connection, committing and always closing.
+
+    Mirrors ``with sqlite3.connect(...)`` implicit-commit semantics but adds a
+    guaranteed ``conn.close()`` in ``finally`` so WAL file handles are released.
+    """
+    conn = _open_db()
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
