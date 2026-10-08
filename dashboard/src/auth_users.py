@@ -13,6 +13,7 @@ import secrets
 import sqlite3
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 from auth import verify_password
@@ -32,8 +33,15 @@ TRUST_SECRET: str = ""  # REQUIRED — same as AUTH_SECRET
 # ---------------------------------------------------------------------------
 
 
-def _get_db() -> sqlite3.Connection:
-    """Open the auth SQLite database, creating schema on first use."""
+def _open_db() -> sqlite3.Connection:
+    """Open the auth SQLite database, creating schema on first use.
+
+    Returns a bare connection. Prefer the :func:`_get_db` context manager,
+    which guarantees the connection is committed on success and ALWAYS closed
+    — leaving connections open keeps WAL (-wal/-shm) file handles alive, which
+    makes temp-dir cleanup fail on Windows (WinError 32) and leaks state
+    between tests.
+    """
     db_path = Path(AUTH_DB_PATH)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path))
@@ -66,6 +74,22 @@ def _get_db() -> sqlite3.Connection:
     """)
     conn.commit()
     return conn
+
+
+@contextmanager
+def _get_db():
+    """Yield an auth DB connection, committing on success and always closing.
+
+    Mirrors the implicit-commit semantics of ``with sqlite3.connect(...)`` but
+    additionally guarantees ``conn.close()`` in a ``finally`` block so WAL file
+    handles are released (prevents WinError 32 on Windows temp-dir cleanup).
+    """
+    conn = _open_db()
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------

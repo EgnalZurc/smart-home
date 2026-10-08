@@ -29,6 +29,7 @@ import logging
 import secrets
 import sqlite3
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -49,8 +50,14 @@ _SEPARATOR = ":"
 # ---------------------------------------------------------------------------
 
 
-def _db() -> sqlite3.Connection:
-    """Open the auth SQLite database and ensure schema exists."""
+def _open_db() -> sqlite3.Connection:
+    """Open the auth SQLite database and ensure schema exists.
+
+    Returns a bare connection. Prefer the :func:`_db` context manager, which
+    commits on success and ALWAYS closes the connection so WAL (-wal/-shm) file
+    handles are released (prevents WinError 32 on Windows temp-dir cleanup and
+    state leaking between tests).
+    """
     db_path = Path(AUTH_DB_PATH)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
@@ -83,6 +90,21 @@ def _db() -> sqlite3.Connection:
         pass  # Column already exists
     conn.commit()
     return conn
+
+
+@contextmanager
+def _db():
+    """Yield an auth DB connection, committing on success and always closing.
+
+    Mirrors ``with sqlite3.connect(...)`` implicit-commit semantics but adds a
+    guaranteed ``conn.close()`` in ``finally`` so WAL file handles are released.
+    """
+    conn = _open_db()
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _hash(token: str) -> str:

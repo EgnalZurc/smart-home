@@ -134,7 +134,7 @@ class TestProfileCRUD:
         """get_all_profiles should return all built-in profiles."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -151,7 +151,7 @@ class TestProfileCRUD:
         """create_profile should return the new profile's UUID."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -170,7 +170,7 @@ class TestProfileCRUD:
         """Should be able to update profile name."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -187,7 +187,7 @@ class TestProfileCRUD:
         """Should be able to update profile level."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -201,7 +201,7 @@ class TestProfileCRUD:
         """Should not be able to update SUPER profile."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -213,7 +213,7 @@ class TestProfileCRUD:
         """Should be able to update FAMILIA_ALL, GAMER, etc."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -227,7 +227,7 @@ class TestProfileCRUD:
         """Should be able to delete custom profiles."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -241,7 +241,7 @@ class TestProfileCRUD:
         """Should not be able to delete built-in profiles."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -258,7 +258,7 @@ class TestUserProfiles:
         """Users without assigned profiles get the default."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -269,7 +269,7 @@ class TestUserProfiles:
         """Should be able to assign profiles to a user."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -286,7 +286,7 @@ class TestUserProfiles:
         """Should be able to add a profile to a user."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -304,7 +304,7 @@ class TestUserProfiles:
         """Should be able to remove a profile from a user."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -327,7 +327,7 @@ class TestEffectiveLevel:
         """User with SUPER profile should have level 0."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -340,7 +340,7 @@ class TestEffectiveLevel:
         """Effective level is the minimum across all profiles."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -356,7 +356,7 @@ class TestEffectiveLevel:
         """is_super should return True for users with level 0."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -369,7 +369,7 @@ class TestEffectiveLevel:
         """is_super should return False for regular users."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -387,7 +387,7 @@ class TestUserInfo:
         """get_user_info should include detailed profile info."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
@@ -406,7 +406,7 @@ class TestUserInfo:
         """get_user_info should include permitted apps."""
         import user_profiles
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             _set_db_path(tmp)
             user_profiles._ensure_builtin_profiles()
 
