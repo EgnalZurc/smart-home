@@ -433,7 +433,7 @@ def evaluate_from_email(prop: Property, zone: Zone) -> ScoredProperty:
         gt_val = GarageType.EXTERIOR
         try:
             object.__setattr__(p, "garage_type", gt_val)
-        except:
+        except Exception:
             p.garage_type = gt_val
 
     # R4 — habitabilidad: si desconocida, el portal no manda ruinas
@@ -441,7 +441,7 @@ def evaluate_from_email(prop: Property, zone: Zone) -> ScoredProperty:
     if hab is None or hab == Habitability.DESCONOCIDO:
         try:
             object.__setattr__(p, "habitability", Habitability.BUENO)
-        except:
+        except Exception:
             p.habitability = Habitability.BUENO
 
     # Calcular score base con el scorer estándar
