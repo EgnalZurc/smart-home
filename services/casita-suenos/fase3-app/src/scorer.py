@@ -426,7 +426,7 @@ def evaluate_from_email(prop: Property, zone: Zone) -> ScoredProperty:
 
     # R2/R3 — terreno y garaje: el portal ya los garantizó
     if not p.has_garden_or_plot:
-        with contextlib.suppress(BaseException):
+        with contextlib.suppress(Exception):
             object.__setattr__(p, "has_garden_or_plot", True)
     current_gt = getattr(p, "garage_type", GarageType.NINGUNO)
     if current_gt == GarageType.NINGUNO and p.has_garage:
