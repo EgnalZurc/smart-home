@@ -44,35 +44,46 @@ def make_mock_request(headers=None, json_data=None):
     return mock_req
 
 
+@pytest.fixture
+def mock_require_super():
+    """Mock require_super to allow admin endpoints in tests."""
+    with patch("api.proxy.baby_gifts.require_super") as mock:
+        mock.return_value = "testadmin"
+        yield mock
+
+
 class TestAdminEndpoints:
     """Tests for admin-only endpoints."""
 
     @pytest.mark.asyncio
-    async def test_get_all_baby_gifts_success(self):
+    async def test_get_all_baby_gifts_success(self, mock_require_super):
         """Returns gifts list on success."""
         gifts = [{"id": "1", "name": "Gift 1"}]
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.get.return_value = make_mock_response(gifts)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await get_all_baby_gifts()
+            result = await get_all_baby_gifts(request)
             assert result == gifts
+            mock_require_super.assert_called_once_with(request)
 
     @pytest.mark.asyncio
-    async def test_get_all_baby_gifts_service_error(self):
+    async def test_get_all_baby_gifts_service_error(self, mock_require_super):
         """Raises 503 when service is unavailable."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.get.side_effect = Exception("Connection refused")
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await get_all_baby_gifts()
+                await get_all_baby_gifts(request)
             assert exc.value.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_create_baby_gift_success(self):
+    async def test_create_baby_gift_success(self, mock_require_super):
         """Creates gift successfully."""
         new_gift = {"id": "1", "name": "New Gift"}
         request = make_mock_request(json_data={"name": "New Gift"})
@@ -84,9 +95,10 @@ class TestAdminEndpoints:
 
             result = await create_baby_gift(request)
             assert result == new_gift
+            mock_require_super.assert_called_once_with(request)
 
     @pytest.mark.asyncio
-    async def test_create_baby_gift_validation_error(self):
+    async def test_create_baby_gift_validation_error(self, mock_require_super):
         """Raises HTTPException on validation error."""
         request = make_mock_request(json_data={"invalid": "data"})
 
@@ -102,7 +114,7 @@ class TestAdminEndpoints:
             assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_update_baby_gift_success(self):
+    async def test_update_baby_gift_success(self, mock_require_super):
         """Updates gift successfully."""
         updated = {"id": "1", "name": "Updated"}
         request = make_mock_request(json_data={"name": "Updated"})
@@ -114,9 +126,10 @@ class TestAdminEndpoints:
 
             result = await update_baby_gift("1", request)
             assert result == updated
+            mock_require_super.assert_called_once_with(request)
 
     @pytest.mark.asyncio
-    async def test_update_baby_gift_not_found(self):
+    async def test_update_baby_gift_not_found(self, mock_require_super):
         """Raises 404 when gift not found."""
         request = make_mock_request(json_data={"name": "Updated"})
 
@@ -132,19 +145,22 @@ class TestAdminEndpoints:
             assert exc.value.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_delete_baby_gift_success(self):
+    async def test_delete_baby_gift_success(self, mock_require_super):
         """Deletes gift successfully."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.delete.return_value = make_mock_response({"status": "deleted"})
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await delete_baby_gift("1")
+            result = await delete_baby_gift("1", request)
             assert result["status"] == "deleted"
+            mock_require_super.assert_called_once_with(request)
 
     @pytest.mark.asyncio
-    async def test_delete_baby_gift_not_found(self):
+    async def test_delete_baby_gift_not_found(self, mock_require_super):
         """Raises 404 when gift not found."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.delete.return_value = make_mock_response(
@@ -153,22 +169,24 @@ class TestAdminEndpoints:
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await delete_baby_gift("999")
+                await delete_baby_gift("999", request)
             assert exc.value.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_admin_unreserve_success(self):
+    async def test_admin_unreserve_success(self, mock_require_super):
         """Admin unreserves gift successfully."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response({"reserved": False})
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await admin_unreserve_baby_gift("1")
-            assert result["reserved"] == False
+            result = await admin_unreserve_baby_gift("1", request)
+            assert result["reserved"] is False
+            mock_require_super.assert_called_once_with(request)
 
     @pytest.mark.asyncio
-    async def test_update_categories_success(self):
+    async def test_update_categories_success(self, mock_require_super):
         """Updates categories successfully."""
         categories = ["Ropa", "Juguetes"]
         request = make_mock_request(json_data={"categories": categories})
@@ -182,26 +200,29 @@ class TestAdminEndpoints:
 
             result = await update_baby_gifts_categories(request)
             assert result["categories"] == categories
+            mock_require_super.assert_called_once_with(request)
 
 
 class TestInvitationEndpoints:
     """Tests for invitation management endpoints."""
 
     @pytest.mark.asyncio
-    async def test_get_invitations_success(self):
+    async def test_get_invitations_success(self, mock_require_super):
         """Returns invitations list."""
         invitations = [{"token": "abc123", "name": "Guest 1"}]
+        request = make_mock_request()
 
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.get.return_value = make_mock_response(invitations)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await get_baby_gifts_invitations()
+            result = await get_baby_gifts_invitations(request)
             assert result == invitations
+            mock_require_super.assert_called_once_with(request)
 
     @pytest.mark.asyncio
-    async def test_create_invitation_success(self):
+    async def test_create_invitation_success(self, mock_require_super):
         """Creates invitation successfully."""
         invitation = {"token": "abc123", "name": "Guest 1"}
         request = make_mock_request(json_data={"name": "Guest 1"})
@@ -213,28 +234,33 @@ class TestInvitationEndpoints:
 
             result = await create_baby_gifts_invitation(request)
             assert result == invitation
+            mock_require_super.assert_called_once_with(request)
 
     @pytest.mark.asyncio
-    async def test_delete_invitation_success(self):
+    async def test_delete_invitation_success(self, mock_require_super):
         """Deletes invitation successfully."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.delete.return_value = make_mock_response({"status": "deleted"})
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await delete_baby_gifts_invitation("abc123")
+            result = await delete_baby_gifts_invitation("abc123", request)
             assert result["status"] == "deleted"
+            mock_require_super.assert_called_once_with(request)
 
     @pytest.mark.asyncio
-    async def test_revoke_invitation_success(self):
+    async def test_revoke_invitation_success(self, mock_require_super):
         """Revokes invitation successfully."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response({"revoked": True})
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await revoke_baby_gifts_invitation("abc123")
-            assert result["revoked"] == True
+            result = await revoke_baby_gifts_invitation("abc123", request)
+            assert result["revoked"] is True
+            mock_require_super.assert_called_once_with(request)
 
 
 class TestUserEndpoints:
@@ -391,7 +417,7 @@ class TestErrorHandlingPaths:
     """Tests for error handling paths to improve coverage."""
 
     @pytest.mark.asyncio
-    async def test_create_gift_network_error(self):
+    async def test_create_gift_network_error(self, mock_require_super):
         """Raises 503 on network error during create."""
         request = make_mock_request(json_data={"name": "Gift"})
 
@@ -405,7 +431,7 @@ class TestErrorHandlingPaths:
             assert exc.value.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_update_gift_network_error(self):
+    async def test_update_gift_network_error(self, mock_require_super):
         """Raises 503 on network error during update."""
         request = make_mock_request(json_data={"name": "Updated"})
 
@@ -419,32 +445,35 @@ class TestErrorHandlingPaths:
             assert exc.value.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_delete_gift_network_error(self):
+    async def test_delete_gift_network_error(self, mock_require_super):
         """Raises 503 on network error during delete."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.delete.side_effect = Exception("Network error")
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await delete_baby_gift("1")
+                await delete_baby_gift("1", request)
             assert exc.value.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_admin_unreserve_network_error(self):
+    async def test_admin_unreserve_network_error(self, mock_require_super):
         """Raises 503 on network error during admin unreserve."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.side_effect = Exception("Network error")
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await admin_unreserve_baby_gift("1")
+                await admin_unreserve_baby_gift("1", request)
             assert exc.value.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_admin_unreserve_service_error(self):
+    async def test_admin_unreserve_service_error(self, mock_require_super):
         """Raises HTTPException on 4xx during admin unreserve."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response(
@@ -453,11 +482,11 @@ class TestErrorHandlingPaths:
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await admin_unreserve_baby_gift("999")
+                await admin_unreserve_baby_gift("999", request)
             assert exc.value.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_update_categories_network_error(self):
+    async def test_update_categories_network_error(self, mock_require_super):
         """Raises 503 on network error during update categories."""
         request = make_mock_request(json_data={"categories": []})
 
@@ -471,19 +500,20 @@ class TestErrorHandlingPaths:
             assert exc.value.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_get_invitations_network_error(self):
+    async def test_get_invitations_network_error(self, mock_require_super):
         """Raises 503 on network error getting invitations."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.get.side_effect = Exception("Network error")
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await get_baby_gifts_invitations()
+                await get_baby_gifts_invitations(request)
             assert exc.value.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_create_invitation_network_error(self):
+    async def test_create_invitation_network_error(self, mock_require_super):
         """Raises 503 on network error creating invitation."""
         request = make_mock_request(json_data={"name": "Guest"})
 
@@ -497,7 +527,7 @@ class TestErrorHandlingPaths:
             assert exc.value.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_create_invitation_service_error(self):
+    async def test_create_invitation_service_error(self, mock_require_super):
         """Raises HTTPException on service error creating invitation."""
         request = make_mock_request(json_data={"name": ""})
 
@@ -513,20 +543,22 @@ class TestErrorHandlingPaths:
             assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_delete_invitation_network_error(self):
+    async def test_delete_invitation_network_error(self, mock_require_super):
         """Raises 503 on network error deleting invitation."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.delete.side_effect = Exception("Network error")
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await delete_baby_gifts_invitation("abc123")
+                await delete_baby_gifts_invitation("abc123", request)
             assert exc.value.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_delete_invitation_service_error(self):
+    async def test_delete_invitation_service_error(self, mock_require_super):
         """Raises HTTPException on service error deleting invitation."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.delete.return_value = make_mock_response(
@@ -535,24 +567,26 @@ class TestErrorHandlingPaths:
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await delete_baby_gifts_invitation("invalid")
+                await delete_baby_gifts_invitation("invalid", request)
             assert exc.value.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_revoke_invitation_network_error(self):
+    async def test_revoke_invitation_network_error(self, mock_require_super):
         """Raises 503 on network error revoking invitation."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.side_effect = Exception("Network error")
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await revoke_baby_gifts_invitation("abc123")
+                await revoke_baby_gifts_invitation("abc123", request)
             assert exc.value.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_revoke_invitation_service_error(self):
+    async def test_revoke_invitation_service_error(self, mock_require_super):
         """Raises HTTPException on service error revoking invitation."""
+        request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response(
@@ -561,7 +595,7 @@ class TestErrorHandlingPaths:
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await revoke_baby_gifts_invitation("abc123")
+                await revoke_baby_gifts_invitation("abc123", request)
             assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
