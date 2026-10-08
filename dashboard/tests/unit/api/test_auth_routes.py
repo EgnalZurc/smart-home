@@ -49,25 +49,6 @@ class TestServeLoginHtml:
             assert 'id="error-msg"' in body
 
 
-class TestResultPage:
-    """Tests for _result_page helper."""
-
-    def test_success_page_has_checkmark(self):
-        from api.auth_routes import _result_page
-
-        html = _result_page("Success", "It worked!", success=True)
-        assert "✅" in html
-        assert "Success" in html
-        assert "It worked!" in html
-
-    def test_failure_page_has_x_mark(self):
-        from api.auth_routes import _result_page
-
-        html = _result_page("Failed", "Something went wrong", success=False)
-        assert "❌" in html
-        assert "Failed" in html
-
-
 class TestDeviceCookieHelpers:
     """Tests for cookie helper functions."""
 
@@ -212,74 +193,8 @@ class TestGetMeEndpoint:
         assert response.status_code == 401
 
 
-class TestTrustApproveEndpoint:
-    """Tests for trust request approval."""
-
-    @patch("api.auth_routes.auth_users")
-    def test_approve_with_invalid_signature(self, mock_users):
-        mock_users.verify_action_sig.return_value = False
-
-        from api.auth_routes import router
-        from fastapi import FastAPI
-
-        app = FastAPI()
-        app.include_router(router)
-        client = TestClient(app)
-
-        response = client.get("/api/auth/trust/approve?token=test&sig=invalid")
-        assert response.status_code == 403
-
-    @patch("api.auth_routes.auth_users")
-    def test_approve_already_processed(self, mock_users):
-        mock_users.verify_action_sig.return_value = True
-        mock_users.resolve_trust_request.return_value = None
-
-        from api.auth_routes import router
-        from fastapi import FastAPI
-
-        app = FastAPI()
-        app.include_router(router)
-        client = TestClient(app)
-
-        response = client.get("/api/auth/trust/approve?token=test&sig=valid")
-        assert response.status_code == 200
-        assert "Ya procesado" in response.text
-
-    @patch("api.auth_routes.auth_users")
-    def test_approve_success(self, mock_users):
-        mock_users.verify_action_sig.return_value = True
-        mock_users.resolve_trust_request.return_value = {"username": "testuser"}
-
-        from api.auth_routes import router
-        from fastapi import FastAPI
-
-        app = FastAPI()
-        app.include_router(router)
-        client = TestClient(app)
-
-        response = client.get("/api/auth/trust/approve?token=test&sig=valid")
-        assert response.status_code == 200
-        assert "aprobada" in response.text
-
-
-class TestTrustRejectEndpoint:
-    """Tests for trust request rejection."""
-
-    @patch("api.auth_routes.auth_users")
-    def test_reject_success(self, mock_users):
-        mock_users.verify_action_sig.return_value = True
-        mock_users.resolve_trust_request.return_value = {"username": "testuser"}
-
-        from api.auth_routes import router
-        from fastapi import FastAPI
-
-        app = FastAPI()
-        app.include_router(router)
-        client = TestClient(app)
-
-        response = client.get("/api/auth/trust/reject?token=test&sig=valid")
-        assert response.status_code == 200
-        assert "rechazada" in response.text
-
+# NOTE: TestResultPage, TestTrustApproveEndpoint and TestTrustRejectEndpoint have
+# been moved to test_trust_routes.py since those endpoints and the _result_page
+# helper are now in api/trust_routes.py.
 # NOTE: TestAdminUserEndpoints and TestAdminProfileEndpoints have been moved
 # to test_auth_admin.py since those endpoints are now in api/auth/admin.py

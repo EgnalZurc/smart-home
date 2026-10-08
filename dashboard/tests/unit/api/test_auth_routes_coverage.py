@@ -229,72 +229,6 @@ class TestMeEndpoint:
             assert response.status_code == 401
 
 
-class TestTrustApproval:
-    def test_approve_valid_signature(self, client):
-        row = {"username": "testuser", "token": "test-token"}
-
-        with (
-            patch("api.auth_routes.auth_users.verify_action_sig", return_value=True),
-            patch("api.auth_routes.auth_users.resolve_trust_request", return_value=row),
-        ):
-            response = client.get(
-                "/api/auth/trust/approve",
-                params={"token": "test-token", "sig": "valid"},
-            )
-
-            assert response.status_code == 200
-            assert "aprobada" in response.text.lower()
-
-    def test_approve_invalid_signature(self, client):
-        with patch("api.auth_routes.auth_users.verify_action_sig", return_value=False):
-            response = client.get(
-                "/api/auth/trust/approve",
-                params={"token": "test-token", "sig": "invalid"},
-            )
-
-            assert response.status_code == 403
-
-    def test_approve_already_processed(self, client):
-        with (
-            patch("api.auth_routes.auth_users.verify_action_sig", return_value=True),
-            patch(
-                "api.auth_routes.auth_users.resolve_trust_request", return_value=None
-            ),
-        ):
-            response = client.get(
-                "/api/auth/trust/approve",
-                params={"token": "test-token", "sig": "valid"},
-            )
-
-            assert response.status_code == 200
-            assert "procesado" in response.text.lower()
-
-
-class TestTrustReject:
-    def test_reject_valid_signature(self, client):
-        row = {"username": "testuser", "token": "test-token"}
-
-        with (
-            patch("api.auth_routes.auth_users.verify_action_sig", return_value=True),
-            patch("api.auth_routes.auth_users.resolve_trust_request", return_value=row),
-        ):
-            response = client.get(
-                "/api/auth/trust/reject", params={"token": "test-token", "sig": "valid"}
-            )
-
-            assert response.status_code == 200
-            assert "rechazada" in response.text.lower()
-
-    def test_reject_invalid_signature(self, client):
-        with patch("api.auth_routes.auth_users.verify_action_sig", return_value=False):
-            response = client.get(
-                "/api/auth/trust/reject",
-                params={"token": "test-token", "sig": "invalid"},
-            )
-
-            assert response.status_code == 403
-
-
 class TestVerifyEndpoint:
     def test_verify_authenticated(self, client):
         with patch("auth.get_current_user", return_value="testuser"):
@@ -310,27 +244,11 @@ class TestVerifyEndpoint:
             assert response.status_code == 401
 
 
+# NOTE: TestTrustApproval, TestTrustReject and the _result_page tests have been
+# moved to test_trust_routes.py since those endpoints and the _result_page helper
+# are now in api/trust_routes.py.
 # NOTE: TestAdminUserEndpoints and TestAdminProfileEndpoints have been moved
 # to test_auth_admin.py since those endpoints are now in api/auth/admin.py
-
-
-class TestResultPage:
-    def test_result_page_success(self):
-        from api.auth_routes import _result_page
-
-        html = _result_page("Test Title", "Test message", success=True)
-
-        assert "Test Title" in html
-        assert "Test message" in html
-        assert "✅" in html
-
-    def test_result_page_failure(self):
-        from api.auth_routes import _result_page
-
-        html = _result_page("Error", "Something failed", success=False)
-
-        assert "Error" in html
-        assert "❌" in html
 
 
 class TestHelpers:
