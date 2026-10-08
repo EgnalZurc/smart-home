@@ -10,8 +10,8 @@ import threading
 import time
 from dataclasses import dataclass
 
-from melcloud_client import MelCloudClient
-from mqtt_handler import MqttHandler
+from smart_home_common.clients.melcloud import MelCloudClient
+from smart_home_common.mqtt.handler import MqttHandler
 from state_persistence import PersistedState, load_state, save_state
 
 from controllers.state_machine import (

@@ -36,16 +36,16 @@ from pathlib import Path
 
 from ac_temp_scheduler import AcTempScheduler
 from controllers.ac_controller import ACController, ControlConfig
-from error_tracker import ErrorTracker
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from melcloud_client import MelCloudClient
-from mqtt_handler import MqttHandler
 from outdoor import build_outdoor_fetcher
 from pydantic import BaseModel
+from smart_home_common.clients.melcloud import MelCloudClient
+from smart_home_common.mqtt.handler import MqttHandler
+from smart_home_common.mqtt.subscription import SubscriptionConfig, SubscriptionManager
+from smart_home_common.utils.error_tracker import ErrorTracker
 from spa import serve_html
-from subscription_manager import SubscriptionConfig, SubscriptionManager
 from zigbee2mqtt_client import Zigbee2MQTTClient
 
 logging.basicConfig(

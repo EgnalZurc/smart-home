@@ -19,7 +19,7 @@ from controllers.state_machine import (
     ManualParams,
     StateMachineOutputs,
 )
-from mqtt_handler import SensorReading
+from smart_home_common.mqtt.handler import SensorReading
 
 
 class TestControlConfig:

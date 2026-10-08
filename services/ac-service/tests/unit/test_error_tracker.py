@@ -8,7 +8,7 @@ class TestErrorTracker:
 
     def test_register_adds_error(self):
         """register should add an error to tracker."""
-        from error_tracker import ErrorTracker
+        from smart_home_common.utils.error_tracker import ErrorTracker
 
         tracker = ErrorTracker()
         tracker.register("test_error", "error", "Test message", "test_source")
@@ -22,7 +22,7 @@ class TestErrorTracker:
 
     def test_register_is_idempotent(self):
         """register should not duplicate if error already exists."""
-        from error_tracker import ErrorTracker
+        from smart_home_common.utils.error_tracker import ErrorTracker
 
         tracker = ErrorTracker()
         tracker.register("dup_error", "error", "First message", "source")
@@ -34,7 +34,7 @@ class TestErrorTracker:
 
     def test_register_preserves_original_timestamp(self):
         """register should preserve original timestamp on duplicate."""
-        from error_tracker import ErrorTracker
+        from smart_home_common.utils.error_tracker import ErrorTracker
 
         tracker = ErrorTracker()
         tracker.register("time_error", "error", "Message", "source")
@@ -48,7 +48,7 @@ class TestErrorTracker:
 
     def test_clear_removes_error(self):
         """clear should remove a specific error."""
-        from error_tracker import ErrorTracker
+        from smart_home_common.utils.error_tracker import ErrorTracker
 
         tracker = ErrorTracker()
         tracker.register("to_clear", "error", "Will be cleared", "source")
@@ -59,7 +59,7 @@ class TestErrorTracker:
 
     def test_clear_nonexistent_is_safe(self):
         """clear should not error for non-existent error."""
-        from error_tracker import ErrorTracker
+        from smart_home_common.utils.error_tracker import ErrorTracker
 
         tracker = ErrorTracker()
         tracker.clear("nonexistent")  # Should not raise
@@ -68,7 +68,7 @@ class TestErrorTracker:
 
     def test_get_active_returns_newest_first(self):
         """get_active should return errors sorted newest first."""
-        from error_tracker import ErrorTracker
+        from smart_home_common.utils.error_tracker import ErrorTracker
 
         tracker = ErrorTracker()
         tracker.register("old", "error", "Old error", "source")
@@ -81,7 +81,7 @@ class TestErrorTracker:
 
     def test_has_active_true_when_errors(self):
         """has_active should return True when errors exist."""
-        from error_tracker import ErrorTracker
+        from smart_home_common.utils.error_tracker import ErrorTracker
 
         tracker = ErrorTracker()
         tracker.register("error", "error", "Message", "source")
@@ -90,7 +90,7 @@ class TestErrorTracker:
 
     def test_has_active_false_when_empty(self):
         """has_active should return False when no errors."""
-        from error_tracker import ErrorTracker
+        from smart_home_common.utils.error_tracker import ErrorTracker
 
         tracker = ErrorTracker()
 
@@ -98,7 +98,7 @@ class TestErrorTracker:
 
     def test_multiple_errors_tracked(self):
         """Should track multiple different errors."""
-        from error_tracker import ErrorTracker
+        from smart_home_common.utils.error_tracker import ErrorTracker
 
         tracker = ErrorTracker()
         tracker.register("error1", "error", "Error 1", "source1")
@@ -110,7 +110,7 @@ class TestErrorTracker:
 
     def test_clear_one_keeps_others(self):
         """Clearing one error should keep others."""
-        from error_tracker import ErrorTracker
+        from smart_home_common.utils.error_tracker import ErrorTracker
 
         tracker = ErrorTracker()
         tracker.register("keep", "error", "Keep this", "source")
@@ -123,7 +123,7 @@ class TestErrorTracker:
 
     def test_severity_types(self):
         """Should support both error and warning severities."""
-        from error_tracker import ErrorTracker
+        from smart_home_common.utils.error_tracker import ErrorTracker
 
         tracker = ErrorTracker()
         tracker.register("err", "error", "Error msg", "source")

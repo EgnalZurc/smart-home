@@ -7,7 +7,7 @@ for controlling the air conditioning unit.
 from unittest.mock import MagicMock, patch
 
 import httpx
-from melcloud_client import MODE_MAP, MelCloudClient
+from smart_home_common.clients.melcloud import MODE_MAP, MelCloudClient
 
 
 class TestMelCloudClientInit:
