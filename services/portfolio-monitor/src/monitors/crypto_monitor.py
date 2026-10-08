@@ -355,15 +355,15 @@ def compute_signals(
     # This is market sentiment, not actionable for HODLers
     # ─────────────────────────────────────────────────────────────────────────
     if fear_greed_val is not None:
-        if fear_greed_val >= thr.get("fg_extreme_greed", 75):
+        if fear_greed_val >= thr["fg_extreme_greed"]:
             signals.append(
                 Signal("", t("crypto.fg_extreme_greed", val=fear_greed_val), "INFO")
             )
-        elif fear_greed_val >= thr.get("fg_high_greed", 60):
+        elif fear_greed_val >= thr["fg_high_greed"]:
             signals.append(
                 Signal("", t("crypto.fg_high_greed", val=fear_greed_val), "INFO")
             )
-        elif fear_greed_val <= thr.get("fg_extreme_fear", 25):
+        elif fear_greed_val <= thr["fg_extreme_fear"]:
             # Extreme fear = potential buying opportunity for HODLers
             signals.append(
                 Signal("", t("crypto.fg_extreme_fear", val=fear_greed_val), "OK")
@@ -374,10 +374,10 @@ def compute_signals(
     # Normal crypto volatility is ±5%, only alert on significant moves
     # ─────────────────────────────────────────────────────────────────────────
     if change_24h is not None:
-        danger_threshold = thr.get("change_24h_danger", -15)
-        warn_threshold = thr.get("change_24h_warn", -10)
-        info_threshold = thr.get("change_24h_info", -5)
-        pump_threshold = thr.get("change_24h_pump", 10)
+        danger_threshold = thr["change_24h_danger"]
+        warn_threshold = thr["change_24h_warn"]
+        info_threshold = thr["change_24h_info"]
+        pump_threshold = thr["change_24h_pump"]
 
         if change_24h <= danger_threshold:
             # Flash crash - rare, serious event
@@ -401,8 +401,8 @@ def compute_signals(
     # Being near ATH is not bad - crypto makes new ATHs in bull markets
     # ─────────────────────────────────────────────────────────────────────────
     if ath_pct is not None:
-        ath_near = thr.get("ath_danger_pct", -5)
-        ath_approaching = thr.get("ath_warn_pct", -15)
+        ath_near = thr["ath_danger_pct"]
+        ath_approaching = thr["ath_warn_pct"]
 
         if ath_pct >= ath_near:
             signals.append(Signal("", t("crypto.ath_near", pct=abs(ath_pct)), "INFO"))
@@ -416,10 +416,10 @@ def compute_signals(
     # -20% in 30 days is a normal correction, not a crisis
     # ─────────────────────────────────────────────────────────────────────────
     if change_30d is not None:
-        bear_danger = thr.get("change_30d_danger", -50)
-        bear_warn = thr.get("change_30d_warn", -35)
-        bear_info = thr.get("change_30d_bear", -20)
-        bull_threshold = thr.get("change_30d_bull", 20)
+        bear_danger = thr["change_30d_danger"]
+        bear_warn = thr["change_30d_warn"]
+        bear_info = thr["change_30d_bear"]
+        bull_threshold = thr["change_30d_bull"]
 
         if change_30d <= bear_danger:
             # Severe crash - very rare (2022 Luna, FTX level)
@@ -493,9 +493,9 @@ class CryptoMonitor(BaseMonitor):
             exchange_trust[exchange] = fetch_exchange_trust_score(exchange)
 
         # Get maturity warning threshold from config
-        maturity_warn_days = config.get_crypto_thresholds().get(
-            "staking_maturity_warn_days", 7
-        )
+        maturity_warn_days = config.get_crypto_thresholds()[
+            "staking_maturity_warn_days"
+        ]
 
         results: list[CryptoAnalysis] = []
         overall_level = AlertLevel.OK

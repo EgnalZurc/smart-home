@@ -154,19 +154,31 @@ def _build_etf_thresholds(settings: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_crypto_thresholds(settings: dict[str, Any]) -> dict[str, Any]:
-    # Note: Fear & Greed is a sentiment indicator, not a price predictor
+    # SINGLE SOURCE OF TRUTH for all crypto signal thresholds.
+    # Every key consumed by crypto_monitor.py MUST be defined here; the monitor
+    # uses direct dict access (no .get() fallbacks), so a missing key fails loudly.
+    # Note: Fear & Greed is a sentiment indicator, not a price predictor.
     thr = _get(settings, "crypto.thresholds", {})
     return {
+        # Fear & Greed index (sentiment)
         "fg_extreme_greed": thr.get("fg_extreme_greed", 75),  # Adjusted from 80
         "fg_high_greed": thr.get("fg_high_greed", 60),  # Adjusted from 65
         "fg_extreme_fear": thr.get("fg_extreme_fear", 25),  # Adjusted from 20
+        # 24h price change (DANGER < WARN < INFO < 0 < PUMP)
         "change_24h_danger": thr.get("change_24h_danger", -10),
         "change_24h_warn": thr.get("change_24h_warn", -5),
+        "change_24h_info": thr.get("change_24h_info", -3),
         "change_24h_pump": thr.get("change_24h_pump", 10),
+        # 30d momentum (DANGER < WARN < BEAR < 0 < BULL)
+        "change_30d_danger": thr.get("change_30d_danger", -50),
+        "change_30d_warn": thr.get("change_30d_warn", -35),
         "change_30d_bear": thr.get("change_30d_bear", -20),
         "change_30d_bull": thr.get("change_30d_bull", 20),
+        # ATH proximity (informational)
         "ath_danger_pct": thr.get("ath_danger_pct", -5),
         "ath_warn_pct": thr.get("ath_warn_pct", -15),
+        # Staking maturity warning window (days)
+        "staking_maturity_warn_days": thr.get("staking_maturity_warn_days", 7),
     }
 
 
