@@ -216,8 +216,8 @@ services:
     image: egnal/smart-home-casita-suenos:latest
     container_name: casita-suenos
     restart: on-failure:5
-    mem_limit: 96m
-    memswap_limit: 96m
+    mem_limit: 192m
+    memswap_limit: 192m
     expose:
       - 8001
     volumes:
