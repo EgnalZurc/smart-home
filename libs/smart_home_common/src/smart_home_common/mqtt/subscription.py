@@ -152,9 +152,7 @@ class SubscriptionManager:
             return
 
         # Update in background thread to avoid blocking
-        threading.Thread(
-            target=self._update_service, args=(service, sub), daemon=True
-        ).start()
+        threading.Thread(target=self._update_service, args=(service, sub), daemon=True).start()
 
     def _update_loop(self):
         """Background thread that updates all subscriptions periodically."""
@@ -208,9 +206,7 @@ class SubscriptionManager:
 
         except Exception as e:
             sub.error_count += 1
-            logger.error(
-                "✗ Failed to update '%s' (error %d): %s", service, sub.error_count, e
-            )
+            logger.error("✗ Failed to update '%s' (error %d): %s", service, sub.error_count, e)
 
     def get_stats(self) -> dict:
         """Get subscription manager statistics.
