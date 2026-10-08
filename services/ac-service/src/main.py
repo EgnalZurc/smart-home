@@ -39,11 +39,12 @@ from controllers.ac_controller import ACController, ControlConfig
 from error_tracker import ErrorTracker
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from melcloud_client import MelCloudClient
 from mqtt_handler import MqttHandler
+from outdoor import build_outdoor_fetcher
 from pydantic import BaseModel
+from spa import serve_html
 from subscription_manager import SubscriptionConfig, SubscriptionManager
 from zigbee2mqtt_client import Zigbee2MQTTClient
 
@@ -203,74 +204,9 @@ async def lifespan(app: FastAPI):
         "melcloud", fetch_melcloud_state, interval=MELCLOUD_UPDATE_INTERVAL
     )
 
-    def fetch_outdoor_temp():
-        import httpx
-
-        # Configure longer timeouts for SSL handshake issues
-        # connect=15.0 allows more time for SSL handshake
-        # read=10.0 for data transfer
-        # pool=5.0 for connection pool
-        timeout = httpx.Timeout(connect=15.0, read=10.0, write=10.0, pool=5.0)
-
-        # Use a transport with custom SSL settings for better compatibility
-        transport = httpx.HTTPTransport(retries=2)
-
-        try:
-            with httpx.Client(timeout=timeout, transport=transport) as client:
-                weather_resp = client.get(
-                    "https://api.open-meteo.com/v1/forecast",
-                    params={
-                        "latitude": LOCATION_LATITUDE,
-                        "longitude": LOCATION_LONGITUDE,
-                        "current": "temperature_2m,relative_humidity_2m",
-                        "timezone": "Europe/Madrid",
-                    },
-                )
-                weather_resp.raise_for_status()
-
-                aqi_resp = client.get(
-                    "https://air-quality-api.open-meteo.com/v1/air-quality",
-                    params={
-                        "latitude": LOCATION_LATITUDE,
-                        "longitude": LOCATION_LONGITUDE,
-                        "current": "european_aqi",
-                        "timezone": "Europe/Madrid",
-                    },
-                )
-                aqi_resp.raise_for_status()
-
-            weather = weather_resp.json().get("current", {})
-            aqi_current = aqi_resp.json().get("current", {})
-            error_tracker.clear("outdoor_fetch")
-            return {
-                "temperature": weather.get("temperature_2m"),
-                "humidity": weather.get("relative_humidity_2m"),
-                "aqi": aqi_current.get("european_aqi"),
-            }
-        except httpx.ConnectTimeout as e:
-            logger.error("SSL/Connect timeout fetching outdoor data: %s", e)
-            error_tracker.register(
-                "outdoor_fetch",
-                "warning",
-                "Outdoor data unavailable: connection timeout",
-                "outdoor",
-            )
-            return None
-        except httpx.HTTPStatusError as e:
-            logger.error("HTTP error fetching outdoor data: %s", e)
-            error_tracker.register(
-                "outdoor_fetch",
-                "warning",
-                f"Outdoor data unavailable: HTTP {e.response.status_code}",
-                "outdoor",
-            )
-            return None
-        except Exception as e:
-            logger.error("Failed to fetch outdoor data: %s", e)
-            error_tracker.register(
-                "outdoor_fetch", "warning", f"Outdoor data unavailable: {e}", "outdoor"
-            )
-            return None
+    fetch_outdoor_temp = build_outdoor_fetcher(
+        LOCATION_LATITUDE, LOCATION_LONGITUDE, error_tracker
+    )
 
     subscription_manager.subscribe(
         "outdoor", fetch_outdoor_temp, interval=OUTDOOR_UPDATE_INTERVAL
@@ -349,24 +285,10 @@ def health_api():
 # ── SPA ───────────────────────────────────────────────────────────────────────
 
 
-def _serve_html(filename: str) -> HTMLResponse:
-    path = Path(__file__).parent / "static" / filename
-    content = path.read_text(encoding="utf-8")
-    content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")
-    return HTMLResponse(
-        content=content,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        },
-    )
-
-
 @app.get("/smart-home/ac", tags=["SPA"])
 async def serve_ac():
     """Serve the AC control SPA."""
-    return _serve_html("index.html")
+    return serve_html("index.html")
 
 
 # ── API routes (/api/ac/*) ────────────────────────────────────────────────────
