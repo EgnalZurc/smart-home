@@ -35,8 +35,9 @@ async def get_alerts():
 @router.post("/alerts/{alert_id}/complete")
 async def complete_alert(alert_id: str):
     """Mark an alert as completed. Only allowed if date has arrived."""
-    import api.routes as routes
     from alerts import mark_alert_completed
+
+    import api.routes as routes
 
     success = mark_alert_completed(alert_id)
 

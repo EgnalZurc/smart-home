@@ -16,21 +16,6 @@ from orchestrator import get_orchestrator  # noqa: F401 — patched by tests
 # ─── Sub-routers ─────────────────────────────────────────────────────────────
 from .alerts import router as _alerts_router
 from .control import router as _control_router
-
-# ─── Re-export: helpers (imported directly by tests) ─────────────────────────
-from .helpers import (  # noqa: F401
-    _config_limiter,
-    _enforce_rate_limit,
-    _refresh_limiter,
-    _retry_after_seconds,
-    _safe_float,
-    _safe_json,
-    _scrub_payload,
-    _serialize_alert,
-    _serialize_analysis,
-    rate_limit,
-)
-from .helpers import _SafeJSONResponse  # noqa: F401
 from .health import router as _health_router
 
 # ─── Re-export: health checks (patched at callsite by tests) ────────────────
@@ -43,6 +28,21 @@ from .health_checks import (  # noqa: F401
     check_fear_greed,
     check_smtp,
     check_yahoo_finance,
+)
+
+# ─── Re-export: helpers (imported directly by tests) ─────────────────────────
+from .helpers import (  # noqa: F401
+    _config_limiter,
+    _enforce_rate_limit,
+    _refresh_limiter,
+    _retry_after_seconds,
+    _safe_float,
+    _safe_json,
+    _SafeJSONResponse,  # noqa: F401
+    _scrub_payload,
+    _serialize_alert,
+    _serialize_analysis,
+    rate_limit,
 )
 from .notifications import router as _notifications_router
 from .summary import router as _summary_router
