@@ -188,6 +188,22 @@ class TestSPAServing:
         # but endpoint should at least not 404
         assert response.status_code in (200, 500)
 
+    def test_serve_html_returns_200(self, client):
+        """GET /smart-home/vacaciones must return 200, not silently 500.
+
+        The bundled static/vacaciones.html ships with the service, so
+        _serve_html should always succeed. A 500 here means the SPA file is
+        missing or unreadable — a real failure the suite must not tolerate.
+        """
+        response = client.get("/smart-home/vacaciones")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+        assert response.headers["cache-control"] == (
+            "no-cache, no-store, must-revalidate, max-age=0"
+        )
+        assert len(response.text) > 0
+
 
 class TestDefaultData:
     """Tests for default data initialization."""
