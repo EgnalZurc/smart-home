@@ -15,16 +15,23 @@ Port: 8010
 """
 
 import logging
-import time
+import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from api import router as api_router
 from config import LOG_LEVEL
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from orchestrator import get_orchestrator
+
+# Add libs to path for shared library import (mirrors monitors/crypto_monitor.py)
+_LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
+if _LIBS_PATH not in sys.path:
+    sys.path.insert(0, _LIBS_PATH)
+
+from html_serving import serve_html  # noqa: E402
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Logging
@@ -98,40 +105,20 @@ async def health_alias():
 # ─────────────────────────────────────────────────────────────────────────────
 # SPA Serving
 # ─────────────────────────────────────────────────────────────────────────────
-def _serve_html(filename: str) -> HTMLResponse:
-    """Serve an HTML file with no-cache headers."""
-    path = Path(__file__).parent / "static" / filename
-    if not path.exists():
-        return HTMLResponse(
-            content="<h1>404 - Dashboard not found</h1><p>Static files not deployed.</p>",
-            status_code=404,
-        )
-
-    content = path.read_text(encoding="utf-8")
-    # Inject cache buster
-    content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")
-
-    return HTMLResponse(
-        content=content,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        },
-    )
+_STATIC_DIR = Path(__file__).parent / "static"
+_NOT_FOUND_HTML = "<h1>404 - Dashboard not found</h1><p>Static files not deployed.</p>"
 
 
 @app.get("/smart-home/portfolio")
 async def serve_dashboard():
     """Serves the portfolio monitor SPA."""
-    return _serve_html("portfolio.html")
+    return serve_html(_STATIC_DIR, "portfolio.html", not_found_html=_NOT_FOUND_HTML)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Static assets
 # ─────────────────────────────────────────────────────────────────────────────
-_static_dir = Path(__file__).parent / "static"
-if _static_dir.exists():
+if _STATIC_DIR.exists():
     app.mount(
-        "/static/portfolio", StaticFiles(directory=str(_static_dir)), name="static"
+        "/static/portfolio", StaticFiles(directory=str(_STATIC_DIR)), name="static"
     )
