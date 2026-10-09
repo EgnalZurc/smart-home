@@ -143,15 +143,24 @@ class MqttHandler:
 
         logger.info("Connecting to MQTT %s:%d", self.broker, self.port)
 
-        # Retry connection
+        # Retry connection with exponential backoff
+        delay = self.retry_delay
+        max_delay = 60  # Cap at 60 seconds
         for attempt in range(self.connect_retries):
             try:
                 self._client.connect(self.broker, self.port, self.keepalive)
                 self._client.loop_start()
                 return
             except Exception as e:
-                logger.warning("MQTT connection attempt %d: %s", attempt + 1, e)
-                time.sleep(self.retry_delay)
+                logger.warning(
+                    "MQTT connection attempt %d/%d: %s (retry in %ds)",
+                    attempt + 1,
+                    self.connect_retries,
+                    e,
+                    delay,
+                )
+                time.sleep(delay)
+                delay = min(delay * 2, max_delay)  # Exponential backoff
 
         raise ConnectionError(f"Could not connect to MQTT {self.broker}:{self.port}")
 

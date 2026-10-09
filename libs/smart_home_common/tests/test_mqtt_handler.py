@@ -360,6 +360,49 @@ class TestConnectionLifecycle:
 
         assert mock_client.connect.call_count == 3
 
+    @patch("smart_home_common.mqtt.handler.time.sleep")
+    @patch("smart_home_common.mqtt.handler.mqtt.Client")
+    def test_start_uses_exponential_backoff(self, mock_client_class, mock_sleep, persist_file):
+        """Retry delay doubles on each failure (exponential backoff)."""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        # Fail 4 times, succeed on 5th
+        mock_client.connect.side_effect = [
+            ConnectionError("fail1"),
+            ConnectionError("fail2"),
+            ConnectionError("fail3"),
+            ConnectionError("fail4"),
+            None,
+        ]
+
+        handler = MqttHandler(
+            "mosquitto", 1883, ["sensor1"], connect_retries=5, retry_delay=1
+        )
+        handler.start()
+
+        # Verify exponential backoff: 1s, 2s, 4s, 8s
+        assert mock_sleep.call_count == 4
+        sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
+        assert sleep_calls == [1, 2, 4, 8]
+
+    @patch("smart_home_common.mqtt.handler.time.sleep")
+    @patch("smart_home_common.mqtt.handler.mqtt.Client")
+    def test_exponential_backoff_caps_at_60_seconds(self, mock_client_class, mock_sleep, persist_file):
+        """Backoff delay is capped at 60 seconds."""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        # Fail 8 times, succeed on 9th
+        mock_client.connect.side_effect = [ConnectionError("fail")] * 8 + [None]
+
+        handler = MqttHandler(
+            "mosquitto", 1883, ["sensor1"], connect_retries=9, retry_delay=8
+        )
+        handler.start()
+
+        # With initial delay=8: 8, 16, 32, 60, 60, 60, 60, 60 (capped at 60)
+        sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
+        assert sleep_calls == [8, 16, 32, 60, 60, 60, 60, 60]
+
     @patch("smart_home_common.mqtt.handler.mqtt.Client")
     def test_stop_saves_and_disconnects(self, mock_client_class, persist_file):
         mock_client = MagicMock()

@@ -31,7 +31,8 @@ services:
       - smart-home
 
   zigbee2mqtt:
-    image: koenkk/zigbee2mqtt:latest
+    # Pin to specific version to avoid unexpected breaking changes from :latest
+    image: koenkk/zigbee2mqtt:1.40.2
     container_name: zigbee2mqtt
     restart: on-failure:5
     mem_limit: 128m
