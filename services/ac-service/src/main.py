@@ -93,7 +93,9 @@ FAN_SPEED_MAX = int(os.environ.get("FAN_SPEED_MAX", "3"))
 
 Z2M_DISCOVERY_TIMEOUT = float(os.environ.get("Z2M_DISCOVERY_TIMEOUT", "10.0"))
 MAX_HISTORY_PER_SENSOR = int(os.environ.get("MAX_HISTORY_PER_SENSOR", "200"))
-CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
+# CORS: require explicit origins in production
+_cors_origins_raw = os.environ.get("CORS_ORIGINS", "")
+CORS_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 LOCATION_LATITUDE = float(os.environ.get("LOCATION_LATITUDE", "40.396644"))
 LOCATION_LONGITUDE = float(os.environ.get("LOCATION_LONGITUDE", "-3.622511"))
 MELCLOUD_UPDATE_INTERVAL = int(os.environ.get("MELCLOUD_UPDATE_INTERVAL", "30"))
@@ -241,19 +243,22 @@ async def lifespan(app: FastAPI):
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
+# Disable interactive API docs in production
+_is_production = os.environ.get("ENVIRONMENT", "production") == "production"
+
 app = FastAPI(
     title="AC Service",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/swagger",
-    redoc_url="/redoc",
+    docs_url=None if _is_production else "/swagger",
+    redoc_url=None if _is_production else "/redoc",
 )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
-    allow_credentials=True,
+    allow_credentials=bool(CORS_ORIGINS),  # Only with explicit origins
 )
 
 
