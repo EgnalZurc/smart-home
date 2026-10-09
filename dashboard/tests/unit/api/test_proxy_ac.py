@@ -275,23 +275,25 @@ class TestPostEndpoints:
     @pytest.mark.asyncio
     async def test_update_manual_param_success(self):
         """Updates single param successfully."""
+        request = make_mock_request()
         with patch(PROXY_HTTPX) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response({"temp": 22})
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await update_ac_manual_param("temp", "22")
+            result = await update_ac_manual_param("temp", "22", request)
             assert result["temp"] == 22
 
     @pytest.mark.asyncio
     async def test_update_manual_param_forwards_query(self):
         """Single-param update forwards param/value as a query string."""
+        request = make_mock_request()
         with patch(PROXY_HTTPX) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response({"ok": True})
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            await update_ac_manual_param("temp", "22")
+            await update_ac_manual_param("temp", "22", request)
 
             called_url = mock_instance.post.call_args.args[0]
             assert called_url.endswith("/api/ac/manual/param?param=temp&value=22")
@@ -521,18 +523,20 @@ class TestErrorHandlingPaths:
     @pytest.mark.asyncio
     async def test_update_manual_param_network_error(self):
         """Raises 503 on network error updating single param."""
+        request = make_mock_request()
         with patch(PROXY_HTTPX) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.side_effect = Exception("Connection refused")
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await update_ac_manual_param("temp", "22")
+                await update_ac_manual_param("temp", "22", request)
             assert exc.value.status_code == 503
 
     @pytest.mark.asyncio
     async def test_update_manual_param_validation_error(self):
         """Raises HTTPException on validation error updating param."""
+        request = make_mock_request()
         with patch(PROXY_HTTPX) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response(
@@ -541,7 +545,7 @@ class TestErrorHandlingPaths:
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await update_ac_manual_param("invalid", "value")
+                await update_ac_manual_param("invalid", "value", request)
             assert exc.value.status_code == 400
 
 

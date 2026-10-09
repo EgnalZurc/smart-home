@@ -98,6 +98,7 @@ class TestPostEndpoints:
     @pytest.mark.asyncio
     async def test_add_year_success(self):
         """Adds new year successfully."""
+        request = make_mock_request()
         resp_data = {"year": 2025, "momentos": []}
 
         with patch(HTTPX_PATCH) as mock_client:
@@ -105,7 +106,7 @@ class TestPostEndpoints:
             mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await add_vacaciones_year()
+            result = await add_vacaciones_year(request)
             assert result == resp_data
 
     @pytest.mark.asyncio
@@ -129,6 +130,7 @@ class TestDeleteEndpoint:
     @pytest.mark.asyncio
     async def test_delete_year_success(self):
         """Deletes year successfully."""
+        request = make_mock_request()
         resp_data = {"status": "deleted"}
 
         with patch(HTTPX_PATCH) as mock_client:
@@ -136,12 +138,13 @@ class TestDeleteEndpoint:
             mock_instance.delete.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await delete_vacaciones_year(2024)
+            result = await delete_vacaciones_year(2024, request)
             assert result == resp_data
 
     @pytest.mark.asyncio
     async def test_delete_year_not_found(self):
         """Returns error when year not found."""
+        request = make_mock_request()
         with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.delete.return_value = make_mock_response(
@@ -150,12 +153,13 @@ class TestDeleteEndpoint:
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await delete_vacaciones_year(1999)
+                await delete_vacaciones_year(1999, request)
             assert exc.value.status_code == 404
 
     @pytest.mark.asyncio
     async def test_delete_year_cannot_delete_only(self):
         """Returns error when trying to delete last year."""
+        request = make_mock_request()
         with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.delete.return_value = make_mock_response(
@@ -164,17 +168,18 @@ class TestDeleteEndpoint:
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await delete_vacaciones_year(2024)
+                await delete_vacaciones_year(2024, request)
             assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
     async def test_delete_year_service_error(self):
         """Raises 503 when service unavailable."""
+        request = make_mock_request()
         with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.delete.side_effect = Exception("Connection refused")
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await delete_vacaciones_year(2024)
+                await delete_vacaciones_year(2024, request)
             assert exc.value.status_code == 503
