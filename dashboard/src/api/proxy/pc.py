@@ -3,7 +3,9 @@
 Proxies requests to valheim-admin which controls the PC agent.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+
+from api.auth_helpers import require_super
 
 from .base import ServiceProxy
 
@@ -33,8 +35,9 @@ async def get_pc_mode():
 
 
 @router.post("/mode/{mode}")
-async def set_pc_mode(mode: str):
+async def set_pc_mode(mode: str, request: Request):
     """Set PC power profile mode (gaming, servidor, balanced)."""
+    require_super(request)
     if mode not in ("gaming", "servidor", "balanced"):
         raise HTTPException(400, "Invalid mode. Use: gaming, servidor, balanced")
     return await _proxy.post(f"/api/pc/mode/{mode}")

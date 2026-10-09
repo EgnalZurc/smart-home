@@ -29,6 +29,11 @@ def make_mock_response(data, status_code=200):
     return resp
 
 
+def make_mock_request():
+    """Create a mock FastAPI request."""
+    return MagicMock()
+
+
 # All tests mock httpx at the base module level since ServiceProxy uses httpx
 HTTPX_PATCH = "libs.service_proxy.proxy.httpx.AsyncClient"
 
@@ -115,30 +120,33 @@ class TestPostEndpoints:
     @pytest.mark.asyncio
     async def test_refresh_all_success(self):
         """Refreshes all monitors."""
+        request = make_mock_request()
         resp_data = {"status": "refreshed"}
         with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await refresh_portfolio()
+            result = await refresh_portfolio(request)
             assert result == resp_data
 
     @pytest.mark.asyncio
     async def test_refresh_monitor_success(self):
         """Refreshes specific monitor."""
+        request = make_mock_request()
         resp_data = {"status": "refreshed", "monitor": "etf"}
         with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await refresh_portfolio_monitor("etf")
+            result = await refresh_portfolio_monitor("etf", request)
             assert result == resp_data
 
     @pytest.mark.asyncio
     async def test_refresh_monitor_not_found(self):
         """Returns error for unknown monitor."""
+        request = make_mock_request()
         with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response(
@@ -147,36 +155,39 @@ class TestPostEndpoints:
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await refresh_portfolio_monitor("unknown")
+                await refresh_portfolio_monitor("unknown", request)
             assert exc.value.status_code == 404
 
     @pytest.mark.asyncio
     async def test_reload_config_success(self):
         """Reloads configuration."""
+        request = make_mock_request()
         resp_data = {"status": "reloaded"}
         with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await reload_portfolio_config()
+            result = await reload_portfolio_config(request)
             assert result == resp_data
 
     @pytest.mark.asyncio
     async def test_send_notification_success(self):
         """Sends test notification."""
+        request = make_mock_request()
         resp_data = {"status": "sent"}
         with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await send_test_notification()
+            result = await send_test_notification(request)
             assert result == resp_data
 
     @pytest.mark.asyncio
     async def test_send_notification_telegram_error(self):
         """Returns error when Telegram fails."""
+        request = make_mock_request()
         with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
             mock_instance.post.return_value = make_mock_response(
@@ -185,5 +196,5 @@ class TestPostEndpoints:
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             with pytest.raises(HTTPException) as exc:
-                await send_test_notification()
+                await send_test_notification(request)
             assert exc.value.status_code == 500
