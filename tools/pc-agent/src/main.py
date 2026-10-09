@@ -58,7 +58,7 @@ POWER_PROFILES = {
 MAX_UPLOAD_BYTES = 600 * 1024 * 1024
 
 if not API_TOKEN:
-    logger.warning("PC_AGENT_TOKEN not set — API is unprotected!")
+    logger.error("PC_AGENT_TOKEN not set — authenticated endpoints will return 503!")
 
 # ── Docker client ─────────────────────────────────────────────────────────────
 #
@@ -122,9 +122,16 @@ app.add_middleware(
 
 
 def require_auth(x_api_token: str = Header(None, alias="X-Api-Token")):
-    """Validate API token from header."""
+    """Validate API token from header.
+
+    Fails closed: if PC_AGENT_TOKEN is not configured, all authenticated
+    endpoints return 503 instead of silently accepting all requests.
+    """
     if not API_TOKEN:
-        return
+        raise HTTPException(
+            status_code=503,
+            detail="PC_AGENT_TOKEN not configured - service unavailable",
+        )
     if x_api_token != API_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid or missing API token")
 
