@@ -14,14 +14,60 @@ Windows (``PermissionError``/``WinError 32``) and leaks state between tests on
 every platform. The source helpers now expose context managers that always
 close the connection; the ``temp_auth_db`` fixture below gives each test a fresh
 database and tears the directory down tolerantly as a backstop.
+
+Authorization bypass for proxy unit tests
+-----------------------------------------
+The proxy endpoints now call ``require_super(request)`` for admin operations.
+Unit tests that call these functions directly (not via TestClient with a real
+auth flow) need to bypass this check. The ``mock_require_super`` fixture patches
+the auth check to always succeed, returning a fake admin username.
 """
 
 import gc
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def mock_require_super():
+    """Bypass require_super authorization for direct function calls in tests.
+
+    This fixture is autouse=True so it applies to all tests automatically.
+    Tests that call proxy functions directly (not via TestClient) would otherwise
+    fail with 401/403 because there's no real authenticated request.
+
+    We patch in EVERY module that imports the function, because Python's
+    `from X import Y` creates a local reference that isn't updated when X.Y
+    is patched. The proxy modules import require_super at module level.
+
+    For integration tests that DO want to test auth, they can override this
+    fixture locally or use TestClient with proper auth setup.
+    """
+    # All modules that import require_super and need it bypassed in tests
+    patch_targets = [
+        "api.auth_helpers.require_super",  # The source module
+        "api.proxy.ac.require_super",
+        "api.proxy.vacaciones.require_super",
+        "api.proxy.casita.require_super",
+        "api.proxy.portfolio.require_super",
+        "api.proxy.pc.require_super",
+        "api.proxy.baby_gifts.require_super",
+    ]
+
+    # Stack multiple patches
+    patches = [patch(target, return_value="test_admin") for target in patch_targets]
+
+    for p in patches:
+        p.start()
+
+    yield
+
+    for p in patches:
+        p.stop()
 
 
 @pytest.fixture

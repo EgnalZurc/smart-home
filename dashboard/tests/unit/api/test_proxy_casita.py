@@ -242,6 +242,7 @@ class TestPostEndpoints:
     @pytest.mark.asyncio
     async def test_run_scraping_success(self):
         """Triggers scraping successfully."""
+        request = make_mock_request()
         resp_data = {"status": "started"}
 
         with patch(HTTPX_PATCH) as mock_client:
@@ -249,12 +250,13 @@ class TestPostEndpoints:
             mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await run_casita_scraping()
+            result = await run_casita_scraping(request)
             assert result == resp_data
 
     @pytest.mark.asyncio
     async def test_run_summary_success(self):
         """Triggers summary generation successfully."""
+        request = make_mock_request()
         resp_data = {"status": "started"}
 
         with patch(HTTPX_PATCH) as mock_client:
@@ -262,5 +264,5 @@ class TestPostEndpoints:
             mock_instance.post.return_value = make_mock_response(resp_data)
             mock_client.return_value.__aenter__.return_value = mock_instance
 
-            result = await run_casita_summary()
+            result = await run_casita_summary(request)
             assert result == resp_data
