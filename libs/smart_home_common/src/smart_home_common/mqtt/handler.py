@@ -65,6 +65,8 @@ class MqttHandler:
         retry_delay: int = 2,
         keepalive: int = 60,
         max_history: int = 200,
+        username: str | None = None,
+        password: str | None = None,
     ):
         self.broker = broker
         self.port = port
@@ -73,6 +75,8 @@ class MqttHandler:
         self.retry_delay = retry_delay
         self.keepalive = keepalive
         self.max_history = max_history
+        self.username = username
+        self.password = password
         self.readings: dict[str, SensorReading] = {}  # Last reading per sensor
         self.history: dict[str, list[SensorReading]] = {}  # FIFO history per sensor
         self._lock = threading.Lock()
@@ -133,17 +137,31 @@ class MqttHandler:
         self._client.on_message = self._on_message
         self._client.on_disconnect = self._on_disconnect
 
+        # Set credentials if provided
+        if self.username and self.password:
+            self._client.username_pw_set(self.username, self.password)
+            logger.info("MQTT auth enabled for user '%s'", self.username)
+
         logger.info("Connecting to MQTT %s:%d", self.broker, self.port)
 
-        # Retry connection
+        # Retry connection with exponential backoff
+        delay = self.retry_delay
+        max_delay = 60  # Cap at 60 seconds
         for attempt in range(self.connect_retries):
             try:
                 self._client.connect(self.broker, self.port, self.keepalive)
                 self._client.loop_start()
                 return
             except Exception as e:
-                logger.warning("MQTT connection attempt %d: %s", attempt + 1, e)
-                time.sleep(self.retry_delay)
+                logger.warning(
+                    "MQTT connection attempt %d/%d: %s (retry in %ds)",
+                    attempt + 1,
+                    self.connect_retries,
+                    e,
+                    delay,
+                )
+                time.sleep(delay)
+                delay = min(delay * 2, max_delay)  # Exponential backoff
 
         raise ConnectionError(f"Could not connect to MQTT {self.broker}:{self.port}")
 

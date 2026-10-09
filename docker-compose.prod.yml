@@ -13,17 +13,21 @@ services:
     restart: on-failure:5
     mem_limit: 16m
     memswap_limit: 16m
-    ports:
-      - 1883:1883
+    # Port 1883 is NOT exposed to host — only reachable from smart-home network.
+    # Reduces attack surface; services connect via Docker DNS (mosquitto:1883).
+    expose:
+      - 1883
     volumes:
       - ./infrastructure/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./infrastructure/mosquitto/passwd:/mosquitto/config/passwd:ro
       - ./data/mosquitto/data:/mosquitto/data
       - ./data/mosquitto/log:/mosquitto/log
     networks:
       - smart-home
 
   zigbee2mqtt:
-    image: koenkk/zigbee2mqtt:latest
+    # Pin to specific version to avoid breaking changes from :latest
+    image: koenkk/zigbee2mqtt:1.40.2
     container_name: zigbee2mqtt
     restart: on-failure:5
     mem_limit: 128m

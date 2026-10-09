@@ -15,21 +15,39 @@ logger = logging.getLogger(__name__)
 class Zigbee2MQTTClient:
     """Client to interact with Zigbee2MQTT via MQTT."""
 
-    def __init__(self, mqtt_broker: str, mqtt_port: int = 1883, timeout: float = 10.0):
+    def __init__(
+        self,
+        mqtt_broker: str,
+        mqtt_port: int = 1883,
+        timeout: float = 10.0,
+        username: str | None = None,
+        password: str | None = None,
+    ):
         """Initializes the client.
 
         Args:
             mqtt_broker: MQTT broker host (e.g., mosquitto)
             mqtt_port: MQTT broker port (default: 1883)
             timeout: Timeout in seconds to get responses
+            username: MQTT username for authentication (optional)
+            password: MQTT password for authentication (optional)
         """
         self.mqtt_broker = mqtt_broker
         self.mqtt_port = mqtt_port
         self.timeout = timeout
+        self.username = username
+        self.password = password
         self.devices: list[dict[str, Any]] = []
         self.response_received = False
 
-    def _on_connect(self, client, userdata, flags, rc, properties=None):
+    def _on_connect(
+        self,
+        client: mqtt.Client,
+        userdata: Any,
+        flags: dict[str, Any],
+        rc: int,
+        properties: mqtt.Properties | None = None,
+    ) -> None:
         """Callback on connect."""
         if rc == 0:
             logger.debug("Connected to MQTT %s:%d", self.mqtt_broker, self.mqtt_port)
@@ -38,7 +56,12 @@ class Zigbee2MQTTClient:
         else:
             logger.error("Error connecting to MQTT: rc=%d", rc)
 
-    def _on_message(self, client, userdata, msg):
+    def _on_message(
+        self,
+        client: mqtt.Client,
+        userdata: Any,
+        msg: mqtt.MQTTMessage,
+    ) -> None:
         """Callback on message received."""
         if msg.topic == "zigbee2mqtt/bridge/devices":
             try:
@@ -66,6 +89,10 @@ class Zigbee2MQTTClient:
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         client.on_connect = self._on_connect
         client.on_message = self._on_message
+
+        # Set credentials if provided
+        if self.username and self.password:
+            client.username_pw_set(self.username, self.password)
 
         try:
             logger.info(

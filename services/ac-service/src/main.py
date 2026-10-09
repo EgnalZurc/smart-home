@@ -58,6 +58,8 @@ logger = logging.getLogger(__name__)
 
 MQTT_BROKER = os.environ.get("MQTT_BROKER", "mosquitto")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
+MQTT_USER = os.environ.get("MQTT_USER")  # Optional: for authenticated MQTT
+MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD")  # Optional: for authenticated MQTT
 MQTT_CONNECT_RETRIES = int(os.environ.get("MQTT_CONNECT_RETRIES", "30"))
 MQTT_RETRY_DELAY = int(os.environ.get("MQTT_RETRY_DELAY", "2"))
 MQTT_KEEPALIVE = int(os.environ.get("MQTT_KEEPALIVE", "60"))
@@ -126,7 +128,13 @@ async def lifespan(app: FastAPI):
     logger.info("=== AC Service starting ===")
 
     # 0. Discover sensors from Zigbee2MQTT
-    z2m = Zigbee2MQTTClient(MQTT_BROKER, MQTT_PORT, timeout=Z2M_DISCOVERY_TIMEOUT)
+    z2m = Zigbee2MQTTClient(
+        MQTT_BROKER,
+        MQTT_PORT,
+        timeout=Z2M_DISCOVERY_TIMEOUT,
+        username=MQTT_USER,
+        password=MQTT_PASSWORD,
+    )
     sensor_names = z2m.discover_temperature_sensors()
     if not sensor_names:
         logger.warning("No sensors discovered — continuing without sensors")
@@ -140,6 +148,8 @@ async def lifespan(app: FastAPI):
         retry_delay=MQTT_RETRY_DELAY,
         keepalive=MQTT_KEEPALIVE,
         max_history=MAX_HISTORY_PER_SENSOR,
+        username=MQTT_USER,
+        password=MQTT_PASSWORD,
     )
     mqtt_handler.start()
     mqtt_handler.set_error_tracker(error_tracker)

@@ -60,6 +60,8 @@ class TestInit:
         assert client.mqtt_broker == "mosquitto"
         assert client.mqtt_port == 1883
         assert client.timeout == 10.0
+        assert client.username is None
+        assert client.password is None
         assert client.devices == []
         assert client.response_received is False
 
@@ -68,6 +70,15 @@ class TestInit:
         assert client.mqtt_broker == "broker.local"
         assert client.mqtt_port == 8883
         assert client.timeout == 5.0
+
+    def test_with_credentials(self):
+        client = Zigbee2MQTTClient(
+            "mosquitto",
+            username="testuser",
+            password="testpass",
+        )
+        assert client.username == "testuser"
+        assert client.password == "testpass"
 
 
 class TestCallbacks:
@@ -137,6 +148,43 @@ class TestGetDevices:
         # Cleanup always runs.
         fake_client.loop_stop.assert_called_once()
         fake_client.disconnect.assert_called_once()
+
+    @patch(MQTT_PATH)
+    def test_connect_with_credentials(self, mock_mqtt):
+        """Credentials are set when provided."""
+        fake_client = mock_mqtt.Client.return_value
+        client = Zigbee2MQTTClient(
+            "mosquitto",
+            timeout=1.0,
+            username="testuser",
+            password="testpass",
+        )
+
+        def deliver_devices():
+            client.response_received = True
+            client.devices = SAMPLE_DEVICES
+
+        fake_client.loop_start.side_effect = deliver_devices
+
+        client.get_devices()
+
+        fake_client.username_pw_set.assert_called_once_with("testuser", "testpass")
+
+    @patch(MQTT_PATH)
+    def test_connect_without_credentials(self, mock_mqtt):
+        """Credentials are not set when not provided."""
+        fake_client = mock_mqtt.Client.return_value
+        client = Zigbee2MQTTClient("mosquitto", timeout=1.0)
+
+        def deliver_devices():
+            client.response_received = True
+            client.devices = SAMPLE_DEVICES
+
+        fake_client.loop_start.side_effect = deliver_devices
+
+        client.get_devices()
+
+        fake_client.username_pw_set.assert_not_called()
 
     @patch(MQTT_PATH)
     def test_timeout_raises_and_cleans_up(self, mock_mqtt):

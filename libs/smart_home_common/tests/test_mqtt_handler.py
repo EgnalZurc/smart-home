@@ -167,6 +167,26 @@ class TestMqttHandlerInit:
         assert handler.keepalive == 30
         assert handler.max_history == 100
 
+    def test_auth_credentials(self, persist_file):
+        handler = MqttHandler(
+            broker="mosquitto",
+            port=1883,
+            sensor_names=["sensor1"],
+            username="testuser",
+            password="testpass",
+        )
+        assert handler.username == "testuser"
+        assert handler.password == "testpass"
+
+    def test_auth_credentials_default_none(self, persist_file):
+        handler = MqttHandler(
+            broker="mosquitto",
+            port=1883,
+            sensor_names=["sensor1"],
+        )
+        assert handler.username is None
+        assert handler.password is None
+
 
 # ---------------------------------------------------------------------------
 # Persistence tests
@@ -288,6 +308,32 @@ class TestConnectionLifecycle:
         assert mock_client.on_disconnect == handler._on_disconnect
 
     @patch("smart_home_common.mqtt.handler.mqtt.Client")
+    def test_start_sets_credentials_when_provided(self, mock_client_class, persist_file):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        handler = MqttHandler(
+            "mosquitto", 1883, ["sensor1"],
+            connect_retries=1,
+            username="testuser",
+            password="testpass",
+        )
+        handler.start()
+
+        mock_client.username_pw_set.assert_called_once_with("testuser", "testpass")
+        mock_client.connect.assert_called_once()
+
+    @patch("smart_home_common.mqtt.handler.mqtt.Client")
+    def test_start_skips_credentials_when_not_provided(self, mock_client_class, persist_file):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        handler = MqttHandler("mosquitto", 1883, ["sensor1"], connect_retries=1)
+        handler.start()
+
+        mock_client.username_pw_set.assert_not_called()
+
+    @patch("smart_home_common.mqtt.handler.mqtt.Client")
     def test_start_retries_on_failure(self, mock_client_class, persist_file):
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
@@ -305,6 +351,30 @@ class TestConnectionLifecycle:
 
         assert mock_client.connect.call_count == 3
         mock_client.loop_start.assert_called_once()
+
+    @patch("smart_home_common.mqtt.handler.time.sleep")
+    @patch("smart_home_common.mqtt.handler.mqtt.Client")
+    def test_start_uses_exponential_backoff(self, mock_client_class, mock_sleep, persist_file):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        # Fail 4 times, succeed on 5th
+        mock_client.connect.side_effect = [
+            ConnectionError("fail1"),
+            ConnectionError("fail2"),
+            ConnectionError("fail3"),
+            ConnectionError("fail4"),
+            None,
+        ]
+
+        handler = MqttHandler(
+            "mosquitto", 1883, ["sensor1"], connect_retries=5, retry_delay=1
+        )
+        handler.start()
+
+        # Verify exponential backoff: 1, 2, 4, 8 seconds
+        assert mock_sleep.call_count == 4
+        sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
+        assert sleep_calls == [1, 2, 4, 8]
 
     @patch("smart_home_common.mqtt.handler.mqtt.Client")
     def test_start_raises_after_max_retries(self, mock_client_class, persist_file):

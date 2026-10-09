@@ -25,7 +25,22 @@ project_root/
 
 1. Copy `configuration.example.yaml` to `/data/zigbee2mqtt/configuration.yaml`
 2. Generate a unique network key for your Zigbee network
-3. Configure your devices in the `devices` section after pairing
+3. **Configure MQTT credentials** (see below)
+4. Configure your devices in the `devices` section after pairing
+
+## MQTT Authentication
+
+Mosquitto requires authentication. Add your credentials to `configuration.yaml`:
+
+```yaml
+mqtt:
+  base_topic: zigbee2mqtt
+  server: mqtt://mosquitto:1883
+  user: zigbee2mqtt
+  password: <your-password-here>
+```
+
+The credentials must match those created with `mosquitto_passwd` on the Pi. See `infrastructure/mosquitto/README.md` for setup instructions.
 
 ## Files Description
 
