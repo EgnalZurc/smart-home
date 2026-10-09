@@ -661,7 +661,8 @@ jobs:
       - lint-and-test-pc-agent
       - lint-and-test-async-http-client
       - lint-and-test-smart-home-common
-    if: always()
+    # Run after all lint jobs complete (success, failure, or skipped), but not if workflow was cancelled
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     steps:
       - name: Check Quality Results
