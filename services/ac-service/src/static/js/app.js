@@ -15,12 +15,15 @@ const i18n = window.i18n;
 let _wasConnected = true;
 
 // -- Poll -----------------------------------------------------------------------
+let _authErrorShown = false;
+
 async function poll() {
     try {
         const [status, sensData] = await Promise.all([fetchStatus(), fetchSensors()]);
         const sensors = sensData.sensors || [];
 
         if (!_wasConnected) { _wasConnected = true; }
+        _authErrorShown = false;  // Reset on successful poll
 
         updateAvgTemp(status);
         updateConnectionStatus(status.mqtt_connected, i18n);
@@ -49,9 +52,19 @@ async function poll() {
 
     } catch (err) {
         console.error('Poll error:', err);
+        
+        // Handle auth errors specially - show message once, don't spam
+        if (err.name === 'AuthError' && !_authErrorShown) {
+            _authErrorShown = true;
+            document.getElementById('status-line').textContent = 'Auth Error';
+            document.getElementById('status-dot').className = 'w-1.5 h-1.5 rounded-full bg-red-400';
+            showToast(err.message || 'Authentication error - please log in', 'error', 10000);
+            return;  // Don't continue showing connection lost messages
+        }
+        
         document.getElementById('status-line').textContent = 'Error';
         document.getElementById('status-dot').className = 'w-1.5 h-1.5 rounded-full bg-red-400';
-        if (_wasConnected) {
+        if (_wasConnected && !_authErrorShown) {
             showToast(i18n.t('toast.connectionLost'), 'error', 5000);
             _wasConnected = false;
         }
@@ -85,11 +98,22 @@ function showApp() {
         await Promise.race([loadHistory(), new Promise(r => setTimeout(r, 4000))]);
     } catch { /* non-fatal */ }
 
+    let initError = null;
     try {
         await Promise.race([poll(), new Promise(r => setTimeout(r, 6000))]);
-    } catch { /* non-fatal */ }
+    } catch (err) {
+        initError = err;
+    }
 
+    // ALWAYS show the app, even if initial poll failed
+    // This prevents infinite "Loading..." state
     showApp();
+    
+    // If there was an auth error on init, show it now after app is visible
+    if (initError && initError.name === 'AuthError') {
+        showToast(initError.message || 'Authentication error - please log in', 'error', 10000);
+    }
+    
     setInterval(poll, 5000);
 })();
 
