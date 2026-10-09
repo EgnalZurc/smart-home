@@ -809,7 +809,8 @@ jobs:
           host: ${{ secrets.PI_SSH_HOST }}
           username: ${{ secrets.PI_SSH_USER }}
           key: ${{ secrets.PI_SSH_KEY }}
-          source: "infrastructure/nginx/conf.d/*,infrastructure/nginx/nginx.conf"
+          # Copy all nginx config: main config, site configs, security headers, and static HTML
+          source: "infrastructure/nginx/nginx.conf,infrastructure/nginx/conf.d/*,infrastructure/nginx/snippets/*,infrastructure/nginx/html/*"
           target: "~/smart-home-prod/"
           strip_components: 0
 
