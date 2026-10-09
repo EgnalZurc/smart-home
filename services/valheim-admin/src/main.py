@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
@@ -44,13 +45,18 @@ _client_config = ServiceClientConfig(
 )
 pc_agent = AsyncServiceClient(_client_config)
 
-app = FastAPI(title="Valheim Admin", version="2.1.0")
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle.
 
-@app.on_event("shutdown")
-async def _close_clients():
-    """Close the shared pc-agent HTTP client on application shutdown."""
+    On shutdown, close the shared pc-agent HTTP client.
+    """
+    yield
     await pc_agent.aclose()
+
+
+app = FastAPI(title="Valheim Admin", version="2.1.0", lifespan=lifespan)
 
 
 # ── Validation ──────────────────────────────────────────────────────────────
