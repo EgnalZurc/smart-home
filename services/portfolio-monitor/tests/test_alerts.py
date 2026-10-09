@@ -106,6 +106,30 @@ class TestAlertsStateManagement:
             state = _load_alerts_state()
         assert state == {}
 
+    def test_save_state_is_atomic_on_crash(self, temp_data_dir):
+        """A crash mid-write keeps the previous alerts_state.json intact.
+
+        _save_alerts_state writes via atomic_write_json (temp file +
+        os.replace). If serialization fails partway, the old file must survive
+        and no stray .tmp file should be left behind.
+        """
+        from alerts import _load_alerts_state, _save_alerts_state
+
+        good = {"alert-1": {"triggered": True}}
+        _save_alerts_state(good)
+
+        with patch(
+            "smart_home_common.persistence.atomic_json.json.dump",
+            side_effect=ValueError("boom"),
+        ):
+            # atomic_write_json re-raises; _save_alerts_state swallows and logs.
+            _save_alerts_state({"alert-2": {"completed": True}})
+
+        # Previous good state is still loadable and unchanged.
+        assert _load_alerts_state() == good
+        # No leftover temp files.
+        assert not list(temp_data_dir.glob(".alerts_state.json.*.tmp"))
+
 
 class TestGetAlerts:
     """Tests for alert retrieval functions."""

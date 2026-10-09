@@ -583,3 +583,36 @@ class TestStateFileCorruption:
         ):
             # Should not crash
             orch._save_state()
+
+    def test_save_state_is_atomic_on_crash(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """A crash mid-write leaves the previous state.json intact (atomic write).
+
+        _save_state writes via smart_home_common.atomic_write_json (temp file +
+        os.replace). If json.dump blows up partway through, the real target must
+        be untouched and no stray .tmp file should remain.
+        """
+        import json as _json
+
+        from orchestrator import Orchestrator
+
+        state_file = temp_data_dir / "state.json"
+        state_file.write_text('{"last_etf_run": "good"}', encoding="utf-8")
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+
+        with patch("orchestrator.STATE_FILE", state_file):
+            with patch(
+                "smart_home_common.persistence.atomic_json.json.dump",
+                side_effect=ValueError("boom"),
+            ):
+                # atomic_write_json re-raises; _save_state swallows and logs.
+                orch._save_state()
+
+        # Previous content survived — not truncated.
+        assert state_file.read_text(encoding="utf-8") == '{"last_etf_run": "good"}'
+        # It is still valid JSON.
+        _json.loads(state_file.read_text(encoding="utf-8"))
+        # No leftover temp files in the data dir.
+        assert not list(temp_data_dir.glob(".state.json.*.tmp"))

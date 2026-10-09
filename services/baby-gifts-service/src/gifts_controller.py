@@ -29,8 +29,10 @@ Invitation structure (SQLite):
 
 import json
 import logging
+import os
 import secrets
 import sqlite3
+import tempfile
 import threading
 from datetime import datetime, timedelta
 
@@ -106,11 +108,42 @@ def _load_gifts() -> dict:
 
 
 def _save_gifts(data: dict):
-    """Save gifts data to JSON file."""
+    """Save gifts data to JSON file atomically.
+
+    Writes to a temporary file in the same directory, fsyncs it, then renames
+    it over the target with os.replace() (atomic on POSIX and Windows). A crash
+    mid-write therefore leaves either the old complete gifts.json or the new
+    complete one — never a half-written file that _load_gifts would discard,
+    losing every reservation. The temp file must share the target's filesystem
+    for the rename to be atomic, hence dir=DATA_DIR.
+
+    This mirrors smart_home_common.persistence.atomic_write_json; it is inlined
+    because baby-gifts does not ship the shared library.
+    """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    GIFTS_FILE.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=DATA_DIR,
+            prefix=f".{GIFTS_FILE.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as f:
+            temp_path = f.name
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, GIFTS_FILE)  # atomic on POSIX and Windows
+        temp_path = None
+    finally:
+        # If replace never ran (exception during write), drop the stray temp file.
+        if temp_path is not None and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError as e:
+                logger.warning(f"Could not remove temp file {temp_path}: {e}")
 
 
 def get_gifts_data(include_admin: bool = False) -> dict:

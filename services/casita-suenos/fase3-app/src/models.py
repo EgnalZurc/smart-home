@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import ClassVar
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -195,8 +196,11 @@ class ScoreBreakdown:
     r17_coast: float  # 0 o 10 — provincia con costa
     r18_beach_plot: float  # 0 o 10 — bonus playa+terreno
 
-    # Puntuación máxima posible: 18 criterios × 10 = 180 pts
-    MAX_SCORE: float = 180.0
+    # Puntuación máxima posible: 18 criterios × 10 = 180 pts.
+    # ClassVar (no es un campo del dataclass): es una constante compartida por
+    # todas las instancias, sincronizada con scorer.MAX_SCORE. Sin ClassVar se
+    # convertiría en un campo con default y entraría en __init__/__eq__.
+    MAX_SCORE: ClassVar[float] = 180.0
 
     @property
     def total(self) -> float:
@@ -260,7 +264,7 @@ class ScoredProperty:
 
     @property
     def passes_alert_threshold(self) -> bool:
-        """60% de 180 = 108 pts."""
+        """66% de 180 = 119 pts (umbral radar)."""
         return (
             self.total_score >= 119.0
         )  # sincronizado con ALERT_THRESHOLD en scorer.py
