@@ -65,6 +65,8 @@ class MqttHandler:
         retry_delay: int = 2,
         keepalive: int = 60,
         max_history: int = 200,
+        username: str | None = None,
+        password: str | None = None,
     ):
         self.broker = broker
         self.port = port
@@ -73,6 +75,8 @@ class MqttHandler:
         self.retry_delay = retry_delay
         self.keepalive = keepalive
         self.max_history = max_history
+        self.username = username
+        self.password = password
         self.readings: dict[str, SensorReading] = {}  # Last reading per sensor
         self.history: dict[str, list[SensorReading]] = {}  # FIFO history per sensor
         self._lock = threading.Lock()
@@ -132,6 +136,10 @@ class MqttHandler:
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
         self._client.on_disconnect = self._on_disconnect
+
+        # Set authentication if provided
+        if self.username and self.password:
+            self._client.username_pw_set(self.username, self.password)
 
         logger.info("Connecting to MQTT %s:%d", self.broker, self.port)
 

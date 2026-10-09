@@ -1,0 +1,14 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Mosquitto Password File Template
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# This file is NOT used directly. Generate the real passwd file on the Pi:
+#
+#   docker exec mosquitto mosquitto_passwd -c /mosquitto/config/passwd zigbee2mqtt
+#   docker exec mosquitto mosquitto_passwd /mosquitto/config/passwd ac-service
+#
+# The real passwd file is stored in:
+#   ~/smart-home-prod/data/mosquitto/config/passwd
+#
+# DO NOT commit the real passwd file to git!
+# ═══════════════════════════════════════════════════════════════════════════════

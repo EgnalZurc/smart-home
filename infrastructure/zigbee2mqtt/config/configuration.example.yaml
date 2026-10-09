@@ -3,6 +3,9 @@ homeassistant:
 mqtt:
   base_topic: zigbee2mqtt
   server: mqtt://mosquitto:1883
+  # Authentication (required - create user with mosquitto_passwd)
+  user: zigbee2mqtt
+  password: CHANGE_ME  # Set the real password here after generating it
 serial:
   port: tcp://host.docker.internal:8282
   adapter: ember
