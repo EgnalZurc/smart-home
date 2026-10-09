@@ -38,21 +38,30 @@ The service runs a control loop that:
 
 (see `requirements.txt` for pinned versions)
 
-## Architecture (`src/`)
+## Architecture
+
+Service-local modules (`src/`):
 
 | File | Role |
 |------|------|
 | `main.py` | FastAPI app, lifespan wiring, and all HTTP routes |
 | `controllers/ac_controller.py` | Control loop, drives the state machine and MELCloud |
 | `controllers/state_machine.py` | Pure control logic (no I/O, fully unit-tested) |
-| `melcloud_client.py` | HTTP client for the MELCloud API (login, device state, commands) |
-| `mqtt_handler.py` | MQTT connection + in-memory sensor readings/history |
-| `zigbee2mqtt_client.py` | Startup discovery of temperature sensors from Zigbee2MQTT |
-| `subscription_manager.py` | Periodic polling (MELCloud state + Open-Meteo outdoor data) |
 | `ac_temp_scheduler.py` | Scheduled target-temperature adjustments |
-| `error_tracker.py` | Tracks active, categorized service errors |
+| `outdoor.py` | Open-Meteo outdoor weather/AQI fetcher |
+| `spa.py` | Serves the SPA HTML |
 | `state_persistence.py` | Load/save controller state to `/app/data/controller_state.json` |
 | `static/` | SPA assets (index.html, JS, i18n locales) |
+
+Shared modules (from `libs/smart_home_common`):
+
+| Module | Role |
+|--------|------|
+| `smart_home_common.clients.melcloud` | HTTP client for the MELCloud API (login, device state, commands) |
+| `smart_home_common.clients.zigbee` | Startup discovery of temperature sensors from Zigbee2MQTT |
+| `smart_home_common.mqtt.handler` | MQTT connection + in-memory sensor readings/history |
+| `smart_home_common.mqtt.subscription` | Periodic polling (MELCloud state + Open-Meteo outdoor data) |
+| `smart_home_common.utils.error_tracker` | Tracks active, categorized service errors |
 
 ### Startup sequence (`lifespan`)
 
