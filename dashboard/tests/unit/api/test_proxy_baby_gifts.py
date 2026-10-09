@@ -46,8 +46,8 @@ def make_mock_request(headers=None, json_data=None):
 
 @pytest.fixture
 def mock_require_super():
-    """Mock require_super to allow admin endpoints in tests."""
-    with patch("api.proxy.baby_gifts.require_super") as mock:
+    """Mock require_app_write to allow admin endpoints in tests."""
+    with patch("api.proxy.baby_gifts.require_app_write") as mock:
         mock.return_value = "testadmin"
         yield mock
 
@@ -67,7 +67,7 @@ class TestAdminEndpoints:
 
             result = await get_all_baby_gifts(request)
             assert result == gifts
-            mock_require_super.assert_called_once_with(request)
+            mock_require_super.assert_called_once_with(request, "babygifts")
 
     @pytest.mark.asyncio
     async def test_get_all_baby_gifts_service_error(self, mock_require_super):
@@ -95,7 +95,7 @@ class TestAdminEndpoints:
 
             result = await create_baby_gift(request)
             assert result == new_gift
-            mock_require_super.assert_called_once_with(request)
+            mock_require_super.assert_called_once_with(request, "babygifts")
 
     @pytest.mark.asyncio
     async def test_create_baby_gift_validation_error(self, mock_require_super):
@@ -126,7 +126,7 @@ class TestAdminEndpoints:
 
             result = await update_baby_gift("1", request)
             assert result == updated
-            mock_require_super.assert_called_once_with(request)
+            mock_require_super.assert_called_once_with(request, "babygifts")
 
     @pytest.mark.asyncio
     async def test_update_baby_gift_not_found(self, mock_require_super):
@@ -155,7 +155,7 @@ class TestAdminEndpoints:
 
             result = await delete_baby_gift("1", request)
             assert result["status"] == "deleted"
-            mock_require_super.assert_called_once_with(request)
+            mock_require_super.assert_called_once_with(request, "babygifts")
 
     @pytest.mark.asyncio
     async def test_delete_baby_gift_not_found(self, mock_require_super):
@@ -183,7 +183,7 @@ class TestAdminEndpoints:
 
             result = await admin_unreserve_baby_gift("1", request)
             assert result["reserved"] is False
-            mock_require_super.assert_called_once_with(request)
+            mock_require_super.assert_called_once_with(request, "babygifts")
 
     @pytest.mark.asyncio
     async def test_update_categories_success(self, mock_require_super):
@@ -200,7 +200,7 @@ class TestAdminEndpoints:
 
             result = await update_baby_gifts_categories(request)
             assert result["categories"] == categories
-            mock_require_super.assert_called_once_with(request)
+            mock_require_super.assert_called_once_with(request, "babygifts")
 
 
 class TestInvitationEndpoints:
@@ -219,7 +219,7 @@ class TestInvitationEndpoints:
 
             result = await get_baby_gifts_invitations(request)
             assert result == invitations
-            mock_require_super.assert_called_once_with(request)
+            mock_require_super.assert_called_once_with(request, "babygifts")
 
     @pytest.mark.asyncio
     async def test_create_invitation_success(self, mock_require_super):
@@ -234,7 +234,7 @@ class TestInvitationEndpoints:
 
             result = await create_baby_gifts_invitation(request)
             assert result == invitation
-            mock_require_super.assert_called_once_with(request)
+            mock_require_super.assert_called_once_with(request, "babygifts")
 
     @pytest.mark.asyncio
     async def test_delete_invitation_success(self, mock_require_super):
@@ -247,7 +247,7 @@ class TestInvitationEndpoints:
 
             result = await delete_baby_gifts_invitation("abc123", request)
             assert result["status"] == "deleted"
-            mock_require_super.assert_called_once_with(request)
+            mock_require_super.assert_called_once_with(request, "babygifts")
 
     @pytest.mark.asyncio
     async def test_revoke_invitation_success(self, mock_require_super):
@@ -260,7 +260,7 @@ class TestInvitationEndpoints:
 
             result = await revoke_baby_gifts_invitation("abc123", request)
             assert result["revoked"] is True
-            mock_require_super.assert_called_once_with(request)
+            mock_require_super.assert_called_once_with(request, "babygifts")
 
 
 class TestUserEndpoints:
