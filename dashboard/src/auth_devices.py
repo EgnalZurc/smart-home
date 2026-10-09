@@ -29,8 +29,9 @@ import logging
 import secrets
 import sqlite3
 import time
-from contextlib import contextmanager
-from pathlib import Path
+from contextlib import AbstractContextManager
+
+from smart_home_common.sqlite_helpers import sqlite_connection
 
 logger = logging.getLogger(__name__)
 
@@ -48,21 +49,16 @@ _SEPARATOR = ":"
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+# Connection management is delegated to smart_home_common.sqlite_helpers, which
+# enables WAL, commits on success, rolls back on error and ALWAYS closes the
+# connection so WAL (-wal/-shm) file handles are released (prevents WinError 32
+# on Windows temp-dir cleanup and state leaking between tests). ``_db`` reads
+# ``AUTH_DB_PATH`` at call time so late injection from main.py's lifespan still
+# takes effect.
 
 
-def _open_db() -> sqlite3.Connection:
-    """Open the auth SQLite database and ensure schema exists.
-
-    Returns a bare connection. Prefer the :func:`_db` context manager, which
-    commits on success and ALWAYS closes the connection so WAL (-wal/-shm) file
-    handles are released (prevents WinError 32 on Windows temp-dir cleanup and
-    state leaking between tests).
-    """
-    db_path = Path(AUTH_DB_PATH)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    """Create the device_tokens table and run idempotent column migrations."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS device_tokens (
             series      TEXT PRIMARY KEY,
@@ -88,23 +84,16 @@ def _open_db() -> sqlite3.Connection:
         )
     except sqlite3.OperationalError:
         pass  # Column already exists
-    conn.commit()
-    return conn
 
 
-@contextmanager
-def _db():
+def _db() -> AbstractContextManager[sqlite3.Connection]:
     """Yield an auth DB connection, committing on success and always closing.
 
-    Mirrors ``with sqlite3.connect(...)`` implicit-commit semantics but adds a
-    guaranteed ``conn.close()`` in ``finally`` so WAL file handles are released.
+    Delegates to :func:`smart_home_common.sqlite_helpers.sqlite_connection`,
+    which guarantees ``conn.close()`` in ``finally`` so WAL file handles are
+    released (prevents WinError 32 on Windows temp-dir cleanup).
     """
-    conn = _open_db()
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+    return sqlite_connection(AUTH_DB_PATH, init=_ensure_schema)
 
 
 def _hash(token: str) -> str:
