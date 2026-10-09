@@ -117,6 +117,7 @@ class TestStatusEndpoint:
         import main
 
         main._scheduler_instance = None
+        main.app.state.scheduler = None
         client = TestClient(main.app)
 
         response = client.get(f"{API}/status")
