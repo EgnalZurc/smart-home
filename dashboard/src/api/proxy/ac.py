@@ -5,7 +5,7 @@ Proxies requests to the ac-service for climate control.
 
 from fastapi import APIRouter, Request
 
-from api.auth_helpers import require_super
+from api.auth_helpers import require_app_write
 
 from .base import ServiceProxy
 
@@ -62,7 +62,7 @@ async def get_ac_config():
 @router.post("/config")
 async def update_ac_config(request: Request):
     """Update controller configuration."""
-    require_super(request)
+    require_app_write(request, "ac")
     body = await request.json()
     return await _proxy.post("/api/ac/config", json=body)
 
@@ -70,7 +70,7 @@ async def update_ac_config(request: Request):
 @router.post("/control")
 async def set_ac_control_mode(request: Request):
     """Set control mode (auto/manual/off)."""
-    require_super(request)
+    require_app_write(request, "ac")
     body = await request.json()
     return await _proxy.post("/api/ac/control", json=body)
 
@@ -78,7 +78,7 @@ async def set_ac_control_mode(request: Request):
 @router.post("/manual")
 async def set_ac_manual_params(request: Request):
     """Set manual control parameters."""
-    require_super(request)
+    require_app_write(request, "ac")
     body = await request.json()
     return await _proxy.post("/api/ac/manual", json=body)
 
@@ -86,7 +86,7 @@ async def set_ac_manual_params(request: Request):
 @router.post("/manual/param")
 async def update_ac_manual_param(param: str, value: str, request: Request):
     """Update a single manual parameter."""
-    require_super(request)
+    require_app_write(request, "ac")
     # ac-service reads these as query params; forward them in the path.
     return await _proxy.post(f"/api/ac/manual/param?param={param}&value={value}")
 

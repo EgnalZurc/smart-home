@@ -5,7 +5,7 @@ Proxies requests to the casita-suenos property search service.
 
 from fastapi import APIRouter, Request
 
-from api.auth_helpers import require_super
+from api.auth_helpers import require_app_write
 
 from .base import ServiceProxy
 
@@ -73,7 +73,7 @@ async def get_casita_schedule():
 @router.post("/schedule")
 async def save_casita_schedule(request: Request):
     """Update scraping schedule configuration."""
-    require_super(request)
+    require_app_write(request, "casita")
     body = await request.json()
     return await _proxy.post("/schedule", json=body)
 
@@ -81,7 +81,7 @@ async def save_casita_schedule(request: Request):
 @router.post("/dismiss")
 async def dismiss_casita_property(request: Request):
     """Dismiss a property from radar."""
-    require_super(request)
+    require_app_write(request, "casita")
     body = await request.json()
     return await _proxy.post("/dismiss", json=body)
 
@@ -89,7 +89,7 @@ async def dismiss_casita_property(request: Request):
 @router.post("/undismiss")
 async def undismiss_casita_property(request: Request):
     """Restore a dismissed property to radar."""
-    require_super(request)
+    require_app_write(request, "casita")
     body = await request.json()
     return await _proxy.post("/undismiss", json=body)
 
@@ -97,7 +97,7 @@ async def undismiss_casita_property(request: Request):
 @router.post("/mark-viewed")
 async def mark_casita_viewed(request: Request):
     """Mark a property as viewed."""
-    require_super(request)
+    require_app_write(request, "casita")
     body = await request.json()
     return await _proxy.post("/mark-viewed", json=body)
 
@@ -105,7 +105,7 @@ async def mark_casita_viewed(request: Request):
 @router.post("/save-comment")
 async def save_casita_comment(request: Request):
     """Save a comment on a property."""
-    require_super(request)
+    require_app_write(request, "casita")
     body = await request.json()
     # Longer timeout for AI operations
     return await _proxy.post("/save-comment", json=body)
@@ -128,12 +128,12 @@ async def get_casita_summary():
 @router.post("/run-scraping")
 async def run_casita_scraping(request: Request):
     """Trigger manual property scraping."""
-    require_super(request)
+    require_app_write(request, "casita")
     return await _proxy.post("/run-scraping")
 
 
 @router.post("/run-summary")
 async def run_casita_summary(request: Request):
     """Trigger AI summary generation."""
-    require_super(request)
+    require_app_write(request, "casita")
     return await _proxy.post("/run-summary")
