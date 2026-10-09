@@ -9,8 +9,9 @@ This module handles all SQLite database interactions including:
 import logging
 import sqlite3
 import uuid
-from contextlib import contextmanager
-from pathlib import Path
+from contextlib import AbstractContextManager
+
+from smart_home_common.sqlite_helpers import open_connection, sqlite_connection
 
 from .constants import BUILTIN_NAME_TO_ID, BUILTIN_PROFILES, DEFAULT_PROFILE_ID
 
@@ -25,29 +26,15 @@ AUTH_DB_PATH: str = "/app/data/auth.db"
 # ---------------------------------------------------------------------------
 # Database helpers
 # ---------------------------------------------------------------------------
-def _open_raw_db() -> sqlite3.Connection:
-    """Open a raw DB connection without schema creation (for migrations).
-
-    Returns a bare connection. Prefer the :func:`_raw_db` / :func:`_db` context
-    managers, which commit on success and ALWAYS close the connection so WAL
-    (-wal/-shm) file handles are released (prevents WinError 32 on Windows
-    temp-dir cleanup and state leaking between tests).
-    """
-    db_path = Path(AUTH_DB_PATH)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
-
-
-def _open_db() -> sqlite3.Connection:
-    """Open a DB connection, creating tables if needed.
-
-    Returns a bare connection. Prefer the :func:`_db` context manager.
-    """
-    conn = _open_raw_db()
-
+# Connection management is delegated to smart_home_common.sqlite_helpers, which
+# enables WAL, commits on success, rolls back on error and ALWAYS closes the
+# connection (releasing -wal/-shm handles so Windows temp-dir cleanup does not
+# fail and state does not leak between tests). The thin wrappers below keep the
+# module's historical API (bare openers + context managers) so callers and
+# tests are unaffected, and read ``AUTH_DB_PATH`` at call time so late injection
+# from main.py's lifespan still takes effect.
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    """Create the profile tables if they do not yet exist."""
     # Profiles table with UUID primary key
     conn.execute("""
         CREATE TABLE IF NOT EXISTS profiles (
@@ -68,34 +55,41 @@ def _open_db() -> sqlite3.Connection:
         )
     """)
 
+
+def _open_raw_db() -> sqlite3.Connection:
+    """Open a raw DB connection without schema creation (for migrations).
+
+    Returns a bare connection. Prefer the :func:`_raw_db` / :func:`_db` context
+    managers, which commit on success and ALWAYS close the connection so WAL
+    (-wal/-shm) file handles are released (prevents WinError 32 on Windows
+    temp-dir cleanup and state leaking between tests).
+    """
+    return open_connection(AUTH_DB_PATH)
+
+
+def _open_db() -> sqlite3.Connection:
+    """Open a DB connection, creating tables if needed.
+
+    Returns a bare connection. Prefer the :func:`_db` context manager.
+    """
+    conn = _open_raw_db()
+    _ensure_schema(conn)
     conn.commit()
     return conn
 
 
-@contextmanager
-def _raw_db():
+def _raw_db() -> AbstractContextManager[sqlite3.Connection]:
     """Yield a raw DB connection, committing on success and always closing."""
-    conn = _open_raw_db()
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+    return sqlite_connection(AUTH_DB_PATH)
 
 
-@contextmanager
-def _db():
+def _db() -> AbstractContextManager[sqlite3.Connection]:
     """Yield a schema-ensured DB connection, committing and always closing.
 
-    Mirrors ``with sqlite3.connect(...)`` implicit-commit semantics but adds a
-    guaranteed ``conn.close()`` in ``finally`` so WAL file handles are released.
+    Delegates to :func:`smart_home_common.sqlite_helpers.sqlite_connection`,
+    which guarantees ``conn.close()`` so WAL file handles are released.
     """
-    conn = _open_db()
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+    return sqlite_connection(AUTH_DB_PATH, init=_ensure_schema)
 
 
 # ---------------------------------------------------------------------------

@@ -13,11 +13,11 @@ import secrets
 import sqlite3
 import time
 import uuid
-from contextlib import contextmanager
-from pathlib import Path
+from contextlib import AbstractContextManager
 
 from auth import verify_password
 from passlib.hash import apr_md5_crypt
+from smart_home_common.sqlite_helpers import open_connection, sqlite_connection
 
 logger = logging.getLogger(__name__)
 
@@ -31,23 +31,16 @@ TRUST_SECRET: str = ""  # REQUIRED — same as AUTH_SECRET
 # ---------------------------------------------------------------------------
 # Database helpers
 # ---------------------------------------------------------------------------
+# Connection management is delegated to smart_home_common.sqlite_helpers, which
+# enables WAL, commits on success, rolls back on error and ALWAYS closes the
+# connection so WAL (-wal/-shm) file handles are released (prevents WinError 32
+# on Windows temp-dir cleanup and state leaking between tests). The wrappers
+# below keep this module's historical API and read ``AUTH_DB_PATH`` at call time
+# so late injection from main.py's lifespan still takes effect.
 
 
-def _open_db() -> sqlite3.Connection:
-    """Open the auth SQLite database, creating schema on first use.
-
-    Returns a bare connection. Prefer the :func:`_get_db` context manager,
-    which guarantees the connection is committed on success and ALWAYS closed
-    — leaving connections open keeps WAL (-wal/-shm) file handles alive, which
-    makes temp-dir cleanup fail on Windows (WinError 32) and leaks state
-    between tests.
-    """
-    db_path = Path(AUTH_DB_PATH)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    """Create the users and trusted_devices tables if they do not exist."""
     # Users table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -72,24 +65,31 @@ def _open_db() -> sqlite3.Connection:
             resolved_at  REAL
         )
     """)
+
+
+def _open_db() -> sqlite3.Connection:
+    """Open the auth SQLite database, creating schema on first use.
+
+    Returns a bare connection. Prefer the :func:`_get_db` context manager,
+    which guarantees the connection is committed on success and ALWAYS closed
+    — leaving connections open keeps WAL (-wal/-shm) file handles alive, which
+    makes temp-dir cleanup fail on Windows (WinError 32) and leaks state
+    between tests.
+    """
+    conn = open_connection(AUTH_DB_PATH)
+    _ensure_schema(conn)
     conn.commit()
     return conn
 
 
-@contextmanager
-def _get_db():
+def _get_db() -> AbstractContextManager[sqlite3.Connection]:
     """Yield an auth DB connection, committing on success and always closing.
 
-    Mirrors the implicit-commit semantics of ``with sqlite3.connect(...)`` but
-    additionally guarantees ``conn.close()`` in a ``finally`` block so WAL file
-    handles are released (prevents WinError 32 on Windows temp-dir cleanup).
+    Delegates to :func:`smart_home_common.sqlite_helpers.sqlite_connection`,
+    which guarantees ``conn.close()`` in a ``finally`` block so WAL file handles
+    are released (prevents WinError 32 on Windows temp-dir cleanup).
     """
-    conn = _open_db()
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+    return sqlite_connection(AUTH_DB_PATH, init=_ensure_schema)
 
 
 # ---------------------------------------------------------------------------
