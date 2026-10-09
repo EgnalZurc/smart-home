@@ -1,16 +1,24 @@
 services:
   mosquitto:
-    image: eclipse-mosquitto:2
+    image: eclipse-mosquitto:2.0.18
     container_name: mosquitto
     restart: unless-stopped
     mem_limit: 16m
     memswap_limit: 16m
-    ports:
-      - 1883:1883
+    expose:
+      - 1883
     volumes:
-      - ./infrastructure/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./infrastructure/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./infrastructure/mosquitto/acl.conf:/mosquitto/config/acl.conf:ro
+      - ./data/mosquitto/passwd:/mosquitto/config/passwd:ro
       - ./data/mosquitto/data:/mosquitto/data
       - ./data/mosquitto/log:/mosquitto/log
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 1883 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - smart-home
       - cuchi-casa

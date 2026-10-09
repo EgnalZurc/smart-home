@@ -15,17 +15,28 @@ logger = logging.getLogger(__name__)
 class Zigbee2MQTTClient:
     """Client to interact with Zigbee2MQTT via MQTT."""
 
-    def __init__(self, mqtt_broker: str, mqtt_port: int = 1883, timeout: float = 10.0):
+    def __init__(
+        self,
+        mqtt_broker: str,
+        mqtt_port: int = 1883,
+        timeout: float = 10.0,
+        username: str | None = None,
+        password: str | None = None,
+    ):
         """Initializes the client.
 
         Args:
             mqtt_broker: MQTT broker host (e.g., mosquitto)
             mqtt_port: MQTT broker port (default: 1883)
             timeout: Timeout in seconds to get responses
+            username: MQTT username for authentication (optional)
+            password: MQTT password for authentication (optional)
         """
         self.mqtt_broker = mqtt_broker
         self.mqtt_port = mqtt_port
         self.timeout = timeout
+        self.username = username
+        self.password = password
         self.devices: list[dict[str, Any]] = []
         self.response_received = False
 
@@ -66,6 +77,10 @@ class Zigbee2MQTTClient:
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         client.on_connect = self._on_connect
         client.on_message = self._on_message
+
+        # Set authentication if provided
+        if self.username and self.password:
+            client.username_pw_set(self.username, self.password)
 
         try:
             logger.info(

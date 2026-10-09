@@ -146,6 +146,8 @@ class TestMqttHandlerInit:
         assert handler.retry_delay == 2
         assert handler.keepalive == 60
         assert handler.max_history == 200
+        assert handler.username is None
+        assert handler.password is None
         assert handler.readings == {}
         assert handler.history == {}
         assert handler._connected is False
@@ -166,6 +168,17 @@ class TestMqttHandlerInit:
         assert handler.retry_delay == 1
         assert handler.keepalive == 30
         assert handler.max_history == 100
+
+    def test_with_authentication(self, persist_file):
+        handler = MqttHandler(
+            broker="mosquitto",
+            port=1883,
+            sensor_names=["sensor1"],
+            username="testuser",
+            password="testpass",
+        )
+        assert handler.username == "testuser"
+        assert handler.password == "testpass"
 
 
 # ---------------------------------------------------------------------------
@@ -286,6 +299,32 @@ class TestConnectionLifecycle:
         assert mock_client.on_connect == handler._on_connect
         assert mock_client.on_message == handler._on_message
         assert mock_client.on_disconnect == handler._on_disconnect
+
+    @patch("smart_home_common.mqtt.handler.mqtt.Client")
+    def test_start_with_authentication(self, mock_client_class, persist_file):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        handler = MqttHandler(
+            "mosquitto", 1883, ["sensor1"],
+            connect_retries=1,
+            username="testuser",
+            password="testpass",
+        )
+        handler.start()
+
+        mock_client.username_pw_set.assert_called_once_with("testuser", "testpass")
+        mock_client.connect.assert_called_once()
+
+    @patch("smart_home_common.mqtt.handler.mqtt.Client")
+    def test_start_without_authentication(self, mock_client_class, persist_file):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        handler = MqttHandler("mosquitto", 1883, ["sensor1"], connect_retries=1)
+        handler.start()
+
+        mock_client.username_pw_set.assert_not_called()
 
     @patch("smart_home_common.mqtt.handler.mqtt.Client")
     def test_start_retries_on_failure(self, mock_client_class, persist_file):
