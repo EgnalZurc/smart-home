@@ -5,7 +5,7 @@ Proxies requests to the portfolio-monitor service.
 
 from fastapi import APIRouter, Request
 
-from api.auth_helpers import require_super
+from api.auth_helpers import require_app_write
 
 from .base import ServiceProxy
 
@@ -35,14 +35,14 @@ async def get_portfolio_crypto():
 @router.post("/refresh")
 async def refresh_portfolio(request: Request):
     """Trigger a refresh of all monitors."""
-    require_super(request)
+    require_app_write(request, "portfolio")
     return await _proxy.post("/api/portfolio/refresh")
 
 
 @router.post("/refresh/{monitor_name}")
 async def refresh_portfolio_monitor(monitor_name: str, request: Request):
     """Trigger a refresh of a specific monitor (etf or crypto)."""
-    require_super(request)
+    require_app_write(request, "portfolio")
     return await _proxy.post(f"/api/portfolio/refresh/{monitor_name}")
 
 
@@ -55,7 +55,7 @@ async def get_portfolio_schedule():
 @router.post("/reload-config")
 async def reload_portfolio_config(request: Request):
     """Reload portfolio configuration from disk."""
-    require_super(request)
+    require_app_write(request, "portfolio")
     return await _proxy.post("/api/portfolio/reload-config")
 
 
@@ -68,5 +68,5 @@ async def get_portfolio_notification_status():
 @router.post("/notifications/test")
 async def test_portfolio_notification(request: Request):
     """Send a test notification to verify Telegram setup."""
-    require_super(request)
+    require_app_write(request, "portfolio")
     return await _proxy.post("/api/portfolio/notifications/test")

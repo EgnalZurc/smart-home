@@ -34,7 +34,7 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def mock_require_super():
-    """Bypass require_super authorization for direct function calls in tests.
+    """Bypass authorization for direct function calls in tests.
 
     This fixture is autouse=True so it applies to all tests automatically.
     Tests that call proxy functions directly (not via TestClient) would otherwise
@@ -42,24 +42,30 @@ def mock_require_super():
 
     We patch in EVERY module that imports the function, because Python's
     `from X import Y` creates a local reference that isn't updated when X.Y
-    is patched. The proxy modules import require_super at module level.
+    is patched. The proxy modules import at module level.
 
     For integration tests that DO want to test auth, they can override this
     fixture locally or use TestClient with proper auth setup.
     """
-    # All modules that import require_super and need it bypassed in tests
-    patch_targets = [
+    # Modules that still use require_super (for system-level admin operations)
+    super_targets = [
         "api.auth_helpers.require_super",  # The source module
-        "api.proxy.ac.require_super",
-        "api.proxy.vacaciones.require_super",
-        "api.proxy.casita.require_super",
-        "api.proxy.portfolio.require_super",
-        "api.proxy.pc.require_super",
-        "api.proxy.baby_gifts.require_super",
+        "api.proxy.pc.require_super",  # PC control stays SUPER-only
+    ]
+
+    # Modules that use require_app_write (app-specific write permissions)
+    app_write_targets = [
+        "api.auth_helpers.require_app_write",  # The source module
+        "api.proxy.ac.require_app_write",
+        "api.proxy.vacaciones.require_app_write",
+        "api.proxy.casita.require_app_write",
+        "api.proxy.portfolio.require_app_write",
+        "api.proxy.baby_gifts.require_app_write",
     ]
 
     # Stack multiple patches
-    patches = [patch(target, return_value="test_admin") for target in patch_targets]
+    patches = [patch(target, return_value="test_admin") for target in super_targets]
+    patches += [patch(target, return_value="test_admin") for target in app_write_targets]
 
     for p in patches:
         p.start()
