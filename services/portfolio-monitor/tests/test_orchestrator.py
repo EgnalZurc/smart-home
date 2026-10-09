@@ -468,6 +468,154 @@ class TestSchedulerLoop:
         # The key assertion is that we got here without hanging
 
 
+class TestDeterministicScheduler:
+    """Tests for the drift-free sleep-until-next-run scheduler."""
+
+    def test_seconds_until_next_run_picks_earliest(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """Returns the wait to the nearest slot and the monitors due then."""
+        from datetime import timedelta
+
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+        now = datetime.now(timezone.utc)
+
+        with patch.object(
+            orch,
+            "get_next_run_times",
+            return_value={
+                "etf": now + timedelta(seconds=300),
+                "crypto": now + timedelta(seconds=120),
+            },
+        ):
+            seconds, due = orch._seconds_until_next_run(now)
+
+        assert due == ["crypto"]
+        assert seconds == pytest.approx(120, abs=1)
+
+    def test_seconds_until_next_run_groups_simultaneous(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """Monitors scheduled at the same timestamp are returned together."""
+        from datetime import timedelta
+
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+        now = datetime.now(timezone.utc)
+        slot = now + timedelta(seconds=60)
+
+        with patch.object(
+            orch, "get_next_run_times", return_value={"etf": slot, "crypto": slot}
+        ):
+            seconds, due = orch._seconds_until_next_run(now)
+
+        assert set(due) == {"etf", "crypto"}
+        assert seconds == pytest.approx(60, abs=1)
+
+    def test_seconds_until_next_run_clamps_past_slot_to_zero(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """A slot already in the past yields a non-negative wait (fire now)."""
+        from datetime import timedelta
+
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+        now = datetime.now(timezone.utc)
+
+        with patch.object(
+            orch,
+            "get_next_run_times",
+            return_value={"etf": now - timedelta(seconds=30)},
+        ):
+            seconds, due = orch._seconds_until_next_run(now)
+
+        assert seconds == 0.0
+        assert due == ["etf"]
+
+    def test_seconds_until_next_run_no_schedule(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """With no scheduled runs, returns a bounded idle wait and no monitors."""
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+
+        with patch.object(orch, "get_next_run_times", return_value={}):
+            seconds, due = orch._seconds_until_next_run(datetime.now(timezone.utc))
+
+        assert seconds == 60.0
+        assert due == []
+
+    @pytest.mark.asyncio
+    async def test_scheduler_sleeps_until_exact_slot(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """The loop sleeps the computed delta, not a fixed 60s interval."""
+        import asyncio
+        from datetime import timedelta
+
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+        orch._running = True
+
+        now = datetime.now(timezone.utc)
+        sleeps: list[float] = []
+
+        async def fake_sleep(seconds):
+            sleeps.append(seconds)
+            orch._running = False  # stop after the first computed sleep
+
+        with patch.object(
+            orch,
+            "get_next_run_times",
+            return_value={"etf": now + timedelta(seconds=137)},
+        ):
+            with patch("orchestrator.asyncio.sleep", side_effect=fake_sleep):
+                await orch._schedule_loop()
+
+        # First sleep must be the exact delta to the slot, never a flat 60.
+        assert sleeps[0] == pytest.approx(137, abs=1)
+        mock_monitors["etf"].run.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_scheduler_floors_sleep_after_overrun(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """A monitor overrunning its slot does not busy-loop (min-sleep floor)."""
+        import asyncio
+
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+        orch._running = True
+
+        now = datetime.now(timezone.utc)
+        sleeps: list[float] = []
+        calls = {"n": 0}
+
+        async def fake_sleep(seconds):
+            sleeps.append(seconds)
+            calls["n"] += 1
+            if calls["n"] >= 2:  # stop after the post-run floor sleep
+                orch._running = False
+
+        # Slot is in the past -> due immediately -> sleep 0 before run, then floor.
+        with patch.object(
+            orch, "get_next_run_times", return_value={"etf": now}
+        ):
+            with patch("orchestrator.asyncio.sleep", side_effect=fake_sleep):
+                await orch._schedule_loop()
+
+        mock_monitors["etf"].run.assert_called()
+        # The post-run sleep must honour the minimum-sleep floor.
+        assert orch._MIN_SLEEP_SECONDS in sleeps
+
+
 class TestReloadConfig:
     """Tests for config reload functionality."""
 
