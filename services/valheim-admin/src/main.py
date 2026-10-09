@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 PC_AGENT_URL = os.environ.get("PC_AGENT_URL", "http://192.168.1.164:8090")
 PC_AGENT_TOKEN = os.environ.get("PC_AGENT_TOKEN", "")
+if not PC_AGENT_TOKEN:
+    raise RuntimeError("PC_AGENT_TOKEN environment variable is required")
 PC_AGENT_TIMEOUT = float(os.environ.get("PC_AGENT_TIMEOUT", "30.0"))
 
 # Create shared async client for pc-agent communication
