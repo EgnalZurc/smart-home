@@ -1,5 +1,7 @@
 """Unit tests for gifts_controller module."""
 
+import pytest
+
 
 class TestGiftsCRUD:
     """Tests for gift CRUD operations."""
@@ -212,3 +214,51 @@ class TestFamiliaUsers:
 
         assert is_familia_user("guest") is False
         assert is_familia_user("admin") is False
+
+
+class TestAtomicSave:
+    """Tests that gifts.json is written atomically (crash-safe)."""
+
+    def test_save_recovers_after_crash(self, tmp_data_dir):
+        """A crash mid-write leaves the previous gifts.json intact.
+
+        _save_gifts writes to a temp file and os.replace()s it into place. If
+        json.dump blows up partway through, the real file must still hold the
+        last good data (every reservation would otherwise be lost) and no stray
+        .tmp file should remain.
+        """
+        from unittest.mock import patch
+
+        import gifts_controller
+        from gifts_controller import add_gift, get_gifts_data
+
+        # Seed one good gift (written atomically).
+        add_gift({"name": "Keep me"})
+        good = get_gifts_data()
+        assert len(good["gifts"]) == 1
+
+        # Next save explodes partway through serialization.
+        with patch.object(
+            gifts_controller.json, "dump", side_effect=ValueError("boom")
+        ):
+            with pytest.raises(ValueError):
+                add_gift({"name": "This write crashes"})
+
+        # The previous good file survived and is still valid JSON.
+        recovered = get_gifts_data()
+        assert len(recovered["gifts"]) == 1
+        assert recovered["gifts"][0]["name"] == "Keep me"
+        # No leftover temp files in the data dir.
+        assert not list(tmp_data_dir.glob(".gifts.json.*.tmp"))
+
+    def test_save_persists_data(self, tmp_data_dir):
+        """A normal save round-trips through the atomic writer."""
+        from gifts_controller import add_gift, get_gifts_data
+
+        add_gift({"name": "Alpha"})
+        add_gift({"name": "Beta"})
+
+        data = get_gifts_data()
+        names = {g["name"] for g in data["gifts"]}
+        assert names == {"Alpha", "Beta"}
+        assert tmp_data_dir.joinpath("gifts.json").exists()

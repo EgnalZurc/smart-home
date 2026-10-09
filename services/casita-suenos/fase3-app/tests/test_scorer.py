@@ -559,3 +559,62 @@ class TestEvaluateFromEmail:
         # Check that property was evaluated (not None)
         assert scored is not None
         assert scored.total_score > 0
+
+
+
+# ── Consistencia modelo <-> scorer ──────────────────────────────────────────
+
+
+class TestScorerConsistency:
+    """Verifica que ScoreBreakdown y scorer.py no se desincronicen."""
+
+    def test_max_score_is_classvar_not_field(self):
+        """MAX_SCORE es un ClassVar, no un campo del dataclass.
+
+        Si fuera un campo entraría en __init__/__eq__ y cada instancia llevaría
+        su propio MAX_SCORE; debe ser una constante de clase compartida. Se
+        comprueba contra dataclasses.fields() (los campos reales de init/eq);
+        __dataclass_fields__ también lista los ClassVar como pseudo-campos.
+        """
+        import dataclasses
+
+        from models import ScoreBreakdown
+
+        field_names = {f.name for f in dataclasses.fields(ScoreBreakdown)}
+        assert "MAX_SCORE" not in field_names
+        assert ScoreBreakdown.MAX_SCORE == 180.0
+
+    def test_model_max_score_matches_scorer(self):
+        """ScoreBreakdown.MAX_SCORE y scorer.MAX_SCORE son la misma constante."""
+        from models import ScoreBreakdown
+
+        assert ScoreBreakdown.MAX_SCORE == MAX_SCORE == 180.0
+
+    def test_alert_threshold_matches_passes_property(self):
+        """passes_alert_threshold usa el mismo umbral que ALERT_THRESHOLD (119)."""
+        from models import ScoreBreakdown, ScoredProperty
+
+        assert ALERT_THRESHOLD == 119.0
+
+        def _breakdown(total: float) -> ScoreBreakdown:
+            fields = dict.fromkeys(
+                (
+                    "r1_rooms r2_terrain r3_garage r4_habitability r5_piscina "
+                    "r6_ac r7_price r8_supermarket r9_health r10_hospital "
+                    "r11_internet r12_madrid r13_beach r14_pools r15_fire "
+                    "r16_flood r17_coast r18_beach_plot"
+                ).split(),
+                0.0,
+            )
+            fields["r12_madrid"] = total  # single field carries the whole total
+            return ScoreBreakdown(**fields)
+
+        # ScoredProperty only reads score.total, so prop/zone can be sentinels.
+        at = ScoredProperty(prop=object(), zone=object(), score=_breakdown(ALERT_THRESHOLD))
+        below = ScoredProperty(
+            prop=object(), zone=object(), score=_breakdown(ALERT_THRESHOLD - 0.1)
+        )
+
+        assert at.total_score == ALERT_THRESHOLD
+        assert at.passes_alert_threshold is True
+        assert below.passes_alert_threshold is False

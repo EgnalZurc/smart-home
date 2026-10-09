@@ -18,6 +18,7 @@ from typing import Any
 import config
 from config import DATA_DIR
 from models import ScheduledAlert
+from smart_home_common.persistence import atomic_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +38,14 @@ def _load_alerts_state() -> dict[str, dict[str, Any]]:
 
 
 def _save_alerts_state(state: dict[str, dict[str, Any]]) -> None:
-    """Persist alerts state to disk."""
+    """Persist alerts state to disk.
+
+    Uses atomic_write_json so a crash mid-write cannot corrupt
+    alerts_state.json (temp file + atomic rename). Errors are logged and
+    swallowed so a failed save never breaks the request.
+    """
     try:
-        ALERTS_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(ALERTS_STATE_FILE, "w") as f:
-            json.dump(state, f, indent=2)
+        atomic_write_json(ALERTS_STATE_FILE, state)
     except Exception as e:
         logger.error(f"Could not save alerts state: {e}")
 

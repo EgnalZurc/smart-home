@@ -15,6 +15,7 @@ from typing import Any, Protocol
 import config
 from config import DATA_DIR, reload_config
 from models import AlertLevel, MonitorState, PortfolioSummary
+from smart_home_common.persistence import atomic_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -97,11 +98,15 @@ class Orchestrator:
             logger.warning(f"Could not load state: {e}")
 
     def _save_state(self):
-        """Persist state to disk (synchronous)."""
+        """Persist state to disk (synchronous).
+
+        Uses atomic_write_json so a crash mid-write cannot leave a truncated
+        state.json: it writes to a temp file in the same directory and renames
+        it over the target. Any error is logged and swallowed so a failed save
+        never crashes the orchestrator.
+        """
         try:
-            STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(STATE_FILE, "w") as f:
-                json.dump(self._state.to_dict(), f, indent=2)
+            atomic_write_json(STATE_FILE, self._state.to_dict())
         except Exception as e:
             logger.error(f"Could not save state: {e}")
 
