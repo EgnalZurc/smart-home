@@ -324,35 +324,83 @@ class Orchestrator:
 
         return result
 
+    # Floor on the sleep between scheduler iterations. Prevents a busy-loop when
+    # a monitor run takes longer than the gap to its next scheduled slot (the
+    # computed sleep would otherwise be <= 0 and spin the loop).
+    _MIN_SLEEP_SECONDS = 5
+
+    def _seconds_until_next_run(self, now: datetime) -> tuple[float, list[str]]:
+        """Compute the wait until the next scheduled slot and who is due then.
+
+        Returns a tuple ``(seconds, monitor_names)`` where ``seconds`` is how
+        long to sleep until the earliest upcoming run (never negative) and
+        ``monitor_names`` lists every monitor sharing that earliest timestamp
+        (so monitors configured at the same minute fire together).
+
+        Deriving the exact target timestamp from the schedule — rather than
+        polling a fixed interval — keeps the cadence drift-free: a run that
+        takes N seconds does not push the next slot by N seconds.
+        """
+        next_runs = {
+            name: run for name, run in self.get_next_run_times().items() if run
+        }
+        if not next_runs:
+            # No schedule configured — fall back to a bounded idle wait so the
+            # loop still responds to shutdown/cancellation promptly.
+            return 60.0, []
+
+        earliest = min(next_runs.values())
+        due = [name for name, run in next_runs.items() if run == earliest]
+        seconds = (earliest - now).total_seconds()
+        # Clamp negatives (slot already passed, e.g. after a slow run or a clock
+        # jump) to 0 so a due monitor fires immediately instead of being skipped.
+        return max(0.0, seconds), due
+
     async def _schedule_loop(self):
-        """Background task that runs monitors on schedule."""
+        """Background task that runs monitors on schedule.
+
+        Deterministic scheduler: instead of waking every 60s and checking a
+        tolerance window, it sleeps exactly until the next scheduled timestamp,
+        runs the monitors due at that slot, then recomputes the following slot.
+        This eliminates the drift the fixed-interval poll accumulated and makes
+        the trigger precise regardless of how long a monitor run takes.
+        """
         logger.info("Starting scheduler loop")
 
         while self._running:
             try:
                 now = datetime.now(timezone.utc)
-                next_runs = self.get_next_run_times()
+                sleep_seconds, due = self._seconds_until_next_run(now)
 
-                # Check if any monitor should run now (within 1 minute tolerance)
-                for monitor_name, next_run in next_runs.items():
-                    if next_run and abs((next_run - now).total_seconds()) < 60:
-                        logger.info(f"Scheduled run for {monitor_name}")
-                        try:
-                            await self.run_monitor(monitor_name)
-                        except Exception as e:
-                            logger.error(
-                                f"Scheduled run failed for {monitor_name}: {e}"
-                            )
+                if sleep_seconds > 0:
+                    logger.debug(
+                        f"Scheduler sleeping {sleep_seconds:.1f}s until next run "
+                        f"({', '.join(due) if due else 'idle'})"
+                    )
+                    await asyncio.sleep(sleep_seconds)
+                    # Re-check the flag: we may have been asked to stop while
+                    # sleeping (stop() flips _running and cancels the task).
+                    if not self._running:
+                        break
 
-                # Sleep for 1 minute
-                await asyncio.sleep(60)
+                for monitor_name in due:
+                    logger.info(f"Scheduled run for {monitor_name}")
+                    try:
+                        await self.run_monitor(monitor_name)
+                    except Exception as e:
+                        logger.error(f"Scheduled run failed for {monitor_name}: {e}")
+
+                # Floor the next wait so a monitor that overran its slot (making
+                # the recomputed sleep ~0) cannot spin the loop. The next slot is
+                # recomputed from the schedule on the following iteration.
+                await asyncio.sleep(self._MIN_SLEEP_SECONDS)
 
             except asyncio.CancelledError:
                 logger.info("Scheduler loop cancelled")
                 break
             except Exception as e:
                 logger.error(f"Scheduler error: {e}")
-                await asyncio.sleep(60)
+                await asyncio.sleep(self._MIN_SLEEP_SECONDS)
 
     async def start(self):
         """Start the orchestrator and scheduler."""
