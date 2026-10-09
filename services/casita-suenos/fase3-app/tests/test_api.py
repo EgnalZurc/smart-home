@@ -76,7 +76,14 @@ def client(mock_scheduler):
     """Create test client with mocked scheduler."""
     import main
 
+    # For backward compatibility with code that still uses globals
     main._scheduler_instance = mock_scheduler
+    main._db_instance = MagicMock()
+
+    # For new code that uses app.state pattern
+    main.app.state.scheduler = mock_scheduler
+    main.app.state.db = MagicMock()
+
     return TestClient(main.app)
 
 
@@ -110,6 +117,7 @@ class TestStatusEndpoint:
         import main
 
         main._scheduler_instance = None
+        main.app.state.scheduler = None
         client = TestClient(main.app)
 
         response = client.get(f"{API}/status")

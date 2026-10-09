@@ -36,16 +36,14 @@ class TestHealthReadyEndpoint:
 
     def test_ready_when_pc_agent_reachable(self):
         """Ready endpoint should return 200 when pc-agent is reachable."""
-        from src.main import app
+        from src.main import app, pc_agent
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client.get.return_value = mock_response
-            mock_client_class.return_value.__aenter__.return_value = mock_client
-
+        with patch.object(
+            pc_agent,
+            "get",
+            new_callable=AsyncMock,
+            return_value={"online": True, "docker": True},
+        ):
             client = TestClient(app)
             response = client.get("/health/ready")
 
@@ -56,13 +54,14 @@ class TestHealthReadyEndpoint:
 
     def test_not_ready_when_pc_agent_unreachable(self):
         """Ready endpoint should return 503 when pc-agent is unreachable."""
-        from src.main import app
+        from src.main import app, pc_agent
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client.get.side_effect = httpx.ConnectError("Connection refused")
-            mock_client_class.return_value.__aenter__.return_value = mock_client
-
+        with patch.object(
+            pc_agent,
+            "get",
+            new_callable=AsyncMock,
+            side_effect=httpx.ConnectError("Connection refused"),
+        ):
             client = TestClient(app)
             response = client.get("/health/ready")
 
@@ -73,13 +72,14 @@ class TestHealthReadyEndpoint:
 
     def test_not_ready_when_pc_agent_timeout(self):
         """Ready endpoint should return 503 on timeout."""
-        from src.main import app
+        from src.main import app, pc_agent
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client.get.side_effect = httpx.TimeoutException("Timed out")
-            mock_client_class.return_value.__aenter__.return_value = mock_client
-
+        with patch.object(
+            pc_agent,
+            "get",
+            new_callable=AsyncMock,
+            side_effect=httpx.TimeoutException("Timed out"),
+        ):
             client = TestClient(app)
             response = client.get("/health/ready")
 

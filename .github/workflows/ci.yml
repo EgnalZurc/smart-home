@@ -546,7 +546,7 @@ jobs:
         run: |
           if [[ -d "services/valheim-admin/tests" ]] && find services/valheim-admin/tests -name "test_*.py" | grep -q .; then
             pip install -r services/valheim-admin/requirements.txt --quiet 2>/dev/null || true
-            cd services/valheim-admin && PYTHONPATH=src:../../libs python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
+            cd services/valheim-admin && PYTHONPATH=src:../../libs:../../libs/smart_home_common/src python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
           else
             echo "⏭️ No tests found"
           fi

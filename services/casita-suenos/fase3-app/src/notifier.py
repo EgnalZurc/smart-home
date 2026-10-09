@@ -51,7 +51,6 @@ def _format_new_property_alert(scored: ScoredProperty) -> str:
     prop = scored.prop
     s = scored.score
     emoji = _score_emoji(scored.total_score)
-    _escape_md(prop.title or "")
     safe_zone = _escape_md(scored.zone.name)
     piscina = _PISCINA_EMOJI.get(prop.piscina.value, "")
     lines = [

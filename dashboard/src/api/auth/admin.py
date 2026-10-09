@@ -65,8 +65,8 @@ async def create_user_endpoint(request: Request):
         raise HTTPException(status_code=400, detail="Username required")
     if not password:
         raise HTTPException(status_code=400, detail="Password required")
-    if len(password) < 4:
-        raise HTTPException(status_code=400, detail="Password too short (min 4)")
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password too short (min 8)")
 
     try:
         user_id = auth_users.create_user(username, password, display_name)
@@ -98,8 +98,8 @@ async def update_user_endpoint(user_id: str, request: Request):
     icon = body.get("icon")
     password = body.get("password")
 
-    if password is not None and len(password) < 4:
-        raise HTTPException(status_code=400, detail="Password too short (min 4)")
+    if password is not None and len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password too short (min 8)")
 
     try:
         auth_users.update_user(

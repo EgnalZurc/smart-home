@@ -19,9 +19,10 @@ from pathlib import Path
 
 import httpx
 from async_http_client import AsyncServiceClient, ServiceClientConfig
-from fastapi import FastAPI, Form, HTTPException
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from smart_home_common.rate_limiter import InMemoryRateLimiter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,6 +45,24 @@ _client_config = ServiceClientConfig(
     timeout=PC_AGENT_TIMEOUT,
 )
 pc_agent = AsyncServiceClient(_client_config)
+
+# Rate limiter for server control endpoints (10 requests per minute per IP)
+server_control_limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60)
+
+
+def _check_rate_limit(request: Request) -> None:
+    """Check rate limit for server control endpoints.
+
+    Raises HTTPException 429 if rate limit exceeded.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    if not server_control_limiter.is_allowed(client_ip):
+        status = server_control_limiter.get_status(client_ip)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Try again later.",
+            headers={"Retry-After": str(int(status.reset_at.timestamp()))},
+        )
 
 
 @asynccontextmanager
@@ -111,19 +130,16 @@ async def health_ready():
     Useful for kubernetes-style readiness probes.
     """
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(
-                f"{PC_AGENT_URL}/health",
-                headers={"X-Api-Token": PC_AGENT_TOKEN} if PC_AGENT_TOKEN else {},
-            )
-            if response.status_code == 200:
-                return {
-                    "ready": True,
-                    "service": "valheim-admin",
-                    "backend": "pc-agent",
-                    "backend_status": "reachable",
-                }
+        await pc_agent.get("/health")
+        return {
+            "ready": True,
+            "service": "valheim-admin",
+            "backend": "pc-agent",
+            "backend_status": "reachable",
+        }
     except (httpx.ConnectError, httpx.TimeoutException):
+        pass
+    except HTTPException:
         pass
 
     raise HTTPException(
@@ -171,20 +187,23 @@ async def get_status():
 
 
 @app.post("/api/server/start")
-async def start_server():
+async def start_server(request: Request):
     """Start Valheim server."""
+    _check_rate_limit(request)
     return await pc_agent.post("/valheim/start")
 
 
 @app.post("/api/server/stop")
-async def stop_server():
+async def stop_server(request: Request):
     """Stop Valheim server."""
+    _check_rate_limit(request)
     return await pc_agent.post("/valheim/stop")
 
 
 @app.post("/api/server/restart")
-async def restart_server():
+async def restart_server(request: Request):
     """Restart Valheim server."""
+    _check_rate_limit(request)
     return await pc_agent.post("/valheim/restart")
 
 
