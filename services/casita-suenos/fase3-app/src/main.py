@@ -21,6 +21,7 @@ import signal
 import sys
 import threading
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
@@ -120,9 +121,75 @@ def _set_process_name() -> None:
     threading.current_thread().name = PROCESS_NAME
 
 
-# ── Instancia global del scheduler ────────────────────────────────────────────
+# ── Instancia global del scheduler (deprecated, use app.state) ────────────────
+# These are kept for backward compatibility with _telegram_polling and main()
+# but new code should use request.app.state.scheduler and request.app.state.db
 _scheduler_instance = None
 _db_instance = None
+
+
+# ── Lifespan context manager ──────────────────────────────────────────────────
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize scheduler and db on startup, clean up on shutdown."""
+    global _scheduler_instance, _db_instance
+
+    from apify_client_wrapper import ApifyUsageTracker, IdealistaApifyClient
+    from casita_scheduler import CasitaScheduler
+    from database import Database
+    from notifier import TelegramNotifier
+
+    # Instanciar componentes
+    db = Database(DB_PATH)
+    notifier = TelegramNotifier(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, db=db)
+    tracker = ApifyUsageTracker(APIFY_USAGE_PATH)
+    apify = IdealistaApifyClient(APIFY_API_TOKEN, tracker)
+
+    scheduler = CasitaScheduler(
+        db=db,
+        notifier=notifier,
+        apify=apify,
+        gmail_address=GMAIL_ADDRESS,
+        gmail_app_password=GMAIL_APP_PASSWORD,
+    )
+
+    # Store in app.state for access via request.app.state
+    app.state.scheduler = scheduler
+    app.state.db = db
+
+    # Also keep globals for backward compatibility with _telegram_polling
+    _scheduler_instance = scheduler
+    _db_instance = db
+
+    # Notificar arranque
+    if NOTIFY_ON_STARTUP:
+        radar_count = len(
+            db.get_radar_properties(min_score=_ALERT_THRESHOLD, limit=500).get(
+                "items", []
+            )
+        )
+        notifier.send_status(
+            f"🚀 Casita Sueños arrancado · {radar_count} casas en el radar"
+        )
+    else:
+        logger.info(
+            "[main] Notificación de arranque Telegram omitida "
+            "(CASITA_NOTIFY_ON_STARTUP no activado)"
+        )
+
+    # Arrancar scheduler
+    scheduler.start()
+    logger.info("[main] Scheduler activo")
+
+    yield
+
+    # Cleanup on shutdown
+    logger.info("[main] Cerrando scheduler y base de datos")
+    scheduler.stop()
+    db.close()
+
 
 # ── FastAPI App ───────────────────────────────────────────────────────────────
 
@@ -132,6 +199,7 @@ app = FastAPI(
     version="2.0.0",
     docs_url=None,  # Deshabilitar docs en producción
     redoc_url=None,
+    lifespan=lifespan,
 )
 
 
@@ -196,13 +264,14 @@ async def health():
 
 
 @api.get("/status")
-async def status():
-    if _scheduler_instance is None:
+async def status(request: Request):
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Scheduler not ready")
 
     import scorer
 
-    status_obj = _scheduler_instance.get_status()
+    status_obj = scheduler.get_status()
     scraper_errors = [
         {
             "portal": e.portal,
@@ -212,7 +281,7 @@ async def status():
         }
         for e in status_obj.scraper_errors
     ]
-    cfg = _scheduler_instance.get_schedule_config()
+    cfg = scheduler.get_schedule_config()
 
     return {
         "online": True,
@@ -258,6 +327,7 @@ async def status():
 
 @api.get("/radar")
 async def get_radar(
+    request: Request,
     limit: int = 20,
     offset: int = 0,
     sort_by: str = "score",
@@ -265,13 +335,14 @@ async def get_radar(
     filter: str | None = None,
     portal: str | None = None,
 ):
-    if _scheduler_instance is None:
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
 
     limit = min(limit, 100)
     offset = max(offset, 0)
 
-    return _scheduler_instance.get_radar(
+    return scheduler.get_radar(
         limit=limit,
         offset=offset,
         sort_by=sort_by,
@@ -282,47 +353,52 @@ async def get_radar(
 
 
 @api.get("/dismissed")
-async def get_dismissed():
-    if _scheduler_instance is None:
+async def get_dismissed(request: Request):
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
-    return {"properties": _scheduler_instance.get_dismissed()}
+    return {"properties": scheduler.get_dismissed()}
 
 
 @api.post("/dismiss")
-async def dismiss_property(req: PropertyUid):
-    if _scheduler_instance is None:
+async def dismiss_property(req: PropertyUid, request: Request):
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
-    ok = _scheduler_instance.dismiss_property(req.uid)
+    ok = scheduler.dismiss_property(req.uid)
     if not ok:
         raise HTTPException(status_code=404, detail="Property not found")
     return {"ok": True, "uid": req.uid}
 
 
 @api.post("/undismiss")
-async def undismiss_property(req: PropertyUid):
-    if _scheduler_instance is None:
+async def undismiss_property(req: PropertyUid, request: Request):
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
-    ok = _scheduler_instance.undismiss_property(req.uid)
+    ok = scheduler.undismiss_property(req.uid)
     if not ok:
         raise HTTPException(status_code=404, detail="Property not found")
     return {"ok": True, "uid": req.uid}
 
 
 @api.post("/mark-viewed")
-async def mark_viewed(req: PropertyUid):
-    if _scheduler_instance is None:
+async def mark_viewed(req: PropertyUid, request: Request):
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
-    ok = _scheduler_instance.mark_viewed(req.uid)
+    ok = scheduler.mark_viewed(req.uid)
     if not ok:
         raise HTTPException(status_code=404, detail="Property not found")
     return {"ok": True, "uid": req.uid}
 
 
 @api.post("/save-comment")
-async def save_comment(req: CommentRequest):
-    if _scheduler_instance is None:
+async def save_comment(req: CommentRequest, request: Request):
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
-    ok = _scheduler_instance.save_comment(req.uid, req.comment)
+    ok = scheduler.save_comment(req.uid, req.comment)
     if not ok:
         raise HTTPException(status_code=404, detail="Property not found")
     return {"ok": True, "uid": req.uid}
@@ -332,29 +408,32 @@ async def save_comment(req: CommentRequest):
 
 
 @api.get("/schedule")
-async def get_schedule():
-    if _scheduler_instance is None:
+async def get_schedule(request: Request):
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
-    return _scheduler_instance.get_schedule_config()
+    return scheduler.get_schedule_config()
 
 
 @api.post("/schedule")
-async def save_schedule(config: ScheduleConfig):
-    if _scheduler_instance is None:
+async def save_schedule(config: ScheduleConfig, request: Request):
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
 
     # Only save non-None fields
     validated = {k: v for k, v in config.model_dump().items() if v is not None}
     if validated:
-        _scheduler_instance.save_schedule_config(validated)
+        scheduler.save_schedule_config(validated)
     return {"ok": True}
 
 
 @api.get("/summary")
-async def get_summary():
-    if _scheduler_instance is None:
+async def get_summary(request: Request):
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
-    summary = _scheduler_instance.get_last_summary()
+    summary = scheduler.get_last_summary()
     return summary or {"content": None, "sent_at": None}
 
 
@@ -362,11 +441,12 @@ async def get_summary():
 
 
 @api.post("/run-scraping")
-async def run_scraping():
-    if _scheduler_instance is None:
+async def run_scraping(request: Request):
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
     threading.Thread(
-        target=_scheduler_instance.run_scraping_now,
+        target=scheduler.run_scraping_now,
         daemon=True,
         name="manual-scraping",
     ).start()
@@ -374,11 +454,12 @@ async def run_scraping():
 
 
 @api.post("/run-gmail-check")
-async def run_gmail_check():
-    if _scheduler_instance is None:
+async def run_gmail_check(request: Request):
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
     threading.Thread(
-        target=_scheduler_instance.run_gmail_check_now,
+        target=scheduler.run_gmail_check_now,
         daemon=True,
         name="manual-gmail",
     ).start()
@@ -386,11 +467,12 @@ async def run_gmail_check():
 
 
 @api.post("/run-fotocasa-check")
-async def run_fotocasa_check():
-    if _scheduler_instance is None:
+async def run_fotocasa_check(request: Request):
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
     threading.Thread(
-        target=_scheduler_instance.run_fotocasa_check_now,
+        target=scheduler.run_fotocasa_check_now,
         daemon=True,
         name="manual-fotocasa",
     ).start()
@@ -398,11 +480,12 @@ async def run_fotocasa_check():
 
 
 @api.post("/run-summary")
-async def run_summary():
-    if _scheduler_instance is None:
+async def run_summary(request: Request):
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
     threading.Thread(
-        target=_scheduler_instance.run_summary_now,
+        target=scheduler.run_summary_now,
         daemon=True,
         name="manual-summary",
     ).start()
@@ -414,7 +497,8 @@ async def run_summary():
 
 @api.post("/telegram-webhook")
 async def telegram_webhook(request: Request):
-    if _scheduler_instance is None:
+    scheduler = request.app.state.scheduler
+    if scheduler is None:
         return {"ok": True}
 
     try:
@@ -426,7 +510,7 @@ async def telegram_webhook(request: Request):
         username = chat.get("username", "") or chat.get("first_name", "")
 
         if chat_id and text.startswith("/start"):
-            _scheduler_instance._notifier.register_chat(chat_id, username)
+            scheduler._notifier.register_chat(chat_id, username)
             return {"ok": True, "registered": chat_id}
     except Exception as e:
         logger.debug("[telegram] Webhook error: %s", e)
@@ -499,56 +583,6 @@ def _telegram_polling() -> None:
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 
-def _init_scheduler():
-    """Initialize scheduler and related components."""
-    global _scheduler_instance, _db_instance
-
-    from apify_client_wrapper import ApifyUsageTracker, IdealistaApifyClient
-    from casita_scheduler import CasitaScheduler
-    from database import Database
-    from notifier import TelegramNotifier
-
-    # Instanciar componentes
-    db = Database(DB_PATH)
-    _db_instance = db
-    notifier = TelegramNotifier(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, db=db)
-    tracker = ApifyUsageTracker(APIFY_USAGE_PATH)
-    apify = IdealistaApifyClient(APIFY_API_TOKEN, tracker)
-
-    scheduler = CasitaScheduler(
-        db=db,
-        notifier=notifier,
-        apify=apify,
-        gmail_address=GMAIL_ADDRESS,
-        gmail_app_password=GMAIL_APP_PASSWORD,
-    )
-
-    _scheduler_instance = scheduler
-
-    # Notificar arranque (opt-in; desactivado por defecto para no spamear Telegram
-    # en cada reinicio del contenedor)
-    if NOTIFY_ON_STARTUP:
-        radar_count = len(
-            db.get_radar_properties(min_score=_ALERT_THRESHOLD, limit=500).get(
-                "items", []
-            )
-        )
-        notifier.send_status(
-            f"🚀 Casita Sueños arrancado · {radar_count} casas en el radar"
-        )
-    else:
-        logger.info(
-            "[main] Notificación de arranque Telegram omitida "
-            "(CASITA_NOTIFY_ON_STARTUP no activado)"
-        )
-
-    # Arrancar scheduler
-    scheduler.start()
-    logger.info("[main] Scheduler activo")
-
-    return db
-
-
 def main() -> None:
     _validate_config()
     Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
@@ -564,27 +598,12 @@ def main() -> None:
 
     logger.info("[main] ── Iniciando %s ──────────────────────────", PROCESS_NAME)
 
-    # Inicializar scheduler en background
-    db = _init_scheduler()
-
-    # Arrancar polling de Telegram
+    # Arrancar polling de Telegram (usa _db_instance que se establece en lifespan)
     threading.Thread(
         target=_telegram_polling, daemon=True, name="telegram-polling"
     ).start()
 
-    # Graceful shutdown
-    def _shutdown(signum, frame):
-        logger.info("[main] Señal %s recibida — apagando", signum)
-        if _scheduler_instance:
-            _scheduler_instance.stop()
-        if db:
-            db.close()
-        sys.exit(0)
-
-    signal.signal(signal.SIGTERM, _shutdown)
-    signal.signal(signal.SIGINT, _shutdown)
-
-    # Arrancar servidor con uvicorn
+    # Arrancar servidor con uvicorn - lifespan maneja init/shutdown del scheduler
     logger.info("[main] Servidor HTTP en puerto %d", STATUS_PORT)
     uvicorn.run(
         app,
