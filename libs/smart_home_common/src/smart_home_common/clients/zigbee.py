@@ -40,7 +40,14 @@ class Zigbee2MQTTClient:
         self.devices: list[dict[str, Any]] = []
         self.response_received = False
 
-    def _on_connect(self, client, userdata, flags, rc, properties=None):
+    def _on_connect(
+        self,
+        client: mqtt.Client,
+        userdata: Any,
+        flags: dict[str, Any],
+        rc: int,
+        properties: mqtt.Properties | None = None,
+    ) -> None:
         """Callback on connect."""
         if rc == 0:
             logger.debug("Connected to MQTT %s:%d", self.mqtt_broker, self.mqtt_port)
@@ -49,7 +56,12 @@ class Zigbee2MQTTClient:
         else:
             logger.error("Error connecting to MQTT: rc=%d", rc)
 
-    def _on_message(self, client, userdata, msg):
+    def _on_message(
+        self,
+        client: mqtt.Client,
+        userdata: Any,
+        msg: mqtt.MQTTMessage,
+    ) -> None:
         """Callback on message received."""
         if msg.topic == "zigbee2mqtt/bridge/devices":
             try:
