@@ -2,23 +2,24 @@
 
 Serves:
   GET  /smart-home/ac              → index.html (SPA)
-  GET  /api/status                 → AC + sensor status
-  GET  /api/sensors                → per-sensor readings
-  GET  /api/sensors/history        → sensor reading history
-  GET  /api/history                → controller action history
-  GET  /api/config                 → controller config
-  POST /api/config                 → update config
-  POST /api/control_mode           → set auto/manual/off
-  POST /api/manual_params          → set manual parameters
-  POST /api/manual_param           → update single manual parameter
-  GET  /api/ac_real                → real AC state from MELCloud
-  GET  /api/outdoor                → outdoor temperature (cached)
-  GET  /api/errors                 → active errors
-  GET  /api/energy/current         → energy consumption 24h
-  GET  /api/energy/hourly          → hourly energy chart data
-  GET  /api/energy/monthly         → monthly energy chart data
-  GET  /api/subscriptions/stats    → subscription manager stats
-  GET  /api/health/zigbee          → zigbee health check
+  GET  /api/ac/status              → AC + sensor status
+  GET  /api/ac/sensors             → per-sensor readings
+  GET  /api/ac/sensors/history     → sensor reading history
+  GET  /api/ac/history             → controller action history
+  GET  /api/ac/config              → controller config
+  POST /api/ac/config              → update config
+  POST /api/ac/control             → set auto/manual/off
+  POST /api/ac/manual              → set manual parameters
+  POST /api/ac/manual/param        → update single manual parameter
+  GET  /api/ac/real                → real AC state from MELCloud
+  GET  /api/ac/outdoor             → outdoor temperature (cached)
+  GET  /api/ac/errors              → active errors
+  GET  /api/ac/energy/current      → energy consumption (placeholder)
+  GET  /api/ac/energy/hourly       → hourly energy chart data (placeholder)
+  GET  /api/ac/energy/monthly      → monthly energy chart data (placeholder)
+  GET  /api/ac/subscriptions/stats → subscription manager stats
+  GET  /api/ac/health/zigbee       → zigbee health check
+  GET  /api/health/ac              → public health check
   GET  /health                     → service health check
 
 Auth: nginx handles auth_request before requests reach this service.

@@ -1,16 +1,22 @@
 """
 Portfolio Monitor Service — Main entry point.
 Serves:
-  GET  /smart-home/portfolio         → SPA dashboard
-  GET  /api/portfolio/summary        → Full portfolio summary
-  GET  /api/portfolio/etf            → ETF analysis
-  GET  /api/portfolio/crypto         → Crypto staking analysis
-  POST /api/portfolio/refresh        → Trigger full refresh
-  POST /api/portfolio/refresh/{name} → Trigger specific monitor refresh
-  GET  /api/portfolio/schedule       → Get monitoring schedule
-  POST /api/portfolio/reload-config  → Reload configuration
-  GET  /health                       → Health check
-  GET  /api/health/portfolio         → Health check alias
+  GET  /smart-home/portfolio             → SPA dashboard
+  GET  /api/portfolio/summary            → Full portfolio summary
+  GET  /api/portfolio/etf                → ETF analysis
+  GET  /api/portfolio/crypto             → Crypto staking analysis
+  GET  /api/portfolio/savings            → Savings accounts
+  POST /api/portfolio/refresh            → Trigger full refresh
+  POST /api/portfolio/refresh/{monitor_name} → Trigger specific monitor refresh
+  POST /api/portfolio/reload-config      → Reload configuration
+  GET  /api/portfolio/schedule           → Get monitoring schedule
+  GET  /api/portfolio/alerts             → List scheduled alerts
+  POST /api/portfolio/alerts/{alert_id}/complete → Mark an alert complete
+  POST /api/portfolio/notifications/test → Send a test notification
+  GET  /api/portfolio/notifications/status → Notification config status
+  GET  /api/portfolio/health/external    → External service health checks
+  GET  /api/health/portfolio             → Health check alias
+  GET  /health                           → Health check
 Port: 8010
 """
 

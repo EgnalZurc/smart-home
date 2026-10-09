@@ -12,7 +12,7 @@ Portfolio monitoring service with ETF, crypto staking, and savings tracking.
 
 ## Configuration
 
-Copy `data/settings.example.toml` to `data/settings.toml` and configure your positions.
+Copy `settings.example.toml` to `data/settings.toml` and configure your positions.
 
 Environment variables:
 - `MONITOR_LANG`: Language (es/en), default: es
@@ -83,7 +83,7 @@ ruff format src/ tests/
 
 1. **Distributed Rate Limiting (Redis)**
    - Required if: scaling to multiple instances
-   - Implementation: Replace `RateLimiter` class in `routes.py` with Redis-backed sliding window
+   - Implementation: Replace the `InMemoryRateLimiter` (from `smart_home_common`, wired in `src/api/routes/helpers.py`) with a Redis-backed sliding window
    - Package: `redis` or `aioredis`
 
 2. **API Authentication**
