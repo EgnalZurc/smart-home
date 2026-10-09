@@ -27,7 +27,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 # --- Configuration from environment variables ---
 # CORS
-CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
+# CORS: require explicit origins in production
+_cors_origins_raw = os.environ.get("CORS_ORIGINS", "")
+CORS_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 
 # AUTH (REQUIRED)
 AUTH_SECRET = os.environ.get("AUTH_SECRET", "")
@@ -214,6 +216,9 @@ tags_metadata = [
     },
 ]
 
+# Disable interactive API docs in production
+_is_production = os.environ.get("ENVIRONMENT", "production") == "production"
+
 app = FastAPI(
     title="Smart Home API",
     description="""
@@ -240,9 +245,9 @@ Most endpoints require authentication. Use `POST /api/auth/token` to obtain a se
     """,
     version="2.0.0",
     lifespan=lifespan,
-    docs_url="/swagger",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url=None if _is_production else "/swagger",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
     openapi_tags=tags_metadata,
 )
 
@@ -254,9 +259,9 @@ app.add_middleware(AuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
-    allow_credentials=True,
+    allow_credentials=bool(CORS_ORIGINS),  # Only with explicit origins
 )
 
 # Auth routes (API endpoints under /api/auth)
