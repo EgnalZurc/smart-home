@@ -371,6 +371,7 @@
         .alert-row:last-child { margin-bottom: 0; }
         .alert-row.warning { background: rgba(245,158,11,.1); border-color: rgba(245,158,11,.3); }
         .alert-row.critical { background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.3); }
+        .alert-row.info { background: rgba(59,130,246,.1); border-color: rgba(59,130,246,.3); }
         .alert-row-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
         .alert-container { font-size: 13px; font-weight: 600; color: #e2e8f0; }
         .alert-pct { font-size: 12px; font-weight: 700; }
@@ -378,6 +379,30 @@
         .alert-pct.critical { color: #fca5a5; }
         .alert-details { font-size: 11px; color: #94a3b8; }
         .alert-time { font-size: 10px; color: #64748b; margin-top: 4px; }
+
+        /* Unified alert rows: source tag + severity dot */
+        .alert-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .alert-severity {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        }
+        .alert-severity.critical { background: #ef4444; }
+        .alert-severity.warning { background: #f59e0b; }
+        .alert-severity.info { background: #3b82f6; }
+        .alert-source {
+            font-size: 9px; text-transform: uppercase; letter-spacing: .05em;
+            font-weight: 700; color: #94a3b8;
+            background: rgba(51,65,85,.5); border-radius: 6px;
+            padding: 2px 6px; flex-shrink: 0;
+        }
+
+        /* Tab count badge */
+        .tab-badge {
+            font-size: 10px; font-weight: 700; line-height: 1;
+            min-width: 16px; height: 16px; padding: 0 4px;
+            border-radius: 8px; background: rgba(99,102,241,.3);
+            color: #c7d2fe; display: inline-flex;
+            align-items: center; justify-content: center;
+        }
 
         /* Days selector */
         .days-selector { display: flex; gap: 6px; margin-bottom: 16px; }
@@ -456,18 +481,35 @@
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
 
-<!-- Memory Alerts modal -->
+<!-- Alerts modal (unified) -->
 <div id="alert-modal" class="modal-overlay" onclick="closeAlertModal(event)">
   <div class="modal-panel" id="alert-panel">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-4">
-      <span id="alert-title" class="text-sm font-semibold text-slate-200">Alertas de memoria</span>
+      <span id="alert-title" class="text-sm font-semibold text-slate-200">Alertas</span>
       <span id="alert-timestamp" class="text-[10px] text-slate-600">—</span>
     </div>
-    <div class="days-selector" id="days-selector">
-      <button class="days-btn active" data-days="1" onclick="setAlertDays(1)">24h</button>
-      <button class="days-btn" data-days="7" onclick="setAlertDays(7)">7d</button>
-      <button class="days-btn" data-days="30" onclick="setAlertDays(30)">30d</button>
+    <div class="res-tabs" id="alert-tabs">
+      <button class="res-tab active" data-tab="all" onclick="switchAlertTab('all')">
+        <span id="alert-tab-all-label">Todas</span>
+        <span class="tab-badge" id="alert-badge-all" style="display:none">0</span>
+      </button>
+      <button class="res-tab" data-tab="metrics" onclick="switchAlertTab('metrics')">
+        <span id="alert-tab-metrics-label">Métricas</span>
+        <span class="tab-badge" id="alert-badge-metrics" style="display:none">0</span>
+      </button>
+      <button class="res-tab" data-tab="portfolio" onclick="switchAlertTab('portfolio')">
+        <span id="alert-tab-portfolio-label">Inversiones</span>
+        <span class="tab-badge" id="alert-badge-portfolio" style="display:none">0</span>
+      </button>
+      <button class="res-tab" data-tab="casita" onclick="switchAlertTab('casita')">
+        <span id="alert-tab-casita-label">Casita</span>
+        <span class="tab-badge" id="alert-badge-casita" style="display:none">0</span>
+      </button>
+      <button class="res-tab" data-tab="ac" onclick="switchAlertTab('ac')">
+        <span id="alert-tab-ac-label">Clima</span>
+        <span class="tab-badge" id="alert-badge-ac" style="display:none">0</span>
+      </button>
     </div>
     <div id="alert-body">
       <div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>
@@ -653,7 +695,7 @@
                 </svg>
             </button>
             <!-- Alerts button (admin only) -->
-            <button id="alert-btn" class="hdr-btn" onclick="openAlertModal()" style="display:none;position:relative" title="Alertas de memoria">
+            <button id="alert-btn" class="hdr-btn" onclick="openAlertModal()" style="display:none;position:relative" title="Alertas">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
                     <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
@@ -743,8 +785,10 @@ const T = {
         ht_melcloud_connected: 'MELCloud conectado', ht_telegram_connected: 'Telegram conectado',
         ht_last_update: 'Última actualización', ht_db_accessible: 'BD accesible',
         ht_static_files: 'Ficheros estáticos', ht_yes: 'Sí', ht_no: 'No',
-        alert_title: 'Alertas de memoria', alert_no_alerts: 'Sin alertas',
+        alert_title: 'Alertas', alert_no_alerts: 'Sin alertas',
         alert_usage: 'Uso', alert_limit: 'Límite',
+        alert_tab_all: 'Todas', alert_tab_metrics: 'Métricas', alert_tab_portfolio: 'Inversiones',
+        alert_tab_casita: 'Casita', alert_tab_ac: 'Clima',
         mx_tab: 'Métricas', mx_ram: 'RAM', mx_cpu: 'CPU', mx_temp: 'Temp',
         mx_trends: 'Tendencias del host', mx_containers: 'Memoria por contenedor',
         mx_services: 'Latencia y disponibilidad',
@@ -782,8 +826,10 @@ const T = {
         ht_melcloud_connected: 'MELCloud connected', ht_telegram_connected: 'Telegram connected',
         ht_last_update: 'Last update', ht_db_accessible: 'DB accessible',
         ht_static_files: 'Static files', ht_yes: 'Yes', ht_no: 'No',
-        alert_title: 'Memory alerts', alert_no_alerts: 'No alerts',
+        alert_title: 'Alerts', alert_no_alerts: 'No alerts',
         alert_usage: 'Usage', alert_limit: 'Limit',
+        alert_tab_all: 'All', alert_tab_metrics: 'Metrics', alert_tab_portfolio: 'Investments',
+        alert_tab_casita: 'Casita', alert_tab_ac: 'Climate',
         mx_tab: 'Metrics', mx_ram: 'RAM', mx_cpu: 'CPU', mx_temp: 'Temp',
         mx_trends: 'Host trends', mx_containers: 'Per-container memory',
         mx_services: 'Latency & uptime',
@@ -850,6 +896,11 @@ function applyLang() {
     document.getElementById('apps-label').textContent = t('services');
     document.getElementById('res-title').textContent = t('res_title');
     document.getElementById('alert-title').textContent = t('alert_title');
+    [['all', 'alert_tab_all'], ['metrics', 'alert_tab_metrics'], ['portfolio', 'alert_tab_portfolio'],
+     ['casita', 'alert_tab_casita'], ['ac', 'alert_tab_ac']].forEach(([tab, key]) => {
+        const el = document.getElementById(`alert-tab-${tab}-label`);
+        if (el) el.textContent = t(key);
+    });
     const mxTabLabel = document.getElementById('metrics-tab-label');
     if (mxTabLabel) mxTabLabel.textContent = t('mx_tab');
     const logoutText = document.getElementById('logout-text');
@@ -1207,89 +1258,130 @@ async function fetchAndRenderMetrics() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Memory Alerts
+// Unified Alerts
 // ═══════════════════════════════════════════════════════════════════════════
 let _alertInterval = null;
-let alertDays = 1;
-let memoryAlerts = [];
+let currentAlertTab = 'all';
+let unifiedAlerts = [];
 
-async function fetchMemoryAlerts(days) {
+// Map a tab to the alert sources it includes. 'all' means every source.
+const ALERT_TAB_SOURCES = {
+    all: null,
+    metrics: ['metrics', 'memory'],
+    portfolio: ['portfolio'],
+    casita: ['casita'],
+    ac: ['ac'],
+};
+
+async function fetchUnifiedAlerts() {
     try {
-        const r = await fetch(`/api/monitoring/memory/alerts?days=${days}`);
+        const r = await fetch('/api/alerts/unified');
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
-        memoryAlerts = data.alerts || [];
-        return memoryAlerts;
+        unifiedAlerts = Array.isArray(data.alerts) ? data.alerts : [];
+        return unifiedAlerts;
     } catch (e) {
-        console.error('Failed to fetch memory alerts:', e);
-        memoryAlerts = [];
+        console.error('Failed to fetch unified alerts:', e);
+        unifiedAlerts = [];
         return [];
     }
+}
+
+// Alerts matching a given tab (null sources => all).
+function alertsForTab(tab) {
+    const sources = ALERT_TAB_SOURCES[tab];
+    if (!sources) return unifiedAlerts;
+    return unifiedAlerts.filter(a => sources.includes(a.source));
 }
 
 function updateAlertBadge() {
     const badge = document.getElementById('alert-badge');
     if (!badge) return;
-    const count = memoryAlerts.length;
+    const count = unifiedAlerts.length;
     if (count === 0) {
         badge.style.display = 'none';
     } else {
         badge.style.display = 'flex';
         badge.textContent = count > 99 ? '99+' : count;
-        // Pulse if any critical (>90%)
-        const hasCritical = memoryAlerts.some(a => a.percent > 90);
+        const hasCritical = unifiedAlerts.some(a => a.severity === 'critical');
         badge.classList.toggle('pulse', hasCritical);
     }
+}
+
+// Per-tab count badges on the tab row.
+function updateTabBadges() {
+    Object.keys(ALERT_TAB_SOURCES).forEach(tab => {
+        const el = document.getElementById(`alert-badge-${tab}`);
+        if (!el) return;
+        const n = alertsForTab(tab).length;
+        if (n === 0) {
+            el.style.display = 'none';
+        } else {
+            el.style.display = 'inline-flex';
+            el.textContent = n > 99 ? '99+' : n;
+        }
+    });
 }
 
 function renderAlerts() {
     const body = document.getElementById('alert-body');
     document.getElementById('alert-timestamp').textContent = new Date().toLocaleTimeString();
-    
-    if (!memoryAlerts.length) {
+
+    const alerts = alertsForTab(currentAlertTab);
+    if (!alerts.length) {
         body.innerHTML = `<div class="text-center py-8 text-slate-500"><svg class="mx-auto mb-3 w-10 h-10 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><p>${t('alert_no_alerts')}</p></div>`;
         return;
     }
-    
-    body.innerHTML = memoryAlerts.map(alert => {
-        const severity = alert.percent > 90 ? 'critical' : 'warning';
-        const usageMiB = (alert.usage_bytes / 1024 / 1024).toFixed(1);
-        const limitMiB = (alert.limit_bytes / 1024 / 1024).toFixed(1);
-        const ts = new Date(alert.timestamp).toLocaleString();
-        return `
-            <div class="alert-row ${severity}">
-                <div class="alert-row-header">
-                    <span class="alert-container">${alert.container}</span>
-                    <span class="alert-pct ${severity}">${alert.percent.toFixed(1)}%</span>
+
+    body.innerHTML = alerts.map(alert => {
+        const severity = ['critical', 'warning', 'info'].includes(alert.severity) ? alert.severity : 'info';
+        const ts = alert.timestamp ? new Date(alert.timestamp).toLocaleString() : '';
+        const title = escapeHtml(alert.title || '');
+        const detail = alert.detail ? `<div class="alert-details">${escapeHtml(alert.detail)}</div>` : '';
+        const source = escapeHtml(alert.source || '');
+        const inner = `
+            <div class="alert-row-header">
+                <div class="alert-title-row">
+                    <span class="alert-severity ${severity}"></span>
+                    <span class="alert-container">${title}</span>
                 </div>
-                <div class="alert-details">${t('alert_usage')}: ${usageMiB} MiB / ${t('alert_limit')}: ${limitMiB} MiB</div>
-                <div class="alert-time">${ts}</div>
+                <span class="alert-source">${source}</span>
             </div>
+            ${detail}
+            ${ts ? `<div class="alert-time">${ts}</div>` : ''}
         `;
+        return alert.link
+            ? `<a href="${encodeURI(alert.link)}" class="alert-row ${severity}" style="display:block;text-decoration:none">${inner}</a>`
+            : `<div class="alert-row ${severity}">${inner}</div>`;
     }).join('');
 }
 
-function setAlertDays(days) {
-    alertDays = days;
-    document.querySelectorAll('#days-selector .days-btn').forEach(btn => 
-        btn.classList.toggle('active', parseInt(btn.dataset.days) === days)
+// Minimal HTML escaping for alert text injected via innerHTML.
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+}
+
+function switchAlertTab(tab) {
+    currentAlertTab = tab;
+    document.querySelectorAll('#alert-tabs .res-tab').forEach(btn =>
+        btn.classList.toggle('active', btn.dataset.tab === tab)
     );
-    document.getElementById('alert-body').innerHTML = '<div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>';
-    fetchAndRenderAlerts();
+    renderAlerts();
 }
 
 async function fetchAndRenderAlerts() {
-    await fetchMemoryAlerts(alertDays);
+    await fetchUnifiedAlerts();
     renderAlerts();
     updateAlertBadge();
+    updateTabBadges();
 }
 
 function openAlertModal() {
     document.getElementById('alert-modal').classList.add('open');
-    alertDays = 1;
-    document.querySelectorAll('#days-selector .days-btn').forEach(btn => 
-        btn.classList.toggle('active', parseInt(btn.dataset.days) === 1)
-    );
+    switchAlertTab('all');
+    document.getElementById('alert-body').innerHTML = '<div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>';
     fetchAndRenderAlerts();
     _alertInterval = setInterval(fetchAndRenderAlerts, 300000); // 5 min
 }
@@ -2111,10 +2203,10 @@ function setupHealthStream() {
     // PC status is lazy-loaded: fetched only when the user opens the "Egnal PC"
     // tab in the Resources modal (see switchResSource / ensurePcStatus), so we
     // avoid hitting pc-agent on every page load and every 30s in the background.
-    // Load memory alerts badge on init and refresh every 5min
+    // Load unified alerts badge on init and refresh every 5min
     if (isAdmin()) {
-        fetchMemoryAlerts(1).then(updateAlertBadge);
-        setInterval(() => fetchMemoryAlerts(1).then(updateAlertBadge), 300000);
+        fetchUnifiedAlerts().then(() => { updateAlertBadge(); updateTabBadges(); });
+        setInterval(() => fetchUnifiedAlerts().then(() => { updateAlertBadge(); updateTabBadges(); }), 300000);
     }
 })();
 </script>
