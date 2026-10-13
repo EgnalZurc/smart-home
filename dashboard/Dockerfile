@@ -22,6 +22,8 @@ FROM python:3.12-slim
 # Install GitHub CLI (gh): required by the manual deploy endpoint
 # (POST /api/deploy/{service} shells out to `gh workflow run ci.yml`).
 # gh authenticates non-interactively via the GH_TOKEN env var injected at runtime.
+# DL3008 is ignored because gh's apt repo does not publish pinnable per-version packages.
+# hadolint ignore=DL3008
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
