@@ -107,7 +107,6 @@ async def get_all_health() -> dict[str, Any]:
         get_baby_gifts_health(),
         get_portfolio_health(),
         get_passwords_health(),
-        get_ai_health(),
         get_valheim_health(),
         get_metrics_health(),
         return_exceptions=True,
@@ -123,7 +122,6 @@ async def get_all_health() -> dict[str, Any]:
         "baby-gifts",
         "portfolio",
         "passwords",
-        "ai",
         "valheim",
         "metrics",
     ]
@@ -467,38 +465,6 @@ async def get_passwords_health() -> dict[str, Any]:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("passwords", _check)
-
-
-# ── Local AI (Open WebUI) ─────────────────────────────────────────────────────
-
-
-@router.get("/ai")
-async def get_ai_health() -> dict[str, Any]:
-    """Health check for Local AI (Open WebUI on EgnalPC).
-
-    Returns:
-    - online: whether Open WebUI is running
-    - error: connection error message if any
-
-    Note: This service runs on EgnalPC, not on the Pi.
-    """
-
-    async def _check() -> dict:
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                r = await client.get("http://192.168.1.164:3000/health")
-                if r.status_code == 200:
-                    data = r.json()
-                    return {"online": data.get("status", False) is True}
-                return {"online": False, "error": f"HTTP {r.status_code}"}
-        except httpx.ConnectError:
-            return {"online": False, "error": "Cannot connect to EgnalPC:3000"}
-        except httpx.TimeoutException:
-            return {"online": False, "error": "Timeout - is EgnalPC on?"}
-        except Exception as e:
-            return {"online": False, "error": str(e)}
-
-    return await _cached_health_check("ai", _check)
 
 
 # ── Valheim Control (pc-agent) ────────────────────────────────────────────────

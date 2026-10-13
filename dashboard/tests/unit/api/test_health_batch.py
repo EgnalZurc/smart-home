@@ -47,7 +47,6 @@ async def test_get_all_health_all_services_online():
     assert "baby-gifts" in result
     assert "portfolio" in result
     assert "passwords" in result
-    assert "ai" in result
     assert "valheim" in result
 
     # Backend is always online (no external call)
@@ -124,7 +123,7 @@ async def test_get_all_health_returns_all_keys():
 
     expected_keys = [
         "backend", "zigbee", "ac", "vacaciones", "immich",
-        "casita", "baby-gifts", "portfolio", "passwords", "ai", "valheim"
+        "casita", "baby-gifts", "portfolio", "passwords", "valheim"
     ]
 
     for key in expected_keys:

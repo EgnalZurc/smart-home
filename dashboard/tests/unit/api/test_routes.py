@@ -170,20 +170,6 @@ class TestHealthEndpoints:
             assert response.status_code == 200
             assert response.json()["online"] is True
 
-    def test_ai_health_success(self, client):
-        with patch("api.health.httpx.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.json.return_value = {"status": True}
-            mock_response.status_code = 200
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                return_value=mock_response
-            )
-
-            response = client.get("/api/health/ai")
-
-            assert response.status_code == 200
-            assert response.json()["online"] is True
-
     def test_valheim_health(self, client):
         with patch("api.health.httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()

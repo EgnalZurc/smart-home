@@ -63,13 +63,6 @@ APP_REGISTRY: list[dict] = [
 # ---------------------------------------------------------------------------
 EXTERNAL_SERVICES: list[dict] = [
     {
-        "key": "ai",
-        "min_level": 0,
-        "max_level": 1,
-        "url": "https://raspberrypi.tailaa37cd.ts.net:8443/",
-        "statusUrl": "/api/health/ai",
-    },
-    {
         "key": "photos_ext",
         "min_level": 0,
         "max_level": 1,
