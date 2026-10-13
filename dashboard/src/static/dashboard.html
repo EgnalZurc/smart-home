@@ -1380,19 +1380,51 @@ async function loadStatus() {
         if (!app.statusUrl || !app.getStatus) continue;
         try {
             const data = await fetchStatus(app.statusUrl);
-            healthData[app.key] = data;
-            const el = document.getElementById('status-' + app.key);
-            if (!el) continue;
-            const isOnline = app.getStatus(data);
-            const dot = el.querySelector('span:first-child');
-            const label = el.querySelector('span:nth-child(2)');
-            const tip = document.getElementById('tip-' + app.key);
-            if (dot) dot.className = `status-dot w-1.5 h-1.5 rounded-full inline-block ${isOnline ? 'bg-green-500' : 'bg-red-400'}`;
-            if (label) label.textContent = t(isOnline ? 'connected' : 'offline');
-            if (tip) tip.innerHTML = buildHealthTip(t(app.nameKey), data);
-            const card = el.closest('.app-card');
-            if (card) card.classList.toggle('offline', !isOnline);
+            applyAppStatus(app, data);
         } catch {}
+    }
+}
+
+// Update a single app card's status dot, label and tooltip from a health dict.
+// Shared by the HTTP polling path (loadStatus) and the WebSocket push path
+// (applyHealthSnapshot) so both render identically.
+function applyAppStatus(app, data) {
+    if (!app || !data || !app.getStatus) return;
+    healthData[app.key] = data;
+    const el = document.getElementById('status-' + app.key);
+    if (!el) return;
+    const isOnline = app.getStatus(data);
+    const dot = el.querySelector('span:first-child');
+    const label = el.querySelector('span:nth-child(2)');
+    const tip = document.getElementById('tip-' + app.key);
+    if (dot) dot.className = `status-dot w-1.5 h-1.5 rounded-full inline-block ${isOnline ? 'bg-green-500' : 'bg-red-400'}`;
+    if (label) label.textContent = t(isOnline ? 'connected' : 'offline');
+    if (tip) tip.innerHTML = buildHealthTip(t(app.nameKey), data);
+    const card = el.closest('.app-card');
+    if (card) card.classList.toggle('offline', !isOnline);
+}
+
+// Derive the /api/health/all result key for an app from its statusUrl
+// (e.g. '/api/health/baby-gifts' -> 'baby-gifts'). This avoids maintaining a
+// second hardcoded app-key -> health-key mapping that could drift.
+function healthKeyForApp(app) {
+    if (!app?.statusUrl) return null;
+    const m = app.statusUrl.match(/\/api\/health\/(.+)$/);
+    return m ? m[1] : null;
+}
+
+// Apply a full health snapshot (the {serviceKey: {...}} payload pushed over the
+// WebSocket, identical in shape to GET /api/health/all) to every app card.
+function applyHealthSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return;
+    for (const app of APPS) {
+        const hk = healthKeyForApp(app);
+        if (!hk) continue;
+        const data = snapshot[hk];
+        if (data === undefined) continue;
+        // Keep the HTTP cache warm so a later fallback poll doesn't flicker.
+        if (app.statusUrl) statusCache[app.statusUrl] = { data, ts: Date.now() };
+        applyAppStatus(app, data);
     }
 }
 
@@ -1438,6 +1470,80 @@ async function loadUser() {
     } catch {}
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Real-time health stream (WebSocket) with HTTP polling fallback
+// ═══════════════════════════════════════════════════════════════════════════
+// Primary path: a single WebSocket to /api/ws/health receives a full health
+// snapshot immediately on connect and then every ~5s. If the socket never
+// opens, errors, or closes, we fall back to the legacy HTTP polling loop
+// (loadStatus every 10s) so the status dots keep updating regardless.
+let _healthWs = null;
+let _healthPollTimer = null;
+let _wsReconnectTimer = null;
+let _wsEverConnected = false;
+
+function startHttpHealthFallback() {
+    if (_healthPollTimer) return;  // already polling
+    loadStatus();  // immediate refresh
+    _healthPollTimer = setInterval(loadStatus, 10000);
+}
+
+function stopHttpHealthFallback() {
+    if (_healthPollTimer) { clearInterval(_healthPollTimer); _healthPollTimer = null; }
+}
+
+function setupHealthStream() {
+    // Guard: environments without WebSocket (very old browsers) just poll.
+    if (typeof WebSocket === 'undefined') { startHttpHealthFallback(); return; }
+
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url = `${proto}//${location.host}/api/ws/health`;
+
+    let ws;
+    try {
+        ws = new WebSocket(url);
+    } catch {
+        startHttpHealthFallback();
+        return;
+    }
+    _healthWs = ws;
+
+    ws.onopen = () => {
+        _wsEverConnected = true;
+        // Live push is active — stop the HTTP fallback to avoid double work.
+        stopHttpHealthFallback();
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const msg = JSON.parse(event.data);
+            if (msg && msg.type === 'health' && msg.data) {
+                applyHealthSnapshot(msg.data);
+            }
+        } catch {}
+    };
+
+    const onDrop = () => {
+        if (_healthWs === ws) _healthWs = null;
+        // Keep the UI fresh via HTTP while the socket is down.
+        startHttpHealthFallback();
+        // Try to re-establish the socket after a short delay (single timer).
+        if (!_wsReconnectTimer) {
+            _wsReconnectTimer = setTimeout(() => {
+                _wsReconnectTimer = null;
+                setupHealthStream();
+            }, 15000);
+        }
+    };
+
+    ws.onclose = onDrop;
+    ws.onerror = () => {
+        // If we never managed to connect, fall back immediately; onclose will
+        // also fire and schedule a reconnect.
+        if (!_wsEverConnected) startHttpHealthFallback();
+    };
+}
+
 // Init
 (async function init() {
     applyLang();
@@ -1447,7 +1553,7 @@ async function loadUser() {
     content.classList.add('visible');
     overlay.classList.add('done');
     setTimeout(() => { overlay.style.display = 'none'; }, 400);
-    setInterval(loadStatus, 10000);
+    setupHealthStream();
     setInterval(() => { if (isAdmin()) loadContainerStates(); }, 30000);
     // PC status is lazy-loaded: fetched only when the user opens the "Egnal PC"
     // tab in the Resources modal (see switchResSource / ensurePcStatus), so we

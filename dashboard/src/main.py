@@ -96,6 +96,7 @@ _AUTH_PUBLIC_PREFIXES = (
     "/redoc",  # ReDoc UI
     "/openapi.json",  # OpenAPI spec
     "/api/monitoring/",  # Memory monitoring — internal use from cron scripts
+    "/api/ws/",  # WebSocket endpoints — handshake bypasses HTTP auth middleware
 )
 
 
