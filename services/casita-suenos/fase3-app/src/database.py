@@ -610,6 +610,34 @@ class Database:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_recent_high_scorers(
+        self,
+        cutoff_iso: str,
+        min_score: float,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Devuelve propiedades puntuadas por encima de ``min_score`` cuyo
+        ``scored_at`` es posterior a ``cutoff_iso`` (ISO-8601), excluyendo las
+        descartadas. Usado por el endpoint /api/casita/alerts del sistema de
+        alertas unificado.
+
+        Nota: ``scored_at`` se almacena como texto ISO-8601, por lo que la
+        comparación lexicográfica equivale a comparación cronológica.
+        """
+        rows = self._conn.execute(
+            """SELECT p.uid, p.title, p.price, p.url, p.zone_id,
+                      s.score_total, s.scored_at
+               FROM scored_properties s
+               JOIN properties p ON p.uid = s.property_uid
+               WHERE s.score_total >= ?
+                 AND s.scored_at >= ?
+                 AND s.dismissed = 0
+               ORDER BY s.scored_at DESC
+               LIMIT ?""",
+            (min_score, cutoff_iso, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def get_recent_price_drops(self, limit: int = 10) -> list[dict]:
         rows = self._conn.execute(
             """SELECT ph.*, p.title, p.url, p.zone_id
