@@ -13,17 +13,6 @@ from unittest.mock import patch
 import pytest
 
 
-# Prevent conftest from trying to load full api.routes (has many deps)
-@pytest.fixture(autouse=True)
-def isolate_monitoring_module():
-    """Ensure monitoring module is imported fresh for each test."""
-    # Remove any cached imports that might pull in routes
-    mods_to_remove = [k for k in sys.modules if k.startswith("api.")]
-    for mod in mods_to_remove:
-        sys.modules.pop(mod, None)
-    yield
-
-
 class TestMemoryMonitoring:
     """Tests for /api/monitoring/memory/* endpoints."""
 
