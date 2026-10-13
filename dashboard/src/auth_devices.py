@@ -342,25 +342,28 @@ def get_device_cookie_from_request(request) -> str | None:
     return request.cookies.get(DEVICE_COOKIE_NAME)
 
 
-def get_pending_token(username: str) -> str | None:
-    """Return the pending cookie value for a user, if any.
+def get_pending_token(username: str, user_agent: str) -> str | None:
+    """Return the pending cookie value for this user+device, if any.
 
-    Used by the middleware to deliver device tokens that were created
-    when admin approved the trust request (before user's next login).
+    Only returns a pending token if the user_agent matches the one that
+    originally requested the trust (stored when admin approved). This
+    prevents device A from receiving device B's token.
     """
     with _db() as conn:
         row = conn.execute(
-            "SELECT pending_cookie FROM device_tokens WHERE username = ? AND pending_cookie IS NOT NULL LIMIT 1",
-            (username,),
+            "SELECT pending_cookie FROM device_tokens "
+            "WHERE username = ? AND user_agent = ? AND pending_cookie IS NOT NULL LIMIT 1",
+            (username, user_agent),
         ).fetchone()
     return row["pending_cookie"] if row else None
 
 
-def mark_token_delivered(username: str) -> None:
+def mark_token_delivered(username: str, user_agent: str) -> None:
     """Clear pending_cookie flag after the token has been delivered to the user's browser."""
     with _db() as conn:
         conn.execute(
-            "UPDATE device_tokens SET pending_cookie = NULL WHERE username = ? AND pending_cookie IS NOT NULL",
-            (username,),
+            "UPDATE device_tokens SET pending_cookie = NULL "
+            "WHERE username = ? AND user_agent = ? AND pending_cookie IS NOT NULL",
+            (username, user_agent),
         )
     logger.info("Pending device token delivered to user %r", username)
