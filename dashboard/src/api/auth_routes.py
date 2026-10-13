@@ -238,7 +238,7 @@ async def post_token(
             "LOGIN FAILED (bad credentials): user=%r ip=%s ua=%s",
             username,
             client_ip,
-            user_agent[:60],
+            user_agent[:200],
         )
         return _serve_login_html(error="Usuario o contraseña incorrectos")
 
@@ -248,7 +248,7 @@ async def post_token(
         username,
         client_ip,
         trusted,
-        user_agent[:60],
+        user_agent[:200],
     )
 
     # Build response — always issue fresh 24h JWT

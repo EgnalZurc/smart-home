@@ -61,7 +61,7 @@ from gifts_controller import (
     validate_invitation,
 )
 from notifier import send_gift_notification
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from utils import parse_price
 
 # Import serve_html from shared lib (path added via PYTHONPATH in Dockerfile/CI;
@@ -92,23 +92,23 @@ app = FastAPI(
 # Pydantic models
 # ═══════════════════════════════════════════════════════════════════════════════
 class GiftCreate(BaseModel):
-    name: str
-    description: str = ""
-    url: str = ""
-    price_range: str = ""
+    name: str = Field(..., max_length=200)
+    description: str = Field(default="", max_length=1000)
+    url: str = Field(default="", max_length=2000)
+    price_range: str = Field(default="", max_length=100)
     priority: int = 2
 
 
 class GiftUpdate(BaseModel):
-    name: str | None = None
-    description: str | None = None
-    url: str | None = None
-    price_range: str | None = None
+    name: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+    url: str | None = Field(default=None, max_length=2000)
+    price_range: str | None = Field(default=None, max_length=100)
     priority: int | None = None
 
 
 class InvitationCreate(BaseModel):
-    name: str
+    name: str = Field(..., max_length=100)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

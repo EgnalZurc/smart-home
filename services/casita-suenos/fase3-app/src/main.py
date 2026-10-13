@@ -29,6 +29,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from scorer import ALERT_THRESHOLD as _ALERT_THRESHOLD
+from smart_home_common.rate_limiter import InMemoryRateLimiter
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -36,6 +37,20 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# ── Rate limiter for manual trigger endpoints (10 req/min per IP) ────────────
+_manual_trigger_limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60)
+
+
+def _check_manual_trigger_rate_limit(request: Request) -> None:
+    """Check rate limit for manual trigger endpoints. Raises 429 if exceeded."""
+    client_ip = request.client.host if request.client else "unknown"
+    if not _manual_trigger_limiter.is_allowed(client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Try again in a minute.",
+        )
+
 
 # ── Configuración desde variables de entorno ─────────────────────────────────
 
@@ -446,6 +461,7 @@ async def get_summary(request: Request):
 
 @api.post("/run-scraping")
 async def run_scraping(request: Request):
+    _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -459,6 +475,7 @@ async def run_scraping(request: Request):
 
 @api.post("/run-gmail-check")
 async def run_gmail_check(request: Request):
+    _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -472,6 +489,7 @@ async def run_gmail_check(request: Request):
 
 @api.post("/run-fotocasa-check")
 async def run_fotocasa_check(request: Request):
+    _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -485,6 +503,7 @@ async def run_fotocasa_check(request: Request):
 
 @api.post("/run-summary")
 async def run_summary(request: Request):
+    _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")

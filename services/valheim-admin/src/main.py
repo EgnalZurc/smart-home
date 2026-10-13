@@ -16,6 +16,7 @@ import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import httpx
 from async_http_client import AsyncServiceClient, ServiceClientConfig
@@ -47,6 +48,10 @@ _client_config = ServiceClientConfig(
 pc_agent = AsyncServiceClient(_client_config)
 
 # Rate limiter for server control endpoints (10 requests per minute per IP)
+# Note: Rate limiting is intentionally applied only to server control endpoints
+# (/api/server/start, /stop, /restart) since they have significant side effects.
+# Read-only endpoints (/api/status, /api/logs, /api/config GET, /api/worlds) are
+# not rate limited as they don't mutate state and are needed for UI polling.
 server_control_limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60)
 
 
@@ -116,13 +121,13 @@ def validate_world_name(world_name: str) -> str:
 
 
 @app.get("/health")
-def health():
+def health() -> dict[str, Any]:
     """Health check for valheim-admin (Pi side). Always returns online."""
     return {"online": True, "service": "valheim-admin"}
 
 
 @app.get("/health/ready")
-async def health_ready():
+async def health_ready() -> dict[str, Any]:
     """
     Readiness check that verifies connectivity to pc-agent.
 
@@ -174,7 +179,7 @@ async def serve_index():
 
 
 @app.get("/api/status")
-async def get_status():
+async def get_status() -> dict[str, Any]:
     """Get Valheim server status."""
     try:
         return await pc_agent.get("/valheim/status")
@@ -248,6 +253,7 @@ async def update_config(
 @app.get("/api/logs")
 async def get_logs(lines: int = 80):
     """Get recent server logs."""
+    lines = max(1, min(lines, 10000))  # Cap between 1 and 10000
     return await pc_agent.get("/valheim/logs", params={"lines": str(lines)})
 
 

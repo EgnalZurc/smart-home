@@ -5,6 +5,7 @@ Uses docker-socket-proxy:2375 (CONTAINERS=1, POST=1 — read + start/stop).
 """
 
 import asyncio
+from typing import Any
 
 import httpx
 from api.auth_helpers import require_super
@@ -33,7 +34,7 @@ CONTAINER_START_DELAYS: dict[str, int] = {
 
 
 @router.get("/containers")
-async def get_containers(request: Request):
+async def get_containers(request: Request) -> dict[str, Any]:
     """Return running state for all controllable services.
 
     Response example:
@@ -70,7 +71,7 @@ async def get_containers(request: Request):
 
 
 @router.post("/containers/{app_key}/stop")
-async def stop_service(app_key: str, request: Request):
+async def stop_service(app_key: str, request: Request) -> dict[str, Any]:
     """Stop all containers for the given service app key.
 
     Stops containers with a 10-second graceful timeout.
@@ -97,7 +98,7 @@ async def stop_service(app_key: str, request: Request):
 
 
 @router.post("/containers/{app_key}/start")
-async def start_service(app_key: str, request: Request):
+async def start_service(app_key: str, request: Request) -> dict[str, Any]:
     """Start all containers for the given service app key.
 
     Only accessible to SUPER profile.

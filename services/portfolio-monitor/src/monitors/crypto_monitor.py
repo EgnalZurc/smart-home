@@ -64,9 +64,11 @@ _generic_client = RetryClient(config=_retry_config)
 # Market data: 5 min (prices update ~every minute, but we don't need real-time)
 # OHLC: 15 min (historical data, rarely changes)
 # Fear & Greed: 30 min (updates ~daily)
+# Exchange trust: 1 hour (rarely changes, reduces API calls)
 _market_cache = TTLCache(default_ttl_seconds=300)  # 5 min
 _ohlc_cache = TTLCache(default_ttl_seconds=900)  # 15 min
 _fg_cache = TTLCache(default_ttl_seconds=1800)  # 30 min
+_exchange_trust_cache = TTLCache(default_ttl_seconds=3600)  # 1 hour
 
 
 def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
@@ -203,10 +205,21 @@ def fetch_exchange_trust_score(exchange: str) -> int | None:
     if not exchange_id:
         return None
 
+    # Check cache first
+    cache_key = f"trust:{exchange_id}"
+    cached = _exchange_trust_cache.get(cache_key)
+    if cached is not None:
+        logger.debug(f"Cache hit for exchange trust: {exchange_id}")
+        return cached
+
     url = f"https://api.coingecko.com/api/v3/exchanges/{exchange_id}"
     try:
         data = _cg_client.get(url).json()
-        return data.get("trust_score")
+        trust_score = data.get("trust_score")
+        # Cache successful response
+        if trust_score is not None:
+            _exchange_trust_cache.set(cache_key, trust_score)
+        return trust_score
     except Exception as e:
         logger.warning(f"Could not fetch trust score for {exchange}: {e}")
         return None
