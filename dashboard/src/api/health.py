@@ -410,120 +410,26 @@ async def get_ai_health():
 
 @router.get("/valheim")
 async def get_valheim_health():
-    """Health check for Valheim control (pc-agent reachability + auth).
+    """Health check for valheim-admin service.
 
-    Verifies:
-    1. pc-agent is reachable (/health - no auth required)
-    2. Docker is available on EgnalPC
-    3. Authentication works (/system/mode - requires valid token)
+    Checks if the valheim-admin container (running on Pi) is healthy.
+    valheim-admin provides the web UI for managing the Valheim server
+    that runs on EgnalPC via pc-agent.
 
     Returns:
-    - online: whether pc-agent is reachable
-    - docker: whether Docker is available on EgnalPC
-    - auth_ok: whether authentication is properly configured
-    - auth_error: specific auth error message if auth fails
+    - online: whether valheim-admin is running and responsive
     - error: connection error message if any
     """
-    result = {
-        "online": False,
-        "docker": False,
-        "auth_ok": False,
-    }
-
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
-            # Check basic reachability (no auth)
-            r = await client.get(f"{PC_AGENT_URL}/health")
+            r = await client.get("http://valheim-admin:8080/health")
             if r.status_code == 200:
                 data = r.json()
-                result["online"] = data.get("online", False)
-                result["docker"] = data.get("docker", False)
-
-                # Check auth works (requires token)
-                r2 = await client.get(
-                    f"{PC_AGENT_URL}/system/mode",
-                    headers=_pc_agent_headers(),
-                )
-                if r2.status_code == 200:
-                    result["auth_ok"] = True
-                elif r2.status_code == 401:
-                    result["auth_error"] = "Invalid token"
-                elif r2.status_code == 503:
-                    result["auth_error"] = "Token not configured on pc-agent"
-                else:
-                    result["auth_error"] = f"Unexpected status {r2.status_code}"
-            else:
-                result["error"] = f"HTTP {r.status_code}"
+                return {"online": data.get("online", False)}
+            return {"online": False, "error": f"HTTP {r.status_code}"}
     except httpx.ConnectError:
-        result["error"] = "Cannot connect to pc-agent - is EgnalPC on?"
+        return {"online": False, "error": "Cannot connect to valheim-admin"}
     except httpx.TimeoutException:
-        result["error"] = "Timeout connecting to pc-agent"
+        return {"online": False, "error": "Timeout"}
     except Exception as e:
-        result["error"] = str(e)
-
-    return result
-
-
-# ── Valheim Game Server ───────────────────────────────────────────────────────
-
-
-@router.get("/valheim-server")
-async def get_valheim_server_health():
-    """Health check for the actual Valheim game server.
-
-    Queries pc-agent to get the status of valheim-server container
-    and whether the game has fully loaded (join code available).
-
-    Returns:
-    - online: whether the server is fully running and joinable
-    - running: whether the container is running
-    - join_code: the join code if available
-    - players: current player count
-    - error: error message if any
-    """
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(
-                f"{PC_AGENT_URL}/valheim/status",
-                headers=_pc_agent_headers(),
-            )
-            if r.status_code == 200:
-                data = r.json()
-                running = data.get("running", False)
-                join_code = data.get("join_code")
-                online = running and join_code is not None
-                return {
-                    "online": online,
-                    "running": running,
-                    "join_code": join_code,
-                    "players": data.get("players", 0),
-                }
-            if r.status_code == 401:
-                return {
-                    "online": False,
-                    "running": False,
-                    "error": "Auth failed - check PC_AGENT_TOKEN",
-                }
-            return {
-                "online": False,
-                "running": False,
-                "error": f"HTTP {r.status_code}",
-            }
-    except httpx.ConnectError:
-        return {
-            "online": False,
-            "running": False,
-            "error": "Cannot connect to pc-agent",
-        }
-    except httpx.TimeoutException:
-        return {
-            "online": False,
-            "running": False,
-            "error": "Timeout",
-        }
-    except Exception as e:
-        return {
-            "online": False,
-            "running": False,
-            "error": str(e),
-        }
+        return {"online": False, "error": str(e)}
