@@ -65,6 +65,10 @@ class TestTokenEndpoint:
     def test_token_success_redirects(self, client):
         with (
             patch("api.auth_routes.auth_users.authenticate_user", return_value=True),
+            patch(
+                "api.auth_routes.auth_users.get_approved_trust_request",
+                return_value=None,
+            ),
             patch("api.auth_routes.auth_core.create_token", return_value="test-jwt"),
             patch("api.auth_routes.auth_core.set_session_cookie"),
         ):
@@ -80,6 +84,10 @@ class TestTokenEndpoint:
     def test_token_sanitizes_next_url(self, client):
         with (
             patch("api.auth_routes.auth_users.authenticate_user", return_value=True),
+            patch(
+                "api.auth_routes.auth_users.get_approved_trust_request",
+                return_value=None,
+            ),
             patch("api.auth_routes.auth_core.create_token", return_value="test-jwt"),
             patch("api.auth_routes.auth_core.set_session_cookie"),
         ):
