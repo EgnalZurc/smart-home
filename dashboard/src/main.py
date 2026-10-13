@@ -246,6 +246,10 @@ tags_metadata = [
         "name": "Metrics",
         "description": "Pi host, container and service-health time-series metrics",
     },
+    {
+        "name": "Alerts",
+        "description": "Unified alerts feed aggregated from all services",
+    },
 ]
 
 # Disable interactive API docs in production

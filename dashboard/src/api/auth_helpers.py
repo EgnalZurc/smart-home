@@ -17,6 +17,26 @@ def _get_authenticated_user(request: Request) -> str:
     return user
 
 
+def require_authenticated(request: Request) -> str:
+    """Check that the current user is authenticated (any profile level).
+
+    Used by endpoints that any logged-in family member may access (level 0-3),
+    such as the unified alerts feed. Authorization beyond authentication is not
+    required here because the AuthMiddleware already gates every ``/api/*`` route
+    to a valid session; this helper makes the per-route contract explicit.
+
+    Args:
+        request: The FastAPI request object.
+
+    Returns:
+        The authenticated username if a valid session exists.
+
+    Raises:
+        HTTPException: 401 if not authenticated.
+    """
+    return _get_authenticated_user(request)
+
+
 def require_super(request: Request) -> str:
     """Check that the current user has level 0 (SUPER) access.
 
