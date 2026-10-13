@@ -10,6 +10,7 @@ Route modules:
 """
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 from system.containers import router as containers_router
 from system.stats import router as stats_router
 
@@ -39,6 +40,28 @@ router.include_router(valheim_router)
 router.include_router(external_router)
 router.include_router(containers_router)
 router.include_router(stats_router)
+
+
+# Legacy redirect: valheim-admin was removed, control is now via /api/valheim/*
+@router.get("/valheim-admin", include_in_schema=False)
+@router.get("/valheim-admin/", include_in_schema=False)
+@router.get("/valheim-admin/{path:path}", include_in_schema=False)
+async def valheim_admin_redirect():
+    """Return info about the removed valheim-admin service."""
+    return JSONResponse(
+        status_code=410,
+        content={
+            "message": "valheim-admin service has been removed",
+            "info": "Valheim control is now integrated into the dashboard via /api/valheim/*",
+            "endpoints": {
+                "status": "/api/valheim/status",
+                "start": "POST /api/valheim/server/start",
+                "stop": "POST /api/valheim/server/stop",
+                "config": "/api/valheim/config",
+                "worlds": "/api/valheim/worlds",
+            },
+        },
+    )
 
 
 # Module-level FIRMS_MAP_KEY, re-exported from the external module.
