@@ -169,6 +169,7 @@ class TestTokenEndpoint:
 
     def test_token_trusted_creates_pending_request(self, client):
         with (
+            patch("api.auth_routes._login_limiter.is_allowed", return_value=True),
             patch("api.auth_routes.auth_users.authenticate_user", return_value=True),
             patch(
                 "api.auth_routes.auth_users.get_approved_trust_request",
