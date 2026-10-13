@@ -221,23 +221,49 @@ async def get_ai_health():
 
 @router.get("/valheim")
 async def get_valheim_health():
-    """Health check for Valheim control (pc-agent reachability).
+    """Health check for Valheim control (pc-agent reachability + auth).
 
-    Now checks pc-agent directly instead of valheim-admin service.
+    Verifies:
+    1. pc-agent is reachable (/health - no auth required)
+    2. Authentication works (/system/mode - requires valid token)
+
+    If auth fails, returns online=true but auth_ok=false to signal the issue.
     """
     import os
 
     pc_agent_url = os.environ.get("PC_AGENT_URL", "http://192.168.1.164:8090")
+    pc_agent_token = os.environ.get("PC_AGENT_TOKEN", "")
+    headers = {"X-Api-Token": pc_agent_token} if pc_agent_token else {}
+
+    result = {
+        "online": False,
+        "docker": False,
+        "auth_ok": False,
+    }
+
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
+            # Check basic reachability (no auth)
             r = await client.get(f"{pc_agent_url}/health")
-            data = r.json()
-            return {
-                "online": data.get("online", False),
-                "docker": data.get("docker", False),
-            }
-    except Exception:
-        return {"online": False, "docker": False}
+            if r.status_code == 200:
+                data = r.json()
+                result["online"] = data.get("online", False)
+                result["docker"] = data.get("docker", False)
+
+                # Check auth works (requires token)
+                r2 = await client.get(f"{pc_agent_url}/system/mode", headers=headers)
+                if r2.status_code == 200:
+                    result["auth_ok"] = True
+                elif r2.status_code == 401:
+                    result["auth_error"] = "Invalid token"
+                elif r2.status_code == 503:
+                    result["auth_error"] = "Token not configured on pc-agent"
+                else:
+                    result["auth_error"] = f"Unexpected status {r2.status_code}"
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
 
 
 @router.get("/valheim-server")
