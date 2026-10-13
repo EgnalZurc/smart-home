@@ -734,7 +734,6 @@ const T = {
         valheim_name: 'Valheim', valheim_desc: 'Servidor de Valheim',
         babygifts_name: 'Lista Regalos Bebé', babygifts_desc: 'Lista de regalos para el bebé',
         portfolio_name: 'Monitor Cartera', portfolio_desc: 'Monitorización de ETFs y crypto',
-        ai_name: 'IA Local', ai_desc: 'Chat con modelos de lenguaje',
         pc_online: 'Online', pc_offline: 'Offline',
         core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
         external_services: 'Servicios externos', infrastructure: 'Infraestructura',
@@ -774,7 +773,6 @@ const T = {
         valheim_name: 'Valheim', valheim_desc: 'Valheim server',
         babygifts_name: 'Baby Gift List', babygifts_desc: 'Baby gift registry',
         portfolio_name: 'Portfolio Monitor', portfolio_desc: 'ETF and crypto monitoring',
-        ai_name: 'Local AI', ai_desc: 'Chat with language models',
         pc_online: 'Online', pc_offline: 'Offline',
         core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
         external_services: 'External services', infrastructure: 'Infrastructure',
@@ -829,7 +827,6 @@ const DEPLOY_SERVICES = {
 
 // External services (for Services modal)
 const EXT_SERVICES = {
-    ai:            { url: 'https://raspberrypi.tailaa37cd.ts.net:8443/', nameKey: 'ai_name',        statusUrl: '/api/health/ai' },
     photos_ext:    { url: 'https://raspberrypi.tailaa37cd.ts.net:10000/', nameKey: 'photos_name',   statusUrl: '/api/health/immich' },
     passwords_ext: { url: '/passwords/',                                  nameKey: 'passwords_name', statusUrl: '/api/health/passwords' },
 };
@@ -1318,11 +1315,9 @@ function switchSvcTab(tab) {
 
 async function loadSvcStatus() {
     // Fire individual health checks in parallel - each updates UI independently as it resolves
-    // This way fast services (immich, passwords) don't wait for slow ones (ai with 5s timeout)
 
     const checks = [
         // External services
-        { key: 'ai', endpoint: '/api/health/ai', extract: r => r.online === true },
         { key: 'photos_ext', endpoint: '/api/health/immich', extract: r => r.online === true },
         { key: 'passwords_ext', endpoint: '/api/health/passwords', extract: r => r.online === true },
         // Core services
@@ -1377,7 +1372,7 @@ async function openSvcModal() {
     currentSvcTab = 'external';
     document.querySelectorAll('#svc-tabs .res-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'external'));
     // Initialize all services as offline (red) - instant feedback
-    ['ai', 'photos_ext', 'passwords_ext', 'core_mqtt', 'core_zigbee'].forEach(k => svcStatus[k] = false);
+    ['photos_ext', 'passwords_ext', 'core_mqtt', 'core_zigbee'].forEach(k => svcStatus[k] = false);
     renderSvcContent();  // Show immediately with all red dots
     // Load actual status in background - will re-render when complete
     loadSvcStatus();

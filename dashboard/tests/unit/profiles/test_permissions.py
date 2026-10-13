@@ -145,7 +145,6 @@ class TestVisibleExternalServices:
             keys = [s["key"] for s in services]
 
             # Should see family-accessible services
-            assert "ai" in keys
             assert "photos_ext" in keys
 
             # Should not see SUPER-only services

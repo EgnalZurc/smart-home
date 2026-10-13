@@ -832,6 +832,12 @@ jobs:
           script: |
             cd ~/smart-home-prod
             echo "=== Deploying ${{ matrix.service.name }} ==="
+            # Ensure data directories exist with correct permissions BEFORE docker compose up.
+            # Docker creates bind-mount dirs as root:root, but services run as appuser (UID 1000).
+            if [ "${{ matrix.service.name }}" = "metrics-service" ]; then
+              mkdir -p data/metrics-service
+              chown 1000:1000 data/metrics-service
+            fi
             docker compose pull ${{ matrix.service.name }}
             docker compose up -d --force-recreate ${{ matrix.service.name }}
             echo "✅ Service deployed with new image"
