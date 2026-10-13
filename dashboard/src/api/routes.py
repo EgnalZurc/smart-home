@@ -15,6 +15,7 @@ from system.containers import router as containers_router
 from system.stats import router as stats_router
 
 from api.health import router as health_router
+from api.monitoring import router as monitoring_router
 from api.proxy import external as _external_module
 from api.proxy.ac import router as ac_router
 from api.proxy.baby_gifts import router as baby_gifts_router
@@ -40,6 +41,7 @@ router.include_router(valheim_router)
 router.include_router(external_router)
 router.include_router(containers_router)
 router.include_router(stats_router)
+router.include_router(monitoring_router)
 
 
 # Legacy redirect: valheim-admin was removed, control is now via /api/valheim/*
