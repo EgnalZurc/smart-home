@@ -669,6 +669,21 @@ function getLevel() { return currentUserData?.effective_level ?? 99; }
 // ═══════════════════════════════════════════════════════════════════════════
 let currentPcMode = null;
 let pcOnline = false;
+// Lazy-load cache for PC status: we only fetch when the user opens the PC tab,
+// and we reuse the cached result for PC_STATUS_TTL ms so re-opening / switching
+// tabs doesn't re-hit pc-agent every time.
+let _pcStatusLoadedAt = 0;
+const PC_STATUS_TTL = 30000;
+
+// Fetch PC status only if we've never loaded it or the cache is stale.
+// Pass force=true to bypass the cache (e.g. after changing the power mode).
+async function ensurePcStatus(force = false) {
+    if (!force && _pcStatusLoadedAt && (Date.now() - _pcStatusLoadedAt) < PC_STATUS_TTL) {
+        return;
+    }
+    await loadPcStatus();
+    _pcStatusLoadedAt = Date.now();
+}
 
 async function loadPcStatus() {
     try {
@@ -710,7 +725,15 @@ function _bar(pct, color) { return `<div class="res-bar-bg"><div class="res-bar 
 async function switchResSource(source) {
     currentResSource = source;
     document.querySelectorAll('#res-tabs .res-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.source === source));
-    if (source === 'pc') await loadPcStatus(); // Refresh PC status before rendering
+    if (source === 'pc') {
+        // Lazy load: show a spinner while we fetch PC status for the first time
+        // (or after the cache expired); cached hits render immediately.
+        const needsFetch = !_pcStatusLoadedAt || (Date.now() - _pcStatusLoadedAt) >= PC_STATUS_TTL;
+        if (needsFetch) {
+            document.getElementById('res-body').innerHTML = '<div class="flex flex-col items-center justify-center py-10 gap-3"><div class="spinner"></div><span class="text-slate-500 text-sm">Cargando estado del PC…</span></div>';
+        }
+        await ensurePcStatus();
+    }
     fetchAndRenderResources();
 }
 
@@ -776,7 +799,7 @@ async function setPcMode(mode) {
         const r = await fetch(`/api/pc/mode/${mode}`, { method: 'POST' });
         if (r.ok) currentPcMode = mode;
     } catch {}
-    await loadPcStatus();
+    await ensurePcStatus(true);
     if (currentResSource === 'pc') renderPcResources();
 }
 
@@ -1426,8 +1449,9 @@ async function loadUser() {
     setTimeout(() => { overlay.style.display = 'none'; }, 400);
     setInterval(loadStatus, 10000);
     setInterval(() => { if (isAdmin()) loadContainerStates(); }, 30000);
-    loadPcStatus();
-    setInterval(loadPcStatus, 30000);
+    // PC status is lazy-loaded: fetched only when the user opens the "Egnal PC"
+    // tab in the Resources modal (see switchResSource / ensurePcStatus), so we
+    // avoid hitting pc-agent on every page load and every 30s in the background.
 })();
 </script>
 </body>
