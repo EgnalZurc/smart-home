@@ -109,6 +109,7 @@ async def get_all_health() -> dict[str, Any]:
         get_passwords_health(),
         get_ai_health(),
         get_valheim_health(),
+        get_metrics_health(),
         return_exceptions=True,
     )
 
@@ -124,6 +125,7 @@ async def get_all_health() -> dict[str, Any]:
         "passwords",
         "ai",
         "valheim",
+        "metrics",
     ]
 
     response = {}
@@ -531,3 +533,44 @@ async def get_valheim_health() -> dict[str, Any]:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("valheim", _check)
+
+
+# ── Metrics Service (infrastructure) ──────────────────────────────────────────
+
+
+@router.get("/metrics")
+async def get_metrics_health() -> dict[str, Any]:
+    """Health check for the metrics-service (infrastructure collector).
+
+    Exercises the service's own DB-aware /health, which reports:
+    - online: whether metrics-service is running
+    - db_ok: whether its SQLite store answers a query
+    - collector_last_tick_age_s: seconds since the last collection tick
+
+    Public (like all /api/health/*) so the dashboard status view and CI verify
+    step can reach it without a session; the data endpoints under /api/metrics/*
+    remain SUPER-gated via the proxy router.
+    """
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                r = await client.get("http://metrics-service:8011/health")
+                if r.status_code == 200:
+                    data = r.json()
+                    return {
+                        "online": data.get("online", False),
+                        "db_ok": data.get("db_ok"),
+                        "collector_last_tick_age_s": data.get(
+                            "collector_last_tick_age_s"
+                        ),
+                    }
+                return {"online": False, "error": f"HTTP {r.status_code}"}
+        except httpx.ConnectError:
+            return {"online": False, "error": "Cannot connect to metrics-service"}
+        except httpx.TimeoutException:
+            return {"online": False, "error": "Timeout"}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
+    return await _cached_health_check("metrics", _check)

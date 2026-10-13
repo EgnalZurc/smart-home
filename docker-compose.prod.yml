@@ -304,6 +304,43 @@ services:
       retries: 3
       start_period: 20s
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Metrics Service - Pi host / container / health time-series collector
+  # Infrastructure service: NOT in APP_CATALOGUE, NOT in CONTROLLABLE_CONTAINERS,
+  # NOT exposed through nginx. Reached only via the backend proxy /api/metrics/*.
+  # /proc and /sys are bind-mounted read-only so the host sampler reads the Pi
+  # host, not the container cgroup.
+  # ─────────────────────────────────────────────────────────────────────────────
+  metrics-service:
+    image: egnal/smart-home-metrics-service:latest
+    container_name: metrics-service
+    restart: on-failure:5
+    mem_limit: 64m
+    memswap_limit: 64m
+    expose:
+      - 8011
+    volumes:
+      - ./data/metrics-service:/app/data
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    environment:
+      - TZ=Europe/Madrid
+      - METRICS_PROC_STAT=/host/proc/stat
+      - METRICS_PROC_MEMINFO=/host/proc/meminfo
+      - METRICS_PROC_LOADAVG=/host/proc/loadavg
+      - METRICS_THERMAL_ZONE=/host/sys/class/thermal/thermal_zone0/temp
+    depends_on:
+      - smart-home-backend
+      - docker-socket-proxy
+    networks:
+      - smart-home
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8011/health', timeout=3)"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
 networks:
   smart-home:
     driver: bridge

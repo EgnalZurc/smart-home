@@ -51,6 +51,7 @@ def mock_require_super():
     super_targets = [
         "api.auth_helpers.require_super",  # The source module
         "api.proxy.pc.require_super",  # PC control stays SUPER-only
+        "api.metrics.require_super",  # Metrics data endpoints are SUPER-only
     ]
 
     # Modules that use require_app_write (app-specific write permissions)
