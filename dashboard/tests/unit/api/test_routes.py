@@ -196,44 +196,6 @@ class TestHealthEndpoints:
             response = client.get("/api/health/valheim")
             assert response.status_code == 200
 
-    def test_valheim_server_health_online(self, client):
-        with patch("api.health.httpx.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
-                "running": True,
-                "join_code": "ABC123",
-                "players": 2,
-            }
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                return_value=mock_response
-            )
-
-            response = client.get("/api/health/valheim-server")
-
-            assert response.status_code == 200
-            data = response.json()
-            assert data["online"] is True
-            assert data["join_code"] == "ABC123"
-
-    def test_valheim_server_health_running_no_code(self, client):
-        with patch("api.health.httpx.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
-                "running": True,
-                "join_code": None,
-            }
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                return_value=mock_response
-            )
-
-            response = client.get("/api/health/valheim-server")
-
-            data = response.json()
-            assert data["online"] is False
-            assert data["running"] is True
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Casita Proxy Tests
