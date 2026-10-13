@@ -64,6 +64,17 @@ Single Swagger UI at `/swagger` documents ALL platform APIs.
 | POST | `/api/system/containers/{name}/stop` | Stop container |
 | GET | `/api/system/stats` | System resources |
 
+### Unified Alerts
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/alerts/unified` | Aggregated alerts from all sources (memory, metrics, ac, portfolio, casita) |
+
+### Monitoring
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/monitoring/memory/alerts` | Memory usage alerts (containers >80% RAM) |
+| POST | `/api/monitoring/memory/snapshot` | Receive memory snapshot from cron |
+
 ### Proxied Services
 See individual service READMEs for their endpoints:
 - [AC Service](../services/ac-service/README.md)

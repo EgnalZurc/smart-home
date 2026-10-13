@@ -71,3 +71,20 @@ TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_ID=...
 CASITA_DATA_DIR=/app/data
 ```
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Service health check |
+| GET | `/status` | Property listings with status |
+| GET | `/api/casita/radar` | Properties above alert threshold |
+| GET | `/api/casita/alerts` | **High-scoring properties** for unified dashboard alerts (score ≥119 in last 24h) |
+| GET | `/api/casita/dismissed` | Dismissed properties |
+| GET | `/api/casita/schedule` | Scraping schedule |
+| POST | `/api/casita/schedule` | Update schedule |
+| POST | `/api/casita/dismiss` | Dismiss a property |
+| POST | `/api/casita/undismiss` | Restore a property |
+| POST | `/api/casita/mark-viewed` | Mark as viewed |
+| POST | `/api/casita/save-comment` | Save comment |
+| POST | `/run-scraping` | Trigger manual scraping |

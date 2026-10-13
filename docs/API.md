@@ -131,6 +131,52 @@ curl http://ac-service:8002/openapi.json | head -c 500
 | GET | `/api/health/valheim` | Valheim server health | No |
 | GET | `/api/health/valheim-admin` | Valheim admin health | No |
 
+### Unified Alerts
+
+Central alert aggregation from all services. The dashboard UI shows these in the "Alertas" modal with category tabs.
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/alerts/unified` | Aggregate alerts from all sources | Yes |
+
+Query parameters:
+- `days` (optional, default 1): Days to look back for memory alerts (1-30)
+
+Response format:
+```json
+{
+  "count": 3,
+  "timestamp": "2026-10-13T19:00:00+00:00",
+  "alerts": [
+    {
+      "source": "casita",
+      "severity": "info",
+      "title": "Propiedad interesante",
+      "detail": "Score: 127/180 - 104,000€",
+      "timestamp": "2026-10-13T14:16:27.998098",
+      "link": "https://www.fotocasa.es/..."
+    }
+  ]
+}
+```
+
+Alert sources:
+- `memory`: Containers with RAM usage >80%
+- `metrics`: CPU, RAM, temperature, disk threshold alerts
+- `ac`: Sensor offline alerts (no data >1h)
+- `portfolio`: WARN/DANGER market signals
+- `casita`: High-scoring properties (score ≥119 in last 24h)
+
+Severity levels: `critical`, `warning`, `info`
+
+### Monitoring
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/monitoring/memory/alerts` | Memory alerts for containers >80% | Yes |
+| GET | `/api/monitoring/memory/history` | Memory snapshot history | Yes |
+| POST | `/api/monitoring/memory/snapshot` | Receive snapshot from cron | No |
+
 ### Authentication Endpoints
 
 | Method | Endpoint | Description | Auth |
