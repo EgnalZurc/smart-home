@@ -176,6 +176,40 @@ class TestVerifyAndRotate:
         # new_cookie_value is empty to signal "use existing JWT"
         assert result.new_cookie_value == ""
 
+    def test_token_mismatch_revokes_only_that_device(self, temp_db):
+        """Token mismatch should only revoke the affected device, not all user devices."""
+        # Create two devices for the same user
+        cookie1 = auth_devices.create_device_token("user1", "Chrome", "IP1")
+        cookie2 = auth_devices.create_device_token("user1", "Firefox", "IP2")
+
+        series1 = cookie1.split(":")[0]
+
+        # Rotate cookie1 to get a new token
+        auth_devices.verify_and_rotate(cookie1)
+
+        # Manually expire the grace window for cookie1
+        conn = sqlite3.connect(temp_db["db_path"])
+        conn.execute(
+            "UPDATE device_tokens SET prev_until = ? WHERE series = ?",
+            (time.time() - 100, series1),
+        )
+        conn.commit()
+        conn.close()
+
+        # Now try to use the OLD cookie1 (should trigger "theft" detection)
+        result = auth_devices.verify_and_rotate(cookie1)
+
+        assert result.ok is False
+        assert result.theft_detected is True
+
+        # cookie1's device should be revoked
+        devices = auth_devices.list_devices("user1")
+        assert len(devices) == 1  # Only one device left
+
+        # cookie2's device should still work
+        result2 = auth_devices.verify_and_rotate(cookie2)
+        assert result2.ok is True
+
     def test_expired_token(self, temp_db):
         cookie = auth_devices.create_device_token("user1", "UA", "IP")
         series = cookie.split(":")[0]
