@@ -132,7 +132,7 @@ services:
       - .env
     environment:
       - TZ=Europe/Madrid
-      # PC agent config for direct Valheim control (replaces valheim-admin service)
+      # PC agent config for EgnalPC power profile control (Resources modal)
       - PC_AGENT_URL=${PC_AGENT_URL:-http://192.168.1.164:8090}
       - PC_AGENT_TOKEN=${PC_AGENT_TOKEN}
     networks:
@@ -274,10 +274,32 @@ services:
     networks:
       - smart-home
 
-  # NOTE: valheim-admin service has been removed.
-  # Valheim server control is now integrated directly into the dashboard,
-  # which communicates with pc-agent on EgnalPC (192.168.1.164:8090).
-  # This saves ~36MB RAM and removes one network hop.
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Valheim Admin - Web management UI for Valheim server
+  # Proxies to pc-agent running on Windows PC (192.168.1.164:8090)
+  # ─────────────────────────────────────────────────────────────────────────────
+  valheim-admin:
+    image: egnal/smart-home-valheim-admin:latest
+    container_name: valheim-admin
+    restart: on-failure:5
+    mem_limit: 72m
+    memswap_limit: 72m
+    expose:
+      - 8080
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Madrid
+      - PC_AGENT_URL=http://192.168.1.164:8090
+      # PC_AGENT_TOKEN loaded from .env
+    networks:
+      - smart-home
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
 networks:
   smart-home:

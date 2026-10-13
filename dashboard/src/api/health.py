@@ -221,78 +221,22 @@ async def get_ai_health():
 
 @router.get("/valheim")
 async def get_valheim_health():
-    """Health check for Valheim control (pc-agent reachability + auth).
+    """Health check for valheim-admin service.
 
-    Verifies:
-    1. pc-agent is reachable (/health - no auth required)
-    2. Authentication works (/system/mode - requires valid token)
-
-    If auth fails, returns online=true but auth_ok=false to signal the issue.
+    Checks if the valheim-admin container (running on Pi) is healthy.
+    valheim-admin provides the web UI for managing the Valheim server
+    that runs on EgnalPC via pc-agent.
     """
-    import os
-
-    pc_agent_url = os.environ.get("PC_AGENT_URL", "http://192.168.1.164:8090")
-    pc_agent_token = os.environ.get("PC_AGENT_TOKEN", "")
-    headers = {"X-Api-Token": pc_agent_token} if pc_agent_token else {}
-
-    result = {
-        "online": False,
-        "docker": False,
-        "auth_ok": False,
-    }
-
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
-            # Check basic reachability (no auth)
-            r = await client.get(f"{pc_agent_url}/health")
+            r = await client.get("http://valheim-admin:8080/health")
             if r.status_code == 200:
                 data = r.json()
-                result["online"] = data.get("online", False)
-                result["docker"] = data.get("docker", False)
-
-                # Check auth works (requires token)
-                r2 = await client.get(f"{pc_agent_url}/system/mode", headers=headers)
-                if r2.status_code == 200:
-                    result["auth_ok"] = True
-                elif r2.status_code == 401:
-                    result["auth_error"] = "Invalid token"
-                elif r2.status_code == 503:
-                    result["auth_error"] = "Token not configured on pc-agent"
-                else:
-                    result["auth_error"] = f"Unexpected status {r2.status_code}"
+                return {"online": data.get("online", False)}
+            return {"online": False, "error": f"HTTP {r.status_code}"}
+    except httpx.ConnectError:
+        return {"online": False, "error": "Cannot connect to valheim-admin"}
+    except httpx.TimeoutException:
+        return {"online": False, "error": "Timeout"}
     except Exception as e:
-        result["error"] = str(e)
-
-    return result
-
-
-@router.get("/valheim-server")
-async def get_valheim_server_health():
-    """Health check for the actual Valheim game server.
-
-    Queries pc-agent directly to get the status of valheim-server container
-    and whether the game has fully loaded (join code available).
-    """
-    import os
-
-    pc_agent_url = os.environ.get("PC_AGENT_URL", "http://192.168.1.164:8090")
-    pc_agent_token = os.environ.get("PC_AGENT_TOKEN", "")
-    headers = {"X-Api-Token": pc_agent_token} if pc_agent_token else {}
-
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(f"{pc_agent_url}/valheim/status", headers=headers)
-            if r.status_code == 200:
-                data = r.json()
-                running = data.get("running", False)
-                join_code = data.get("join_code")
-                online = running and join_code is not None
-                return {
-                    "online": online,
-                    "running": running,
-                    "join_code": join_code,
-                    "players": data.get("players", 0),
-                }
-    except Exception:
-        pass
-    return {"online": False, "running": False}
+        return {"online": False, "error": str(e)}
