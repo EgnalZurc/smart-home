@@ -28,7 +28,17 @@ from fastapi import FastAPI, Form, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 # Load .env from script directory
-load_dotenv(Path(__file__).parent.parent / ".env")
+# Try multiple locations to handle NSSM service execution
+_script_dir = Path(__file__).resolve().parent
+_env_candidates = [
+    _script_dir.parent / ".env",  # ../. env relative to src/
+    _script_dir / ".env",  # same dir as script
+    Path("E:/pc-agent/.env"),  # absolute fallback for NSSM
+]
+for _env_path in _env_candidates:
+    if _env_path.exists():
+        load_dotenv(_env_path)
+        break
 
 logging.basicConfig(
     level=logging.INFO,
