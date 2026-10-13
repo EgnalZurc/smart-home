@@ -351,6 +351,46 @@
             border-radius: 6px; color: #e2e8f0; padding: 6px 10px; font-size: 13px; cursor: pointer;
         }
         .admin-select:focus { outline: none; border-color: rgba(99,102,241,.5); }
+        /* Alert badge */
+        .alert-badge {
+            position: absolute; top: -4px; right: -4px;
+            min-width: 16px; height: 16px; padding: 0 4px;
+            background: #ef4444; color: white;
+            font-size: 10px; font-weight: 700;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .alert-badge.pulse { animation: alertPulse 1.5s ease-in-out infinite; }
+        @keyframes alertPulse { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)} 50%{box-shadow:0 0 0 6px rgba(239,68,68,0)} }
+
+        /* Alert rows */
+        .alert-row {
+            padding: 12px; border-radius: 10px; margin-bottom: 8px;
+            border: 1px solid rgba(51,65,85,.4);
+        }
+        .alert-row:last-child { margin-bottom: 0; }
+        .alert-row.warning { background: rgba(245,158,11,.1); border-color: rgba(245,158,11,.3); }
+        .alert-row.critical { background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.3); }
+        .alert-row-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+        .alert-container { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+        .alert-pct { font-size: 12px; font-weight: 700; }
+        .alert-pct.warning { color: #fcd34d; }
+        .alert-pct.critical { color: #fca5a5; }
+        .alert-details { font-size: 11px; color: #94a3b8; }
+        .alert-time { font-size: 10px; color: #64748b; margin-top: 4px; }
+
+        /* Days selector */
+        .days-selector { display: flex; gap: 6px; margin-bottom: 16px; }
+        .days-btn {
+            padding: 6px 12px; border-radius: 8px;
+            border: 1px solid rgba(51,65,85,.5);
+            background: rgba(30,41,59,.5);
+            color: #94a3b8; font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: all .15s;
+        }
+        .days-btn:hover { background: rgba(51,65,85,.5); color: #e2e8f0; }
+        .days-btn.active { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.5); color: #a5b4fc; }
+
         /* Responsive container - compact (focused UI: app grid) */
         .responsive-compact { width: 100%; max-width: 100%; }
         @media (min-width: 640px) { .responsive-compact { max-width: 540px; } }
@@ -358,6 +398,25 @@
     </style>
 </head>
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
+
+<!-- Memory Alerts modal -->
+<div id="alert-modal" class="modal-overlay" onclick="closeAlertModal(event)">
+  <div class="modal-panel" id="alert-panel">
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-4">
+      <span id="alert-title" class="text-sm font-semibold text-slate-200">Alertas de memoria</span>
+      <span id="alert-timestamp" class="text-[10px] text-slate-600">—</span>
+    </div>
+    <div class="days-selector" id="days-selector">
+      <button class="days-btn active" data-days="1" onclick="setAlertDays(1)">24h</button>
+      <button class="days-btn" data-days="7" onclick="setAlertDays(7)">7d</button>
+      <button class="days-btn" data-days="30" onclick="setAlertDays(30)">30d</button>
+    </div>
+    <div id="alert-body">
+      <div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>
+    </div>
+  </div>
+</div>
 
 <!-- Resources modal -->
 <div id="res-modal" class="modal-overlay" onclick="closeResModal(event)">
@@ -532,6 +591,14 @@
                     <line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>
                 </svg>
             </button>
+            <!-- Alerts button (admin only) -->
+            <button id="alert-btn" class="hdr-btn" onclick="openAlertModal()" style="display:none;position:relative" title="Alertas de memoria">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span id="alert-badge" class="alert-badge" style="display:none">0</span>
+            </button>
             <!-- Admin button (admin only) -->
             <button id="admin-btn" class="hdr-btn" onclick="openAdminModal()" style="display:none" title="Administración">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -616,6 +683,8 @@ const T = {
         ht_melcloud_connected: 'MELCloud conectado', ht_telegram_connected: 'Telegram conectado',
         ht_last_update: 'Última actualización', ht_db_accessible: 'BD accesible',
         ht_static_files: 'Ficheros estáticos', ht_yes: 'Sí', ht_no: 'No',
+        alert_title: 'Alertas de memoria', alert_no_alerts: 'Sin alertas',
+        alert_usage: 'Uso', alert_limit: 'Límite',
     },
     en: {
         title: 'Cuchi Casa', services: 'Services', logout_label: 'Sign out',
@@ -647,6 +716,8 @@ const T = {
         ht_melcloud_connected: 'MELCloud connected', ht_telegram_connected: 'Telegram connected',
         ht_last_update: 'Last update', ht_db_accessible: 'DB accessible',
         ht_static_files: 'Static files', ht_yes: 'Yes', ht_no: 'No',
+        alert_title: 'Memory alerts', alert_no_alerts: 'No alerts',
+        alert_usage: 'Usage', alert_limit: 'Limit',
     },
 };
 
@@ -706,6 +777,7 @@ function applyLang() {
     document.getElementById('title').textContent = t('title');
     document.getElementById('apps-label').textContent = t('services');
     document.getElementById('res-title').textContent = t('res_title');
+    document.getElementById('alert-title').textContent = t('alert_title');
     const logoutText = document.getElementById('logout-text');
     if (logoutText) logoutText.textContent = t('logout_label');
     saveLang(currentLang);
@@ -876,6 +948,101 @@ function closeResModal(e) {
     document.getElementById('res-modal').classList.remove('open');
     clearInterval(_resInterval);
     _resInterval = null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Memory Alerts
+// ═══════════════════════════════════════════════════════════════════════════
+let _alertInterval = null;
+let alertDays = 1;
+let memoryAlerts = [];
+
+async function fetchMemoryAlerts(days) {
+    try {
+        const r = await fetch(`/api/monitoring/memory/alerts?days=${days}`);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        memoryAlerts = data.alerts || [];
+        return memoryAlerts;
+    } catch (e) {
+        console.error('Failed to fetch memory alerts:', e);
+        memoryAlerts = [];
+        return [];
+    }
+}
+
+function updateAlertBadge() {
+    const badge = document.getElementById('alert-badge');
+    if (!badge) return;
+    const count = memoryAlerts.length;
+    if (count === 0) {
+        badge.style.display = 'none';
+    } else {
+        badge.style.display = 'flex';
+        badge.textContent = count > 99 ? '99+' : count;
+        // Pulse if any critical (>90%)
+        const hasCritical = memoryAlerts.some(a => a.percent > 90);
+        badge.classList.toggle('pulse', hasCritical);
+    }
+}
+
+function renderAlerts() {
+    const body = document.getElementById('alert-body');
+    document.getElementById('alert-timestamp').textContent = new Date().toLocaleTimeString();
+    
+    if (!memoryAlerts.length) {
+        body.innerHTML = `<div class="text-center py-8 text-slate-500"><svg class="mx-auto mb-3 w-10 h-10 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><p>${t('alert_no_alerts')}</p></div>`;
+        return;
+    }
+    
+    body.innerHTML = memoryAlerts.map(alert => {
+        const severity = alert.percent > 90 ? 'critical' : 'warning';
+        const usageMiB = (alert.usage_bytes / 1024 / 1024).toFixed(1);
+        const limitMiB = (alert.limit_bytes / 1024 / 1024).toFixed(1);
+        const ts = new Date(alert.timestamp).toLocaleString();
+        return `
+            <div class="alert-row ${severity}">
+                <div class="alert-row-header">
+                    <span class="alert-container">${alert.container}</span>
+                    <span class="alert-pct ${severity}">${alert.percent.toFixed(1)}%</span>
+                </div>
+                <div class="alert-details">${t('alert_usage')}: ${usageMiB} MiB / ${t('alert_limit')}: ${limitMiB} MiB</div>
+                <div class="alert-time">${ts}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function setAlertDays(days) {
+    alertDays = days;
+    document.querySelectorAll('#days-selector .days-btn').forEach(btn => 
+        btn.classList.toggle('active', parseInt(btn.dataset.days) === days)
+    );
+    document.getElementById('alert-body').innerHTML = '<div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>';
+    fetchAndRenderAlerts();
+}
+
+async function fetchAndRenderAlerts() {
+    await fetchMemoryAlerts(alertDays);
+    renderAlerts();
+    updateAlertBadge();
+}
+
+function openAlertModal() {
+    document.getElementById('alert-modal').classList.add('open');
+    alertDays = 1;
+    document.querySelectorAll('#days-selector .days-btn').forEach(btn => 
+        btn.classList.toggle('active', parseInt(btn.dataset.days) === 1)
+    );
+    fetchAndRenderAlerts();
+    _alertInterval = setInterval(fetchAndRenderAlerts, 300000); // 5 min
+}
+
+function closeAlertModal(e) {
+    if (e && document.getElementById('alert-panel').contains(e.target)) return;
+    document.getElementById('alert-modal').classList.remove('open');
+    clearInterval(_alertInterval);
+    _alertInterval = null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1258,7 +1425,7 @@ function closeAdminModal(e) {
 }
 
 // Close modals on Escape
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeResModal(); closeSvcModal(); closeAdminModal(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeResModal(); closeSvcModal(); closeAlertModal(); closeAdminModal(); } });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Service Cards
@@ -1583,6 +1750,7 @@ async function loadUser() {
         if (isAdmin()) {
             document.getElementById('svc-btn').style.display = 'flex';
             document.getElementById('res-btn').style.display = 'flex';
+            document.getElementById('alert-btn').style.display = 'flex';
             document.getElementById('admin-btn').style.display = 'flex';
         }
         
@@ -1689,6 +1857,11 @@ function setupHealthStream() {
     // PC status is lazy-loaded: fetched only when the user opens the "Egnal PC"
     // tab in the Resources modal (see switchResSource / ensurePcStatus), so we
     // avoid hitting pc-agent on every page load and every 30s in the background.
+    // Load memory alerts badge on init and refresh every 5min
+    if (isAdmin()) {
+        fetchMemoryAlerts(1).then(updateAlertBadge);
+        setInterval(() => fetchMemoryAlerts(1).then(updateAlertBadge), 300000);
+    }
 })();
 </script>
 <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
