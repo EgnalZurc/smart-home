@@ -506,3 +506,120 @@ class TestUpsertScore:
         db.upsert_score(scored)
 
         assert db.is_alerted(sample_property.unique_id) is True
+
+
+
+# ── Tests de get_recent_high_scorers ──────────────────────────────────────────
+
+
+class TestGetRecentHighScorers:
+    def _insert_scored(self, db, prop, zone, scored_at, total=130.0):
+        """Inserta una propiedad con un score concreto y un scored_at dado.
+
+        Construye un ScoreBreakdown cuya suma sea ``total`` para controlar si
+        la propiedad supera o no el umbral de alerta.
+        """
+        db.upsert_property(prop)
+        breakdown = ScoreBreakdown(
+            r1_rooms=total,
+            r2_terrain=0.0,
+            r3_garage=0.0,
+            r4_habitability=0.0,
+            r5_piscina=0.0,
+            r6_ac=0.0,
+            r7_price=0.0,
+            r8_supermarket=0.0,
+            r9_health=0.0,
+            r10_hospital=0.0,
+            r11_internet=0.0,
+            r12_madrid=0.0,
+            r13_beach=0.0,
+            r14_pools=0.0,
+            r15_fire=0.0,
+            r16_flood=0.0,
+            r17_coast=0.0,
+            r18_beach_plot=0.0,
+        )
+        db.upsert_score(
+            ScoredProperty(prop=prop, zone=zone, score=breakdown, scored_at=scored_at)
+        )
+
+    def test_returns_recent_high_scorer(self, db, sample_zone):
+        prop = _make_property(portal_id="recent_001")
+        now = datetime.now()
+        self._insert_scored(db, prop, sample_zone, now)
+
+        cutoff = (now - timedelta(hours=24)).isoformat()
+        results = db.get_recent_high_scorers(cutoff, 119.0)
+
+        assert len(results) == 1
+        assert results[0]["uid"] == prop.unique_id
+        assert results[0]["title"] == prop.title
+        assert results[0]["score_total"] >= 119.0
+        assert results[0]["url"] == prop.url
+        assert "scored_at" in results[0]
+
+    def test_excludes_old_scorer(self, db, sample_zone):
+        """Una propiedad puntuada hace más de 24h no debe aparecer."""
+        prop = _make_property(portal_id="old_001")
+        old_time = datetime.now() - timedelta(hours=48)
+        self._insert_scored(db, prop, sample_zone, old_time)
+
+        cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
+        results = db.get_recent_high_scorers(cutoff, 119.0)
+
+        assert results == []
+
+    def test_excludes_below_threshold(self, db, sample_zone):
+        """Una propiedad con score por debajo del umbral no debe aparecer."""
+        prop = _make_property(portal_id="low_001")
+        now = datetime.now()
+        self._insert_scored(db, prop, sample_zone, now, total=100.0)
+
+        cutoff = (now - timedelta(hours=24)).isoformat()
+        results = db.get_recent_high_scorers(cutoff, 119.0)
+
+        assert results == []
+
+    def test_excludes_dismissed(self, db, sample_zone):
+        """Las propiedades descartadas no deben aparecer en las alertas."""
+        prop = _make_property(portal_id="dismissed_001")
+        now = datetime.now()
+        self._insert_scored(db, prop, sample_zone, now)
+        db.dismiss(prop.unique_id)
+
+        cutoff = (now - timedelta(hours=24)).isoformat()
+        results = db.get_recent_high_scorers(cutoff, 119.0)
+
+        assert results == []
+
+    def test_ordered_by_scored_at_desc(self, db, sample_zone):
+        """Los resultados deben ordenarse por scored_at descendente."""
+        now = datetime.now()
+        older = _make_property(portal_id="order_old")
+        newer = _make_property(portal_id="order_new")
+        self._insert_scored(db, older, sample_zone, now - timedelta(hours=5))
+        self._insert_scored(db, newer, sample_zone, now - timedelta(hours=1))
+
+        cutoff = (now - timedelta(hours=24)).isoformat()
+        results = db.get_recent_high_scorers(cutoff, 119.0)
+
+        assert [r["uid"] for r in results] == [
+            newer.unique_id,
+            older.unique_id,
+        ]
+
+    def test_respects_limit(self, db, sample_zone):
+        now = datetime.now()
+        for i in range(5):
+            prop = _make_property(portal_id=f"limit_{i}")
+            self._insert_scored(db, prop, sample_zone, now - timedelta(minutes=i))
+
+        cutoff = (now - timedelta(hours=24)).isoformat()
+        results = db.get_recent_high_scorers(cutoff, 119.0, limit=3)
+
+        assert len(results) == 3
+
+    def test_empty_when_no_scores(self, db):
+        cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
+        assert db.get_recent_high_scorers(cutoff, 119.0) == []

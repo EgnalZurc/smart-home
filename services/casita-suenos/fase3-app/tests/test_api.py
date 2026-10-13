@@ -124,6 +124,84 @@ class TestStatusEndpoint:
         assert response.status_code == 503
 
 
+class TestAlertsEndpoint:
+    """Tests for /api/casita/alerts endpoint (unified alerts system)."""
+
+    def test_alerts_returns_normalized_items(self, client):
+        import main
+
+        main.app.state.db.get_recent_high_scorers.return_value = [
+            {
+                "uid": "idealista:12345",
+                "title": "Casa amplia con jardín en Zamora meseta buena",
+                "price": 120000,
+                "url": "https://idealista.com/inmueble/12345",
+                "score_total": 130.5,
+                "scored_at": "2026-10-13T08:00:00",
+            }
+        ]
+        response = client.get(f"{API}/alerts")
+        assert response.status_code == 200
+        data = response.json()
+        assert "alerts" in data
+        assert len(data["alerts"]) == 1
+
+        alert = data["alerts"][0]
+        assert alert["source"] == "casita"
+        assert alert["severity"] == "info"
+        # Title truncated to 50 chars
+        assert len(alert["title"]) <= 50
+        assert alert["detail"] == "Score: 130/180 - 120,000€"
+        assert alert["timestamp"] == "2026-10-13T08:00:00"
+        assert alert["link"] == "https://idealista.com/inmueble/12345"
+
+    def test_alerts_empty_when_no_high_scorers(self, client):
+        import main
+
+        main.app.state.db.get_recent_high_scorers.return_value = []
+        response = client.get(f"{API}/alerts")
+        assert response.status_code == 200
+        assert response.json() == {"alerts": []}
+
+    def test_alerts_handles_missing_title(self, client):
+        import main
+
+        main.app.state.db.get_recent_high_scorers.return_value = [
+            {
+                "uid": "pisos:999",
+                "title": "",
+                "price": 95000,
+                "url": "https://pisos.com/999",
+                "score_total": 120.0,
+                "scored_at": "2026-10-13T09:00:00",
+            }
+        ]
+        response = client.get(f"{API}/alerts")
+        assert response.status_code == 200
+        alert = response.json()["alerts"][0]
+        assert alert["title"] == "Propiedad interesante"
+
+    def test_alerts_queries_with_threshold(self, client):
+        import main
+        import scorer
+
+        main.app.state.db.get_recent_high_scorers.return_value = []
+        response = client.get(f"{API}/alerts")
+        assert response.status_code == 200
+        # Called with (cutoff_iso, ALERT_THRESHOLD)
+        args = main.app.state.db.get_recent_high_scorers.call_args
+        assert args.args[1] == scorer.ALERT_THRESHOLD
+
+    def test_alerts_503_when_db_not_ready(self):
+        import main
+
+        main.app.state.db = None
+        main.app.state.scheduler = None
+        client = TestClient(main.app)
+        response = client.get(f"{API}/alerts")
+        assert response.status_code == 503
+
+
 class TestRadarEndpoint:
     """Tests for /radar endpoint."""
 

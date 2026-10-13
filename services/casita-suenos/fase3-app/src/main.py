@@ -344,6 +344,43 @@ async def status(request: Request):
 # ── Radar & Properties endpoints ──────────────────────────────────────────────
 
 
+@api.get("/alerts")
+async def get_casita_alerts(request: Request):
+    """Return high-scoring properties for the unified alerts system.
+
+    Lists properties scored above the alert threshold in the last 24h as
+    normalized alert objects consumed by the smart-home dashboard.
+    """
+    from datetime import datetime, timedelta
+
+    import scorer
+
+    db = request.app.state.db
+    if db is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+
+    cutoff_iso = (datetime.now() - timedelta(hours=24)).isoformat()
+    high_scorers = db.get_recent_high_scorers(cutoff_iso, scorer.ALERT_THRESHOLD)
+
+    alerts = []
+    for prop in high_scorers:
+        title = prop.get("title") or ""
+        price = prop.get("price") or 0
+        score = prop.get("score_total") or 0
+        scored_at = prop.get("scored_at")
+        alerts.append(
+            {
+                "source": "casita",
+                "severity": "info",
+                "title": title[:50] if title else "Propiedad interesante",
+                "detail": f"Score: {score:.0f}/{scorer.MAX_SCORE:.0f} - {price:,.0f}€",
+                "timestamp": scored_at if scored_at else datetime.now().isoformat(),
+                "link": prop.get("url"),
+            }
+        )
+    return {"alerts": alerts}
+
+
 @api.get("/radar")
 async def get_radar(
     request: Request,
