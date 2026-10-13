@@ -95,7 +95,9 @@ def test_sample_host_tolerates_sampler_failure(monkeypatch, tmp_path):
     # Point meminfo at a valid file but make temp read a missing path so that
     # sampler raises and is swallowed, yet the others still produce samples.
     monkeypatch.setattr(collector, "PROC_MEMINFO", _write(tmp_path / "mi", MEMINFO))
-    monkeypatch.setattr(collector, "sample_cpu", lambda *a, **k: [("host.cpu.percent", "", 1.0)])
+    monkeypatch.setattr(
+        collector, "sample_cpu", lambda *a, **k: [("host.cpu.percent", "", 1.0)]
+    )
     monkeypatch.setattr(collector, "THERMAL_ZONE", str(tmp_path / "does-not-exist"))
     monkeypatch.setattr(collector, "PROC_LOADAVG", _write(tmp_path / "la", LOADAVG))
 

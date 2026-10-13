@@ -21,6 +21,7 @@ from contextlib import asynccontextmanager
 
 from config import DB_PATH, LOG_LEVEL, PORT, SERVICE_NAME
 from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel
 
 # Shared libs live at /app/libs in the container; add to path for imports.
 _LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
@@ -171,6 +172,54 @@ async def get_summary(
     since_ts = int(time.time()) - seconds
     rows = collector.store.summary(since_ts)
     return {"window": window, "metrics": rows}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Alerts API (Wave 3.3)
+# ═══════════════════════════════════════════════════════════════════════════════
+@app.get("/api/metrics/alerts")
+async def get_alerts() -> dict:
+    """Return the currently-firing alerts (anti-flap active set)."""
+    return {
+        "ts": int(time.time()),
+        "active": collector.alert_engine.active_alerts(),
+    }
+
+
+@app.get("/api/metrics/alerts/history")
+async def get_alerts_history(
+    days: int = Query(7, ge=1, le=90, description="Look-back window in days"),
+) -> dict:
+    """Return the alert audit trail (fired/resolved events) for the last N days."""
+    events = collector.alert_engine.store.history(days=days)
+    return {"days": days, "count": len(events), "events": events}
+
+
+@app.get("/api/metrics/thresholds")
+async def get_thresholds() -> dict:
+    """Return the current alert threshold rule set."""
+    return {"thresholds": collector.alert_engine.get_thresholds()}
+
+
+class ThresholdUpdate(BaseModel):
+    """Runtime threshold patch.
+
+    Maps rule key → fields to override, e.g.::
+
+        {"updates": {"host_temp": {"value": 70, "critical_value": 78}}}
+    """
+
+    updates: dict[str, dict]
+
+
+@app.put("/api/metrics/thresholds")
+async def put_thresholds(payload: ThresholdUpdate) -> dict:
+    """Patch alert thresholds at runtime (SUPER-gated at the proxy)."""
+    try:
+        updated = collector.alert_engine.set_thresholds(payload.updates)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"thresholds": updated}
 
 
 if __name__ == "__main__":  # pragma: no cover

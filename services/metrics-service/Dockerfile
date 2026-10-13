@@ -26,6 +26,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 COPY --chown=appuser:appuser services/metrics-service/src/ .
+# Ship the shared notifications package under LIBS_PATH (/app/libs) so the alert
+# engine can `import notifications` (TelegramNotifier) at runtime. smart_home_common
+# is pip-installed above; notifications is a bare package, so it is copied here.
+COPY --chown=appuser:appuser libs/notifications/ /app/libs/notifications/
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8011
