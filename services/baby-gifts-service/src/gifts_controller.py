@@ -71,6 +71,9 @@ def _init_db():
             window_start TEXT NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_rate_limits_ip ON rate_limits(ip)
+    """)
     # Migration: add expires_at column if it doesn't exist
     try:
         conn.execute("ALTER TABLE invitations ADD COLUMN expires_at TEXT")

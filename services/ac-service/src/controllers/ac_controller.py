@@ -533,10 +533,11 @@ class ACController:
 
     def _needs_melcloud_update(self, outputs: StateMachineOutputs) -> bool:
         """Determina si hay que enviar un comando a MELCloud."""
-        if self._last_outputs is None:
-            return True
+        with self._lock:
+            if self._last_outputs is None:
+                return True
 
-        last = self._last_outputs
+            last = self._last_outputs
 
         # If power, mode, setpoint or fan changed → send
         if outputs.power != last.power:

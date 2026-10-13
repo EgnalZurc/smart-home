@@ -538,10 +538,13 @@ def update_manual_param(param: str, value: str):
             raise HTTPException(400, "Fan speed must be an integer")
         if converted_value < 0 or converted_value > 3:
             raise HTTPException(400, "Fan speed must be between 0 and 3")
-    else:
+    elif param == "mode":
         if value not in ("cool", "heat"):
             raise HTTPException(400, "Mode must be 'cool' or 'heat'")
         converted_value = value
+    else:
+        # Unreachable due to param validation above, but explicit for safety
+        raise HTTPException(400, f"Invalid parameter: {param}")
     ac_controller.update_manual_param(param, converted_value)
     manual_params = state.manual_params
     mode = converted_value if param == "mode" else manual_params.mode
@@ -590,6 +593,7 @@ def get_ac_real():
             "room_temp": state.get("RoomTemperature"),
         }
     except Exception:
+        logger.exception("Error fetching real AC state from MELCloud")
         return {
             "power": None,
             "mode": None,

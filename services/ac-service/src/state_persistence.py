@@ -7,6 +7,7 @@ Goal: Minimize AC on/off cycles to protect the compressor.
 """
 
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,7 +16,8 @@ from smart_home_common.persistence import atomic_read_json, atomic_write_json
 logger = logging.getLogger(__name__)
 
 # Persistence file (inside container, mounted as volume)
-STATE_FILE = Path("/app/data/controller_state.json")
+_DATA_DIR = os.environ.get("AC_DATA_DIR", "/app/data")
+STATE_FILE = Path(_DATA_DIR) / "controller_state.json"
 
 
 @dataclass

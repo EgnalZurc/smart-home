@@ -335,4 +335,8 @@ def add_year() -> dict[str, Any]:
 
 
 def is_healthy() -> bool:
-    return True
+    """Verify data directory is accessible."""
+    try:
+        return DATA_FILE.parent.exists() and DATA_FILE.parent.is_dir()
+    except OSError:
+        return False
