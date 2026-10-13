@@ -227,6 +227,10 @@ tags_metadata = [
         "description": "Docker container management",
     },
     {
+        "name": "Deploy",
+        "description": "Manual GitHub Actions deploy triggers (SUPER only)",
+    },
+    {
         "name": "System",
         "description": "Raspberry Pi system stats and mode control",
     },

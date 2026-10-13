@@ -19,6 +19,23 @@ RUN pip install --user --no-cache-dir --no-compile -r requirements.txt && \
 # Stage 2: Runtime (minimal)
 FROM python:3.12-slim
 
+# Install GitHub CLI (gh): required by the manual deploy endpoint
+# (POST /api/deploy/{service} shells out to `gh workflow run ci.yml`).
+# gh authenticates non-interactively via the GH_TOKEN env var injected at runtime.
+# DL3008 is ignored because gh's apt repo does not publish pinnable per-version packages.
+# hadolint ignore=DL3008
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && apt-get purge -y curl \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
 # Create non-root user
 RUN adduser --disabled-password --gecos '' --uid 1000 appuser
 
