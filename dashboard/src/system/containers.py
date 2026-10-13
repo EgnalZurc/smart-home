@@ -13,8 +13,6 @@ from fastapi import APIRouter, HTTPException, Request
 router = APIRouter(prefix="/api/system", tags=["Containers"])
 
 # Mapping: app key → list of container names to stop/start together.
-# Note: "valheim" is not listed here because the Valheim server runs on EgnalPC,
-# not on the Pi. Valheim control is handled via pc-agent proxy endpoints.
 CONTROLLABLE_CONTAINERS: dict[str, list[str]] = {
     "ac": ["ac-service"],
     "vacaciones": ["vacaciones-service"],
@@ -23,6 +21,7 @@ CONTROLLABLE_CONTAINERS: dict[str, list[str]] = {
     "passwords": ["vaultwarden"],
     "babygifts": ["baby-gifts-service"],
     "portfolio": ["portfolio-monitor"],
+    "valheim": ["valheim-admin"],
 }
 
 DOCKER_PROXY = "http://docker-socket-proxy:2375/v1.41"
