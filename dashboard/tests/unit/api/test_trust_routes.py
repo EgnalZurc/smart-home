@@ -54,7 +54,7 @@ class TestTrustApproveEndpoint:
         }
         mock_devices.create_device_token.return_value = "series:token"
 
-        response = client.get("/api/auth/trust/approve?token=test&sig=valid")
+        response = client.get("/api/auth/trust/approve?token=test-token&sig=valid")
 
         assert response.status_code == 200
         assert "aprobada" in response.text.lower()
@@ -65,7 +65,7 @@ class TestTrustApproveEndpoint:
             ip_address="192.168.1.1",
             pending=True,
         )
-        # Verify trust request was deleted
+        # Verify trust request was deleted (using URL token)
         mock_users.delete_trust_request.assert_called_once_with("test-token")
 
 
