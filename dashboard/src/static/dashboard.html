@@ -561,7 +561,7 @@ const APP_CATALOGUE = {
     casita:    { url: '/smart-home/casita?' + Date.now(),             nameKey: 'casita_name',    descKey: 'casita_desc',    statusUrl: '/api/health/casita',    getStatus: d => d?.online === true },
     passwords: { url: '/passwords/',                                  nameKey: 'passwords_name', descKey: 'passwords_desc', statusUrl: '/api/health/passwords', getStatus: d => d?.online === true },
     babygifts: { url: '/smart-home/baby-gifts', nameKey: 'babygifts_name', descKey: 'babygifts_desc', statusUrl: '/api/health/baby-gifts', getStatus: d => d?.online === true },
-    valheim:   { url: '/valheim-admin/',        nameKey: 'valheim_name',   descKey: 'valheim_desc',   statusUrl: '/api/health/valheim',    getStatus: d => d?.online === true },
+    valheim:   { url: null, controllable: false, nameKey: 'valheim_name',   descKey: 'valheim_desc',   statusUrl: '/api/health/valheim',    getStatus: d => d?.online === true },
     portfolio: { url: '/smart-home/portfolio',  nameKey: 'portfolio_name', descKey: 'portfolio_desc', statusUrl: '/api/health/portfolio',  getStatus: d => d?.online === true },
 };
 
@@ -1128,7 +1128,9 @@ function renderApps() {
     if (!APPS.length) return;
     const showBtn = isAdmin();
     document.getElementById('apps-list').innerHTML = APPS.map(app => {
-        const btnHtml = showBtn ? `<button class="svc-btn loading" id="btn-${app.key}" onclick="toggleService(event,'${app.key}')">${t('svc_loading')}</button>` : '';
+        // Only show control button for services that are controllable (not explicitly false)
+        const canControl = app.controllable !== false;
+        const btnHtml = (showBtn && canControl) ? `<button class="svc-btn loading" id="btn-${app.key}" onclick="toggleService(event,'${app.key}')">${t('svc_loading')}</button>` : '';
         const tag = app.url ? 'a' : 'div';
         const href = app.url ? `href="${app.url}"` : '';
         return `<${tag} ${href} class="app-card px-4 py-3.5">
@@ -1142,7 +1144,7 @@ function renderApps() {
                     </div>
                     <p class="text-[11px] text-slate-400 truncate">${t(app.descKey)}</p>
                 </div>
-                ${btnHtml}${(showBtn || !app.url) ? '' : '<span class="text-slate-600 ml-1">›</span>'}
+                ${btnHtml}${((showBtn && canControl) || !app.url) ? '' : '<span class="text-slate-600 ml-1">›</span>'}
             </div>
         </${tag}>`;
     }).join('');

@@ -113,9 +113,7 @@ async def get_backend_health():
         import profiles.db as profiles_db
 
         db_path = Path(profiles_db.AUTH_DB_PATH)
-        if db_path.exists():
-            checks["db_accessible"] = True
-        elif db_path.parent.exists():
+        if db_path.exists() or db_path.parent.exists():
             checks["db_accessible"] = True
     except Exception as e:
         checks["db_error"] = str(e)
