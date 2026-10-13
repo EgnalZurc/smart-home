@@ -97,6 +97,66 @@ async def stop_service(app_key: str, request: Request) -> dict[str, Any]:
     return {"status": "ok" if all_ok else "partial", "results": results}
 
 
+# Seconds to wait between the stop and start phases of a restart.
+RESTART_PAUSE_SECONDS = 2
+
+
+@router.post("/containers/{app_key}/restart")
+async def restart_service(app_key: str, request: Request) -> dict[str, Any]:
+    """Restart all containers for the given service app key.
+
+    Performs a stop (10s graceful timeout) followed by a start, with a short
+    pause in between. Returns the combined result of both phases so the caller
+    can tell which half failed.
+    Only accessible to SUPER profile.
+    """
+    require_super(request)
+    containers = CONTROLLABLE_CONTAINERS.get(app_key)
+    if not containers:
+        raise HTTPException(status_code=404, detail=f"Unknown service: {app_key}")
+
+    stop_results: dict[str, str] = {}
+    start_results: dict[str, str] = {}
+    delay = CONTAINER_START_DELAYS.get(app_key, 0)
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        # Phase 1: stop every container.
+        for name in containers:
+            try:
+                r = await client.post(f"{DOCKER_PROXY}/containers/{name}/stop?t=10")
+                stop_results[name] = (
+                    "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+                )
+            except Exception as e:
+                stop_results[name] = f"error: {e}"
+
+        # Short pause so containers release ports/locks before restarting.
+        await asyncio.sleep(RESTART_PAUSE_SECONDS)
+
+        # Phase 2: start every container, honouring any per-service delays.
+        for i, name in enumerate(containers):
+            if i > 0 and delay > 0:
+                await asyncio.sleep(delay)
+            try:
+                r = await client.post(f"{DOCKER_PROXY}/containers/{name}/start")
+                start_results[name] = (
+                    "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
+                )
+            except Exception as e:
+                start_results[name] = f"error: {e}"
+
+    def _ok(v: str) -> bool:
+        return v == "ok" or v == "http_304"
+
+    all_ok = all(_ok(v) for v in stop_results.values()) and all(
+        _ok(v) for v in start_results.values()
+    )
+    return {
+        "status": "ok" if all_ok else "partial",
+        "stop": stop_results,
+        "start": start_results,
+    }
+
+
 @router.post("/containers/{app_key}/start")
 async def start_service(app_key: str, request: Request) -> dict[str, Any]:
     """Start all containers for the given service app key.
