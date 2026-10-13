@@ -16,6 +16,7 @@ import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import httpx
 from async_http_client import AsyncServiceClient, ServiceClientConfig
@@ -120,13 +121,13 @@ def validate_world_name(world_name: str) -> str:
 
 
 @app.get("/health")
-def health() -> dict[str, bool | str]:
+def health() -> dict[str, Any]:
     """Health check for valheim-admin (Pi side). Always returns online."""
     return {"online": True, "service": "valheim-admin"}
 
 
 @app.get("/health/ready")
-async def health_ready() -> dict[str, bool | str]:
+async def health_ready() -> dict[str, Any]:
     """
     Readiness check that verifies connectivity to pc-agent.
 
@@ -178,7 +179,7 @@ async def serve_index():
 
 
 @app.get("/api/status")
-async def get_status() -> dict[str, bool | str]:
+async def get_status() -> dict[str, Any]:
     """Get Valheim server status."""
     try:
         return await pc_agent.get("/valheim/status")
