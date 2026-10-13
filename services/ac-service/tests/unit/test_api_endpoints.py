@@ -607,6 +607,54 @@ class TestErrorTrackerNone:
         assert data["errors"] == []
 
 
+class TestAlertsEndpoint:
+    """Tests for /api/ac/alerts endpoint."""
+
+    def test_get_alerts_empty_when_no_sensor_alert(self, client, mock_components):
+        """GET /api/ac/alerts should return no alerts when sensor_alert is False."""
+        mock_components["ac_controller"].current_state.sensor_alert = False
+
+        response = client.get("/api/ac/alerts")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["alerts"] == []
+
+    def test_get_alerts_with_sensor_alert(self, client, mock_components):
+        """GET /api/ac/alerts should return an alert when sensor_alert is True."""
+        mock_components["ac_controller"].current_state.sensor_alert = True
+        mock_components["ac_controller"].config.sensor_timeout = 3600
+
+        response = client.get("/api/ac/alerts")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["alerts"]) == 1
+        alert = data["alerts"][0]
+        assert alert["source"] == "ac"
+        assert alert["severity"] == "warning"
+        assert alert["title"] == "Sensor sin datos"
+        assert alert["title_en"] == "Sensor offline"
+        assert "3600" in alert["detail"]
+        assert "3600" in alert["detail_en"]
+        assert "timestamp" in alert
+
+    def test_get_alerts_when_controller_none(self, client):
+        """GET /api/ac/alerts should return no alerts when controller is None."""
+        import main
+
+        original = main.ac_controller
+        main.ac_controller = None
+
+        response = client.get("/api/ac/alerts")
+
+        main.ac_controller = original
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["alerts"] == []
+
+
 class TestSubscriptionManagerNone:
     """Tests when subscription manager is None."""
 
