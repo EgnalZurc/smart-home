@@ -391,6 +391,63 @@
         .days-btn:hover { background: rgba(51,65,85,.5); color: #e2e8f0; }
         .days-btn.active { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.5); color: #a5b4fc; }
 
+        /* ── Metrics widgets (observability) ──────────────────────────────── */
+        .mx-section { margin-bottom: 18px; }
+        .mx-section:last-child { margin-bottom: 0; }
+        .mx-section-title {
+            font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+            color: #64748b; font-weight: 700; margin-bottom: 8px;
+        }
+        .mx-spark-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 0; border-bottom: 1px solid rgba(51,65,85,.3);
+        }
+        .mx-spark-row:last-child { border-bottom: none; }
+        .mx-spark-label { font-size: 12px; color: #94a3b8; width: 54px; flex-shrink: 0; }
+        .mx-spark-svg { flex: 1; height: 32px; display: block; }
+        .mx-spark-svg path { fill: none; stroke-width: 1.5; }
+        .mx-spark-svg .mx-fill { stroke: none; opacity: .12; }
+        .mx-spark-cur {
+            font-size: 12px; font-weight: 700; width: 56px; text-align: right;
+            flex-shrink: 0; color: #e2e8f0;
+        }
+        .mx-spark-cur.green { color: #4ade80; }
+        .mx-spark-cur.yellow { color: #fcd34d; }
+        .mx-spark-cur.red { color: #fca5a5; }
+        /* Per-container memory bars */
+        .mx-cbar-row { margin-bottom: 10px; }
+        .mx-cbar-row:last-child { margin-bottom: 0; }
+        .mx-cbar-head {
+            display: flex; justify-content: space-between; align-items: baseline;
+            margin-bottom: 3px;
+        }
+        .mx-cbar-name { font-size: 12px; color: #e2e8f0; font-weight: 500; }
+        .mx-cbar-val { font-size: 11px; color: #94a3b8; }
+        .mx-cbar-bg { height: 6px; border-radius: 4px; background: rgba(51,65,85,.5); overflow: hidden; }
+        .mx-cbar-fill { height: 100%; border-radius: 4px; transition: width .3s; }
+        .mx-cbar-fill.green { background: #22c55e; }
+        .mx-cbar-fill.yellow { background: #f59e0b; }
+        .mx-cbar-fill.red { background: #ef4444; }
+        /* Service latency/uptime table */
+        .mx-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .mx-table th {
+            text-align: left; color: #64748b; font-weight: 600; font-size: 10px;
+            text-transform: uppercase; letter-spacing: .05em;
+            padding: 4px 6px; border-bottom: 1px solid rgba(51,65,85,.5);
+        }
+        .mx-table th.num, .mx-table td.num { text-align: right; }
+        .mx-table td {
+            padding: 6px 6px; color: #cbd5e1;
+            border-bottom: 1px solid rgba(51,65,85,.25);
+        }
+        .mx-table tr:last-child td { border-bottom: none; }
+        .mx-table td.svc { color: #e2e8f0; font-weight: 500; }
+        .mx-up-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; }
+        .mx-up-dot.ok { background: #22c55e; }
+        .mx-up-dot.warn { background: #f59e0b; }
+        .mx-up-dot.down { background: #ef4444; }
+        .mx-empty { text-align: center; color: #64748b; font-size: 12px; padding: 14px 0; }
+
         /* Responsive container - compact (focused UI: app grid) */
         .responsive-compact { width: 100%; max-width: 100%; }
         @media (min-width: 640px) { .responsive-compact { max-width: 540px; } }
@@ -434,6 +491,10 @@
       <button class="res-tab" data-source="pc" onclick="switchResSource('pc')">
         <span class="tab-dot bg-slate-600" id="pc-tab-dot"></span>
         <span>Egnal PC</span>
+      </button>
+      <button class="res-tab" data-source="metrics" id="res-tab-metrics" onclick="switchResSource('metrics')" style="display:none">
+        <span class="tab-dot bg-slate-600" id="metrics-tab-dot"></span>
+        <span id="metrics-tab-label">Métricas</span>
       </button>
     </div>
     <div id="res-body">
@@ -685,6 +746,13 @@ const T = {
         ht_static_files: 'Ficheros estáticos', ht_yes: 'Sí', ht_no: 'No',
         alert_title: 'Alertas de memoria', alert_no_alerts: 'Sin alertas',
         alert_usage: 'Uso', alert_limit: 'Límite',
+        mx_tab: 'Métricas', mx_ram: 'RAM', mx_cpu: 'CPU', mx_temp: 'Temp',
+        mx_trends: 'Tendencias del host', mx_containers: 'Memoria por contenedor',
+        mx_services: 'Latencia y disponibilidad',
+        mx_range_1h: '1h', mx_range_24h: '24h',
+        mx_col_service: 'Servicio', mx_col_latency: 'Latencia med.',
+        mx_col_max: 'Máx', mx_col_uptime: 'Disponib.',
+        mx_no_data: 'Sin datos todavía', mx_error: 'No se pudieron cargar las métricas',
     },
     en: {
         title: 'Cuchi Casa', services: 'Services', logout_label: 'Sign out',
@@ -718,6 +786,13 @@ const T = {
         ht_static_files: 'Static files', ht_yes: 'Yes', ht_no: 'No',
         alert_title: 'Memory alerts', alert_no_alerts: 'No alerts',
         alert_usage: 'Usage', alert_limit: 'Limit',
+        mx_tab: 'Metrics', mx_ram: 'RAM', mx_cpu: 'CPU', mx_temp: 'Temp',
+        mx_trends: 'Host trends', mx_containers: 'Per-container memory',
+        mx_services: 'Latency & uptime',
+        mx_range_1h: '1h', mx_range_24h: '24h',
+        mx_col_service: 'Service', mx_col_latency: 'Avg latency',
+        mx_col_max: 'Max', mx_col_uptime: 'Uptime',
+        mx_no_data: 'No data yet', mx_error: 'Failed to load metrics',
     },
 };
 
@@ -778,6 +853,8 @@ function applyLang() {
     document.getElementById('apps-label').textContent = t('services');
     document.getElementById('res-title').textContent = t('res_title');
     document.getElementById('alert-title').textContent = t('alert_title');
+    const mxTabLabel = document.getElementById('metrics-tab-label');
+    if (mxTabLabel) mxTabLabel.textContent = t('mx_tab');
     const logoutText = document.getElementById('logout-text');
     if (logoutText) logoutText.textContent = t('logout_label');
     saveLang(currentLang);
@@ -855,6 +932,8 @@ function _tempColor(c) { return c < 60 ? 'green' : c < 75 ? 'yellow' : 'red'; }
 function _bar(pct, color) { return `<div class="res-bar-bg"><div class="res-bar ${color}" style="width:${Math.min(pct,100)}%"></div></div>`; }
 
 async function switchResSource(source) {
+    // Metrics is SUPER-only — never switch a non-admin onto it.
+    if (source === 'metrics' && !isAdmin()) return;
     currentResSource = source;
     document.querySelectorAll('#res-tabs .res-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.source === source));
     if (source === 'pc') {
@@ -865,6 +944,8 @@ async function switchResSource(source) {
             document.getElementById('res-body').innerHTML = '<div class="flex flex-col items-center justify-center py-10 gap-3"><div class="spinner"></div><span class="text-slate-500 text-sm">Cargando estado del PC…</span></div>';
         }
         await ensurePcStatus();
+    } else if (source === 'metrics') {
+        document.getElementById('res-body').innerHTML = `<div class="mx-empty">${t('ht_loading')}</div>`;
     }
     fetchAndRenderResources();
 }
@@ -919,6 +1000,8 @@ async function fetchAndRenderResources() {
             document.getElementById('pi-tab-dot').className = 'tab-dot bg-red-400';
             document.getElementById('res-body').innerHTML = `<p class="text-center text-red-400 text-sm py-4">Error: ${e.message}</p>`;
         }
+    } else if (currentResSource === 'metrics') {
+        await fetchAndRenderMetrics();
     } else {
         renderPcResources();
     }
@@ -938,6 +1021,9 @@ async function setPcMode(mode) {
 function openResModal() {
     document.getElementById('res-modal').classList.add('open');
     currentResSource = 'pi';
+    // Metrics tab is SUPER-only (host/container internals): show it for admins only.
+    const mxTab = document.getElementById('res-tab-metrics');
+    if (mxTab) mxTab.style.display = isAdmin() ? '' : 'none';
     document.querySelectorAll('#res-tabs .res-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.source === 'pi'));
     fetchAndRenderResources();
     _resInterval = setInterval(fetchAndRenderResources, 5000);
@@ -948,6 +1034,179 @@ function closeResModal(e) {
     document.getElementById('res-modal').classList.remove('open');
     clearInterval(_resInterval);
     _resInterval = null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Metrics widgets (observability) — SUPER-only tab in the Resources modal.
+//
+// Data comes from the infrastructure metrics-service, reached only through the
+// SUPER-gated backend proxy under /api/metrics/*. metrics-service is NOT in
+// APP_CATALOGUE / CONTROLLABLE_CONTAINERS (it is infrastructure, not a tile).
+// ═══════════════════════════════════════════════════════════════════════════
+let mxRange = '1h';  // '1h' -> hi-res ring buffer; '24h' -> SQLite rollup
+
+// Host trend sparklines to render: metric key + i18n label + value formatter +
+// a thresholds fn (pct→color) reusing the same bands as the live Pi stats.
+const MX_SPARKS = [
+    { metric: 'host.ram.percent',  labelKey: 'mx_ram',  fmt: v => `${v.toFixed(0)}%`,  color: _barColor },
+    { metric: 'host.cpu.percent',  labelKey: 'mx_cpu',  fmt: v => `${v.toFixed(0)}%`,  color: _barColor },
+    { metric: 'host.temp.celsius', labelKey: 'mx_temp', fmt: v => `${v.toFixed(0)}°C`, color: _tempColor },
+];
+
+function setMxRange(range) {
+    if (range === mxRange) return;
+    mxRange = range;
+    document.querySelectorAll('#mx-range .days-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.range === range));
+    fetchAndRenderMetrics();
+}
+
+// Build an SVG sparkline path from a list of {ts, value} points. Returns the
+// polyline + a filled area under it, scaled to the given box. Flat/empty series
+// render as a baseline.
+function _mxSparkPath(points, w, h, pad = 2) {
+    if (!points || points.length === 0) return { line: '', area: '' };
+    const vals = points.map(p => p.value);
+    let min = Math.min(...vals), max = Math.max(...vals);
+    if (max - min < 1e-6) { min -= 1; max += 1; }  // avoid div-by-zero on flat data
+    const n = points.length;
+    const xStep = n > 1 ? (w - pad * 2) / (n - 1) : 0;
+    const scaleY = v => h - pad - ((v - min) / (max - min)) * (h - pad * 2);
+    const coords = points.map((p, i) => [pad + i * xStep, scaleY(p.value)]);
+    const line = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+    const first = coords[0], last = coords[coords.length - 1];
+    const area = `${line} L${last[0].toFixed(1)} ${h} L${first[0].toFixed(1)} ${h} Z`;
+    return { line, area };
+}
+
+const _MX_STROKE = { green: '#4ade80', yellow: '#fbbf24', red: '#f87171' };
+
+async function _mxFetchSeries(metric) {
+    const resolution = mxRange === '1h' ? 'hi' : 'rollup';
+    const since = mxRange === '1h' ? '-1h' : '-24h';
+    const qs = new URLSearchParams({ metric, resolution, since }).toString();
+    const r = await fetch(`/api/metrics/series?${qs}`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    return data.points || [];
+}
+
+function _renderMxSparks(seriesByMetric) {
+    const W = 180, H = 32;
+    return MX_SPARKS.map(spec => {
+        const pts = seriesByMetric[spec.metric] || [];
+        const cur = pts.length ? pts[pts.length - 1].value : null;
+        const colorName = cur != null ? spec.color(cur) : 'green';
+        const stroke = _MX_STROKE[colorName];
+        const { line, area } = _mxSparkPath(pts, W, H);
+        const curTxt = cur != null ? spec.fmt(cur) : '—';
+        return `
+          <div class="mx-spark-row">
+            <span class="mx-spark-label">${t(spec.labelKey)}</span>
+            <svg class="mx-spark-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+              <path class="mx-fill" d="${area}" fill="${stroke}"/>
+              <path d="${line}" stroke="${stroke}"/>
+            </svg>
+            <span class="mx-spark-cur ${colorName}">${curTxt}</span>
+          </div>`;
+    }).join('');
+}
+
+function _renderMxContainers(latest) {
+    // latest.series is keyed "metric|label"; pick container.mem.percent rows.
+    const rows = Object.values(latest.series || {})
+        .filter(s => s.metric === 'container.mem.percent')
+        .sort((a, b) => b.value - a.value);
+    if (!rows.length) return `<div class="mx-empty">${t('mx_no_data')}</div>`;
+    // used_mb companions for the "X MB" label, keyed by container label.
+    const usedByName = {};
+    for (const s of Object.values(latest.series || {})) {
+        if (s.metric === 'container.mem.used_mb') usedByName[s.label] = s.value;
+    }
+    return rows.map(s => {
+        const pct = s.value;
+        const colorName = _barColor(pct);
+        const usedMb = usedByName[s.label];
+        const valTxt = usedMb != null ? `${usedMb.toFixed(0)} MB · ${pct.toFixed(0)}%` : `${pct.toFixed(0)}%`;
+        return `
+          <div class="mx-cbar-row">
+            <div class="mx-cbar-head"><span class="mx-cbar-name">${s.label}</span><span class="mx-cbar-val">${valTxt}</span></div>
+            <div class="mx-cbar-bg"><div class="mx-cbar-fill ${colorName}" style="width:${Math.min(pct, 100)}%"></div></div>
+          </div>`;
+    }).join('');
+}
+
+function _renderMxServices(summary) {
+    // summary.metrics rows are {metric, label, min, avg, max, count}. Build a
+    // per-service view from service.<key>.latency_ms and service.<key>.online.
+    const svcs = {};
+    for (const row of summary.metrics || []) {
+        const m = row.metric || '';
+        if (m.startsWith('service.') && m.endsWith('.latency_ms')) {
+            (svcs[row.label] ??= {}).latencyAvg = row.avg;
+            svcs[row.label].latencyMax = row.max;
+        } else if (m.startsWith('service.') && m.endsWith('.online')) {
+            (svcs[row.label] ??= {}).uptime = row.avg;  // mean of 0/1 → fraction up
+        }
+    }
+    const names = Object.keys(svcs).sort();
+    if (!names.length) return `<div class="mx-empty">${t('mx_no_data')}</div>`;
+    const rowsHtml = names.map(name => {
+        const s = svcs[name];
+        const upPct = s.uptime != null ? s.uptime * 100 : null;
+        const dotCls = upPct == null ? 'warn' : upPct >= 99 ? 'ok' : upPct >= 90 ? 'warn' : 'down';
+        const lat = s.latencyAvg != null ? `${Math.round(s.latencyAvg)} ms` : '—';
+        const latMax = s.latencyMax != null ? `${Math.round(s.latencyMax)} ms` : '—';
+        const up = upPct != null ? `${upPct.toFixed(1)}%` : '—';
+        return `<tr><td class="svc"><span class="mx-up-dot ${dotCls}"></span>${name}</td><td class="num">${lat}</td><td class="num">${latMax}</td><td class="num">${up}</td></tr>`;
+    }).join('');
+    return `
+      <table class="mx-table">
+        <thead><tr>
+          <th>${t('mx_col_service')}</th>
+          <th class="num">${t('mx_col_latency')}</th>
+          <th class="num">${t('mx_col_max')}</th>
+          <th class="num">${t('mx_col_uptime')}</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>`;
+}
+
+async function fetchAndRenderMetrics() {
+    const body = document.getElementById('res-body');
+    document.getElementById('res-timestamp').textContent = new Date().toLocaleTimeString();
+    const mxDot = document.getElementById('metrics-tab-dot');
+    const summaryWindow = mxRange === '1h' ? '1h' : '24h';
+    try {
+        const [sparkArr, latest, summary] = await Promise.all([
+            Promise.all(MX_SPARKS.map(s => _mxFetchSeries(s.metric))),
+            fetch('/api/metrics/latest').then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }),
+            fetch(`/api/metrics/summary?window=${summaryWindow}`).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }),
+        ]);
+        const seriesByMetric = {};
+        MX_SPARKS.forEach((s, i) => { seriesByMetric[s.metric] = sparkArr[i]; });
+        if (mxDot) mxDot.className = 'tab-dot bg-green-500';
+        body.innerHTML = `
+          <div class="days-selector" id="mx-range">
+            <button class="days-btn ${mxRange === '1h' ? 'active' : ''}" data-range="1h" onclick="setMxRange('1h')">${t('mx_range_1h')}</button>
+            <button class="days-btn ${mxRange === '24h' ? 'active' : ''}" data-range="24h" onclick="setMxRange('24h')">${t('mx_range_24h')}</button>
+          </div>
+          <div class="mx-section">
+            <div class="mx-section-title">${t('mx_trends')}</div>
+            ${_renderMxSparks(seriesByMetric)}
+          </div>
+          <div class="mx-section">
+            <div class="mx-section-title">${t('mx_containers')}</div>
+            ${_renderMxContainers(latest)}
+          </div>
+          <div class="mx-section">
+            <div class="mx-section-title">${t('mx_services')}</div>
+            ${_renderMxServices(summary)}
+          </div>`;
+    } catch (e) {
+        if (mxDot) mxDot.className = 'tab-dot bg-red-400';
+        body.innerHTML = `<p class="text-center text-red-400 text-sm py-4">${t('mx_error')}: ${e.message}</p>`;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
