@@ -232,7 +232,10 @@ async def get_valheim_health():
         async with httpx.AsyncClient(timeout=3.0) as client:
             r = await client.get(f"{pc_agent_url}/health")
             data = r.json()
-            return {"online": data.get("online", False), "docker": data.get("docker", False)}
+            return {
+                "online": data.get("online", False),
+                "docker": data.get("docker", False),
+            }
     except Exception:
         return {"online": False, "docker": False}
 
