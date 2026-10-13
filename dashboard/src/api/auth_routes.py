@@ -206,25 +206,28 @@ async def post_token(
     """Validate credentials and issue a session cookie.
 
     Device trust flow:
-      1. If user has an approved trust request (admin already approved):
-         → Issue device cookie (Jaspan token) automatically, no checkbox needed.
-         → Clear the consumed trust request row.
-      2. If 'trusted' checkbox is checked and no approved request exists:
-         → If no active (pending/approved) request: create one + send email.
+      1. If 'trusted' checkbox is checked:
+         → If no pending request exists: create one + send email to admin.
          → If one already exists: skip (dedup).
-      3. Always issue a fresh 24h JWT.
+      2. Always issue a fresh 24h JWT.
+
+    The actual device token is created when admin approves the email link
+    (in trust_routes.py) and delivered to the user's browser on their next
+    authenticated request (in AuthMiddleware).
 
     Sanitises the next_url redirect to relative paths only.
 
     Rate limiting: 5 attempts per 5 minutes per IP address.
     """
-    # Rate limiting check
     client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("User-Agent", "unknown")
+
+    # Rate limiting check
     if not _login_limiter.is_allowed(client_ip):
         logger.warning(
-            "Rate limit exceeded for IP %s attempting login as %r",
-            client_ip,
+            "LOGIN BLOCKED (rate limit): user=%r ip=%s",
             username,
+            client_ip,
         )
         return _serve_login_html(
             error="Demasiados intentos. Espera unos minutos e inténtalo de nuevo."
@@ -232,11 +235,21 @@ async def post_token(
 
     if not auth_users.authenticate_user(username, password):
         logger.warning(
-            "Failed login for user %r from %s",
+            "LOGIN FAILED (bad credentials): user=%r ip=%s ua=%s",
             username,
             client_ip,
+            user_agent[:60],
         )
         return _serve_login_html(error="Usuario o contraseña incorrectos")
+
+    # Successful login
+    logger.info(
+        "LOGIN OK: user=%r ip=%s remember_device=%s ua=%s",
+        username,
+        client_ip,
+        trusted,
+        user_agent[:60],
+    )
 
     # Build response — always issue fresh 24h JWT
     if not next_url.startswith("/") or next_url.startswith("//"):
@@ -246,31 +259,23 @@ async def post_token(
     session_token = auth_core.create_token(username)
     auth_core.set_session_cookie(response, session_token)
 
-    # Always check for approved trust request (auto-issue device token if approved)
-    approved_row = auth_users.get_approved_trust_request(username)
-    if approved_row:
-        # Issue the Jaspan device token and clear the (now consumed) trust request
-        ip = request.client.host if request.client else "unknown"
-        ua = request.headers.get("User-Agent", "unknown")
-        device_cookie = auth_devices.create_device_token(username, ua, ip)
-        _set_device_cookie(response, device_cookie)
-        auth_users.delete_trust_request(approved_row["token"])
-        logger.info("Device token auto-issued for approved user %r", username)
-    elif trusted:
-        # No approved request — user wants to request trust, create pending + send email
+    if trusted:
+        # User wants to remember this device — create trust request if not exists
         if not auth_users.has_active_trust_request(username):
-            ip = request.client.host if request.client else "unknown"
-            ua = request.headers.get("User-Agent", "unknown")
-            trust_token = auth_users.create_trust_request(username, ua, ip)
-            _send_trust_email(username, ua, ip, trust_token)
+            trust_token = auth_users.create_trust_request(
+                username, user_agent, client_ip
+            )
+            _send_trust_email(username, user_agent, client_ip, trust_token)
             logger.info(
-                "Trust request created for user %r, token prefix: %s",
+                "TRUST REQUEST CREATED: user=%r ip=%s ua=%s token_prefix=%s",
                 username,
+                client_ip,
+                user_agent[:40],
                 trust_token[:8],
             )
         else:
             logger.info(
-                "Trust request skipped for user %r — active request already exists",
+                "TRUST REQUEST SKIPPED (already pending): user=%r",
                 username,
             )
 
@@ -280,6 +285,8 @@ async def post_token(
 @router.post("/logout")
 async def post_logout(request: Request):
     """Clear session and device cookies, revoke device token from DB."""
+    user = auth_core.get_current_user(request)
+
     # Revoke device token if present
     device_cookie = auth_devices.get_device_cookie_from_request(request)
     if device_cookie:
@@ -291,8 +298,14 @@ async def post_logout(request: Request):
             revoked = revoke_device(series)
             if revoked:
                 logger.info(
-                    "Device token revoked on logout (series prefix: %s)", series[:8]
+                    "LOGOUT: user=%r device_token_revoked=True series_prefix=%s",
+                    user,
+                    series[:8],
                 )
+            else:
+                logger.info("LOGOUT: user=%r device_token_revoked=False", user)
+    else:
+        logger.info("LOGOUT: user=%r (no device token)", user)
 
     response = RedirectResponse(url="/api/auth/login", status_code=303)
     auth_core.clear_session_cookie(response)

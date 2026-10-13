@@ -65,10 +65,6 @@ class TestTokenEndpoint:
     def test_token_success_redirects(self, client):
         with (
             patch("api.auth_routes.auth_users.authenticate_user", return_value=True),
-            patch(
-                "api.auth_routes.auth_users.get_approved_trust_request",
-                return_value=None,
-            ),
             patch("api.auth_routes.auth_core.create_token", return_value="test-jwt"),
             patch("api.auth_routes.auth_core.set_session_cookie"),
         ):
@@ -84,10 +80,6 @@ class TestTokenEndpoint:
     def test_token_sanitizes_next_url(self, client):
         with (
             patch("api.auth_routes.auth_users.authenticate_user", return_value=True),
-            patch(
-                "api.auth_routes.auth_users.get_approved_trust_request",
-                return_value=None,
-            ),
             patch("api.auth_routes.auth_core.create_token", return_value="test-jwt"),
             patch("api.auth_routes.auth_core.set_session_cookie"),
         ):
@@ -105,76 +97,10 @@ class TestTokenEndpoint:
             assert response.status_code == 303
             assert response.headers["location"] == "/smart-home"
 
-    def test_token_auto_issues_device_token_when_approved(self, client):
-        """Device token should be issued automatically when approved, without checkbox."""
-        approved_row = {"token": "test-token", "username": "testuser"}
-
-        with (
-            patch("api.auth_routes.auth_users.authenticate_user", return_value=True),
-            patch(
-                "api.auth_routes.auth_users.get_approved_trust_request",
-                return_value=approved_row,
-            ),
-            patch(
-                "api.auth_routes.auth_devices.create_device_token",
-                return_value="device-cookie",
-            ) as mock_create,
-            patch("api.auth_routes.auth_users.delete_trust_request") as mock_delete,
-            patch("api.auth_routes.auth_core.create_token", return_value="test-jwt"),
-            patch("api.auth_routes.auth_core.set_session_cookie"),
-        ):
-            # Note: trusted is NOT in the form data
-            response = client.post(
-                "/api/auth/token",
-                data={
-                    "username": "testuser",
-                    "password": "testpass",
-                },
-                follow_redirects=False,
-            )
-
-            assert response.status_code == 303
-            # Device token should be created even without checkbox
-            mock_create.assert_called_once()
-            mock_delete.assert_called_once_with("test-token")
-
-    def test_token_trusted_with_approved_request(self, client):
-        approved_row = {"token": "test-token", "username": "testuser"}
-
-        with (
-            patch("api.auth_routes.auth_users.authenticate_user", return_value=True),
-            patch(
-                "api.auth_routes.auth_users.get_approved_trust_request",
-                return_value=approved_row,
-            ),
-            patch(
-                "api.auth_routes.auth_devices.create_device_token",
-                return_value="device-cookie",
-            ),
-            patch("api.auth_routes.auth_users.delete_trust_request"),
-            patch("api.auth_routes.auth_core.create_token", return_value="test-jwt"),
-            patch("api.auth_routes.auth_core.set_session_cookie"),
-        ):
-            response = client.post(
-                "/api/auth/token",
-                data={
-                    "username": "testuser",
-                    "password": "testpass",
-                    "trusted": "true",
-                },
-                follow_redirects=False,
-            )
-
-            assert response.status_code == 303
-
     def test_token_trusted_creates_pending_request(self, client):
         with (
             patch("api.auth_routes._login_limiter.is_allowed", return_value=True),
             patch("api.auth_routes.auth_users.authenticate_user", return_value=True),
-            patch(
-                "api.auth_routes.auth_users.get_approved_trust_request",
-                return_value=None,
-            ),
             patch(
                 "api.auth_routes.auth_users.has_active_trust_request",
                 return_value=False,

@@ -6,14 +6,17 @@ GET  /api/auth/trust/approve  Admin approves a trusted-device request (email lin
 GET  /api/auth/trust/reject   Admin rejects a trusted-device request (email link)
 
 These endpoints are reached through single-use signed links emailed to the admin
-when a user requests that their device be marked as trusted. The device-token
-issuing flow itself lives in ``auth_routes.py`` (the ``POST /api/auth/token``
-handler), since it is part of the login path.
+when a user requests that their device be marked as trusted.
+
+When admin approves, the device token is created IMMEDIATELY using the user_agent
+and ip_address from the original request. The token is stored with pending_cookie
+set, and will be delivered to the user's browser on their next authenticated request.
 """
 
 import html
 import logging
 
+import auth_devices
 import auth_users
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
@@ -31,7 +34,12 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 @router.get("/trust/approve", include_in_schema=False)
 async def trust_approve(token: str, sig: str):
-    """Admin approves a trust request via signed email link."""
+    """Admin approves a trust request via signed email link.
+
+    This immediately creates the device token using the user_agent and ip_address
+    from the original trust request. The token is stored as pending and will be
+    delivered to the user's browser on their next authenticated request.
+    """
     if not auth_users.verify_action_sig(token, "approve", sig):
         raise HTTPException(status_code=403, detail="Invalid or tampered signature")
 
@@ -46,13 +54,29 @@ async def trust_approve(token: str, sig: str):
         )
 
     username = row["username"]
-    logger.info("Admin approved trusted device request for user %r", username)
+    user_agent = row["user_agent"]
+    ip_address = row["ip_address"]
+
+    # Create device token immediately (pending delivery to user's browser)
+    auth_devices.create_device_token(
+        username=username,
+        user_agent=user_agent,
+        ip_address=ip_address,
+        pending=True,
+    )
+
+    # Delete the consumed trust request
+    auth_users.delete_trust_request(token)
+
+    logger.info(
+        "Admin approved trusted device for user %r — token created (pending delivery)",
+        username,
+    )
     return HTMLResponse(
         _result_page(
             "Solicitud aprobada",
-            f"La solicitud de <strong>{html.escape(username)}</strong> ha sido aprobada. "
-            "En el próximo inicio de sesión con «Recordar dispositivo» marcado "
-            "recibirá su token de dispositivo.",
+            f"El dispositivo de <strong>{html.escape(username)}</strong> ha sido aprobado. "
+            "El token se activará automáticamente en su próxima visita al dashboard.",
             success=True,
         )
     )
