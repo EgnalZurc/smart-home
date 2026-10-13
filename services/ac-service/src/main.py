@@ -14,6 +14,7 @@ Serves:
   GET  /api/ac/real                → real AC state from MELCloud
   GET  /api/ac/outdoor             → outdoor temperature (cached)
   GET  /api/ac/errors              → active errors
+  GET  /api/ac/alerts              → current AC alerts (unified alerts system)
   GET  /api/ac/energy/current      → energy consumption (placeholder)
   GET  /api/ac/energy/hourly       → hourly energy chart data (placeholder)
   GET  /api/ac/energy/monthly      → monthly energy chart data (placeholder)
@@ -33,6 +34,7 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ac_temp_scheduler import AcTempScheduler
@@ -638,6 +640,26 @@ def get_errors():
         return {"errors": [], "has_errors": False}
     active = error_tracker.get_active()
     return {"errors": active, "has_errors": bool(active)}
+
+
+@app.get("/api/ac/alerts", tags=["AC Control"])
+def get_ac_alerts():
+    """Return current AC alerts for the unified alerts system."""
+    alerts = []
+    if ac_controller is not None and ac_controller.current_state.sensor_alert:
+        timeout = ac_controller.config.sensor_timeout
+        alerts.append(
+            {
+                "source": "ac",
+                "severity": "warning",
+                "title": "Sensor sin datos",
+                "title_en": "Sensor offline",
+                "detail": f"Última lectura hace más de {timeout}s",
+                "detail_en": f"Last reading over {timeout}s ago",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+    return {"alerts": alerts}
 
 
 @app.get("/api/ac/energy/current", tags=["Energy"])

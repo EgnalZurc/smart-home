@@ -3,13 +3,17 @@ Portfolio Monitor — Alerts endpoints.
 
 List upcoming scheduled alerts and mark an alert as completed (only once its
 date has arrived). Completing an alert reloads the orchestrator's cached alert
-list so the next summary reflects the change.
+list so the next summary reflects the change. Also exposes the currently active
+WARN/DANGER market alerts for the unified alerts system.
 
 ``get_orchestrator`` is resolved through the ``api.routes`` package namespace at
 call time so tests patching ``api.routes.get_orchestrator`` take effect here.
 """
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, HTTPException
+from models import AlertLevel
 
 from .helpers import _safe_json, _serialize_alert
 
@@ -30,6 +34,46 @@ async def get_alerts():
             "count": len(summary.upcoming_alerts),
         }
     )
+
+
+@router.get("/alerts/active")
+async def get_active_alerts():
+    """Return current WARN/DANGER market alerts for the unified alerts system.
+
+    Scans the latest per-asset analyses (ETF + crypto) in the orchestrator's
+    cached summary and surfaces every position at WARN or DANGER as a flat
+    alert object in the shape the unified dashboard alerts widget expects.
+    Savings have no severity signals, so they are not included.
+    """
+    import api.routes as routes
+
+    orch = routes.get_orchestrator()
+    summary = orch.get_summary()
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    alerts = []
+    analyses = list(summary.etf_analysis or []) + list(summary.crypto_analysis or [])
+    for analysis in analyses:
+        if analysis.level < AlertLevel.WARN:
+            continue
+
+        severity = "critical" if analysis.level == AlertLevel.DANGER else "warning"
+        # Signal.body carries the human-readable text; take the first 3.
+        detail = "; ".join(s.body for s in (analysis.signals or [])[:3])
+
+        alerts.append(
+            {
+                "source": "portfolio",
+                "severity": severity,
+                "title": f"{analysis.name}: {analysis.level.name}",
+                "detail": detail,
+                "timestamp": now,
+                "link": "/portfolio",
+            }
+        )
+
+    return _safe_json({"alerts": alerts})
 
 
 @router.post("/alerts/{alert_id}/complete")
