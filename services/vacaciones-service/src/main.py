@@ -18,6 +18,7 @@ Port: 8003
 """
 
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -76,8 +77,6 @@ def health():
 
 def _serve_html(filename: str) -> HTMLResponse:
     """Serve an HTML file with no-cache headers."""
-    import time
-
     path = Path(__file__).parent / "static" / filename
     content = path.read_text(encoding="utf-8")
     content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")

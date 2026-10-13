@@ -55,6 +55,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ── Module-level constants for MELCloud mode/fan mappings ─────────────────────
+# Reused by get_ac_real() to avoid duplication
+MELCLOUD_MODE_NAMES: dict[int, str] = {
+    1: "HOT",
+    2: "DRY",
+    3: "COLD",
+    7: "FAN",
+    8: "AUTO",
+}
+MELCLOUD_FAN_NAMES: dict[int, str] = {0: "Auto", 1: "Bajo", 2: "Medio", 3: "Alto"}
+
 # ── Configuration from environment ───────────────────────────────────────────
 
 MQTT_BROKER = os.environ.get("MQTT_BROKER", "mosquitto")
@@ -419,6 +430,7 @@ def get_sensors_history(
 @app.get("/api/ac/history", tags=["AC Control"])
 def get_history(limit: int = 100):
     """Get controller action history."""
+    limit = max(1, min(limit, 1000))  # Cap between 1 and 1000
     return {"history": ac_controller.get_history(limit)}
 
 
@@ -583,8 +595,8 @@ def get_ac_real():
                 "set_temp": None,
                 "room_temp": None,
             }
-        mode_names = {1: "HOT", 2: "DRY", 3: "COLD", 7: "FAN", 8: "AUTO"}
-        fan_names = {0: "Auto", 1: "Bajo", 2: "Medio", 3: "Alto"}
+        mode_names = MELCLOUD_MODE_NAMES
+        fan_names = MELCLOUD_FAN_NAMES
         return {
             "power": state.get("Power", False),
             "mode": mode_names.get(state.get("OperationMode"), "?"),

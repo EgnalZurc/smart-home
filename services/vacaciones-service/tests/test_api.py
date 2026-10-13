@@ -180,14 +180,6 @@ class TestYearEndpoints:
 class TestSPAServing:
     """Tests for SPA HTML serving."""
 
-    def test_spa_served(self, client):
-        """GET /smart-home/vacaciones should serve HTML."""
-        response = client.get("/smart-home/vacaciones")
-        
-        # May fail if static file doesn't exist in test env
-        # but endpoint should at least not 404
-        assert response.status_code in (200, 500)
-
     def test_serve_html_returns_200(self, client):
         """GET /smart-home/vacaciones must return 200, not silently 500.
 

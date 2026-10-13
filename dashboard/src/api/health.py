@@ -13,6 +13,7 @@ The /all endpoint aggregates all health checks in parallel for efficiency.
 
 import asyncio
 import os
+from typing import Any
 
 import httpx
 from fastapi import APIRouter
@@ -34,7 +35,7 @@ def _pc_agent_headers() -> dict[str, str]:
 
 
 @router.get("/all")
-async def get_all_health():
+async def get_all_health() -> dict[str, Any]:
     """Batch health check for all services in parallel.
 
     Returns status of all services in a single request, checking them
@@ -86,13 +87,13 @@ async def get_all_health():
 
 
 @router.get("")
-async def get_health():
+async def get_health() -> dict[str, Any]:
     """Health check for the dashboard API."""
     return {"status": "ok", "service": "dashboard"}
 
 
 @router.get("/backend")
-async def get_backend_health():
+async def get_backend_health() -> dict[str, Any]:
     """Health check for the backend itself with self-tests.
 
     Validates that critical components are functional:
@@ -132,7 +133,7 @@ async def get_backend_health():
 
 
 @router.get("/zigbee")
-async def get_zigbee_health():
+async def get_zigbee_health() -> dict[str, Any]:
     """Health check for Zigbee2MQTT via ac-service.
 
     Returns:
@@ -184,7 +185,7 @@ async def get_zigbee_health():
 
 
 @router.get("/ac")
-async def get_ac_health():
+async def get_ac_health() -> dict[str, Any]:
     """Health check for AC service.
 
     Returns:
@@ -214,7 +215,7 @@ async def get_ac_health():
 
 
 @router.get("/vacaciones")
-async def get_vacaciones_health():
+async def get_vacaciones_health() -> dict[str, Any]:
     """Health check for Vacaciones service.
 
     Returns:
@@ -240,7 +241,7 @@ async def get_vacaciones_health():
 
 
 @router.get("/immich")
-async def get_immich_health():
+async def get_immich_health() -> dict[str, Any]:
     """Health check for Immich photo server.
 
     Returns:
@@ -267,7 +268,7 @@ async def get_immich_health():
 
 
 @router.get("/casita")
-async def get_casita_health():
+async def get_casita_health() -> dict[str, Any]:
     """Health check for Casita Sueños service.
 
     Returns:
@@ -297,7 +298,7 @@ async def get_casita_health():
 
 
 @router.get("/baby-gifts")
-async def get_baby_gifts_health():
+async def get_baby_gifts_health() -> dict[str, Any]:
     """Health check for Baby Gifts service.
 
     Returns:
@@ -323,7 +324,7 @@ async def get_baby_gifts_health():
 
 
 @router.get("/portfolio")
-async def get_portfolio_health():
+async def get_portfolio_health() -> dict[str, Any]:
     """Health check for Portfolio Monitor service.
 
     Returns:
@@ -353,7 +354,7 @@ async def get_portfolio_health():
 
 
 @router.get("/passwords")
-async def get_passwords_health():
+async def get_passwords_health() -> dict[str, Any]:
     """Health check for Vaultwarden.
 
     Returns:
@@ -381,7 +382,7 @@ async def get_passwords_health():
 
 
 @router.get("/ai")
-async def get_ai_health():
+async def get_ai_health() -> dict[str, Any]:
     """Health check for Local AI (Open WebUI on EgnalPC).
 
     Returns:
@@ -409,7 +410,7 @@ async def get_ai_health():
 
 
 @router.get("/valheim")
-async def get_valheim_health():
+async def get_valheim_health() -> dict[str, Any]:
     """Health check for valheim-admin service.
 
     Checks if the valheim-admin container (running on Pi) is healthy.
