@@ -273,4 +273,4 @@ class TestConstants:
         assert auth_devices.DEVICE_TOKEN_TTL == 365 * 24 * 3600
 
     def test_grace_window(self):
-        assert auth_devices.GRACE_WINDOW_SECONDS == 30
+        assert auth_devices.GRACE_WINDOW_SECONDS == 3600  # 1 hour
