@@ -83,8 +83,9 @@ services:
     image: ghcr.io/tecnativa/docker-socket-proxy:latest
     container_name: docker-socket-proxy
     restart: on-failure:5
-    mem_limit: 32m
-    memswap_limit: 32m
+    # Increased from 32m based on 61% usage (19MB)
+    mem_limit: 48m
+    memswap_limit: 48m
     environment:
       CONTAINERS: 1
       POST: 1
@@ -187,8 +188,9 @@ services:
     image: egnal/smart-home-portfolio-monitor:latest
     container_name: portfolio-monitor
     restart: on-failure:5
-    mem_limit: 256m
-    memswap_limit: 256m
+    # Reduced from 256m based on 40% usage (101MB)
+    mem_limit: 160m
+    memswap_limit: 160m
     expose:
       - 8010
     volumes:
@@ -211,8 +213,9 @@ services:
     image: egnal/smart-home-vacaciones:latest
     container_name: vacaciones-service
     restart: on-failure:5
-    mem_limit: 64m
-    memswap_limit: 64m
+    # Increased from 64m based on 55% usage (35MB)
+    mem_limit: 80m
+    memswap_limit: 80m
     expose:
       - 8003
     volumes:
@@ -233,9 +236,9 @@ services:
     image: egnal/smart-home-casita-suenos:latest
     container_name: casita-suenos
     restart: on-failure:5
-    # Increased from 192m based on 77% usage (148MB)
-    mem_limit: 256m
-    memswap_limit: 256m
+    # Reduced from 256m based on 26% usage (67MB) - was over-provisioned
+    mem_limit: 128m
+    memswap_limit: 128m
     expose:
       - 8001
     volumes:
