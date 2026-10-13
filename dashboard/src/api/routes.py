@@ -16,6 +16,7 @@ from system.stats import router as stats_router
 
 from api.deploy import router as deploy_router
 from api.health import router as health_router
+from api.metrics import router as metrics_router
 from api.monitoring import router as monitoring_router
 from api.proxy import external as _external_module
 from api.proxy.ac import router as ac_router
@@ -44,6 +45,7 @@ router.include_router(external_router)
 router.include_router(containers_router)
 router.include_router(stats_router)
 router.include_router(monitoring_router)
+router.include_router(metrics_router)
 router.include_router(ws_router)
 router.include_router(deploy_router)
 

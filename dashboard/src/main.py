@@ -242,6 +242,10 @@ tags_metadata = [
         "name": "Portfolio",
         "description": "Investment portfolio monitoring (ETFs, crypto)",
     },
+    {
+        "name": "Metrics",
+        "description": "Pi host, container and service-health time-series metrics",
+    },
 ]
 
 # Disable interactive API docs in production

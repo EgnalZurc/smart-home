@@ -1,0 +1,56 @@
+"""Metrics service proxy routes (SUPER-gated).
+
+Proxies the read API of the infrastructure ``metrics-service`` (:8011) under the
+unified backend gateway so it appears in Swagger and is protected by the backend
+AuthMiddleware + nginx ``auth_request``. The browser never talks to :8011
+directly.
+
+All routes require SUPER (level 0), matching ``system/stats.py`` and
+``system/containers.py``: metrics expose host/container internals that only the
+admin should see.
+"""
+
+from fastapi import APIRouter, Query, Request
+
+from api.auth_helpers import require_super
+from api.proxy.base import ServiceProxy
+
+router = APIRouter(prefix="/api/metrics", tags=["Metrics"])
+
+_proxy = ServiceProxy("http://metrics-service:8011")
+
+
+@router.get("/latest")
+async def get_metrics_latest(request: Request):
+    """Newest sample for every series (powers status widgets)."""
+    require_super(request)
+    return await _proxy.get("/api/metrics/latest")
+
+
+@router.get("/series")
+async def get_metrics_series(
+    request: Request,
+    metric: str = Query(..., description="Metric name, e.g. host.ram.percent"),
+    label: str = Query("", description="Series label (container/service key)"),
+    since: str | None = Query(None, description="Unix ts or relative, e.g. -1h"),
+    until: str | None = Query(None, description="Unix ts upper bound"),
+    resolution: str = Query("hi", pattern="^(hi|rollup)$"),
+):
+    """One time-ranged series (hi = ring buffer, rollup = SQLite)."""
+    require_super(request)
+    params = {"metric": metric, "label": label, "resolution": resolution}
+    if since is not None:
+        params["since"] = since
+    if until is not None:
+        params["until"] = until
+    return await _proxy.get("/api/metrics/series", params=params)
+
+
+@router.get("/summary")
+async def get_metrics_summary(
+    request: Request,
+    window: str = Query("24h", pattern="^(1h|24h|7d|30d)$"),
+):
+    """min/avg/max per metric over a window."""
+    require_super(request)
+    return await _proxy.get("/api/metrics/summary", params={"window": window})
