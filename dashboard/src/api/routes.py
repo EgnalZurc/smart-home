@@ -22,6 +22,7 @@ from api.proxy.external import router as external_router
 from api.proxy.pc import router as pc_router
 from api.proxy.portfolio import router as portfolio_router
 from api.proxy.vacaciones import router as vacaciones_router
+from api.proxy.valheim import router as valheim_router
 
 # Main router that aggregates all sub-routers
 router = APIRouter()
@@ -34,6 +35,7 @@ router.include_router(vacaciones_router)
 router.include_router(baby_gifts_router)
 router.include_router(portfolio_router)
 router.include_router(pc_router)
+router.include_router(valheim_router)
 router.include_router(external_router)
 router.include_router(containers_router)
 router.include_router(stats_router)

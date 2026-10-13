@@ -35,8 +35,9 @@ services:
     image: koenkk/zigbee2mqtt:1.40.2
     container_name: zigbee2mqtt
     restart: on-failure:5
-    mem_limit: 128m
-    memswap_limit: 128m
+    # Increased from 128m based on 73% usage (93MB)
+    mem_limit: 192m
+    memswap_limit: 192m
     depends_on:
       - mosquitto
     expose:
@@ -119,8 +120,9 @@ services:
     image: egnal/smart-home-dashboard:latest
     container_name: smart-home-backend
     restart: on-failure:5
-    mem_limit: 72m
-    memswap_limit: 72m
+    # Increased from 72m based on 65% usage (47MB) - added headroom
+    mem_limit: 96m
+    memswap_limit: 96m
     expose:
       - 8080
     volumes:
@@ -130,6 +132,9 @@ services:
       - .env
     environment:
       - TZ=Europe/Madrid
+      # PC agent config for direct Valheim control (replaces valheim-admin service)
+      - PC_AGENT_URL=${PC_AGENT_URL:-http://192.168.1.164:8090}
+      - PC_AGENT_TOKEN=${PC_AGENT_TOKEN}
     networks:
       - smart-home
 
@@ -164,8 +169,9 @@ services:
     image: egnal/smart-home-baby-gifts:latest
     container_name: baby-gifts-service
     restart: on-failure:5
-    mem_limit: 64m
-    memswap_limit: 64m
+    # Increased from 64m based on 77% usage (49MB)
+    mem_limit: 96m
+    memswap_limit: 96m
     expose:
       - 8004
     volumes:
@@ -227,8 +233,9 @@ services:
     image: egnal/smart-home-casita-suenos:latest
     container_name: casita-suenos
     restart: on-failure:5
-    mem_limit: 192m
-    memswap_limit: 192m
+    # Increased from 192m based on 77% usage (148MB)
+    mem_limit: 256m
+    memswap_limit: 256m
     expose:
       - 8001
     volumes:
@@ -254,8 +261,9 @@ services:
     image: egnal/smart-home-vaultwarden:latest
     container_name: vaultwarden
     restart: on-failure:5
-    mem_limit: 128m
-    memswap_limit: 128m
+    # Reduced from 128m based on 16% usage (21MB) - still generous
+    mem_limit: 64m
+    memswap_limit: 64m
     expose:
       - 80
       - 3012
@@ -266,32 +274,10 @@ services:
     networks:
       - smart-home
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Valheim Admin - Web management UI for Valheim server
-  # Proxies to pc-agent running on Windows PC (192.168.1.164:8090)
-  # ─────────────────────────────────────────────────────────────────────────────
-  valheim-admin:
-    image: egnal/smart-home-valheim-admin:latest
-    container_name: valheim-admin
-    restart: on-failure:5
-    mem_limit: 72m
-    memswap_limit: 72m
-    expose:
-      - 8080
-    env_file:
-      - .env
-    environment:
-      - TZ=Europe/Madrid
-      - PC_AGENT_URL=http://192.168.1.164:8090
-      # PC_AGENT_TOKEN loaded from .env
-    networks:
-      - smart-home
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=3)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
+  # NOTE: valheim-admin service has been removed.
+  # Valheim server control is now integrated directly into the dashboard,
+  # which communicates with pc-agent on EgnalPC (192.168.1.164:8090).
+  # This saves ~36MB RAM and removes one network hop.
 
 networks:
   smart-home:
