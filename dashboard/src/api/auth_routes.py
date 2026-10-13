@@ -205,14 +205,14 @@ async def post_token(
 ):
     """Validate credentials and issue a session cookie.
 
-    If 'trusted' is checked:
-      A) User already has an approved trust request in the DB:
-         → Issue device cookie (Jaspan token), clear the trust request row.
-         → Also issue a fresh 24h JWT as usual.
-      B) No approved request yet:
-         → If no active (pending/approved) request exists: create one + send email.
+    Device trust flow:
+      1. If user has an approved trust request (admin already approved):
+         → Issue device cookie (Jaspan token) automatically, no checkbox needed.
+         → Clear the consumed trust request row.
+      2. If 'trusted' checkbox is checked and no approved request exists:
+         → If no active (pending/approved) request: create one + send email.
          → If one already exists: skip (dedup).
-         → Issue standard 24h JWT only.
+      3. Always issue a fresh 24h JWT.
 
     Sanitises the next_url redirect to relative paths only.
 
@@ -246,35 +246,33 @@ async def post_token(
     session_token = auth_core.create_token(username)
     auth_core.set_session_cookie(response, session_token)
 
-    if trusted:
-        # Check for an approved trust request for this user
-        approved_row = auth_users.get_approved_trust_request(username)
-
-        if approved_row:
-            # Issue the Jaspan device token and clear the (now consumed) trust request
+    # Always check for approved trust request (auto-issue device token if approved)
+    approved_row = auth_users.get_approved_trust_request(username)
+    if approved_row:
+        # Issue the Jaspan device token and clear the (now consumed) trust request
+        ip = request.client.host if request.client else "unknown"
+        ua = request.headers.get("User-Agent", "unknown")
+        device_cookie = auth_devices.create_device_token(username, ua, ip)
+        _set_device_cookie(response, device_cookie)
+        auth_users.delete_trust_request(approved_row["token"])
+        logger.info("Device token auto-issued for approved user %r", username)
+    elif trusted:
+        # No approved request — user wants to request trust, create pending + send email
+        if not auth_users.has_active_trust_request(username):
             ip = request.client.host if request.client else "unknown"
             ua = request.headers.get("User-Agent", "unknown")
-            device_cookie = auth_devices.create_device_token(username, ua, ip)
-            _set_device_cookie(response, device_cookie)
-            auth_users.delete_trust_request(approved_row["token"])
-            logger.info("Device token issued for approved user %r", username)
+            trust_token = auth_users.create_trust_request(username, ua, ip)
+            _send_trust_email(username, ua, ip, trust_token)
+            logger.info(
+                "Trust request created for user %r, token prefix: %s",
+                username,
+                trust_token[:8],
+            )
         else:
-            # No approved request — create pending one (with dedup) and send email
-            if not auth_users.has_active_trust_request(username):
-                ip = request.client.host if request.client else "unknown"
-                ua = request.headers.get("User-Agent", "unknown")
-                trust_token = auth_users.create_trust_request(username, ua, ip)
-                _send_trust_email(username, ua, ip, trust_token)
-                logger.info(
-                    "Trust request created for user %r, token prefix: %s",
-                    username,
-                    trust_token[:8],
-                )
-            else:
-                logger.info(
-                    "Trust request skipped for user %r — active request already exists",
-                    username,
-                )
+            logger.info(
+                "Trust request skipped for user %r — active request already exists",
+                username,
+            )
 
     return response
 

@@ -18,10 +18,10 @@ Database table (device_tokens):
 Security properties:
     - Token rotates on every use → stolen cookie window = until victim next accesses
     - Only hash is stored → DB leak does not directly yield valid cookie values
-    - Series mismatch (valid series + wrong token outside grace window) → theft assumed →
-      ALL device tokens for that user are deleted immediately
-    - Race condition handled: previous token valid for 30 seconds after rotation
-      to handle parallel requests when JWT expires
+    - Series mismatch (valid series + wrong token outside grace window) → token invalid →
+      only THAT device token is deleted (not all user devices)
+    - Race condition handled: previous token valid for 1 hour after rotation
+      to handle parallel requests, laptop sleep/wake, and network issues
 """
 
 import hashlib
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 AUTH_DB_PATH: str = "/app/data/auth.db"
 DEVICE_TOKEN_TTL: int = 365 * 24 * 3600  # 1 year in seconds
-GRACE_WINDOW_SECONDS: int = 30  # Previous token valid for 30s after rotation
+GRACE_WINDOW_SECONDS: int = 3600  # Previous token valid for 1 hour after rotation
 
 DEVICE_COOKIE_NAME = "smh_device"
 _SEPARATOR = ":"
@@ -193,7 +193,7 @@ def verify_and_rotate(cookie_value: str) -> VerifyResult:
         3. Series found, previous token hash matches AND within grace window
            → return VerifyResult(ok=True) with CURRENT cookie (no re-rotation)
         4. Series found, token hash DOES NOT match (neither current nor prev in grace)
-           → theft assumed, delete ALL device tokens for that user,
+           → revoke THIS device only (not all user devices),
              return VerifyResult(ok=False, theft_detected=True)
         5. Series found, token matches, but expired
            → delete row, return VerifyResult(ok=False)
@@ -269,14 +269,18 @@ def verify_and_rotate(cookie_value: str) -> VerifyResult:
             # The middleware will still issue a fresh JWT but won't overwrite the device cookie
             return VerifyResult(ok=True, username=username, new_cookie_value="")
 
-        # Case 4: Token mismatch — theft detected
+        # Case 4: Token mismatch — invalid token, revoke only THIS device
+        # Note: Traditional Jaspan pattern deletes ALL user tokens on mismatch
+        # (assuming theft). We take a softer approach: only revoke the affected
+        # device. This avoids nuking all devices due to network glitches, browser
+        # cache issues, or a single compromised device. A real attacker with one
+        # stolen cookie can only access until the victim uses that device again.
         logger.warning(
-            "THEFT DETECTED: series %s for user %r — "
-            "deleting ALL device tokens for this user",
+            "Token mismatch for series %s (user %r) — revoking this device only",
             series[:8],
             username,
         )
-        conn.execute("DELETE FROM device_tokens WHERE username = ?", (username,))
+        conn.execute("DELETE FROM device_tokens WHERE series = ?", (series,))
         return VerifyResult(ok=False, theft_detected=True, username=username)
 
 
