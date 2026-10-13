@@ -312,6 +312,62 @@ class TestContainerEndpoints:
 
                     assert response.status_code == 200
 
+    def test_restart_service_not_super(self, client):
+        with patch("auth.get_current_user", return_value="user"):
+            with patch("user_profiles.is_super", return_value=False):
+                response = client.post("/api/system/containers/ac/restart")
+                assert response.status_code == 403
+
+    def test_restart_service_not_found(self, client):
+        with patch("auth.get_current_user", return_value="admin"):
+            with patch("user_profiles.is_super", return_value=True):
+                response = client.post("/api/system/containers/unknown/restart")
+                assert response.status_code == 404
+
+    def test_restart_service_success(self, client):
+        with patch("auth.get_current_user", return_value="admin"):
+            with patch("user_profiles.is_super", return_value=True):
+                with patch("system.containers.asyncio.sleep", new=AsyncMock()):
+                    with patch("system.containers.httpx.AsyncClient") as mock_client:
+                        mock_response = MagicMock()
+                        mock_response.status_code = 204
+                        mock_post = AsyncMock(return_value=mock_response)
+                        mock_client.return_value.__aenter__.return_value.post = (
+                            mock_post
+                        )
+
+                        response = client.post("/api/system/containers/ac/restart")
+
+                        assert response.status_code == 200
+                        data = response.json()
+                        assert data["status"] == "ok"
+                        assert data["stop"]["ac-service"] == "ok"
+                        assert data["start"]["ac-service"] == "ok"
+                        # One stop call + one start call for the single container.
+                        assert mock_post.await_count == 2
+
+    def test_restart_service_partial_when_start_fails(self, client):
+        with patch("auth.get_current_user", return_value="admin"):
+            with patch("user_profiles.is_super", return_value=True):
+                with patch("system.containers.asyncio.sleep", new=AsyncMock()):
+                    with patch("system.containers.httpx.AsyncClient") as mock_client:
+                        stop_resp = MagicMock()
+                        stop_resp.status_code = 204
+                        start_resp = MagicMock()
+                        start_resp.status_code = 500
+                        mock_post = AsyncMock(side_effect=[stop_resp, start_resp])
+                        mock_client.return_value.__aenter__.return_value.post = (
+                            mock_post
+                        )
+
+                        response = client.post("/api/system/containers/ac/restart")
+
+                        assert response.status_code == 200
+                        data = response.json()
+                        assert data["status"] == "partial"
+                        assert data["stop"]["ac-service"] == "ok"
+                        assert data["start"]["ac-service"] == "http_500"
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AC Proxy Tests
