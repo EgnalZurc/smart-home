@@ -198,7 +198,11 @@ class TelegramNotifier:
                     )
                     success = False
             except Exception as e:
-                logger.error("[telegram] Error enviando a chat %s: %s", chat_id, e)
+                # Log only the error type/message, not the full exception which may
+                # contain the URL with the bot token in tracebacks
+                logger.error(
+                    "[telegram] Error enviando a chat %s: %s", chat_id, type(e).__name__
+                )
                 success = False
         return success
 

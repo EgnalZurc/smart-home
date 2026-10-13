@@ -121,8 +121,8 @@ def _set_process_name() -> None:
 
 
 # ── Instancia global del scheduler (deprecated, use app.state) ────────────────
-# These are kept for backward compatibility with _telegram_polling and main()
-# but new code should use request.app.state.scheduler and request.app.state.db
+# These are kept for backward compatibility with main()
+# New code should use request.app.state.scheduler and request.app.state.db
 _scheduler_instance = None
 _db_instance = None
 
@@ -158,7 +158,7 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = scheduler
     app.state.db = db
 
-    # Also keep globals for backward compatibility with _telegram_polling
+    # Also keep globals for backward compatibility
     _scheduler_instance = scheduler
     _db_instance = db
 
@@ -181,6 +181,11 @@ async def lifespan(app: FastAPI):
     # Arrancar scheduler
     scheduler.start()
     logger.info("[main] Scheduler activo")
+
+    # Arrancar polling de Telegram (db is now available)
+    threading.Thread(
+        target=_telegram_polling, args=(db,), daemon=True, name="telegram-polling"
+    ).start()
 
     yield
 
@@ -537,8 +542,12 @@ async def serve_frontend():
 # ── Telegram polling (background thread) ──────────────────────────────────────
 
 
-def _telegram_polling() -> None:
-    """Background thread that polls Telegram for /start commands."""
+def _telegram_polling(db) -> None:
+    """Background thread that polls Telegram for /start commands.
+
+    Args:
+        db: Database instance for registering chat IDs.
+    """
     import httpx
 
     token = TELEGRAM_BOT_TOKEN
@@ -558,8 +567,8 @@ def _telegram_polling() -> None:
                 chat_id = str(chat.get("id", ""))
                 username = chat.get("username", "") or chat.get("first_name", "")
 
-                if chat_id and text.startswith("/start") and _db_instance:
-                    _db_instance.register_telegram_chat(chat_id, username)
+                if chat_id and text.startswith("/start") and db is not None:
+                    db.register_telegram_chat(chat_id, username)
                     logger.info(
                         "[main] Nuevo chat registrado via /start: %s (%s)",
                         chat_id,
@@ -597,12 +606,8 @@ def main() -> None:
 
     logger.info("[main] ── Iniciando %s ──────────────────────────", PROCESS_NAME)
 
-    # Arrancar polling de Telegram (usa _db_instance que se establece en lifespan)
-    threading.Thread(
-        target=_telegram_polling, daemon=True, name="telegram-polling"
-    ).start()
-
     # Arrancar servidor con uvicorn - lifespan maneja init/shutdown del scheduler
+    # y arranca el thread de telegram polling con db disponible
     logger.info("[main] Servidor HTTP en puerto %d", STATUS_PORT)
     uvicorn.run(
         app,

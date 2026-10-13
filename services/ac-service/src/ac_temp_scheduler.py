@@ -30,6 +30,8 @@ class AcTempScheduler:
 
     def stop(self):
         self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
 
     def _run_once(self):
         """Check if it is on the hour and record if so. Extracted for testability."""

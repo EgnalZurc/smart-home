@@ -130,8 +130,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # 3. Valid JWT
         user = auth_core.get_current_user(request)
         if user:
-            # Check for pending device token to deliver
-            pending_cookie = auth_devices.get_pending_token(user)
+            # Check for pending device token to deliver (must match this device's UA)
+            user_agent = request.headers.get("User-Agent", "")
+            pending_cookie = auth_devices.get_pending_token(user, user_agent)
             if pending_cookie:
                 response = await call_next(request)
                 response.set_cookie(
@@ -143,7 +144,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     samesite="strict",
                     path="/",
                 )
-                auth_devices.mark_token_delivered(user)
+                auth_devices.mark_token_delivered(user, user_agent)
                 logger.info("Delivered pending device token to user %r", user)
                 return response
             return await call_next(request)

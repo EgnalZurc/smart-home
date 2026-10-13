@@ -127,7 +127,9 @@ class TestStaticAssets:
 class TestValidSession:
     def test_valid_jwt_passes_through(self, client, monkeypatch):
         monkeypatch.setattr(main.auth_core, "get_current_user", lambda request: "alice")
-        monkeypatch.setattr(main.auth_devices, "get_pending_token", lambda user: None)
+        monkeypatch.setattr(
+            main.auth_devices, "get_pending_token", lambda user, ua: None
+        )
         resp = client.get("/smart-home")
         assert resp.status_code == 200
         assert resp.text == "protected-ok"
@@ -135,7 +137,9 @@ class TestValidSession:
     def test_valid_jwt_does_not_touch_device_cookie(self, client, monkeypatch):
         """A valid JWT short-circuits before the device-token branch is reached."""
         monkeypatch.setattr(main.auth_core, "get_current_user", lambda request: "alice")
-        monkeypatch.setattr(main.auth_devices, "get_pending_token", lambda user: None)
+        monkeypatch.setattr(
+            main.auth_devices, "get_pending_token", lambda user, ua: None
+        )
         device_probe = MagicMock(return_value=None)
         monkeypatch.setattr(
             main.auth_devices, "get_device_cookie_from_request", device_probe
@@ -148,17 +152,17 @@ class TestValidSession:
         """If user has a pending device token, it should be delivered as a cookie."""
         monkeypatch.setattr(main.auth_core, "get_current_user", lambda request: "alice")
         monkeypatch.setattr(
-            main.auth_devices, "get_pending_token", lambda user: "series:token"
+            main.auth_devices, "get_pending_token", lambda user, ua: "series:token"
         )
         mark_delivered = MagicMock()
         monkeypatch.setattr(main.auth_devices, "mark_token_delivered", mark_delivered)
 
-        resp = client.get("/smart-home")
+        resp = client.get("/smart-home", headers={"User-Agent": "TestBrowser/1.0"})
 
         assert resp.status_code == 200
         # Should have set the device cookie
         assert "smh_device=series:token" in resp.headers.get("set-cookie", "")
-        mark_delivered.assert_called_once_with("alice")
+        mark_delivered.assert_called_once_with("alice", "TestBrowser/1.0")
 
 
 # ── 5. No session and no device cookie -> redirect to login ────────────────────

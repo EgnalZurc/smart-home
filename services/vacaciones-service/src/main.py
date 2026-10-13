@@ -19,6 +19,7 @@ Port: 8003
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
@@ -52,12 +53,12 @@ app = FastAPI(
 
 
 class VacacionesConfigRequest(BaseModel):
-    nucleos: list = []
-    personas: list = []
+    nucleos: list[dict[str, Any]] = []
+    personas: list[dict[str, Any]] = []
 
 
 class VacacionesYearRequest(BaseModel):
-    comidas: list = []
+    comidas: list[dict[str, Any]] = []
     notas: str = ""
 
 
