@@ -13,6 +13,8 @@ The /all endpoint aggregates all health checks in parallel for efficiency.
 
 import asyncio
 import os
+import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -29,6 +31,57 @@ PC_AGENT_TOKEN = os.environ.get("PC_AGENT_TOKEN", "")
 def _pc_agent_headers() -> dict[str, str]:
     """Get authentication headers for pc-agent requests."""
     return {"X-Api-Token": PC_AGENT_TOKEN} if PC_AGENT_TOKEN else {}
+
+
+# ── Health Check Cache ────────────────────────────────────────────────────────
+#
+# The dashboard UI polls service status frequently (and the /all endpoint fans
+# out to every service in parallel). Without caching, each poll triggers N real
+# HTTP requests to the backend services, which is wasteful and can hammer slow
+# services. We cache each service's result for a short TTL so repeated polls
+# within the window reuse the last known result instead of issuing a new request.
+
+HEALTH_CACHE_TTL = 5.0  # seconds
+
+# Maps a service key -> (timestamp, data) of the last successful check.
+_health_cache: dict[str, tuple[float, dict]] = {}
+
+
+async def _cached_health_check(
+    key: str, check_fn: Callable[[], Awaitable[dict]]
+) -> dict:
+    """Return a cached health result for ``key`` or run ``check_fn`` to refresh it.
+
+    If a cached entry exists for ``key`` and is younger than ``HEALTH_CACHE_TTL``
+    seconds, the cached data is returned without calling ``check_fn``. Otherwise
+    ``check_fn`` is awaited, its result stored with the current timestamp, and
+    returned.
+
+    The result always includes a ``latency_ms`` field: for cache hits this is 0
+    (no real request was made), for fresh checks it is the actual request time
+    in milliseconds.
+
+    Args:
+        key: Unique cache key identifying the service (e.g. ``"ac"``).
+        check_fn: Zero-argument coroutine function that performs the real check
+            and returns the health dict.
+
+    Returns:
+        The health dict, either from cache or freshly computed, with latency_ms.
+    """
+    now = time.monotonic()
+    cached = _health_cache.get(key)
+    if cached is not None:
+        timestamp, data = cached
+        if now - timestamp < HEALTH_CACHE_TTL:
+            # Return cached data with latency=0 to indicate cache hit
+            return {**data, "latency_ms": 0, "cached": True}
+
+    start = time.monotonic()
+    data = await check_fn()
+    latency_ms = int((time.monotonic() - start) * 1000)
+    _health_cache[key] = (time.monotonic(), data)
+    return {**data, "latency_ms": latency_ms}
 
 
 # ── Batch Health Check ────────────────────────────────────────────────────────
@@ -101,32 +154,36 @@ async def get_backend_health() -> dict[str, Any]:
     - Required environment variables
     - Static files accessibility
     """
-    from pathlib import Path
 
-    checks = {
-        "online": True,
-        "db_accessible": False,
-        "static_files": False,
-    }
+    async def _check() -> dict:
+        from pathlib import Path
 
-    # Check database accessibility
-    try:
-        import profiles.db as profiles_db
+        checks = {
+            "online": True,
+            "db_accessible": False,
+            "static_files": False,
+        }
 
-        db_path = Path(profiles_db.AUTH_DB_PATH)
-        if db_path.exists() or db_path.parent.exists():
-            checks["db_accessible"] = True
-    except Exception as e:
-        checks["db_error"] = str(e)
+        # Check database accessibility
+        try:
+            import profiles.db as profiles_db
 
-    # Check static files
-    try:
-        static_path = Path(__file__).parent.parent / "static" / "login.html"
-        checks["static_files"] = static_path.exists()
-    except Exception as e:
-        checks["static_error"] = str(e)
+            db_path = Path(profiles_db.AUTH_DB_PATH)
+            if db_path.exists() or db_path.parent.exists():
+                checks["db_accessible"] = True
+        except Exception as e:
+            checks["db_error"] = str(e)
 
-    return checks
+        # Check static files
+        try:
+            static_path = Path(__file__).parent.parent / "static" / "login.html"
+            checks["static_files"] = static_path.exists()
+        except Exception as e:
+            checks["static_error"] = str(e)
+
+        return checks
+
+    return await _cached_health_check("backend", _check)
 
 
 # ── Zigbee / MQTT ─────────────────────────────────────────────────────────────
@@ -142,43 +199,47 @@ async def get_zigbee_health() -> dict[str, Any]:
     - active_sensors: number of sensors currently reporting
     - error: connection error message if any
     """
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get("http://ac-service:8002/api/ac/health/zigbee")
-            if r.status_code == 200:
-                data = r.json()
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                r = await client.get("http://ac-service:8002/api/ac/health/zigbee")
+                if r.status_code == 200:
+                    data = r.json()
+                    return {
+                        "online": data.get("mqtt_connected", False),
+                        "mqtt_connected": data.get("mqtt_connected", False),
+                        "active_sensors": data.get("active_sensors", 0),
+                    }
                 return {
-                    "online": data.get("mqtt_connected", False),
-                    "mqtt_connected": data.get("mqtt_connected", False),
-                    "active_sensors": data.get("active_sensors", 0),
+                    "online": False,
+                    "mqtt_connected": False,
+                    "active_sensors": 0,
+                    "error": f"HTTP {r.status_code}",
                 }
+        except httpx.ConnectError:
             return {
                 "online": False,
                 "mqtt_connected": False,
                 "active_sensors": 0,
-                "error": f"HTTP {r.status_code}",
+                "error": "Cannot connect to ac-service",
             }
-    except httpx.ConnectError:
-        return {
-            "online": False,
-            "mqtt_connected": False,
-            "active_sensors": 0,
-            "error": "Cannot connect to ac-service",
-        }
-    except httpx.TimeoutException:
-        return {
-            "online": False,
-            "mqtt_connected": False,
-            "active_sensors": 0,
-            "error": "Timeout connecting to ac-service",
-        }
-    except Exception as e:
-        return {
-            "online": False,
-            "mqtt_connected": False,
-            "active_sensors": 0,
-            "error": str(e),
-        }
+        except httpx.TimeoutException:
+            return {
+                "online": False,
+                "mqtt_connected": False,
+                "active_sensors": 0,
+                "error": "Timeout connecting to ac-service",
+            }
+        except Exception as e:
+            return {
+                "online": False,
+                "mqtt_connected": False,
+                "active_sensors": 0,
+                "error": str(e),
+            }
+
+    return await _cached_health_check("zigbee", _check)
 
 
 # ── AC Service ────────────────────────────────────────────────────────────────
@@ -193,22 +254,26 @@ async def get_ac_health() -> dict[str, Any]:
     - melcloud_connected: whether MELCloud API is accessible (if applicable)
     - error: connection error message if any
     """
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get("http://ac-service:8002/api/health/ac")
-            if r.status_code == 200:
-                data = r.json()
-                return {
-                    "online": data.get("online", False),
-                    "melcloud_connected": data.get("melcloud_connected"),
-                }
-            return {"online": False, "error": f"HTTP {r.status_code}"}
-    except httpx.ConnectError:
-        return {"online": False, "error": "Cannot connect to ac-service"}
-    except httpx.TimeoutException:
-        return {"online": False, "error": "Timeout"}
-    except Exception as e:
-        return {"online": False, "error": str(e)}
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                r = await client.get("http://ac-service:8002/api/health/ac")
+                if r.status_code == 200:
+                    data = r.json()
+                    return {
+                        "online": data.get("online", False),
+                        "melcloud_connected": data.get("melcloud_connected"),
+                    }
+                return {"online": False, "error": f"HTTP {r.status_code}"}
+        except httpx.ConnectError:
+            return {"online": False, "error": "Cannot connect to ac-service"}
+        except httpx.TimeoutException:
+            return {"online": False, "error": "Timeout"}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
+    return await _cached_health_check("ac", _check)
 
 
 # ── Vacaciones Service ────────────────────────────────────────────────────────
@@ -222,19 +287,23 @@ async def get_vacaciones_health() -> dict[str, Any]:
     - online: whether the service is running
     - error: connection error message if any
     """
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get("http://vacaciones-service:8003/health")
-            if r.status_code == 200:
-                data = r.json()
-                return {"online": data.get("online", False)}
-            return {"online": False, "error": f"HTTP {r.status_code}"}
-    except httpx.ConnectError:
-        return {"online": False, "error": "Cannot connect to vacaciones-service"}
-    except httpx.TimeoutException:
-        return {"online": False, "error": "Timeout"}
-    except Exception as e:
-        return {"online": False, "error": str(e)}
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                r = await client.get("http://vacaciones-service:8003/health")
+                if r.status_code == 200:
+                    data = r.json()
+                    return {"online": data.get("online", False)}
+                return {"online": False, "error": f"HTTP {r.status_code}"}
+        except httpx.ConnectError:
+            return {"online": False, "error": "Cannot connect to vacaciones-service"}
+        except httpx.TimeoutException:
+            return {"online": False, "error": "Timeout"}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
+    return await _cached_health_check("vacaciones", _check)
 
 
 # ── Immich ────────────────────────────────────────────────────────────────────
@@ -248,20 +317,24 @@ async def get_immich_health() -> dict[str, Any]:
     - online: whether Immich is running and responsive
     - error: connection error message if any
     """
-    try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            r = await client.get("http://immich_server:2283/api/server/ping")
-            if r.status_code == 200:
-                data = r.json()
-                is_online = data.get("res") == "pong"
-                return {"online": is_online}
-            return {"online": False, "error": f"HTTP {r.status_code}"}
-    except httpx.ConnectError:
-        return {"online": False, "error": "Cannot connect to immich_server"}
-    except httpx.TimeoutException:
-        return {"online": False, "error": "Timeout"}
-    except Exception as e:
-        return {"online": False, "error": str(e)}
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                r = await client.get("http://immich_server:2283/api/server/ping")
+                if r.status_code == 200:
+                    data = r.json()
+                    is_online = data.get("res") == "pong"
+                    return {"online": is_online}
+                return {"online": False, "error": f"HTTP {r.status_code}"}
+        except httpx.ConnectError:
+            return {"online": False, "error": "Cannot connect to immich_server"}
+        except httpx.TimeoutException:
+            return {"online": False, "error": "Timeout"}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
+    return await _cached_health_check("immich", _check)
 
 
 # ── Casita Sueños ─────────────────────────────────────────────────────────────
@@ -276,22 +349,26 @@ async def get_casita_health() -> dict[str, Any]:
     - telegram_connected: whether Telegram bot is connected (if available)
     - error: connection error message if any
     """
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get("http://casita-suenos:8001/health")
-            if resp.status_code == 200:
-                data = resp.json()
-                return {
-                    "online": data.get("online", False),
-                    "telegram_connected": data.get("telegram_connected"),
-                }
-            return {"online": False, "error": f"HTTP {resp.status_code}"}
-    except httpx.ConnectError:
-        return {"online": False, "error": "Cannot connect to casita-suenos"}
-    except httpx.TimeoutException:
-        return {"online": False, "error": "Timeout"}
-    except Exception as e:
-        return {"online": False, "error": str(e)}
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get("http://casita-suenos:8001/health")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return {
+                        "online": data.get("online", False),
+                        "telegram_connected": data.get("telegram_connected"),
+                    }
+                return {"online": False, "error": f"HTTP {resp.status_code}"}
+        except httpx.ConnectError:
+            return {"online": False, "error": "Cannot connect to casita-suenos"}
+        except httpx.TimeoutException:
+            return {"online": False, "error": "Timeout"}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
+    return await _cached_health_check("casita", _check)
 
 
 # ── Baby Gifts ────────────────────────────────────────────────────────────────
@@ -305,19 +382,23 @@ async def get_baby_gifts_health() -> dict[str, Any]:
     - online: whether the service is running
     - error: connection error message if any
     """
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get("http://baby-gifts-service:8004/health")
-            if resp.status_code == 200:
-                data = resp.json()
-                return {"online": data.get("online", False)}
-            return {"online": False, "error": f"HTTP {resp.status_code}"}
-    except httpx.ConnectError:
-        return {"online": False, "error": "Cannot connect to baby-gifts-service"}
-    except httpx.TimeoutException:
-        return {"online": False, "error": "Timeout"}
-    except Exception as e:
-        return {"online": False, "error": str(e)}
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get("http://baby-gifts-service:8004/health")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return {"online": data.get("online", False)}
+                return {"online": False, "error": f"HTTP {resp.status_code}"}
+        except httpx.ConnectError:
+            return {"online": False, "error": "Cannot connect to baby-gifts-service"}
+        except httpx.TimeoutException:
+            return {"online": False, "error": "Timeout"}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
+    return await _cached_health_check("baby-gifts", _check)
 
 
 # ── Portfolio Monitor ─────────────────────────────────────────────────────────
@@ -332,22 +413,26 @@ async def get_portfolio_health() -> dict[str, Any]:
     - last_update: timestamp of last portfolio update (if available)
     - error: connection error message if any
     """
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get("http://portfolio-monitor:8010/health")
-            if resp.status_code == 200:
-                data = resp.json()
-                return {
-                    "online": data.get("online", False),
-                    "last_update": data.get("last_update"),
-                }
-            return {"online": False, "error": f"HTTP {resp.status_code}"}
-    except httpx.ConnectError:
-        return {"online": False, "error": "Cannot connect to portfolio-monitor"}
-    except httpx.TimeoutException:
-        return {"online": False, "error": "Timeout"}
-    except Exception as e:
-        return {"online": False, "error": str(e)}
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get("http://portfolio-monitor:8010/health")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return {
+                        "online": data.get("online", False),
+                        "last_update": data.get("last_update"),
+                    }
+                return {"online": False, "error": f"HTTP {resp.status_code}"}
+        except httpx.ConnectError:
+            return {"online": False, "error": "Cannot connect to portfolio-monitor"}
+        except httpx.TimeoutException:
+            return {"online": False, "error": "Timeout"}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
+    return await _cached_health_check("portfolio", _check)
 
 
 # ── Vaultwarden (Passwords) ───────────────────────────────────────────────────
@@ -361,21 +446,25 @@ async def get_passwords_health() -> dict[str, Any]:
     - online: whether Vaultwarden is running and accessible
     - error: connection error message if any
     """
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get("http://vaultwarden:80/passwords/")
-            if resp.status_code == 200:
-                return {"online": True}
-            # Vaultwarden may return redirects, that's still "online"
-            if resp.status_code in (301, 302, 303, 307, 308):
-                return {"online": True}
-            return {"online": False, "error": f"HTTP {resp.status_code}"}
-    except httpx.ConnectError:
-        return {"online": False, "error": "Cannot connect to vaultwarden"}
-    except httpx.TimeoutException:
-        return {"online": False, "error": "Timeout"}
-    except Exception as e:
-        return {"online": False, "error": str(e)}
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get("http://vaultwarden:80/passwords/")
+                if resp.status_code == 200:
+                    return {"online": True}
+                # Vaultwarden may return redirects, that's still "online"
+                if resp.status_code in (301, 302, 303, 307, 308):
+                    return {"online": True}
+                return {"online": False, "error": f"HTTP {resp.status_code}"}
+        except httpx.ConnectError:
+            return {"online": False, "error": "Cannot connect to vaultwarden"}
+        except httpx.TimeoutException:
+            return {"online": False, "error": "Timeout"}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
+    return await _cached_health_check("passwords", _check)
 
 
 # ── Local AI (Open WebUI) ─────────────────────────────────────────────────────
@@ -391,19 +480,23 @@ async def get_ai_health() -> dict[str, Any]:
 
     Note: This service runs on EgnalPC, not on the Pi.
     """
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get("http://192.168.1.164:3000/health")
-            if r.status_code == 200:
-                data = r.json()
-                return {"online": data.get("status", False) is True}
-            return {"online": False, "error": f"HTTP {r.status_code}"}
-    except httpx.ConnectError:
-        return {"online": False, "error": "Cannot connect to EgnalPC:3000"}
-    except httpx.TimeoutException:
-        return {"online": False, "error": "Timeout - is EgnalPC on?"}
-    except Exception as e:
-        return {"online": False, "error": str(e)}
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                r = await client.get("http://192.168.1.164:3000/health")
+                if r.status_code == 200:
+                    data = r.json()
+                    return {"online": data.get("status", False) is True}
+                return {"online": False, "error": f"HTTP {r.status_code}"}
+        except httpx.ConnectError:
+            return {"online": False, "error": "Cannot connect to EgnalPC:3000"}
+        except httpx.TimeoutException:
+            return {"online": False, "error": "Timeout - is EgnalPC on?"}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
+    return await _cached_health_check("ai", _check)
 
 
 # ── Valheim Control (pc-agent) ────────────────────────────────────────────────
@@ -421,16 +514,20 @@ async def get_valheim_health() -> dict[str, Any]:
     - online: whether valheim-admin is running and responsive
     - error: connection error message if any
     """
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get("http://valheim-admin:8080/health")
-            if r.status_code == 200:
-                data = r.json()
-                return {"online": data.get("online", False)}
-            return {"online": False, "error": f"HTTP {r.status_code}"}
-    except httpx.ConnectError:
-        return {"online": False, "error": "Cannot connect to valheim-admin"}
-    except httpx.TimeoutException:
-        return {"online": False, "error": "Timeout"}
-    except Exception as e:
-        return {"online": False, "error": str(e)}
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                r = await client.get("http://valheim-admin:8080/health")
+                if r.status_code == 200:
+                    data = r.json()
+                    return {"online": data.get("online", False)}
+                return {"online": False, "error": f"HTTP {r.status_code}"}
+        except httpx.ConnectError:
+            return {"online": False, "error": "Cannot connect to valheim-admin"}
+        except httpx.TimeoutException:
+            return {"online": False, "error": "Timeout"}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
+    return await _cached_health_check("valheim", _check)
