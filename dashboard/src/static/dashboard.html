@@ -104,6 +104,35 @@
         .section-label { font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
         .status-dot { animation: pulse 2s infinite; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+        /* Health detail tooltip (shown on hover/click of status dots) */
+        .health-trigger { position: relative; cursor: help; }
+        .health-tip {
+            position: absolute; z-index: 9000;
+            bottom: calc(100% + 8px); left: 0;
+            min-width: 180px; max-width: 260px;
+            background: rgba(15,23,42,.98); color: #e2e8f0;
+            border: 1px solid rgba(99,102,241,.35); border-radius: 10px;
+            padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.45);
+            backdrop-filter: blur(10px);
+            font-size: 11px; line-height: 1.5; text-align: left;
+            opacity: 0; transform: translateY(4px); pointer-events: none;
+            transition: opacity .15s ease, transform .15s ease;
+            white-space: normal;
+        }
+        .health-trigger:hover .health-tip,
+        .health-trigger.tip-open .health-tip { opacity: 1; transform: translateY(0); pointer-events: auto; }
+        .health-tip::after {
+            content: ''; position: absolute; top: 100%; left: 12px;
+            border: 5px solid transparent; border-top-color: rgba(15,23,42,.98);
+        }
+        .health-tip .ht-title { font-weight: 700; color: #f1f5f9; margin-bottom: 4px; font-size: 12px; }
+        .health-tip .ht-row { display: flex; justify-content: space-between; gap: 10px; }
+        .health-tip .ht-k { color: #94a3b8; }
+        .health-tip .ht-v { color: #e2e8f0; font-weight: 600; word-break: break-word; text-align: right; }
+        .health-tip .ht-v.ok { color: #86efac; }
+        .health-tip .ht-v.bad { color: #fca5a5; }
+        .health-tip .ht-err { color: #fca5a5; margin-top: 4px; word-break: break-word; }
         .fade-in { animation: fadeIn 0.35s ease; }
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 
@@ -524,6 +553,12 @@ const T = {
         pc_online: 'Online', pc_offline: 'Offline',
         core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
         external_services: 'Servicios externos', infrastructure: 'Infraestructura',
+        ht_status: 'Estado', ht_latency: 'Latencia', ht_error: 'Error',
+        ht_online: 'Online', ht_offline: 'Offline', ht_loading: 'Cargando…',
+        ht_mqtt_connected: 'MQTT conectado', ht_active_sensors: 'Sensores activos',
+        ht_melcloud_connected: 'MELCloud conectado', ht_telegram_connected: 'Telegram conectado',
+        ht_last_update: 'Última actualización', ht_db_accessible: 'BD accesible',
+        ht_static_files: 'Ficheros estáticos', ht_yes: 'Sí', ht_no: 'No',
     },
     en: {
         title: 'Cuchi Casa', services: 'Services', logout_label: 'Sign out',
@@ -544,6 +579,12 @@ const T = {
         pc_online: 'Online', pc_offline: 'Offline',
         core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
         external_services: 'External services', infrastructure: 'Infrastructure',
+        ht_status: 'Status', ht_latency: 'Latency', ht_error: 'Error',
+        ht_online: 'Online', ht_offline: 'Offline', ht_loading: 'Loading…',
+        ht_mqtt_connected: 'MQTT connected', ht_active_sensors: 'Active sensors',
+        ht_melcloud_connected: 'MELCloud connected', ht_telegram_connected: 'Telegram connected',
+        ht_last_update: 'Last update', ht_db_accessible: 'DB accessible',
+        ht_static_files: 'Static files', ht_yes: 'Yes', ht_no: 'No',
     },
 };
 
@@ -1138,8 +1179,9 @@ function renderApps() {
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 mb-0.5">
                         <span class="text-sm font-semibold">${t(app.nameKey)}</span>
-                        <span id="status-${app.key}" class="flex items-center gap-1 text-[10px] text-slate-500">
+                        <span id="status-${app.key}" class="health-trigger flex items-center gap-1 text-[10px] text-slate-500" onclick="toggleTip(event,'${app.key}')">
                             <span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span><span>—</span>
+                            <span class="health-tip" id="tip-${app.key}"></span>
                         </span>
                     </div>
                     <p class="text-[11px] text-slate-400 truncate">${t(app.descKey)}</p>
@@ -1194,6 +1236,8 @@ async function toggleService(event, key) {
 
 // Status polling
 const statusCache = {};
+// Last health JSON per service key (for the detail tooltip)
+const healthData = {};
 async function fetchStatus(url) {
     if (statusCache[url] && (Date.now() - statusCache[url].ts) < 8000) return statusCache[url].data;
     const data = await fetch(url).then(r => r.json());
@@ -1201,16 +1245,83 @@ async function fetchStatus(url) {
     return data;
 }
 
+// Friendly label for an arbitrary extra health field (falls back to the raw key)
+function healthFieldLabel(key) {
+    const mapped = t('ht_' + key);
+    return mapped === ('ht_' + key) ? key : mapped;
+}
+
+// Format a health field value for display inside the tooltip
+function healthFieldValue(value) {
+    if (value === true) return { text: t('ht_yes'), cls: 'ok' };
+    if (value === false) return { text: t('ht_no'), cls: 'bad' };
+    if (value === null || value === undefined) return { text: '—', cls: '' };
+    return { text: String(value), cls: '' };
+}
+
+// Build the tooltip inner HTML from a service's name + its last health JSON
+function buildHealthTip(nameLabel, data) {
+    const esc = s => String(s).replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    if (!data) {
+        return `<span class="ht-title">${esc(nameLabel)}</span>`
+            + `<div class="ht-row"><span class="ht-k">${t('ht_status')}</span>`
+            + `<span class="ht-v">${t('ht_loading')}</span></div>`;
+    }
+    const online = data.online === true;
+    const rows = [];
+    rows.push(`<div class="ht-row"><span class="ht-k">${t('ht_status')}</span>`
+        + `<span class="ht-v ${online ? 'ok' : 'bad'}">${online ? t('ht_online') : t('ht_offline')}</span></div>`);
+    if (typeof data.latency_ms === 'number') {
+        rows.push(`<div class="ht-row"><span class="ht-k">${t('ht_latency')}</span>`
+            + `<span class="ht-v">${data.latency_ms}ms</span></div>`);
+    }
+    // Any other diagnostic fields (mqtt_connected, melcloud_connected, etc.)
+    const skip = new Set(['online', 'latency_ms', 'error']);
+    for (const [k, v] of Object.entries(data)) {
+        if (skip.has(k)) continue;
+        const fv = healthFieldValue(v);
+        rows.push(`<div class="ht-row"><span class="ht-k">${esc(healthFieldLabel(k))}</span>`
+            + `<span class="ht-v ${fv.cls}">${esc(fv.text)}</span></div>`);
+    }
+    let html = `<span class="ht-title">${esc(nameLabel)}</span>` + rows.join('');
+    if (data.error) {
+        html += `<div class="ht-err">${t('ht_error')}: ${esc(data.error)}</div>`;
+    }
+    return html;
+}
+
+// Toggle the tooltip open on tap (touch devices have no hover)
+function toggleTip(event, key) {
+    event.stopPropagation();
+    const el = document.getElementById('status-' + key);
+    if (!el) return;
+    const wasOpen = el.classList.contains('tip-open');
+    document.querySelectorAll('.health-trigger.tip-open').forEach(e => e.classList.remove('tip-open'));
+    if (!wasOpen) el.classList.add('tip-open');
+}
+// Dismiss any open tap-tooltip when clicking elsewhere
+document.addEventListener('click', e => {
+    if (!e.target.closest('.health-trigger')) {
+        document.querySelectorAll('.health-trigger.tip-open').forEach(el => el.classList.remove('tip-open'));
+    }
+});
+
 async function loadStatus() {
     for (const app of APPS) {
         if (!app.statusUrl || !app.getStatus) continue;
         try {
             const data = await fetchStatus(app.statusUrl);
+            healthData[app.key] = data;
             const el = document.getElementById('status-' + app.key);
             if (!el) continue;
             const isOnline = app.getStatus(data);
-            el.querySelector('span:first-child').className = `status-dot w-1.5 h-1.5 rounded-full inline-block ${isOnline ? 'bg-green-500' : 'bg-red-400'}`;
-            el.querySelector('span:last-child').textContent = t(isOnline ? 'connected' : 'offline');
+            const dot = el.querySelector('span:first-child');
+            const label = el.querySelector('span:nth-child(2)');
+            const tip = document.getElementById('tip-' + app.key);
+            if (dot) dot.className = `status-dot w-1.5 h-1.5 rounded-full inline-block ${isOnline ? 'bg-green-500' : 'bg-red-400'}`;
+            if (label) label.textContent = t(isOnline ? 'connected' : 'offline');
+            if (tip) tip.innerHTML = buildHealthTip(t(app.nameKey), data);
             const card = el.closest('.app-card');
             if (card) card.classList.toggle('offline', !isOnline);
         } catch {}

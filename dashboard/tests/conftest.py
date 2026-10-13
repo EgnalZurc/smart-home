@@ -108,3 +108,31 @@ def temp_auth_db(monkeypatch):
             # Drop any connection objects the test left referenced so their
             # __del__ runs (and WAL handles close) before cleanup.
             gc.collect()
+
+
+
+
+@pytest.fixture(autouse=True)
+def clear_health_cache():
+    """Reset the health check cache before and after every test.
+
+    The health cache is a module-level dict that persists across tests. Without
+    this fixture, a test that succeeds (online=True) can pollute subsequent tests
+    that expect failure (online=False) because the cached result is returned.
+    """
+    try:
+        import api.health as health
+
+        health._health_cache.clear()
+    except (ImportError, AttributeError):
+        # Module might not be imported yet or cache might not exist
+        pass
+
+    yield
+
+    try:
+        import api.health as health
+
+        health._health_cache.clear()
+    except (ImportError, AttributeError):
+        pass
