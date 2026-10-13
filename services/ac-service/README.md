@@ -85,6 +85,12 @@ The SPA lives at `/smart-home/ac`; the JSON API is served under `/api/ac/*`.
 | GET | `/api/health/ac` | Public health check |
 | GET | `/api/ac/health/zigbee` | Zigbee/MQTT health + active sensor count |
 
+### Alerts (Unified Alerts System)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/ac/alerts` | Current AC alerts for the unified dashboard alerts system. Returns `sensor_alert` when sensor data is stale (>1h). |
+
 ### Status & Control
 
 | Method | Endpoint | Description |

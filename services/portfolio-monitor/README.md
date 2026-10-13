@@ -25,6 +25,8 @@ Environment variables:
 - `GET /api/portfolio/etf` - ETF positions
 - `GET /api/portfolio/crypto` - Crypto staking positions
 - `GET /api/portfolio/savings` - Savings accounts
+- `GET /api/portfolio/alerts` - Scheduled alerts (upcoming reminders)
+- `GET /api/portfolio/alerts/active` - **Active market alerts** for unified dashboard (WARN/DANGER signals)
 - `GET /api/portfolio/health/external` - External service health checks
 - `POST /api/portfolio/refresh` - Trigger manual refresh (rate limited)
 
