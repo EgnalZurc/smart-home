@@ -70,7 +70,8 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             ip_address  TEXT NOT NULL DEFAULT '',
             created_at  REAL NOT NULL,
             last_used   REAL NOT NULL,
-            expires_at  REAL NOT NULL
+            expires_at  REAL NOT NULL,
+            pending_cookie TEXT DEFAULT NULL
         )
     """)
     # Migration: add prev_hash and prev_until columns if they don't exist
@@ -81,6 +82,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     try:
         conn.execute(
             "ALTER TABLE device_tokens ADD COLUMN prev_until REAL DEFAULT NULL"
+        )
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    # Migration: add pending_cookie for deferred delivery
+    try:
+        conn.execute(
+            "ALTER TABLE device_tokens ADD COLUMN pending_cookie TEXT DEFAULT NULL"
         )
     except sqlite3.OperationalError:
         pass  # Column already exists
@@ -125,17 +133,24 @@ def _decode_cookie(value: str) -> tuple[str, str] | None:
 # ---------------------------------------------------------------------------
 
 
-def create_device_token(username: str, user_agent: str, ip_address: str) -> str:
+def create_device_token(
+    username: str, user_agent: str, ip_address: str, pending: bool = False
+) -> str:
     """Create a new device token entry and return the cookie value.
 
-    Called once when admin approves a trusted-device request and the user
-    logs in with 'Remember device' checked.
+    Args:
+        username: The user who owns this device token.
+        user_agent: Browser/device identifier for display.
+        ip_address: IP address for logging/display.
+        pending: If True, store cookie value for deferred delivery (admin approval flow).
+                 If False (default), token is immediately active.
 
     Returns:
         Cookie value string: "<series>:<token>"
     """
     series = _generate()
     token = _generate()
+    cookie_value = _encode_cookie(series, token)
     now = time.time()
 
     with _db() as conn:
@@ -143,8 +158,8 @@ def create_device_token(username: str, user_agent: str, ip_address: str) -> str:
             """
             INSERT INTO device_tokens
                 (series, token_hash, username, user_agent, ip_address,
-                 created_at, last_used, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 created_at, last_used, expires_at, pending_cookie)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 series,
@@ -155,13 +170,21 @@ def create_device_token(username: str, user_agent: str, ip_address: str) -> str:
                 now,
                 now,
                 now + DEVICE_TOKEN_TTL,
+                cookie_value if pending else None,
             ),
         )
 
-    logger.info(
-        "Device token created for user %r (series prefix: %s)", username, series[:8]
-    )
-    return _encode_cookie(series, token)
+    if pending:
+        logger.info(
+            "Device token created (pending delivery) for user %r (series prefix: %s)",
+            username,
+            series[:8],
+        )
+    else:
+        logger.info(
+            "Device token created for user %r (series prefix: %s)", username, series[:8]
+        )
+    return cookie_value
 
 
 class VerifyResult:
@@ -317,3 +340,27 @@ def list_devices(username: str) -> list[dict]:
 def get_device_cookie_from_request(request) -> str | None:
     """Extract the device cookie value from a request."""
     return request.cookies.get(DEVICE_COOKIE_NAME)
+
+
+def get_pending_token(username: str) -> str | None:
+    """Return the pending cookie value for a user, if any.
+
+    Used by the middleware to deliver device tokens that were created
+    when admin approved the trust request (before user's next login).
+    """
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT pending_cookie FROM device_tokens WHERE username = ? AND pending_cookie IS NOT NULL LIMIT 1",
+            (username,),
+        ).fetchone()
+    return row["pending_cookie"] if row else None
+
+
+def mark_token_delivered(username: str) -> None:
+    """Clear pending_cookie flag after the token has been delivered to the user's browser."""
+    with _db() as conn:
+        conn.execute(
+            "UPDATE device_tokens SET pending_cookie = NULL WHERE username = ? AND pending_cookie IS NOT NULL",
+            (username,),
+        )
+    logger.info("Pending device token delivered to user %r", username)

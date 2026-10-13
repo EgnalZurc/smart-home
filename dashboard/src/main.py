@@ -104,7 +104,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
     Decision tree for every incoming request:
     1. Public path (/auth/*, /health, PWA assets) → pass through
     2. Static files (/static/*) → pass through (login page needs CSS)
-    3. Valid JWT session cookie → pass through
+    3. Valid JWT session cookie:
+       a. Check if user has pending device token → deliver it as cookie
+       b. Pass through
     4. Expired JWT + valid device cookie (Jaspan token):
        a. Verify and rotate the device token
        b. Issue a fresh 24h JWT
@@ -128,6 +130,22 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # 3. Valid JWT
         user = auth_core.get_current_user(request)
         if user:
+            # Check for pending device token to deliver
+            pending_cookie = auth_devices.get_pending_token(user)
+            if pending_cookie:
+                response = await call_next(request)
+                response.set_cookie(
+                    key=auth_devices.DEVICE_COOKIE_NAME,
+                    value=pending_cookie,
+                    max_age=auth_devices.DEVICE_TOKEN_TTL,
+                    httponly=True,
+                    secure=True,
+                    samesite="strict",
+                    path="/",
+                )
+                auth_devices.mark_token_delivered(user)
+                logger.info("Delivered pending device token to user %r", user)
+                return response
             return await call_next(request)
 
         # 4. Expired/missing JWT — check device cookie
@@ -163,7 +181,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
                         samesite="strict",
                         path="/",
                     )
-                logger.debug("Session silently refreshed for user %r", result.username)
+                logger.info(
+                    "Session silently refreshed via device token for user %r",
+                    result.username,
+                )
                 return response
 
         # 5. Not authenticated — redirect to login

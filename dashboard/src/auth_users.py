@@ -334,13 +334,15 @@ def get_trust_status(token: str) -> str | None:
 
 
 def has_active_trust_request(username: str) -> bool:
-    """Return True if the user already has a pending or approved trust request.
+    """Return True if the user already has a pending trust request.
 
-    Used to avoid sending duplicate approval emails.
+    Used to avoid sending duplicate approval emails. Approved requests are
+    deleted immediately when the device token is created, so we only check
+    for pending ones.
     """
     with _get_db() as conn:
         row = conn.execute(
-            "SELECT id FROM trusted_devices WHERE username = ? AND status IN ('pending', 'approved') LIMIT 1",
+            "SELECT id FROM trusted_devices WHERE username = ? AND status = 'pending' LIMIT 1",
             (username,),
         ).fetchone()
     return row is not None

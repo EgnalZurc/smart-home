@@ -42,14 +42,31 @@ class TestTrustApproveEndpoint:
         assert response.status_code == 200
         assert "Ya procesado" in response.text
 
+    @patch("api.trust_routes.auth_devices")
     @patch("api.trust_routes.auth_users")
-    def test_approve_success(self, mock_users, client):
+    def test_approve_success(self, mock_users, mock_devices, client):
         mock_users.verify_action_sig.return_value = True
-        mock_users.resolve_trust_request.return_value = {"username": "testuser"}
+        mock_users.resolve_trust_request.return_value = {
+            "username": "testuser",
+            "user_agent": "Mozilla/5.0 Test",
+            "ip_address": "192.168.1.1",
+            "token": "test-token",
+        }
+        mock_devices.create_device_token.return_value = "series:token"
 
         response = client.get("/api/auth/trust/approve?token=test&sig=valid")
+
         assert response.status_code == 200
         assert "aprobada" in response.text.lower()
+        # Verify device token was created with pending=True
+        mock_devices.create_device_token.assert_called_once_with(
+            username="testuser",
+            user_agent="Mozilla/5.0 Test",
+            ip_address="192.168.1.1",
+            pending=True,
+        )
+        # Verify trust request was deleted
+        mock_users.delete_trust_request.assert_called_once_with("test-token")
 
 
 class TestTrustRejectEndpoint:
