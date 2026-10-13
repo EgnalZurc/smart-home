@@ -31,7 +31,9 @@ def test_series_time_range_filter():
 
 def test_add_batch_shares_timestamp():
     rb = RingBuffer(maxlen=10)
-    rb.add_batch([("host.cpu.percent", "", 10.0), ("host.ram.percent", "", 50.0)], ts=200)
+    rb.add_batch(
+        [("host.cpu.percent", "", 10.0), ("host.ram.percent", "", 50.0)], ts=200
+    )
     assert rb.series("host.cpu.percent") == [(200, 10.0)]
     assert rb.series("host.ram.percent") == [(200, 50.0)]
 

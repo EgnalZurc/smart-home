@@ -56,3 +56,16 @@ BACKEND_HEALTH_URL = os.environ.get(
 
 # ── HTTP timeouts ────────────────────────────────────────────────────────────
 HTTP_TIMEOUT_S = float(os.environ.get("METRICS_HTTP_TIMEOUT_S", "5.0"))
+
+# ── Alerting (Wave 3.3) ──────────────────────────────────────────────────────
+# Master switch for the alert engine. When off, the collector still samples but
+# evaluate_tick is never called (useful to silence a noisy baseline week).
+ALERTS_ENABLED = os.environ.get("METRICS_ALERTS_ENABLED", "true").lower() == "true"
+# Retention for the alert_history audit trail (days). Longer than metrics so an
+# alert postmortem outlives the 30-day metric window.
+ALERT_HISTORY_RETENTION_DAYS = int(
+    os.environ.get("METRICS_ALERT_HISTORY_RETENTION_DAYS", "90")
+)
+# Telegram delivery is driven by libs/notifications.TelegramNotifier.from_env(),
+# which reads TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_IDS. If unset, the notifier is
+# simply disabled (alerts still fire + persist, just no message is sent).

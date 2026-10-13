@@ -13,6 +13,8 @@ import time
 import httpx
 import main
 import pytest
+from alert_store import AlertStore
+from alerts import AlertEngine
 from sqlite_store import SqliteStore
 from storage import RingBuffer
 
@@ -21,8 +23,13 @@ from storage import RingBuffer
 def client(tmp_path, monkeypatch):
     # Swap the module-level collector's storage for test-local instances so
     # tests do not touch the production DB path or share ring state.
-    monkeypatch.setattr(main.collector, "ring", RingBuffer(maxlen=240))
+    ring = RingBuffer(maxlen=240)
+    monkeypatch.setattr(main.collector, "ring", ring)
     monkeypatch.setattr(main.collector, "store", SqliteStore(str(tmp_path / "m.db")))
+    # Fresh alert engine on a temp store so alert endpoints are isolated too.
+    engine = AlertEngine(ring, AlertStore(str(tmp_path / "m.db")))
+    engine.load_state()
+    monkeypatch.setattr(main.collector, "alert_engine", engine)
     monkeypatch.setattr(main.collector, "last_tick_ts", time.monotonic())
     transport = httpx.ASGITransport(app=main.app)
     return httpx.AsyncClient(transport=transport, base_url="http://test")
@@ -144,3 +151,66 @@ async def test_summary_invalid_window_rejected(client):
     async with client as c:
         resp = await c.get("/api/metrics/summary", params={"window": "99y"})
     assert resp.status_code == 422
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Alerts + thresholds endpoints (Wave 3.3)
+# ═══════════════════════════════════════════════════════════════════════════════
+async def test_alerts_endpoint_reports_active(client):
+    # Drive one firing alert through the engine, then read it back via the API.
+    main.collector.ring.add("host.disk.percent", "", 95.0, ts=1000)
+    main.collector.alert_engine.evaluate_tick(now=1000)
+    async with client as c:
+        resp = await c.get("/api/metrics/alerts")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["active"]) == 1
+    assert body["active"][0]["rule_key"] == "host_disk"
+
+
+async def test_alerts_history_endpoint(client):
+    # Use a near-now timestamp: the history endpoint filters by real wall-clock
+    # (now - days), so an epoch-1970 ts would be pruned out of the window.
+    now = int(time.time())
+    main.collector.ring.add("host.disk.percent", "", 95.0, ts=now)
+    main.collector.alert_engine.evaluate_tick(now=now)
+    async with client as c:
+        resp = await c.get("/api/metrics/alerts/history", params={"days": 30})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["count"] >= 1
+    assert body["events"][0]["event"] == "fired"
+
+
+async def test_alerts_history_rejects_out_of_range_days(client):
+    async with client as c:
+        resp = await c.get("/api/metrics/alerts/history", params={"days": 999})
+    assert resp.status_code == 422
+
+
+async def test_get_thresholds_endpoint(client):
+    async with client as c:
+        resp = await c.get("/api/metrics/thresholds")
+    assert resp.status_code == 200
+    rules = resp.json()["thresholds"]
+    assert any(r["key"] == "host_ram" for r in rules)
+
+
+async def test_put_thresholds_updates_value(client):
+    async with client as c:
+        resp = await c.put(
+            "/api/metrics/thresholds",
+            json={"updates": {"host_disk": {"value": 42.0}}},
+        )
+    assert resp.status_code == 200
+    rule = next(r for r in resp.json()["thresholds"] if r["key"] == "host_disk")
+    assert rule["value"] == 42.0
+
+
+async def test_put_thresholds_unknown_key_returns_400(client):
+    async with client as c:
+        resp = await c.put(
+            "/api/metrics/thresholds",
+            json={"updates": {"ghost": {"value": 1}}},
+        )
+    assert resp.status_code == 400

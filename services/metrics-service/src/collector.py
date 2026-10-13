@@ -22,7 +22,11 @@ import os
 import time
 
 import httpx
+from alert_store import AlertStore
+from alerts import AlertEngine
 from config import (
+    ALERT_HISTORY_RETENTION_DAYS,
+    ALERTS_ENABLED,
     BACKEND_HEALTH_URL,
     COLLECT_INTERVAL_S,
     CPU_SAMPLE_WINDOW_S,
@@ -40,6 +44,21 @@ from sqlite_store import SqliteStore
 from storage import RingBuffer, Sample
 
 logger = logging.getLogger(__name__)
+
+
+def _make_notifier():
+    """Build a TelegramNotifier from the environment, tolerating import layout.
+
+    In the container ``/app/libs`` is on ``sys.path`` (set by ``main.py`` /
+    ``LIBS_PATH``), so ``notifications`` is a top-level package. Under pytest the
+    repo root is on ``sys.path`` instead, so the package is ``libs.notifications``.
+    Try both so the engine is wired identically in prod and in tests.
+    """
+    try:
+        from notifications import TelegramNotifier
+    except ImportError:  # pragma: no cover - exercised only under pytest layout
+        from libs.notifications import TelegramNotifier
+    return TelegramNotifier.from_env()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -262,9 +281,18 @@ class Collector:
         self,
         ring: RingBuffer | None = None,
         store: SqliteStore | None = None,
+        alert_engine: AlertEngine | None = None,
     ) -> None:
         self.ring = ring if ring is not None else RingBuffer()
         self.store = store if store is not None else SqliteStore()
+        # Alert engine shares the ring buffer (reads hi-res samples) and its own
+        # SQLite tables in the SAME DB file as the metrics store, so tests that
+        # inject a temp-path store transparently get a temp-path alert store too.
+        self.alert_engine = (
+            alert_engine
+            if alert_engine is not None
+            else AlertEngine(self.ring, AlertStore(self.store.db_path))
+        )
         self.last_tick_ts: float | None = None
         self._last_rollup_bucket: int | None = None
         self._tasks: list[asyncio.Task] = []
@@ -290,6 +318,15 @@ class Collector:
 
         self.ring.add_batch(samples, ts)
         self.last_tick_ts = time.monotonic()
+
+        # Evaluate alert rules against the freshly-updated ring buffer. Failures
+        # here must never kill the collection loop, so swallow + log.
+        if ALERTS_ENABLED:
+            try:
+                self.alert_engine.evaluate_tick(now=ts)
+            except Exception:
+                logger.exception("alert evaluation failed")
+
         return samples
 
     # ── Rollup ──────────────────────────────────────────────────────────────────
@@ -335,10 +372,35 @@ class Collector:
                 await asyncio.to_thread(self.store.prune)
             except Exception:
                 logger.exception("prune failed")
+            try:
+                await asyncio.to_thread(
+                    self.alert_engine.store.prune_history,
+                    ALERT_HISTORY_RETENTION_DAYS,
+                )
+            except Exception:
+                logger.exception("alert history prune failed")
 
     async def start(self) -> None:
         """Open the HTTP client and spawn the background tasks."""
         self._client = httpx.AsyncClient(timeout=HTTP_TIMEOUT_S)
+        # Wire the Telegram notifier from the live environment and rehydrate the
+        # active-alert set so a restart does not re-spam already-firing alerts.
+        if ALERTS_ENABLED:
+            try:
+                notifier = _make_notifier()
+                self.alert_engine.notifier = notifier
+                if not notifier.enabled:
+                    logger.warning(
+                        "Alerts enabled but Telegram notifier is unconfigured "
+                        "(no TELEGRAM_BOT_TOKEN/CHAT_IDS) — alerts will fire and "
+                        "persist but no message will be sent"
+                    )
+            except Exception:
+                logger.exception("failed to initialise Telegram notifier")
+            try:
+                self.alert_engine.load_state()
+            except Exception:
+                logger.exception("failed to load persisted alert state")
         self._tasks = [
             asyncio.create_task(self._collect_loop()),
             asyncio.create_task(self._rollup_loop()),

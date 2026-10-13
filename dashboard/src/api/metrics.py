@@ -54,3 +54,35 @@ async def get_metrics_summary(
     """min/avg/max per metric over a window."""
     require_super(request)
     return await _proxy.get("/api/metrics/summary", params={"window": window})
+
+
+@router.get("/alerts")
+async def get_metrics_alerts(request: Request):
+    """Currently-firing alerts (anti-flap active set)."""
+    require_super(request)
+    return await _proxy.get("/api/metrics/alerts")
+
+
+@router.get("/alerts/history")
+async def get_metrics_alerts_history(
+    request: Request,
+    days: int = Query(7, ge=1, le=90, description="Look-back window in days"),
+):
+    """Alert audit trail (fired/resolved events) for the last N days."""
+    require_super(request)
+    return await _proxy.get("/api/metrics/alerts/history", params={"days": days})
+
+
+@router.get("/thresholds")
+async def get_metrics_thresholds(request: Request):
+    """Current alert threshold rule set."""
+    require_super(request)
+    return await _proxy.get("/api/metrics/thresholds")
+
+
+@router.put("/thresholds")
+async def put_metrics_thresholds(request: Request):
+    """Patch alert thresholds at runtime (SUPER)."""
+    require_super(request)
+    body = await request.json()
+    return await _proxy.put("/api/metrics/thresholds", json=body)

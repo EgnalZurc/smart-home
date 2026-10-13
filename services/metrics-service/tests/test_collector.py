@@ -16,8 +16,16 @@ from storage import RingBuffer
 
 
 # ── Docker stats parsing ──────────────────────────────────────────────────────
-def _docker_stats(usage, limit, cache=0, cpu_total=200, precpu_total=100,
-                  sys_cpu=2000, presys_cpu=1000, online=4):
+def _docker_stats(
+    usage,
+    limit,
+    cache=0,
+    cpu_total=200,
+    precpu_total=100,
+    sys_cpu=2000,
+    presys_cpu=1000,
+    online=4,
+):
     return {
         "memory_stats": {
             "usage": usage,
@@ -141,7 +149,9 @@ async def test_sample_health_failure_returns_empty():
 # ── Rollup ────────────────────────────────────────────────────────────────────
 @pytest.fixture
 def collector(tmp_path):
-    return Collector(ring=RingBuffer(maxlen=240), store=SqliteStore(str(tmp_path / "m.db")))
+    return Collector(
+        ring=RingBuffer(maxlen=240), store=SqliteStore(str(tmp_path / "m.db"))
+    )
 
 
 def test_rollup_averages_window_into_sqlite(collector):
@@ -186,7 +196,9 @@ def test_last_tick_age_none_before_first_tick(collector):
 async def test_tick_gathers_docker_and_health_with_client(collector, monkeypatch):
     import collector as collector_mod
 
-    monkeypatch.setattr(collector_mod, "sample_host", lambda: [("host.cpu.percent", "", 1.0)])
+    monkeypatch.setattr(
+        collector_mod, "sample_host", lambda: [("host.cpu.percent", "", 1.0)]
+    )
 
     async def fake_docker(_client, **_kw):
         return [("container.mem.percent", "svc", 42.0)]

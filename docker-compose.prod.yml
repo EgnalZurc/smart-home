@@ -329,6 +329,11 @@ services:
       - METRICS_PROC_MEMINFO=/host/proc/meminfo
       - METRICS_PROC_LOADAVG=/host/proc/loadavg
       - METRICS_THERMAL_ZONE=/host/sys/class/thermal/thermal_zone0/temp
+    # Telegram alerts (Wave 3.3): TelegramNotifier.from_env() reads
+    # TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_IDS from .env (same pattern as
+    # baby-gifts-service). If unset, alerts still fire + persist but send nothing.
+    env_file:
+      - .env
     depends_on:
       - smart-home-backend
       - docker-socket-proxy
