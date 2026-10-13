@@ -17,9 +17,9 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Form, HTTPException, Request
+from smart_home_common.rate_limiter import InMemoryRateLimiter
 
 from api.auth_helpers import require_super
-from smart_home_common.rate_limiter import InMemoryRateLimiter
 
 logger = logging.getLogger(__name__)
 
