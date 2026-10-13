@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from system.containers import router as containers_router
 from system.stats import router as stats_router
 
+from api.deploy import router as deploy_router
 from api.health import router as health_router
 from api.monitoring import router as monitoring_router
 from api.proxy import external as _external_module
@@ -44,6 +45,7 @@ router.include_router(containers_router)
 router.include_router(stats_router)
 router.include_router(monitoring_router)
 router.include_router(ws_router)
+router.include_router(deploy_router)
 
 
 # Legacy redirect: valheim-admin was removed, control is now via /api/valheim/*

@@ -58,6 +58,43 @@
         .svc-restart.spinning { animation: svc-spin 0.8s linear infinite; }
         @keyframes svc-spin { to { transform: rotate(360deg); } }
 
+        /* Deploy button (shown next to restart; SUPER only) */
+        .svc-deploy {
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 11px; padding: 4px 7px; border-radius: 6px;
+            border: 1px solid rgba(192,132,252,.4); color:#c084fc;
+            background: rgba(168,85,247,.08);
+            cursor: pointer; transition: background 0.15s, opacity 0.15s;
+            flex-shrink: 0; line-height: 1; user-select: none;
+        }
+        .svc-deploy:hover { background: rgba(168,85,247,.15); }
+        .svc-deploy:active { opacity: 0.7; }
+        .svc-deploy:disabled { opacity: 0.4; cursor: not-allowed; }
+        .svc-deploy.spinning { animation: svc-spin 0.8s linear infinite; }
+
+        /* Toast notifications (bottom-centre) */
+        #toast-container {
+            position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+            z-index: 9500; display: flex; flex-direction: column; gap: 8px;
+            align-items: center; pointer-events: none;
+            padding: 0 12px; width: max-content; max-width: calc(100vw - 24px);
+        }
+        .toast {
+            pointer-events: auto;
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 14px; border-radius: 10px;
+            font-size: 13px; line-height: 1.3;
+            background: rgba(15,23,42,.96); border: 1px solid rgba(51,65,85,.6);
+            color: #e2e8f0; box-shadow: 0 8px 24px rgba(0,0,0,.4);
+            opacity: 0; transform: translateY(8px);
+            transition: opacity .2s ease, transform .2s ease;
+            max-width: 100%;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.success { border-color: rgba(34,197,94,.5); }
+        .toast.error { border-color: rgba(239,68,68,.5); }
+        .toast a { color: #60a5fa; text-decoration: underline; white-space: nowrap; }
+
         /* Header icon button */
         .hdr-btn {
             display: inline-flex; align-items: center; justify-content: center;
@@ -553,6 +590,11 @@ const T = {
         title: 'Cuchi Casa', services: 'Servicios', logout_label: 'Salir',
         connected: 'Conectado', offline: 'Sin conexión',
         svc_stop: 'Parar', svc_start: 'Arrancar', svc_loading: '…', svc_restart: 'Reiniciar',
+        svc_deploy: 'Desplegar',
+        deploy_confirm: '¿Desplegar «{name}»? Esto lanza el workflow de CI/CD en GitHub Actions.',
+        deploy_ok: 'Despliegue lanzado para {name}',
+        deploy_view: 'Ver en GitHub Actions',
+        deploy_err: 'No se pudo lanzar el despliegue de {name}',
         res_title: 'Recursos del sistema', res_ram: 'RAM', res_swap: 'Swap',
         res_cpu: 'CPU', res_disk: 'Disco', res_temp: 'Temperatura',
         ac_name: 'Control AC', ac_desc: 'Temperatura, sensores Zigbee, MELCloud',
@@ -579,6 +621,11 @@ const T = {
         title: 'Cuchi Casa', services: 'Services', logout_label: 'Sign out',
         connected: 'Connected', offline: 'Offline',
         svc_stop: 'Stop', svc_start: 'Start', svc_loading: '…', svc_restart: 'Restart',
+        svc_deploy: 'Deploy',
+        deploy_confirm: 'Deploy "{name}"? This triggers the CI/CD workflow on GitHub Actions.',
+        deploy_ok: 'Deploy triggered for {name}',
+        deploy_view: 'View in GitHub Actions',
+        deploy_err: 'Could not trigger deploy for {name}',
         res_title: 'System resources', res_ram: 'RAM', res_swap: 'Swap',
         res_cpu: 'CPU', res_disk: 'Disk', res_temp: 'Temperature',
         ac_name: 'AC Control', ac_desc: 'Temperature control, Zigbee sensors, MELCloud',
@@ -619,6 +666,19 @@ const APP_CATALOGUE = {
     babygifts: { url: '/smart-home/baby-gifts', nameKey: 'babygifts_name', descKey: 'babygifts_desc', statusUrl: '/api/health/baby-gifts', getStatus: d => d?.online === true },
     valheim:   { url: '/valheim-admin/', nameKey: 'valheim_name',   descKey: 'valheim_desc',   statusUrl: '/api/health/valheim',    getStatus: d => d?.online === true },
     portfolio: { url: '/smart-home/portfolio',  nameKey: 'portfolio_name', descKey: 'portfolio_desc', statusUrl: '/api/health/portfolio',  getStatus: d => d?.online === true },
+};
+
+// Dashboard app key → GitHub Actions CI service name (ci.yml workflow_dispatch
+// `service` input). Only apps present here get a 🚀 Deploy button; the backend
+// re-validates against the same allow-list.
+const DEPLOY_SERVICES = {
+    ac:         'ac-service',
+    vacaciones: 'vacaciones',
+    casita:     'casita',
+    babygifts:  'baby-gifts',
+    portfolio:  'portfolio-monitor',
+    passwords:  'vaultwarden',
+    valheim:    'valheim-admin',
 };
 
 // External services (for Services modal)
@@ -1211,6 +1271,8 @@ function renderApps() {
         const canControl = app.controllable !== false;
         const btnHtml = (showBtn && canControl) ? `<button class="svc-btn loading" id="btn-${app.key}" onclick="toggleService(event,'${app.key}')">${t('svc_loading')}</button>` : '';
         const restartHtml = (showBtn && canControl) ? `<button class="svc-restart" id="restart-${app.key}" title="${t('svc_restart')}" aria-label="${t('svc_restart')}" style="display:none" onclick="restartService(event,'${app.key}')">🔄</button>` : '';
+        // Deploy button: SUPER only, and only for apps mapped to a CI service.
+        const deployHtml = (showBtn && DEPLOY_SERVICES[app.key]) ? `<button class="svc-deploy" id="deploy-${app.key}" title="${t('svc_deploy')}" aria-label="${t('svc_deploy')}" onclick="deployService(event,'${app.key}')">🚀</button>` : '';
         const tag = app.url ? 'a' : 'div';
         const href = app.url ? `href="${app.url}"` : '';
         return `<${tag} ${href} class="app-card px-4 py-3.5">
@@ -1225,7 +1287,7 @@ function renderApps() {
                     </div>
                     <p class="text-[11px] text-slate-400 truncate">${t(app.descKey)}</p>
                 </div>
-                ${(showBtn && canControl) ? `<div class="flex items-center gap-1.5">${restartHtml}${btnHtml}</div>` : ''}${((showBtn && canControl) || !app.url) ? '' : '<span class="text-slate-600 ml-1">›</span>'}
+                ${(showBtn && (canControl || deployHtml)) ? `<div class="flex items-center gap-1.5">${deployHtml}${restartHtml}${btnHtml}</div>` : ''}${((showBtn && (canControl || deployHtml)) || !app.url) ? '' : '<span class="text-slate-600 ml-1">›</span>'}
             </div>
         </${tag}>`;
     }).join('');
@@ -1300,6 +1362,75 @@ async function restartService(event, key) {
             await loadStatus();
         } else { updateBtn(key, containerState[key]); }
     } catch { updateBtn(key, containerState[key]); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Deploy (manual GitHub Actions trigger — SUPER only)
+// ═══════════════════════════════════════════════════════════════════════════
+function fmt(str, vars) {
+    return str.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
+}
+
+function showToast(message, { kind = 'info', linkUrl = null, linkText = null, timeout = 6000 } = {}) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const el = document.createElement('div');
+    el.className = `toast ${kind}`;
+    el.setAttribute('role', 'status');
+    const msg = document.createElement('span');
+    msg.textContent = message;
+    el.appendChild(msg);
+    if (linkUrl) {
+        const a = document.createElement('a');
+        a.href = linkUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = linkText || linkUrl;
+        el.appendChild(a);
+    }
+    container.appendChild(el);
+    // Force reflow so the entrance transition plays.
+    void el.offsetWidth;
+    el.classList.add('show');
+    const remove = () => {
+        el.classList.remove('show');
+        setTimeout(() => el.remove(), 250);
+    };
+    setTimeout(remove, timeout);
+}
+
+async function deployService(event, key) {
+    event.preventDefault(); event.stopPropagation();
+    const service = DEPLOY_SERVICES[key];
+    if (!service) return;
+    const deployBtn = document.getElementById('deploy-' + key);
+    if (!deployBtn || deployBtn.disabled) return;
+    const app = APPS.find(a => a.key === key);
+    const name = app ? t(app.nameKey) : key;
+    if (!window.confirm(fmt(t('deploy_confirm'), { name }))) return;
+
+    deployBtn.disabled = true;
+    deployBtn.classList.add('spinning');
+    try {
+        const r = await fetch(`/api/deploy/${encodeURIComponent(service)}`, { method: 'POST' });
+        if (r.ok) {
+            let data = {};
+            try { data = await r.json(); } catch {}
+            const url = data.run_url || data.actions_url;
+            showToast(fmt(t('deploy_ok'), { name }), {
+                kind: 'success',
+                linkUrl: url,
+                linkText: url ? t('deploy_view') : null,
+            });
+        } else {
+            showToast(fmt(t('deploy_err'), { name }), { kind: 'error' });
+        }
+    } catch {
+        showToast(fmt(t('deploy_err'), { name }), { kind: 'error' });
+    } finally {
+        deployBtn.disabled = false;
+        deployBtn.classList.remove('spinning');
+    }
 }
 
 // Status polling
@@ -1560,5 +1691,6 @@ function setupHealthStream() {
     // avoid hitting pc-agent on every page load and every 30s in the background.
 })();
 </script>
+<div id="toast-container" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>
