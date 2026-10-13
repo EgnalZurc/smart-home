@@ -95,6 +95,7 @@ _AUTH_PUBLIC_PREFIXES = (
     "/swagger",  # Swagger UI
     "/redoc",  # ReDoc UI
     "/openapi.json",  # OpenAPI spec
+    "/api/monitoring/",  # Memory monitoring — internal use from cron scripts
 )
 
 
