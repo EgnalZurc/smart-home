@@ -561,7 +561,7 @@ const APP_CATALOGUE = {
     casita:    { url: '/smart-home/casita?' + Date.now(),             nameKey: 'casita_name',    descKey: 'casita_desc',    statusUrl: '/api/health/casita',    getStatus: d => d?.online === true },
     passwords: { url: '/passwords/',                                  nameKey: 'passwords_name', descKey: 'passwords_desc', statusUrl: '/api/health/passwords', getStatus: d => d?.online === true },
     babygifts: { url: '/smart-home/baby-gifts', nameKey: 'babygifts_name', descKey: 'babygifts_desc', statusUrl: '/api/health/baby-gifts', getStatus: d => d?.online === true },
-    valheim:   { url: '/valheim-admin/', controllable: false, nameKey: 'valheim_name',   descKey: 'valheim_desc',   statusUrl: '/api/health/valheim',    getStatus: d => d?.online === true },
+    valheim:   { url: '/valheim-admin/', nameKey: 'valheim_name',   descKey: 'valheim_desc',   statusUrl: '/api/health/valheim',    getStatus: d => d?.online === true },
     portfolio: { url: '/smart-home/portfolio',  nameKey: 'portfolio_name', descKey: 'portfolio_desc', statusUrl: '/api/health/portfolio',  getStatus: d => d?.online === true },
 };
 
