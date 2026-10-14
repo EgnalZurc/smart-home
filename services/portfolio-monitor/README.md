@@ -5,6 +5,7 @@ Portfolio monitoring service with ETF, crypto staking, and savings tracking.
 ## Features
 
 - **ETF Monitor**: Yahoo Finance data, technical analysis (MA50/MA200), signals
+- **Dividend Calendar**: ETF dividend tracking from Yahoo Finance — trailing-12-month yield, last/estimated-next distribution, estimated annual income, and a 90-day upcoming-payment calendar
 - **Crypto Monitor**: CoinGecko data, staking APY tracking, Fear & Greed index
 - **Savings Monitor**: Bank account tracking with interest projections
 - **DeFi Monitor**: Manual-APY yield tracking for DeFi positions (no external APIs)
@@ -70,7 +71,8 @@ This service uses **lazy credential loading** to minimize security exposure:
 - `GET /api/portfolio/defi` - DeFi yield positions (manual APY, no external APIs)
 - `GET /api/portfolio/rebalance` - **Rebalance analysis**: per-position allocation drift vs target + suggested trades
 - `GET /api/portfolio/alerts` - Scheduled alerts (upcoming reminders)
-- `GET /api/portfolio/alerts/active` - **Active market alerts** for unified dashboard (WARN/DANGER signals + rebalance drift)
+- `GET /api/portfolio/alerts/active` - **Active market alerts** for unified dashboard (WARN/DANGER signals + rebalance drift + upcoming dividends within 7 days)
+- `GET /api/portfolio/dividends` - **Dividend calendar**: per-ETF trailing yield, last/next distribution, estimated annual income, plus distributions estimated in the next 90 days
 - `GET /api/portfolio/health/external` - External service health checks
 - `POST /api/portfolio/refresh` - Trigger manual refresh (rate limited)
 

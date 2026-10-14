@@ -471,7 +471,7 @@ services:
     networks:
       - smart-home
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8013/health', timeout=3)"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8014/health', timeout=3)"]
       interval: 60s
       timeout: 5s
       retries: 3

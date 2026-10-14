@@ -1018,6 +1018,10 @@ jobs:
               mkdir -p data/presence-service
               chown 1000:1000 data/presence-service
             fi
+            if [ "${{ matrix.service.name }}" = "calendar-service" ]; then
+              mkdir -p data/calendar-service
+              chown 1000:1000 data/calendar-service
+            fi
             docker compose pull ${{ matrix.service.name }}
             docker compose up -d --force-recreate ${{ matrix.service.name }}
             echo "✅ Service deployed with new image"

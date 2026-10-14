@@ -114,6 +114,54 @@ async def get_active_alerts():
             }
         )
 
+    # Upcoming dividends: surface any dividend estimated within the next 7 days
+    # as an informational alert so they appear in the unified alerts feed.
+    import asyncio
+
+    from monitors.etf_monitor import calculate_dividend_info
+
+    portfolio = config.get_etf_portfolio()
+    prices: dict[str, float] = {}
+    for analysis in summary.etf_analysis or []:
+        ticker = getattr(analysis, "ticker", None)
+        price = getattr(analysis, "price", None)
+        if ticker and price:
+            prices[ticker] = float(price)
+
+    today = datetime.now(timezone.utc).date()
+    for fund_id, cfg in portfolio.items():
+        ticker = cfg.get("ticker", "")
+        units = cfg.get("units", 0.0) or 0.0
+        current_price = prices.get(ticker)
+        info = await asyncio.to_thread(
+            calculate_dividend_info, ticker, current_price, units
+        )
+        next_date_str = info.get("next_dividend_date")
+        if not next_date_str:
+            continue
+        try:
+            next_date = datetime.fromisoformat(next_date_str).date()
+        except ValueError:
+            continue
+        days_until = (next_date - today).days
+        if 0 <= days_until <= 7:
+            est_income = info.get("estimated_annual_income", 0.0)
+            # Quarterly estimate: TTM / 4
+            quarterly_est = (est_income / 4) if est_income else 0.0
+            alerts.append(
+                {
+                    "source": "portfolio",
+                    "severity": "info",
+                    "title": f"Dividend: {cfg.get('name', fund_id)}",
+                    "detail": (
+                        f"Expected ~{next_date_str} "
+                        f"(in {days_until} days, ~€{quarterly_est:.2f})"
+                    ),
+                    "timestamp": now,
+                    "link": "/portfolio",
+                }
+            )
+
     return _safe_json({"alerts": alerts})
 
 

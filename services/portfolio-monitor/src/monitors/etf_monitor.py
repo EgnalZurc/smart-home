@@ -34,6 +34,10 @@ logger = logging.getLogger(__name__)
 # historical data, so it can live a bit longer.
 _history_cache = TTLCache(default_ttl_seconds=300)  # 5 min
 _ohlc_cache = TTLCache(default_ttl_seconds=900)  # 15 min
+# Dividend history changes at most a few times a year, so it can be cached for
+# much longer than price history. 1 hour collapses dashboard refresh bursts
+# while still picking up a newly declared distribution within the same day.
+_dividends_cache = TTLCache(default_ttl_seconds=3600)  # 1 hour
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -217,6 +221,135 @@ def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
     except Exception as e:
         logger.error(f"Error fetching OHLC for {ticker_sym}: {e}")
         return []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dividend helpers
+# ─────────────────────────────────────────────────────────────────────────────
+def fetch_dividends(ticker_sym: str) -> pd.Series:
+    """Download the full dividend history for a ticker as a pandas Series.
+
+    Cached per ticker for an hour since dividend history is near-static. On any
+    error (or an ETF with no distributions) an empty Series is returned so the
+    callers can treat "no data" and "no dividends" uniformly.
+    """
+    cached = _dividends_cache.get(ticker_sym)
+    if cached is not None:
+        logger.debug(f"Cache hit for dividends: {ticker_sym}")
+        return cached
+
+    try:
+        ticker = yf.Ticker(ticker_sym)
+        divs = ticker.dividends
+        if divs is None:
+            divs = pd.Series(dtype="float64")
+        _dividends_cache.set(ticker_sym, divs)
+        return divs
+    except Exception as e:
+        logger.error(f"Error fetching dividends for {ticker_sym}: {e}")
+        return pd.Series(dtype="float64")
+
+
+def _estimate_dividend_frequency(dates: list[datetime]) -> int | None:
+    """Estimate the average number of days between consecutive distributions.
+
+    Uses up to the last 6 intervals so a changed cadence is reflected quickly.
+    Returns ``None`` when there are fewer than two payments to compare.
+    """
+    if len(dates) < 2:
+        return None
+
+    ordered = sorted(dates)
+    recent = ordered[-7:]  # last 6 intervals at most
+    intervals = [
+        (recent[i] - recent[i - 1]).days
+        for i in range(1, len(recent))
+        if (recent[i] - recent[i - 1]).days > 0
+    ]
+    if not intervals:
+        return None
+    return round(sum(intervals) / len(intervals))
+
+
+def calculate_dividend_info(
+    ticker_sym: str,
+    current_price: float | None,
+    units: float = 0.0,
+) -> dict[str, Any]:
+    """Build the dividend summary for a single ETF.
+
+    Returns a dict with:
+      - ``last_dividend_date`` (ISO date str | None)
+      - ``last_dividend_amount`` (per-share, float | None)
+      - ``ttm_dividend`` (trailing-12-month per-share total, float)
+      - ``dividend_yield_pct`` (TTM dividend / current price * 100, float | None)
+      - ``estimated_annual_income`` (TTM dividend * owned units, float)
+      - ``next_dividend_date`` (ISO date str | None) - inferred from cadence
+      - ``frequency_days`` (avg interval between payments, int | None)
+    """
+    empty: dict[str, Any] = {
+        "last_dividend_date": None,
+        "last_dividend_amount": None,
+        "ttm_dividend": 0.0,
+        "dividend_yield_pct": None,
+        "estimated_annual_income": 0.0,
+        "next_dividend_date": None,
+        "frequency_days": None,
+    }
+
+    divs = fetch_dividends(ticker_sym)
+    if divs is None or divs.empty:
+        return empty
+
+    # Normalise index timestamps to naive dates for arithmetic + serialization.
+    dates: list[datetime] = []
+    for idx in divs.index:
+        try:
+            dt = idx.to_pydatetime() if hasattr(idx, "to_pydatetime") else idx
+            if getattr(dt, "tzinfo", None) is not None:
+                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+            dates.append(dt)
+        except (AttributeError, ValueError, TypeError):
+            continue
+
+    if not dates:
+        return empty
+
+    last_date = max(dates)
+    last_amount = float(divs.iloc[-1])
+
+    # Trailing-12-month total: sum every distribution in the last 365 days.
+    cutoff = last_date - pd.Timedelta(days=365)
+    ttm_dividend = float(
+        sum(
+            float(amount)
+            for dt, amount in zip(dates, divs.to_numpy(), strict=False)
+            if dt >= cutoff
+        )
+    )
+
+    dividend_yield_pct: float | None = None
+    if current_price and current_price > 0 and ttm_dividend > 0:
+        dividend_yield_pct = (ttm_dividend / current_price) * 100
+
+    estimated_annual_income = ttm_dividend * units if units else 0.0
+
+    frequency_days = _estimate_dividend_frequency(dates)
+    next_dividend_date: str | None = None
+    if frequency_days:
+        next_dividend_date = (
+            (last_date + pd.Timedelta(days=frequency_days)).date().isoformat()
+        )
+
+    return {
+        "last_dividend_date": last_date.date().isoformat(),
+        "last_dividend_amount": last_amount,
+        "ttm_dividend": ttm_dividend,
+        "dividend_yield_pct": dividend_yield_pct,
+        "estimated_annual_income": estimated_annual_income,
+        "next_dividend_date": next_dividend_date,
+        "frequency_days": frequency_days,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────

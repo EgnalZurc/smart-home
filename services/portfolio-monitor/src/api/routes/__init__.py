@@ -16,6 +16,7 @@ from orchestrator import get_orchestrator  # noqa: F401 — patched by tests
 # ─── Sub-routers ─────────────────────────────────────────────────────────────
 from .alerts import router as _alerts_router
 from .control import router as _control_router
+from .dividends import router as _dividends_router
 from .health import router as _health_router
 
 # ─── Re-export: health checks (patched at callsite by tests) ────────────────
@@ -56,3 +57,4 @@ router.include_router(_alerts_router)
 router.include_router(_notifications_router)
 router.include_router(_health_router)
 router.include_router(_rebalance_router)
+router.include_router(_dividends_router)
