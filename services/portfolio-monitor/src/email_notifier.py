@@ -88,15 +88,23 @@ class _BuiltinEmailSender:
         self._smtp_user = os.environ.get(
             "SMTP_USER", os.environ.get("AUTH_SMTP_USER", "")
         )
-        self._smtp_password = os.environ.get(
-            "SMTP_PASSWORD", os.environ.get("AUTH_SMTP_PASSWORD", "")
-        )
+        # Note: _smtp_password is now a property (lazy loading) - see below
         self._recipient = os.environ.get("ALERT_EMAIL") or self._smtp_user
-        self._enabled = bool(self._smtp_user and self._smtp_password)
+
+    @property
+    def _smtp_password(self) -> str:
+        """
+        Get SMTP password with lazy loading.
+
+        Security: Password is read from environment at call time, not at init.
+        This reduces the window where credentials are held in memory and avoids
+        accidentally logging credentials during instantiation.
+        """
+        return os.environ.get("SMTP_PASSWORD", os.environ.get("AUTH_SMTP_PASSWORD", ""))
 
     @property
     def enabled(self) -> bool:
-        return self._enabled
+        return bool(self._smtp_user and self._smtp_password)
 
     def send(
         self,
@@ -105,7 +113,7 @@ class _BuiltinEmailSender:
         recipient: str | None = None,
         plain_body: str | None = None,
     ) -> NotificationResult:
-        if not self._enabled:
+        if not self.enabled:
             return NotificationResult(False, "Email disabled — missing credentials")
 
         to_addr = recipient or self._recipient
