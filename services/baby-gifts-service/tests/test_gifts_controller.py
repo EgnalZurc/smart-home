@@ -262,3 +262,83 @@ class TestAtomicSave:
         names = {g["name"] for g in data["gifts"]}
         assert names == {"Alpha", "Beta"}
         assert tmp_data_dir.joinpath("gifts.json").exists()
+
+
+
+class TestInvitationRetryLimit:
+    """Tests for invitation creation retry limit."""
+
+    def test_create_invitation_retries_on_collision(self, tmp_data_dir):
+        """create_invitation should retry on IntegrityError (token collision)."""
+        from unittest.mock import MagicMock, patch
+
+        import gifts_controller
+
+        # Mock to fail twice then succeed
+        call_count = 0
+        original_execute = None
+
+        def mock_execute(sql, params=None):
+            nonlocal call_count
+            if "INSERT INTO invitations" in sql:
+                call_count += 1
+                if call_count < 3:
+                    import sqlite3
+
+                    raise sqlite3.IntegrityError("UNIQUE constraint failed")
+            return original_execute(sql, params) if params else original_execute(sql)
+
+        # Create real connection and wrap its execute
+        conn = gifts_controller._get_db()
+        original_execute = conn.execute
+
+        with patch.object(gifts_controller, "_get_db") as mock_get_db:
+            mock_conn = MagicMock()
+            mock_conn.execute = mock_execute
+            mock_conn.commit = conn.commit
+            mock_conn.close = conn.close
+            mock_get_db.return_value = mock_conn
+
+            result = gifts_controller.create_invitation("Retry Guest")
+
+        assert result["status"] == "ok"
+        assert call_count == 3  # Failed twice, succeeded on third
+
+    def test_create_invitation_fails_after_max_retries(self, tmp_data_dir):
+        """create_invitation should return error after MAX_INVITATION_RETRIES."""
+        from unittest.mock import MagicMock, patch
+
+        import sqlite3
+
+        import gifts_controller
+
+        with patch.object(gifts_controller, "_get_db") as mock_get_db:
+            mock_conn = MagicMock()
+            mock_conn.execute.side_effect = sqlite3.IntegrityError(
+                "UNIQUE constraint failed"
+            )
+            mock_get_db.return_value = mock_conn
+
+            result = gifts_controller.create_invitation("Failing Guest")
+
+        assert result["status"] == "error"
+        assert "unique token" in result["message"].lower()
+
+    def test_create_invitation_logs_error_on_max_retries(self, tmp_data_dir, caplog):
+        """create_invitation should log error when max retries reached."""
+        from unittest.mock import MagicMock, patch
+
+        import sqlite3
+
+        import gifts_controller
+
+        with patch.object(gifts_controller, "_get_db") as mock_get_db:
+            mock_conn = MagicMock()
+            mock_conn.execute.side_effect = sqlite3.IntegrityError(
+                "UNIQUE constraint failed"
+            )
+            mock_get_db.return_value = mock_conn
+
+            gifts_controller.create_invitation("Log Test Guest")
+
+        assert "Failed to create invitation after 3 retries" in caplog.text
