@@ -1,17 +1,40 @@
-"""Valheim Admin — Proxy to pc-agent on Windows PC.
+"""Valheim Admin — Proxy service to pc-agent on Windows PC.
+
+This module implements a FastAPI-based proxy service that bridges the smart-home
+dashboard running on the Raspberry Pi with the pc-agent service running on the
+Windows PC that controls the actual Valheim dedicated server.
 
 Architecture:
-  Dashboard (Pi) → valheim-admin (Pi) → pc-agent (Windows PC) → valheim-server
+    Dashboard (Pi) → valheim-admin (Pi) → pc-agent (Windows PC) → valheim-server
 
-This service runs on the Raspberry Pi and proxies ALL commands to pc-agent.
+The service runs on the Raspberry Pi and proxies ALL commands to pc-agent.
 The actual Valheim server, worlds, logs, and config live on the Windows PC.
 
-Port: 8080 (internal, proxied by nginx via /valheim-admin/)
-Auth: nginx handles auth_request — this service trusts all incoming requests.
+Features:
+    - Server lifecycle management (start/stop/restart)
+    - Configuration viewing and updates
+    - World management (create, activate, delete)
+    - Log streaming
+    - PC power profile control
+    - Rate limiting on server control endpoints
+
+Security:
+    - Port 8080 internal, proxied by nginx via /valheim-admin/
+    - nginx handles auth_request — this service trusts all incoming requests
+    - Input validation on all user-provided data
+    - Rate limiting prevents abuse of server control endpoints
+
+Example:
+    The service is typically started via Docker::
+
+        docker compose up -d valheim-admin
+
+    Or directly for development::
+
+        uvicorn main:app --host 0.0.0.0 --port 8080
 """
 
 import logging
-import os
 import re
 import shlex
 import time
@@ -26,19 +49,44 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from smart_home_common.rate_limiter import InMemoryRateLimiter
 
+from .config import (
+    BACKUPS_DEFAULT,
+    BACKUPS_MAX,
+    BACKUPS_MIN,
+    LOGS_DEFAULT_LINES,
+    LOGS_MAX_LINES,
+    LOGS_MIN_LINES,
+    PC_AGENT_TIMEOUT,
+    PC_AGENT_TOKEN,
+    PC_AGENT_URL,
+    RATE_LIMIT_MAX_REQUESTS,
+    RATE_LIMIT_WINDOW_SECONDS,
+    SAVE_INTERVAL_DEFAULT_SECONDS,
+    SAVE_INTERVAL_MAX_SECONDS,
+    SAVE_INTERVAL_MIN_SECONDS,
+    SERVER_NAME_MAX_LENGTH,
+    SERVER_NAME_PATTERN,
+    SERVER_PASS_MAX_LENGTH,
+    SERVICE_NAME,
+    SERVICE_TITLE,
+    SERVICE_VERSION,
+    VALID_POWER_MODES,
+    WORLD_NAME_MAX_LENGTH,
+    WORLD_NAME_PATTERN,
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# ── Configuration ─────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Service Initialization
+# ══════════════════════════════════════════════════════════════════════════════
 
-PC_AGENT_URL = os.environ.get("PC_AGENT_URL", "http://192.168.1.164:8090")
-PC_AGENT_TOKEN = os.environ.get("PC_AGENT_TOKEN", "")
 if not PC_AGENT_TOKEN:
     raise RuntimeError("PC_AGENT_TOKEN environment variable is required")
-PC_AGENT_TIMEOUT = float(os.environ.get("PC_AGENT_TIMEOUT", "30.0"))
 
 # Create shared async client for pc-agent communication
 _client_config = ServiceClientConfig(
@@ -48,28 +96,64 @@ _client_config = ServiceClientConfig(
 )
 pc_agent = AsyncServiceClient(_client_config)
 
-# Rate limiter for server control endpoints (10 requests per minute per IP)
+# Rate limiter for server control endpoints
 # Note: Rate limiting is intentionally applied only to server control endpoints
 # (/api/server/start, /stop, /restart) since they have significant side effects.
 # Read-only endpoints (/api/status, /api/logs, /api/config GET, /api/worlds) are
 # not rate limited as they don't mutate state and are needed for UI polling.
-server_control_limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60)
+server_control_limiter = InMemoryRateLimiter(
+    max_requests=RATE_LIMIT_MAX_REQUESTS,
+    window_seconds=RATE_LIMIT_WINDOW_SECONDS,
+)
+
+# Compiled regex patterns for validation
+_WORLD_NAME_RE = re.compile(WORLD_NAME_PATTERN)
+_SERVER_NAME_RE = re.compile(SERVER_NAME_PATTERN)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Utility Functions
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 def _sanitize_shell_arg(arg: str) -> str:
-    """Sanitize argument for shell command to prevent injection.
+    """Sanitize an argument for safe shell command construction.
 
-    Uses shlex.quote to properly escape special characters.
-    Note: valheim-admin is a proxy service and does not execute shell commands
-    directly. This utility is provided for consistency and future use.
+    Uses shlex.quote to properly escape special characters that could be
+    interpreted by the shell.
+
+    Note:
+        valheim-admin is a proxy service and does not execute shell commands
+        directly. This utility is provided for consistency with other services
+        and potential future use.
+
+    Args:
+        arg: The argument string to sanitize.
+
+    Returns:
+        The shell-escaped argument string.
+
+    Example:
+        >>> _sanitize_shell_arg("hello world")
+        "'hello world'"
+        >>> _sanitize_shell_arg("test; rm -rf /")
+        "'test; rm -rf /'"
     """
     return shlex.quote(arg)
 
 
 def _check_rate_limit(request: Request) -> None:
-    """Check rate limit for server control endpoints.
+    """Check if the request exceeds the rate limit for server control.
 
-    Raises HTTPException 429 if rate limit exceeded.
+    This function enforces rate limiting on server control endpoints to prevent
+    abuse. It uses the client's IP address as the identifier.
+
+    Args:
+        request: The incoming FastAPI request object.
+
+    Raises:
+        HTTPException: 429 status if the rate limit is exceeded, includes
+            Retry-After header with the reset timestamp.
     """
     client_ip = request.client.host if request.client else "unknown"
     if not server_control_limiter.is_allowed(client_ip):
@@ -82,56 +166,63 @@ def _check_rate_limit(request: Request) -> None:
         )
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Application Lifecycle
+# ══════════════════════════════════════════════════════════════════════════════
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage application lifecycle.
+    """Manage the FastAPI application lifecycle.
 
-    On shutdown, close the shared pc-agent HTTP client.
+    This async context manager handles startup and shutdown events for the
+    application. On shutdown, it closes the shared pc-agent HTTP client to
+    ensure proper resource cleanup.
+
+    Args:
+        app: The FastAPI application instance.
+
+    Yields:
+        None: Control returns to FastAPI for normal operation.
     """
     yield
     await pc_agent.aclose()
 
 
-app = FastAPI(title="Valheim Admin", version="2.1.0", lifespan=lifespan)
+app = FastAPI(title=SERVICE_TITLE, version=SERVICE_VERSION, lifespan=lifespan)
 
 
-# ── Validation ──────────────────────────────────────────────────────────────
-
-# world_name is forwarded to pc-agent, which uses it to build filesystem paths
-# and URL path segments. Restrict it to a safe charset to prevent path traversal
-# and injection (e.g. "../", slashes, shell metacharacters).
-WORLD_NAME_MAX_LENGTH = 64
-_WORLD_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-
-# server_name: alphanumeric + spaces, max 64 chars. Displayed in server browser.
-SERVER_NAME_MAX_LENGTH = 64
-_SERVER_NAME_RE = re.compile(r"^[A-Za-z0-9 ]{1,64}$")
-
-# server_pass: max 128 chars, no newlines or null bytes (would break config files).
-SERVER_PASS_MAX_LENGTH = 128
-
-# save_interval bounds: 5 minutes to 24 hours (in seconds)
-SAVE_INTERVAL_MIN = 300
-SAVE_INTERVAL_MAX = 86400
-
-# backups bounds: 1 to 100
-BACKUPS_MIN = 1
-BACKUPS_MAX = 100
+# ══════════════════════════════════════════════════════════════════════════════
+# Input Validation
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 def validate_world_name(world_name: str) -> str:
-    """Validate a world name before forwarding it to pc-agent.
+    """Validate a world name before forwarding to pc-agent.
 
-    Allowed: ASCII alphanumerics, underscore and hyphen, 1..64 chars.
-    Raises HTTPException(400) if the value is empty, too long, or contains
-    any other character.
+    World names are used to build filesystem paths on the Windows PC, so they
+    must be restricted to a safe character set to prevent path traversal and
+    injection attacks (e.g., "../", slashes, shell metacharacters).
+
+    Args:
+        world_name: The world name to validate.
+
+    Returns:
+        The validated world name (unchanged if valid).
+
+    Raises:
+        HTTPException: 400 status if the world name is empty, too long,
+            or contains invalid characters.
+
+    Example:
+        >>> validate_world_name("MyWorld_01")
+        'MyWorld_01'
+        >>> validate_world_name("../etc/passwd")  # Raises HTTPException
     """
     if not world_name or len(world_name) > WORLD_NAME_MAX_LENGTH:
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Invalid world_name: must be 1 to {WORLD_NAME_MAX_LENGTH} characters."
-            ),
+            detail=f"Invalid world_name: must be 1 to {WORLD_NAME_MAX_LENGTH} characters.",
         )
     if not _WORLD_NAME_RE.match(world_name):
         raise HTTPException(
@@ -145,10 +236,24 @@ def validate_world_name(world_name: str) -> str:
 
 
 def validate_server_name(name: str) -> str:
-    """Validate server name before forwarding to pc-agent.
+    """Validate a server name before forwarding to pc-agent.
 
-    Allowed: ASCII alphanumerics and spaces, 1..64 chars.
-    Raises HTTPException(400) if invalid.
+    Server names are displayed in the Valheim server browser and should be
+    human-readable. Allowed characters are ASCII alphanumerics and spaces.
+
+    Args:
+        name: The server name to validate.
+
+    Returns:
+        The validated server name (unchanged if valid).
+
+    Raises:
+        HTTPException: 400 status if the name is empty, too long,
+            or contains invalid characters.
+
+    Example:
+        >>> validate_server_name("My Valheim Server")
+        'My Valheim Server'
     """
     if not name or not _SERVER_NAME_RE.match(name):
         raise HTTPException(
@@ -162,9 +267,24 @@ def validate_server_name(name: str) -> str:
 
 
 def validate_server_pass(password: str) -> str:
-    """Validate server password before forwarding to pc-agent.
+    """Validate a server password before forwarding to pc-agent.
 
-    Raises HTTPException(400) if too long or contains newlines/null bytes.
+    Passwords are written to configuration files, so newlines and null bytes
+    are prohibited as they would corrupt the config format.
+
+    Args:
+        password: The password to validate.
+
+    Returns:
+        The validated password (unchanged if valid).
+
+    Raises:
+        HTTPException: 400 status if the password is too long or contains
+            newlines or null bytes.
+
+    Example:
+        >>> validate_server_pass("secret123")
+        'secret123'
     """
     if len(password) > SERVER_PASS_MAX_LENGTH:
         raise HTTPException(
@@ -180,37 +300,102 @@ def validate_server_pass(password: str) -> str:
 
 
 def clamp_save_interval(value: int) -> int:
-    """Clamp save_interval to valid bounds (5 min to 24 hours)."""
-    return max(SAVE_INTERVAL_MIN, min(value, SAVE_INTERVAL_MAX))
+    """Clamp save interval to valid bounds.
+
+    Ensures the save interval stays within reasonable limits to prevent
+    data loss (too long) or excessive disk I/O (too short).
+
+    Args:
+        value: The requested save interval in seconds.
+
+    Returns:
+        The clamped value between SAVE_INTERVAL_MIN_SECONDS (5 min)
+        and SAVE_INTERVAL_MAX_SECONDS (24 hours).
+
+    Example:
+        >>> clamp_save_interval(60)  # Too short
+        300
+        >>> clamp_save_interval(100000)  # Too long
+        86400
+        >>> clamp_save_interval(1800)  # Valid
+        1800
+    """
+    return max(SAVE_INTERVAL_MIN_SECONDS, min(value, SAVE_INTERVAL_MAX_SECONDS))
 
 
 def clamp_backups(value: int) -> int:
-    """Clamp backup count to valid bounds (1 to 100)."""
+    """Clamp backup count to valid bounds.
+
+    Ensures the backup count stays within reasonable limits to prevent
+    running out of disk space (too many) or losing too much history (too few).
+
+    Args:
+        value: The requested number of backups to keep.
+
+    Returns:
+        The clamped value between BACKUPS_MIN (1) and BACKUPS_MAX (100).
+
+    Example:
+        >>> clamp_backups(0)  # Too few
+        1
+        >>> clamp_backups(500)  # Too many
+        100
+        >>> clamp_backups(10)  # Valid
+        10
+    """
     return max(BACKUPS_MIN, min(value, BACKUPS_MAX))
 
 
-# ── Health ────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Health Check Endpoints
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    """Health check for valheim-admin (Pi side). Always returns online."""
-    return {"online": True, "service": "valheim-admin"}
+    """Return basic health status for valheim-admin.
+
+    This is a lightweight liveness check that always returns online. It does
+    not verify backend connectivity — use /health/ready for that.
+
+    Returns:
+        A dictionary with online status and service name.
+
+    Example response::
+
+        {"online": true, "service": "valheim-admin"}
+    """
+    return {"online": True, "service": SERVICE_NAME}
 
 
 @app.get("/health/ready")
 async def health_ready() -> dict[str, Any]:
-    """
-    Readiness check that verifies connectivity to pc-agent.
+    """Check readiness by verifying connectivity to pc-agent.
 
-    Returns 200 if pc-agent is reachable, 503 otherwise.
-    Useful for kubernetes-style readiness probes.
+    This endpoint performs an actual health check against pc-agent to verify
+    the backend is reachable. Useful for Kubernetes-style readiness probes
+    to prevent routing traffic to an instance that can't reach its backend.
+
+    Returns:
+        A dictionary with ready status and backend connectivity info.
+
+    Raises:
+        HTTPException: 503 status if pc-agent is unreachable.
+
+    Example success response::
+
+        {
+            "ready": true,
+            "service": "valheim-admin",
+            "backend": "pc-agent",
+            "backend_status": "reachable"
+        }
     """
     try:
         await pc_agent.get("/health")
         return {
             "ready": True,
-            "service": "valheim-admin",
+            "service": SERVICE_NAME,
             "backend": "pc-agent",
             "backend_status": "reachable",
         }
@@ -223,19 +408,29 @@ async def health_ready() -> dict[str, Any]:
         status_code=503,
         detail={
             "ready": False,
-            "service": "valheim-admin",
+            "service": SERVICE_NAME,
             "backend": "pc-agent",
             "backend_status": "unreachable",
         },
     )
 
 
-# ── Static / SPA ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Static Files / SPA
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 @app.get("/", response_class=HTMLResponse)
-async def serve_index():
-    """Serve the admin SPA."""
+async def serve_index() -> HTMLResponse:
+    """Serve the Valheim Admin single-page application.
+
+    Reads index.html from the static directory and injects a cache-busting
+    version comment to ensure browsers always get the latest version.
+
+    Returns:
+        HTML response with the admin SPA, or a fallback message if
+        index.html is not found.
+    """
     path = Path(__file__).parent / "static" / "index.html"
     if not path.exists():
         return HTMLResponse("<h1>Valheim Admin</h1><p>index.html not found</p>")
@@ -247,12 +442,39 @@ async def serve_index():
     )
 
 
-# ── Server status & control ───────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Server Status & Control Endpoints
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 @app.get("/api/status")
 async def get_status() -> dict[str, Any]:
-    """Get Valheim server status."""
+    """Get current Valheim server status from pc-agent.
+
+    Queries pc-agent for the server's running state, player count, and
+    other status information.
+
+    Returns:
+        Server status dictionary from pc-agent, or a fallback status
+        indicating pc-agent is unreachable.
+
+    Example success response::
+
+        {
+            "running": true,
+            "players": 2,
+            "world": "MyWorld",
+            "uptime": 3600
+        }
+
+    Example failure response::
+
+        {
+            "running": false,
+            "status": "pc_unreachable",
+            "pc_agent": "offline"
+        }
+    """
     try:
         return await pc_agent.get("/valheim/status")
     except HTTPException:
@@ -264,8 +486,21 @@ async def get_status() -> dict[str, Any]:
 
 
 @app.post("/api/server/start")
-async def start_server(request: Request):
-    """Start Valheim server."""
+async def start_server(request: Request) -> dict[str, Any]:
+    """Start the Valheim dedicated server.
+
+    Sends a start command to pc-agent, which launches the Valheim server
+    process on the Windows PC. Rate limited to prevent abuse.
+
+    Args:
+        request: The incoming request (used for rate limiting).
+
+    Returns:
+        Result dictionary from pc-agent with operation status.
+
+    Raises:
+        HTTPException: 429 if rate limit exceeded.
+    """
     _check_rate_limit(request)
     logger.info("Server start requested")
     result = await pc_agent.post("/valheim/start")
@@ -274,8 +509,21 @@ async def start_server(request: Request):
 
 
 @app.post("/api/server/stop")
-async def stop_server(request: Request):
-    """Stop Valheim server."""
+async def stop_server(request: Request) -> dict[str, Any]:
+    """Stop the Valheim dedicated server.
+
+    Sends a stop command to pc-agent, which gracefully shuts down the
+    Valheim server process. Rate limited to prevent abuse.
+
+    Args:
+        request: The incoming request (used for rate limiting).
+
+    Returns:
+        Result dictionary from pc-agent with operation status.
+
+    Raises:
+        HTTPException: 429 if rate limit exceeded.
+    """
     _check_rate_limit(request)
     logger.info("Server stop requested")
     result = await pc_agent.post("/valheim/stop")
@@ -284,8 +532,21 @@ async def stop_server(request: Request):
 
 
 @app.post("/api/server/restart")
-async def restart_server(request: Request):
-    """Restart Valheim server."""
+async def restart_server(request: Request) -> dict[str, Any]:
+    """Restart the Valheim dedicated server.
+
+    Sends a restart command to pc-agent, which stops and then starts the
+    Valheim server. Rate limited to prevent abuse.
+
+    Args:
+        request: The incoming request (used for rate limiting).
+
+    Returns:
+        Result dictionary from pc-agent with operation status.
+
+    Raises:
+        HTTPException: 429 if rate limit exceeded.
+    """
     _check_rate_limit(request)
     logger.info("Server restart requested")
     result = await pc_agent.post("/valheim/restart")
@@ -293,12 +554,32 @@ async def restart_server(request: Request):
     return result
 
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Configuration Endpoints
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 @app.get("/api/config")
-async def get_config():
-    """Get Valheim server configuration."""
+async def get_config() -> dict[str, Any]:
+    """Get current Valheim server configuration.
+
+    Retrieves the server configuration from pc-agent, including server name,
+    world name, password status, and other settings.
+
+    Returns:
+        Configuration dictionary from pc-agent.
+
+    Example response::
+
+        {
+            "server_name": "My Server",
+            "world_name": "MyWorld",
+            "server_public": true,
+            "crossplay": true,
+            "save_interval": 1800,
+            "backups": 4
+        }
+    """
     return await pc_agent.get("/valheim/config")
 
 
@@ -309,10 +590,31 @@ async def update_config(
     server_pass: str = Form(...),
     server_public: bool = Form(False),
     crossplay: bool = Form(False),
-    save_interval: int = Form(1800),
-    backups: int = Form(4),
-):
-    """Update Valheim server configuration."""
+    save_interval: int = Form(SAVE_INTERVAL_DEFAULT_SECONDS),
+    backups: int = Form(BACKUPS_DEFAULT),
+) -> dict[str, Any]:
+    """Update Valheim server configuration.
+
+    Validates all inputs and forwards the configuration update to pc-agent.
+    The server may need to be restarted for some changes to take effect.
+
+    Args:
+        server_name: Display name for the server in browser (1-64 chars,
+            alphanumeric and spaces).
+        world_name: Name of the world to use (1-64 chars, alphanumeric,
+            underscore, hyphen).
+        server_pass: Server password (max 128 chars, no newlines).
+        server_public: Whether the server appears in the public browser.
+        crossplay: Whether to enable crossplay with Xbox/console players.
+        save_interval: World save interval in seconds (300-86400).
+        backups: Number of backup copies to keep (1-100).
+
+    Returns:
+        Result dictionary from pc-agent confirming the update.
+
+    Raises:
+        HTTPException: 400 if any input validation fails.
+    """
     validate_server_name(server_name)
     validate_world_name(world_name)
     validate_server_pass(server_pass)
@@ -340,28 +642,81 @@ async def update_config(
     return result
 
 
-# ── Logs ──────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Logs Endpoints
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 @app.get("/api/logs")
-async def get_logs(lines: int = 80):
-    """Get recent server logs."""
-    lines = max(1, min(lines, 10000))  # Cap between 1 and 10000
+async def get_logs(lines: int = LOGS_DEFAULT_LINES) -> dict[str, Any]:
+    """Get recent Valheim server log entries.
+
+    Retrieves the most recent log lines from the Valheim server via pc-agent.
+    The number of lines is capped to prevent excessive memory usage.
+
+    Args:
+        lines: Number of log lines to retrieve (default: 80, max: 10000).
+
+    Returns:
+        Dictionary containing log entries from pc-agent.
+
+    Example response::
+
+        {
+            "logs": [
+                "10:23:45 - Player 'Viking' connected",
+                "10:24:01 - World saved"
+            ]
+        }
+    """
+    lines = max(LOGS_MIN_LINES, min(lines, LOGS_MAX_LINES))
     return await pc_agent.get("/valheim/logs", params={"lines": str(lines)})
 
 
-# ── Worlds ────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# World Management Endpoints
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 @app.get("/api/worlds")
-async def list_worlds():
-    """List available worlds."""
+async def list_worlds() -> dict[str, Any]:
+    """List all available Valheim worlds.
+
+    Retrieves the list of world files from pc-agent, including which
+    world is currently active.
+
+    Returns:
+        Dictionary containing list of worlds from pc-agent.
+
+    Example response::
+
+        {
+            "worlds": [
+                {"name": "MyWorld", "active": true, "size_mb": 15.2},
+                {"name": "TestWorld", "active": false, "size_mb": 2.1}
+            ]
+        }
+    """
     return await pc_agent.get("/valheim/worlds")
 
 
 @app.post("/api/worlds/new")
-async def create_world(world_name: str = Form(...)):
-    """Create a new world."""
+async def create_world(world_name: str = Form(...)) -> dict[str, Any]:
+    """Create a new Valheim world.
+
+    Creates a new empty world with the specified name. The world will not
+    be activated automatically — use /api/worlds/activate for that.
+
+    Args:
+        world_name: Name for the new world (1-64 chars, alphanumeric,
+            underscore, hyphen only).
+
+    Returns:
+        Result dictionary from pc-agent confirming creation.
+
+    Raises:
+        HTTPException: 400 if world_name is invalid.
+    """
     validate_world_name(world_name)
     logger.info("Creating new world: %s", world_name)
     result = await pc_agent.post("/valheim/worlds/new", {"world_name": world_name})
@@ -370,8 +725,21 @@ async def create_world(world_name: str = Form(...)):
 
 
 @app.post("/api/worlds/activate")
-async def activate_world(world_name: str = Form(...)):
-    """Activate a world."""
+async def activate_world(world_name: str = Form(...)) -> dict[str, Any]:
+    """Activate a world for the server to use.
+
+    Sets the specified world as the active world. The server should be
+    restarted for the change to take effect.
+
+    Args:
+        world_name: Name of the world to activate.
+
+    Returns:
+        Result dictionary from pc-agent confirming activation.
+
+    Raises:
+        HTTPException: 400 if world_name is invalid.
+    """
     validate_world_name(world_name)
     logger.info("Activating world: %s", world_name)
     result = await pc_agent.post("/valheim/worlds/activate", {"world_name": world_name})
@@ -380,8 +748,21 @@ async def activate_world(world_name: str = Form(...)):
 
 
 @app.delete("/api/worlds/{world_name}")
-async def delete_world(world_name: str):
-    """Delete a world."""
+async def delete_world(world_name: str) -> dict[str, Any]:
+    """Delete a Valheim world.
+
+    Permanently deletes the specified world and all its data. This action
+    cannot be undone.
+
+    Args:
+        world_name: Name of the world to delete.
+
+    Returns:
+        Result dictionary from pc-agent confirming deletion.
+
+    Raises:
+        HTTPException: 400 if world_name is invalid.
+    """
     validate_world_name(world_name)
     logger.warning("Deleting world: %s", world_name)
     result = await pc_agent.delete(f"/valheim/worlds/{world_name}")
@@ -389,12 +770,28 @@ async def delete_world(world_name: str):
     return result
 
 
-# ── PC Control ────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# PC Control Endpoints
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 @app.get("/api/pc/status")
-async def get_pc_status():
-    """Get PC agent status."""
+async def get_pc_status() -> dict[str, Any]:
+    """Get the status of pc-agent and the Windows PC.
+
+    Checks if pc-agent is online and Docker is available.
+
+    Returns:
+        Status dictionary from pc-agent, or offline status if unreachable.
+
+    Example success response::
+
+        {"online": true, "docker": true}
+
+    Example failure response::
+
+        {"online": false, "docker": false}
+    """
     try:
         return await pc_agent.get("/health")
     except HTTPException:
@@ -402,24 +799,51 @@ async def get_pc_status():
 
 
 @app.get("/api/pc/mode")
-async def get_pc_mode():
-    """Get current PC power profile."""
+async def get_pc_mode() -> dict[str, Any]:
+    """Get the current Windows power profile.
+
+    Retrieves which power profile is currently active on the PC.
+
+    Returns:
+        Dictionary with current power mode from pc-agent.
+
+    Example response::
+
+        {"mode": "gaming"}
+    """
     return await pc_agent.get("/system/mode")
 
 
 @app.post("/api/pc/mode/{mode}")
-async def set_pc_mode(mode: str):
-    """Set PC power profile."""
-    if mode not in ("gaming", "servidor", "balanced"):
+async def set_pc_mode(mode: str) -> dict[str, Any]:
+    """Set the Windows power profile.
+
+    Changes the PC's power profile to optimize for different workloads.
+    Valid modes are: gaming, servidor, balanced.
+
+    Args:
+        mode: The power profile to activate.
+
+    Returns:
+        Result dictionary from pc-agent confirming the change.
+
+    Raises:
+        HTTPException: 400 if mode is not one of the valid options.
+    """
+    if mode not in VALID_POWER_MODES:
         logger.warning("Invalid power mode requested: %s", mode)
-        raise HTTPException(400, "Invalid mode")
+        raise HTTPException(
+            400, f"Invalid mode. Valid modes: {', '.join(sorted(VALID_POWER_MODES))}"
+        )
     logger.info("Setting PC power mode: %s", mode)
     result = await pc_agent.post(f"/system/mode/{mode}")
     logger.info("PC power mode set: %s", mode)
     return result
 
 
-# ── Static files ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Static File Mounting
+# ══════════════════════════════════════════════════════════════════════════════
 
 _static = Path(__file__).parent / "static"
 if _static.exists():
