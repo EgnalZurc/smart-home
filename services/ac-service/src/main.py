@@ -6,6 +6,7 @@ Serves:
   GET  /api/ac/sensors             → per-sensor readings
   GET  /api/ac/sensors/history     → sensor reading history
   GET  /api/ac/history             → controller action history
+  GET  /api/ac/thermal-curves      → heating/cooling curve analysis
   GET  /api/ac/config              → controller config
   POST /api/ac/config              → update config
   POST /api/ac/control             → set auto/manual/off
@@ -50,6 +51,7 @@ from smart_home_common.mqtt.handler import MqttHandler
 from smart_home_common.mqtt.subscription import SubscriptionConfig, SubscriptionManager
 from smart_home_common.utils.error_tracker import ErrorTracker
 from spa import serve_html
+from thermal_analysis import ThermalBuffer, analyze
 
 logging.basicConfig(
     level=logging.INFO,
@@ -130,6 +132,11 @@ ac_controller: ACController | None = None
 subscription_manager: SubscriptionManager | None = None
 error_tracker: ErrorTracker | None = None
 ac_temp_scheduler: AcTempScheduler | None = None
+
+# In-memory thermal sample buffer feeding /api/ac/thermal-curves. Created once
+# at import so the endpoint can be queried even before the lifespan wires it
+# into the controller (it simply returns empty curves until samples arrive).
+thermal_buffer: ThermalBuffer = ThermalBuffer()
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -238,6 +245,14 @@ async def lifespan(app: FastAPI):
         "outdoor", fetch_outdoor_temp, interval=OUTDOOR_UPDATE_INTERVAL
     )
     subscription_manager.start()
+
+    # Wire thermal analysis: the controller appends one sample per tick,
+    # enriched with the outdoor temperature from the subscription cache.
+    def current_outdoor_temp() -> float | None:
+        cached = subscription_manager.get_cached("outdoor", default={})
+        return cached.get("temperature") if cached else None
+
+    ac_controller.set_thermal_buffer(thermal_buffer, current_outdoor_temp)
 
     # 5. Scheduler
     ac_temp_scheduler = AcTempScheduler(mqtt_handler, ac_controller)
@@ -434,6 +449,17 @@ def get_history(limit: int = 100):
     """Get controller action history."""
     limit = max(1, min(limit, 1000))  # Cap between 1 and 1000
     return {"history": ac_controller.get_history(limit)}
+
+
+@app.get("/api/ac/thermal-curves", tags=["AC Control"])
+def get_thermal_curves():
+    """Heating/cooling curve analysis from accumulated thermal samples.
+
+    Returns heating/cooling rates (°C/min), average time to reach the target
+    setpoint, and an efficiency breakdown bucketed by outdoor temperature.
+    Returns empty/None metrics until enough samples have accumulated.
+    """
+    return analyze(thermal_buffer.snapshot())
 
 
 @app.get("/api/ac/config", tags=["AC Control"])
