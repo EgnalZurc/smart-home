@@ -20,6 +20,7 @@ import asyncio
 import logging
 import os
 import time
+from typing import Any
 
 import httpx
 from alert_store import AlertStore
@@ -46,7 +47,7 @@ from storage import RingBuffer, Sample
 logger = logging.getLogger(__name__)
 
 
-def _make_notifier():
+def _make_notifier() -> Any:
     """Build a TelegramNotifier from the environment, tolerating import layout.
 
     In the container ``/app/libs`` is on ``sys.path`` (set by ``main.py`` /
@@ -305,7 +306,7 @@ def sample_host(*, with_cpu: bool = True) -> list[Sample]:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Docker sampler (pull from docker-socket-proxy)
 # ═══════════════════════════════════════════════════════════════════════════════
-def _cpu_percent_from_stats(stats: dict) -> float:
+def _cpu_percent_from_stats(stats: dict[str, Any]) -> float:
     """Compute container CPU percentage from a Docker stats payload.
 
     Uses the same algorithm as ``docker stats`` to calculate CPU usage from
@@ -334,7 +335,7 @@ def _cpu_percent_from_stats(stats: dict) -> float:
     return 0.0
 
 
-def parse_container_stats(name: str, stats: dict) -> list[Sample]:
+def parse_container_stats(name: str, stats: dict[str, Any]) -> list[Sample]:
     """Translate a container's Docker stats payload into metric samples.
 
     Extracts memory usage (excluding page cache, like ``docker stats``) and
@@ -415,7 +416,7 @@ async def sample_docker(
 # ═══════════════════════════════════════════════════════════════════════════════
 # Health sampler (pull from backend /api/health/all)
 # ═══════════════════════════════════════════════════════════════════════════════
-def parse_health(payload: dict) -> list[Sample]:
+def parse_health(payload: dict[str, Any]) -> list[Sample]:
     """Translate /api/health/all response into latency and online samples.
 
     Converts the backend health snapshot into time-series samples for each
@@ -522,7 +523,7 @@ class Collector:
         )
         self.last_tick_ts: float | None = None
         self._last_rollup_bucket: int | None = None
-        self._tasks: list[asyncio.Task] = []
+        self._tasks: list[asyncio.Task[None]] = []
         self._client: httpx.AsyncClient | None = None
 
     # ── Single tick ───────────────────────────────────────────────────────────
