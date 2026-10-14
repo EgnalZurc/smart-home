@@ -48,9 +48,19 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             username      TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
             display_name  TEXT NOT NULL DEFAULT '',
-            icon          TEXT DEFAULT NULL
+            icon          TEXT DEFAULT NULL,
+            dark_mode     INTEGER NOT NULL DEFAULT 1
         )
     """)
+
+    # Idempotent migration: add dark_mode to pre-existing user tables that were
+    # created before the column existed. ``CREATE TABLE IF NOT EXISTS`` above is
+    # a no-op for already-created tables, so new columns must be added here.
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if "dark_mode" not in cols:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN dark_mode INTEGER NOT NULL DEFAULT 1"
+        )
 
     # Trusted devices table
     conn.execute("""
@@ -179,6 +189,38 @@ def get_user_by_username(username: str) -> dict | None:
             (username,),
         ).fetchone()
     return dict(row) if row else None
+
+
+def get_user_preferences(username: str) -> dict:
+    """Return the UI preferences for a user.
+
+    Currently only ``dark_mode`` (bool). Defaults to ``{"dark_mode": True}``
+    when the user does not exist, so the dashboard always has a usable value
+    (the UI is dark-first).
+    """
+    with _get_db() as conn:
+        row = conn.execute(
+            "SELECT dark_mode FROM users WHERE username = ?",
+            (username,),
+        ).fetchone()
+    if row is None:
+        return {"dark_mode": True}
+    return {"dark_mode": bool(row["dark_mode"])}
+
+
+def set_user_preferences(username: str, dark_mode: bool) -> None:
+    """Persist a user's UI preferences (currently ``dark_mode``).
+
+    Raises ValueError if the user does not exist.
+    """
+    with _get_db() as conn:
+        cur = conn.execute(
+            "UPDATE users SET dark_mode = ? WHERE username = ?",
+            (1 if dark_mode else 0, username),
+        )
+        if cur.rowcount == 0:
+            raise ValueError(f"User not found: {username}")
+        conn.commit()
 
 
 def create_user(username: str, password: str, display_name: str = "") -> str:
