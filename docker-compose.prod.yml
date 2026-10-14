@@ -399,6 +399,48 @@ services:
       retries: 3
       start_period: 30s
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Calendar Service - Google Calendar sync, dashboard agenda + Telegram reminders
+  # Reached via the backend proxy /api/calendar/* (SUPER-gated); the browser
+  # never talks to :8014 directly. Caches events in SQLite + stores the OAuth
+  # refresh token (token.json) in the bind-mounted data dir.
+  # See docs/designs/calendar-service-design.md.
+  # NOTE: the deploy step must `mkdir -p` + `chown 1000:1000 data/calendar-service`
+  # BEFORE `docker compose up` so the non-root container can create its SQLite DB
+  # and write token.json (lesson carried from metrics-service).
+  # ─────────────────────────────────────────────────────────────────────────────
+  calendar-service:
+    image: egnal/smart-home-calendar-service:latest
+    container_name: calendar-service
+    restart: on-failure:5
+    mem_limit: 96m
+    memswap_limit: 96m
+    expose:
+      - 8014
+    volumes:
+      - ./data/calendar-service:/app/data
+    environment:
+      - TZ=Europe/Madrid
+      - CALENDAR_TZ=Europe/Madrid
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+      - CALENDAR_SEED=${CALENDAR_SEED:-}
+    # Shared Telegram notifier: TelegramNotifier.from_env() reads
+    # TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_IDS from .env (same pattern as
+    # metrics-service). If unset, reminders are recorded but nothing is sent.
+    env_file:
+      - .env
+    depends_on:
+      - smart-home-backend
+    networks:
+      - smart-home
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8014/health', timeout=3)"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
 networks:
   smart-home:
     driver: bridge

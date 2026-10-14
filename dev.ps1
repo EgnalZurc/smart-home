@@ -171,8 +171,9 @@ function Resolve-ServicePath {
         'valheim-admin'     { return 'services/valheim-admin' }
         'metrics-service'   { return 'services/metrics-service' }
         'energy-monitor'    { return 'services/energy-monitor' }
+        'calendar-service'  { return 'services/calendar-service' }
         'pc-agent'          { return 'tools/pc-agent' }
-        default             { throw "Unknown service '$Service'. Known: dashboard, ac-service, baby-gifts, portfolio-monitor, vacaciones, casita, valheim-admin, metrics-service, energy-monitor, pc-agent." }
+        default             { throw "Unknown service '$Service'. Known: dashboard, ac-service, baby-gifts, portfolio-monitor, vacaciones, casita, valheim-admin, metrics-service, energy-monitor, calendar-service, pc-agent." }
     }
 }
 
@@ -180,13 +181,13 @@ function Resolve-ServicePath {
 function Invoke-Ci {
     param([string]$Service = 'dashboard')
     $path = Resolve-ServicePath -Service $Service
-    $cov  = if ($Service -in @('dashboard', 'ac-service', 'portfolio-monitor', 'casita', 'baby-gifts', 'vacaciones', 'valheim-admin', 'metrics-service', 'energy-monitor')) {
+    $cov  = if ($Service -in @('dashboard', 'ac-service', 'portfolio-monitor', 'casita', 'baby-gifts', 'vacaciones', 'valheim-admin', 'metrics-service', 'energy-monitor', 'calendar-service')) {
         ' --cov=src --cov-report=term-missing --cov-fail-under=80'
     } else { '' }
 
     # Services that import the shared smart_home_common library must install it
     # (editable) before pytest, mirroring the matching ci.yml job.
-    $installCommon = if ($Service -in @('dashboard', 'ac-service', 'portfolio-monitor', 'casita', 'metrics-service', 'energy-monitor')) {
+    $installCommon = if ($Service -in @('dashboard', 'ac-service', 'portfolio-monitor', 'casita', 'metrics-service', 'energy-monitor', 'calendar-service')) {
         "pip install -e libs/smart_home_common --quiet 2>/dev/null || true`n"
     } else { '' }
 
