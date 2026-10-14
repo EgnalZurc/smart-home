@@ -41,6 +41,36 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ac_temp_scheduler import AcTempScheduler
+from config import (
+    DEFAULT_CLEANUP_INTERVAL_SECONDS,
+    DEFAULT_COOLDOWN_SECONDS,
+    DEFAULT_FAN_SPEED_MAX,
+    DEFAULT_HYSTERESIS_OFF,
+    DEFAULT_HYSTERESIS_ON,
+    DEFAULT_LOCATION_LATITUDE,
+    DEFAULT_LOCATION_LONGITUDE,
+    DEFAULT_MAX_HISTORY_PER_SENSOR,
+    DEFAULT_MAX_SETPOINT,
+    DEFAULT_MELCLOUD_MAX_FAILURES,
+    DEFAULT_MELCLOUD_TIMEOUT,
+    DEFAULT_MELCLOUD_UPDATE_INTERVAL,
+    DEFAULT_MIN_SETPOINT,
+    DEFAULT_MQTT_BROKER,
+    DEFAULT_MQTT_CONNECT_RETRIES,
+    DEFAULT_MQTT_KEEPALIVE,
+    DEFAULT_MQTT_PORT,
+    DEFAULT_MQTT_RETRY_DELAY,
+    DEFAULT_OUTDOOR_CACHE_TTL,
+    DEFAULT_OUTDOOR_UPDATE_INTERVAL,
+    DEFAULT_SENSOR_TIMEOUT,
+    DEFAULT_TARGET_TEMP,
+    DEFAULT_Z2M_DISCOVERY_TIMEOUT,
+    EVENT_LOG_MAX_HOURS,
+    HISTORY_LIMIT_MAX,
+    HISTORY_LIMIT_MIN,
+    MELCLOUD_FAN_NAMES,
+    MELCLOUD_MODE_NAMES,
+)
 from controllers.ac_controller import ACController, ControlConfig
 from event_log import ACEventLog
 from fastapi import FastAPI, HTTPException
@@ -63,21 +93,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Module-level constants for MELCloud mode/fan mappings ─────────────────────
-# Reused by get_ac_real() to avoid duplication
-MELCLOUD_MODE_NAMES: dict[int, str] = {
-    1: "HOT",
-    2: "DRY",
-    3: "COLD",
-    7: "FAN",
-    8: "AUTO",
-}
-MELCLOUD_FAN_NAMES: dict[int, str] = {0: "Auto", 1: "Bajo", 2: "Medio", 3: "Alto"}
-
 # ── Configuration from environment ───────────────────────────────────────────
 
-MQTT_BROKER = os.environ.get("MQTT_BROKER", "mosquitto")
-MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
+MQTT_BROKER = os.environ.get("MQTT_BROKER", DEFAULT_MQTT_BROKER)
+MQTT_PORT = int(os.environ.get("MQTT_PORT", str(DEFAULT_MQTT_PORT)))
 MQTT_USER = os.environ.get("MQTT_USER")
 MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD")
 if not MQTT_USER or not MQTT_PASSWORD:
@@ -85,15 +104,23 @@ if not MQTT_USER or not MQTT_PASSWORD:
         "MQTT credentials not set - connecting without auth. "
         "Set MQTT_USER and MQTT_PASSWORD in production."
     )
-MQTT_CONNECT_RETRIES = int(os.environ.get("MQTT_CONNECT_RETRIES", "30"))
-MQTT_RETRY_DELAY = int(os.environ.get("MQTT_RETRY_DELAY", "2"))
-MQTT_KEEPALIVE = int(os.environ.get("MQTT_KEEPALIVE", "60"))
+MQTT_CONNECT_RETRIES = int(
+    os.environ.get("MQTT_CONNECT_RETRIES", str(DEFAULT_MQTT_CONNECT_RETRIES))
+)
+MQTT_RETRY_DELAY = int(
+    os.environ.get("MQTT_RETRY_DELAY", str(DEFAULT_MQTT_RETRY_DELAY))
+)
+MQTT_KEEPALIVE = int(os.environ.get("MQTT_KEEPALIVE", str(DEFAULT_MQTT_KEEPALIVE)))
 
 MELCLOUD_URL = os.environ.get("MELCLOUD_URL", "https://app.melcloud.com")
 MELCLOUD_EMAIL = os.environ.get("MELCLOUD_EMAIL")
 MELCLOUD_PASSWORD = os.environ.get("MELCLOUD_PASSWORD")
-MELCLOUD_TIMEOUT = float(os.environ.get("MELCLOUD_TIMEOUT", "30.0"))
-MELCLOUD_MAX_FAILURES = int(os.environ.get("MELCLOUD_MAX_FAILURES", "100"))
+MELCLOUD_TIMEOUT = float(
+    os.environ.get("MELCLOUD_TIMEOUT", str(DEFAULT_MELCLOUD_TIMEOUT))
+)
+MELCLOUD_MAX_FAILURES = int(
+    os.environ.get("MELCLOUD_MAX_FAILURES", str(DEFAULT_MELCLOUD_MAX_FAILURES))
+)
 MELCLOUD_APP_VERSION = os.environ.get("MELCLOUD_APP_VERSION", "1.32.1.0")
 
 if not MELCLOUD_EMAIL or not MELCLOUD_PASSWORD:
@@ -106,27 +133,51 @@ if "MELCLOUD_BUILDING_ID" not in os.environ:
 MELCLOUD_DEVICE_ID = int(os.environ["MELCLOUD_DEVICE_ID"])
 MELCLOUD_BUILDING_ID = int(os.environ["MELCLOUD_BUILDING_ID"])
 
-TARGET_TEMPERATURE = float(os.environ.get("TARGET_TEMPERATURE", "26.0"))
-HYSTERESIS_ON = float(os.environ.get("HYSTERESIS_ON", "0.5"))
-HYSTERESIS_OFF = float(os.environ.get("HYSTERESIS_OFF", "0.3"))
-MIN_SETPOINT_TEMP = float(os.environ.get("MIN_SETPOINT_TEMP", "19.0"))
-MAX_SETPOINT_TEMP = float(os.environ.get("MAX_SETPOINT_TEMP", "30.0"))
-COOLDOWN_SECONDS = int(os.environ.get("COOLDOWN_SECONDS", "180"))
+TARGET_TEMPERATURE = float(
+    os.environ.get("TARGET_TEMPERATURE", str(DEFAULT_TARGET_TEMP))
+)
+HYSTERESIS_ON = float(os.environ.get("HYSTERESIS_ON", str(DEFAULT_HYSTERESIS_ON)))
+HYSTERESIS_OFF = float(os.environ.get("HYSTERESIS_OFF", str(DEFAULT_HYSTERESIS_OFF)))
+MIN_SETPOINT_TEMP = float(
+    os.environ.get("MIN_SETPOINT_TEMP", str(DEFAULT_MIN_SETPOINT))
+)
+MAX_SETPOINT_TEMP = float(
+    os.environ.get("MAX_SETPOINT_TEMP", str(DEFAULT_MAX_SETPOINT))
+)
+COOLDOWN_SECONDS = int(
+    os.environ.get("COOLDOWN_SECONDS", str(DEFAULT_COOLDOWN_SECONDS))
+)
 LOOP_INTERVAL = int(os.environ.get("LOOP_INTERVAL", "10"))
-SENSOR_TIMEOUT = int(os.environ.get("SENSOR_TIMEOUT", "3600"))
-FAN_SPEED_MAX = int(os.environ.get("FAN_SPEED_MAX", "3"))
+SENSOR_TIMEOUT = int(os.environ.get("SENSOR_TIMEOUT", str(DEFAULT_SENSOR_TIMEOUT)))
+FAN_SPEED_MAX_CONFIG = int(os.environ.get("FAN_SPEED_MAX", str(DEFAULT_FAN_SPEED_MAX)))
 
-Z2M_DISCOVERY_TIMEOUT = float(os.environ.get("Z2M_DISCOVERY_TIMEOUT", "10.0"))
-MAX_HISTORY_PER_SENSOR = int(os.environ.get("MAX_HISTORY_PER_SENSOR", "200"))
+Z2M_DISCOVERY_TIMEOUT = float(
+    os.environ.get("Z2M_DISCOVERY_TIMEOUT", str(DEFAULT_Z2M_DISCOVERY_TIMEOUT))
+)
+MAX_HISTORY_PER_SENSOR = int(
+    os.environ.get("MAX_HISTORY_PER_SENSOR", str(DEFAULT_MAX_HISTORY_PER_SENSOR))
+)
 # CORS: require explicit origins in production
 _cors_origins_raw = os.environ.get("CORS_ORIGINS", "")
 CORS_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
-LOCATION_LATITUDE = float(os.environ.get("LOCATION_LATITUDE", "40.396644"))
-LOCATION_LONGITUDE = float(os.environ.get("LOCATION_LONGITUDE", "-3.622511"))
-MELCLOUD_UPDATE_INTERVAL = int(os.environ.get("MELCLOUD_UPDATE_INTERVAL", "30"))
-OUTDOOR_UPDATE_INTERVAL = int(os.environ.get("OUTDOOR_UPDATE_INTERVAL", "600"))
-OUTDOOR_CACHE_TTL = int(os.environ.get("OUTDOOR_CACHE_TTL", "600"))
-CLEANUP_INTERVAL_SECONDS = int(os.environ.get("CLEANUP_INTERVAL_SECONDS", "86400"))
+LOCATION_LATITUDE = float(
+    os.environ.get("LOCATION_LATITUDE", str(DEFAULT_LOCATION_LATITUDE))
+)
+LOCATION_LONGITUDE = float(
+    os.environ.get("LOCATION_LONGITUDE", str(DEFAULT_LOCATION_LONGITUDE))
+)
+MELCLOUD_UPDATE_INTERVAL = int(
+    os.environ.get("MELCLOUD_UPDATE_INTERVAL", str(DEFAULT_MELCLOUD_UPDATE_INTERVAL))
+)
+OUTDOOR_UPDATE_INTERVAL = int(
+    os.environ.get("OUTDOOR_UPDATE_INTERVAL", str(DEFAULT_OUTDOOR_UPDATE_INTERVAL))
+)
+OUTDOOR_CACHE_TTL = int(
+    os.environ.get("OUTDOOR_CACHE_TTL", str(DEFAULT_OUTDOOR_CACHE_TTL))
+)
+CLEANUP_INTERVAL_SECONDS = int(
+    os.environ.get("CLEANUP_INTERVAL_SECONDS", str(DEFAULT_CLEANUP_INTERVAL_SECONDS))
+)
 
 AC_POWER_COOLING_MAX = float(os.environ.get("AC_POWER_COOLING_MAX", "2.5"))
 AC_POWER_COOLING_MID = float(os.environ.get("AC_POWER_COOLING_MID", "1.75"))
@@ -216,7 +267,7 @@ async def lifespan(app: FastAPI):
         cooldown_seconds=COOLDOWN_SECONDS,
         loop_interval=LOOP_INTERVAL,
         sensor_timeout=SENSOR_TIMEOUT,
-        fan_speed_max=FAN_SPEED_MAX,
+        fan_speed_max=FAN_SPEED_MAX_CONFIG,
         device_id=MELCLOUD_DEVICE_ID,
         building_id=MELCLOUD_BUILDING_ID,
         melcloud_max_failures=MELCLOUD_MAX_FAILURES,
@@ -328,7 +379,8 @@ class ControlModeRequest(BaseModel):
 class ACSetpointRequest(BaseModel):
     """Request model for AC setpoint temperature."""
 
-    temperature: float = Field(ge=16.0, le=31.0)  # MELCloud limits
+    # MELCloud limits: MELCLOUD_TEMP_MIN (16.0) to MELCLOUD_TEMP_MAX (31.0)
+    temperature: float = Field(ge=16.0, le=31.0)
 
 
 class ACModeRequest(BaseModel):
@@ -352,8 +404,12 @@ class ACPowerRequest(BaseModel):
 
 
 class ManualParamsRequest(BaseModel):
+    """Request model for manual AC control parameters."""
+
     mode: str = "cool"
+    # Fan speed: FAN_SPEED_MIN (0) to FAN_SPEED_MAX (3)
     fan_speed: int = Field(default=0, ge=0, le=3)
+    # Temperature: MELCLOUD_TEMP_MIN (16.0) to MELCLOUD_TEMP_MAX (31.0)
     temperature: float = Field(default=23.0, ge=16.0, le=31.0)
 
     @field_validator("mode")
@@ -520,7 +576,7 @@ def get_sensors_history(
 @app.get("/api/ac/history", tags=["AC Control"])
 def get_history(limit: int = 100):
     """Get controller action history."""
-    limit = max(1, min(limit, 1000))  # Cap between 1 and 1000
+    limit = max(HISTORY_LIMIT_MIN, min(limit, HISTORY_LIMIT_MAX))
     return {"history": ac_controller.get_history(limit)}
 
 
@@ -531,14 +587,14 @@ def get_event_log(hours: int = 24):
     Returns every logged command (mode changes, manual params, config
     updates) from the last ``hours`` hours, newest first.
     """
-    hours = max(1, min(hours, 720))  # Cap between 1 hour and 30 days
+    hours = max(1, min(hours, EVENT_LOG_MAX_HOURS))
     if event_log is None:
         return {"events": [], "hours": hours}
     return {"events": event_log.get_history(hours), "hours": hours}
 
 
 @app.get("/api/ac/learning", tags=["AC Control"])
-def get_learning(window: int = 1000):
+def get_learning(window: int = HISTORY_LIMIT_MAX):
     """Return usage patterns, correlations and recommendations.
 
     Performs a basic statistical analysis over the controller action history
@@ -548,7 +604,7 @@ def get_learning(window: int = 1000):
     Args:
         window: number of most-recent history records to analyse (1-1000).
     """
-    window = max(1, min(window, 1000))  # Cap between 1 and 1000
+    window = max(HISTORY_LIMIT_MIN, min(window, HISTORY_LIMIT_MAX))
     if ac_controller is None:
         return analyze_history([])
     records = ac_controller.get_history(window)
