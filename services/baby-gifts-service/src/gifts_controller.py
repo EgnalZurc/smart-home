@@ -299,8 +299,28 @@ def is_familia_user(username: str) -> bool:
 
 
 # ── Invitations ───────────────────────────────────────────────────────────────
-def create_invitation(name: str) -> dict:
-    """Create a new invitation with a unique token. Expires in 6 months."""
+MAX_INVITATION_RETRIES = 3
+
+
+def create_invitation(name: str, _retries: int = 0) -> dict:
+    """Create a new invitation with a unique token. Expires in 6 months.
+
+    Args:
+        name: Guest name for the invitation.
+        _retries: Internal retry counter (do not set manually).
+
+    Returns:
+        Dict with status 'ok' and invitation details, or status 'error' if
+        token generation fails after MAX_INVITATION_RETRIES attempts.
+    """
+    if _retries >= MAX_INVITATION_RETRIES:
+        logger.error(
+            "Failed to create invitation after %d retries for name=%s",
+            MAX_INVITATION_RETRIES,
+            name,
+        )
+        return {"status": "error", "message": "Failed to generate unique token"}
+
     token = secrets.token_urlsafe(24)  # 32 chars
     now = datetime.now()
     expires_at = now + timedelta(days=config.INVITATION_EXPIRY_DAYS)
@@ -320,8 +340,8 @@ def create_invitation(name: str) -> dict:
             "expires_at": expires_at.isoformat(),
         }
     except sqlite3.IntegrityError:
-        # Extremely unlikely collision, retry
-        return create_invitation(name)
+        # Token collision (extremely unlikely), retry with incremented counter
+        return create_invitation(name, _retries + 1)
     finally:
         conn.close()
 

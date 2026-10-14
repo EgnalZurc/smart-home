@@ -73,6 +73,37 @@ async def get_active_alerts():
             }
         )
 
+    # Rebalance drift: surface each position whose allocation left its target
+    # band as a warning-severity alert in the same unified shape.
+    import config
+    from monitors.rebalance import compute_rebalance
+
+    rebalance = compute_rebalance(
+        etf_analyses=summary.etf_analysis or [],
+        crypto_analyses=summary.crypto_analysis or [],
+        etf_funds=list(config.get_etf_portfolio().values()),
+        crypto_positions=config.get_crypto_positions(),
+        threshold_pct=config.get_rebalance_config().get("threshold_pct", 5.0),
+    )
+    for pos in rebalance["positions"]:
+        if not pos["needs_rebalance"]:
+            continue
+        direction = "over" if pos["deviation"] > 0 else "under"
+        alerts.append(
+            {
+                "source": "portfolio",
+                "severity": "warning",
+                "title": f"Rebalance: {pos['name']}",
+                "detail": (
+                    f"{pos['current_allocation']:.1f}% vs target "
+                    f"{pos['target_allocation']:.1f}% "
+                    f"({direction} by {abs(pos['deviation']):.1f} pts)"
+                ),
+                "timestamp": now,
+                "link": "/portfolio",
+            }
+        )
+
     return _safe_json({"alerts": alerts})
 
 
