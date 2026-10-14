@@ -7,5 +7,12 @@ validation intact while letting the suite exercise the app.
 """
 
 import os
+import sys
+from pathlib import Path
+
+# Add src directory to path so 'from config import' works
+src_dir = Path(__file__).parent.parent / "src"
+if str(src_dir) not in sys.path:
+    sys.path.insert(0, str(src_dir))
 
 os.environ.setdefault("PC_AGENT_TOKEN", "test-token")

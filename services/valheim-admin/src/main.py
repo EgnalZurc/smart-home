@@ -44,12 +44,7 @@ from typing import Any
 
 import httpx
 from async_http_client import AsyncServiceClient, ServiceClientConfig
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from smart_home_common.rate_limiter import InMemoryRateLimiter
-
-from .config import (
+from config import (
     BACKUPS_DEFAULT,
     BACKUPS_MAX,
     BACKUPS_MIN,
@@ -74,6 +69,10 @@ from .config import (
     WORLD_NAME_MAX_LENGTH,
     WORLD_NAME_PATTERN,
 )
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from smart_home_common.rate_limiter import InMemoryRateLimiter
 
 logging.basicConfig(
     level=logging.INFO,
