@@ -113,7 +113,7 @@ class _BuiltinEmailSender:
         recipient: str | None = None,
         plain_body: str | None = None,
     ) -> NotificationResult:
-        if not self._enabled:
+        if not self.enabled:
             return NotificationResult(False, "Email disabled — missing credentials")
 
         to_addr = recipient or self._recipient
