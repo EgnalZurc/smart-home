@@ -13,6 +13,7 @@ Auth: nginx handles auth_request — this service trusts all incoming requests.
 import logging
 import os
 import re
+import shlex
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -55,6 +56,16 @@ pc_agent = AsyncServiceClient(_client_config)
 server_control_limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60)
 
 
+def _sanitize_shell_arg(arg: str) -> str:
+    """Sanitize argument for shell command to prevent injection.
+
+    Uses shlex.quote to properly escape special characters.
+    Note: valheim-admin is a proxy service and does not execute shell commands
+    directly. This utility is provided for consistency and future use.
+    """
+    return shlex.quote(arg)
+
+
 def _check_rate_limit(request: Request) -> None:
     """Check rate limit for server control endpoints.
 
@@ -63,6 +74,7 @@ def _check_rate_limit(request: Request) -> None:
     client_ip = request.client.host if request.client else "unknown"
     if not server_control_limiter.is_allowed(client_ip):
         status = server_control_limiter.get_status(client_ip)
+        logger.warning("Rate limit exceeded for IP: %s", client_ip)
         raise HTTPException(
             status_code=429,
             detail="Too many requests. Try again later.",
@@ -255,21 +267,30 @@ async def get_status() -> dict[str, Any]:
 async def start_server(request: Request):
     """Start Valheim server."""
     _check_rate_limit(request)
-    return await pc_agent.post("/valheim/start")
+    logger.info("Server start requested")
+    result = await pc_agent.post("/valheim/start")
+    logger.info("Server start completed: %s", result.get("status", "unknown"))
+    return result
 
 
 @app.post("/api/server/stop")
 async def stop_server(request: Request):
     """Stop Valheim server."""
     _check_rate_limit(request)
-    return await pc_agent.post("/valheim/stop")
+    logger.info("Server stop requested")
+    result = await pc_agent.post("/valheim/stop")
+    logger.info("Server stop completed: %s", result.get("status", "unknown"))
+    return result
 
 
 @app.post("/api/server/restart")
 async def restart_server(request: Request):
     """Restart Valheim server."""
     _check_rate_limit(request)
-    return await pc_agent.post("/valheim/restart")
+    logger.info("Server restart requested")
+    result = await pc_agent.post("/valheim/restart")
+    logger.info("Server restart completed: %s", result.get("status", "unknown"))
+    return result
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -297,7 +318,13 @@ async def update_config(
     validate_server_pass(server_pass)
     save_interval = clamp_save_interval(save_interval)
     backups = clamp_backups(backups)
-    return await pc_agent.post(
+    logger.info(
+        "Config update: world=%s, server_name=%s, public=%s",
+        world_name,
+        server_name,
+        server_public,
+    )
+    result = await pc_agent.post(
         "/valheim/config",
         {
             "server_name": server_name,
@@ -309,6 +336,8 @@ async def update_config(
             "backups": backups,
         },
     )
+    logger.info("Config update completed")
+    return result
 
 
 # ── Logs ──────────────────────────────────────────────────────────────────────
@@ -334,21 +363,30 @@ async def list_worlds():
 async def create_world(world_name: str = Form(...)):
     """Create a new world."""
     validate_world_name(world_name)
-    return await pc_agent.post("/valheim/worlds/new", {"world_name": world_name})
+    logger.info("Creating new world: %s", world_name)
+    result = await pc_agent.post("/valheim/worlds/new", {"world_name": world_name})
+    logger.info("World creation completed: %s", world_name)
+    return result
 
 
 @app.post("/api/worlds/activate")
 async def activate_world(world_name: str = Form(...)):
     """Activate a world."""
     validate_world_name(world_name)
-    return await pc_agent.post("/valheim/worlds/activate", {"world_name": world_name})
+    logger.info("Activating world: %s", world_name)
+    result = await pc_agent.post("/valheim/worlds/activate", {"world_name": world_name})
+    logger.info("World activation completed: %s", world_name)
+    return result
 
 
 @app.delete("/api/worlds/{world_name}")
 async def delete_world(world_name: str):
     """Delete a world."""
     validate_world_name(world_name)
-    return await pc_agent.delete(f"/valheim/worlds/{world_name}")
+    logger.warning("Deleting world: %s", world_name)
+    result = await pc_agent.delete(f"/valheim/worlds/{world_name}")
+    logger.warning("World deleted: %s", world_name)
+    return result
 
 
 # ── PC Control ────────────────────────────────────────────────────────────────
@@ -373,8 +411,12 @@ async def get_pc_mode():
 async def set_pc_mode(mode: str):
     """Set PC power profile."""
     if mode not in ("gaming", "servidor", "balanced"):
+        logger.warning("Invalid power mode requested: %s", mode)
         raise HTTPException(400, "Invalid mode")
-    return await pc_agent.post(f"/system/mode/{mode}")
+    logger.info("Setting PC power mode: %s", mode)
+    result = await pc_agent.post(f"/system/mode/{mode}")
+    logger.info("PC power mode set: %s", mode)
+    return result
 
 
 # ── Static files ──────────────────────────────────────────────────────────────
