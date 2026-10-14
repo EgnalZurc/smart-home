@@ -34,6 +34,7 @@ import secrets
 import sqlite3
 import tempfile
 import threading
+import uuid
 from datetime import datetime, timedelta
 
 import config
@@ -96,6 +97,21 @@ def _get_db():
     conn = sqlite3.connect(str(DB_FILE))
     conn.row_factory = sqlite3.Row
     return conn
+
+
+# ── Gift ID validation ────────────────────────────────────────────────────────
+def _validate_gift_id(gift_id: str) -> bool:
+    """Validate gift_id is a valid UUID format.
+
+    Note: baby-gifts uses g_<timestamp>_<hex> format for IDs, not UUID.
+    This validates whether a gift_id *could* be a valid UUID if that format
+    is expected. For legacy IDs, this will return False.
+    """
+    try:
+        uuid.UUID(gift_id)
+        return True
+    except (ValueError, AttributeError, TypeError):
+        return False
 
 
 # ── Gifts data ────────────────────────────────────────────────────────────────
@@ -193,8 +209,23 @@ def add_gift(gift: dict) -> dict:
         return new_gift
 
 
-def update_gift(gift_id: str, updates: dict) -> dict | None:
-    """Update a gift (admin only)."""
+def update_gift(gift_id: str, updates: dict) -> dict | None | tuple[None, int, str]:
+    """Update a gift (admin only).
+
+    Returns:
+        - dict: Updated gift on success
+        - None: Gift not found (legacy behavior, returns 404 at API layer)
+        - tuple[None, int, str]: (None, status_code, error_message) for validation errors
+    """
+    # Validate gift_id format - must be non-empty string
+    if not gift_id or not isinstance(gift_id, str):
+        return (None, 400, "gift_id must be a non-empty string")
+
+    # Validate gift_id format - should match our ID pattern (g_<timestamp>_<hex>)
+    # or be a valid UUID for future compatibility
+    if not (gift_id.startswith("g_") or _validate_gift_id(gift_id)):
+        return (None, 400, "Invalid gift_id format")
+
     with _lock:
         data = _load_gifts()
         for i, gift in enumerate(data.get("gifts", [])):
@@ -213,6 +244,7 @@ def update_gift(gift_id: str, updates: dict) -> dict | None:
                 data["gifts"][i] = gift
                 _save_gifts(data)
                 return gift
+        # Gift not found - return None for 404 (legacy behavior)
         return None
 
 
