@@ -372,7 +372,7 @@ async def get_casita_alerts(request: Request):
             {
                 "source": "casita",
                 "severity": "info",
-                "id": prop.get("unique_id"),  # Used by dashboard to build dismiss key
+                "id": prop.get("uid"),  # Used by dashboard to build dismiss key
                 "title": title[:50] if title else "Propiedad interesante",
                 "detail": f"Score: {score:.0f}/{scorer.MAX_SCORE:.0f} - {price:,.0f}€",
                 "timestamp": scored_at if scored_at else datetime.now().isoformat(),
