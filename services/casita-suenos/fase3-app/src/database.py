@@ -649,6 +649,52 @@ class Database:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_price_trend(self, uid: str) -> dict:
+        """Devuelve la tendencia de precio de una propiedad a partir del
+        último cambio registrado en ``price_history``.
+
+        El historial guarda cada cambio como (old_price, new_price); el registro
+        más reciente de la propiedad describe su variación de precio actual.
+
+        Returns:
+            dict con:
+              - ``previous_price``: precio anterior al último cambio (int) o None
+              - ``price_change``: diferencia en euros (new - old) o None
+              - ``price_change_pct``: porcentaje de cambio redondeado o None
+              - ``trend``: 'down' | 'up' | 'stable' | None (None si no hay historial)
+        """
+        row = self._conn.execute(
+            "SELECT old_price, new_price, delta_pct FROM price_history "
+            "WHERE property_uid = ? ORDER BY detected_at DESC, id DESC LIMIT 1",
+            (uid,),
+        ).fetchone()
+
+        if row is None:
+            return {
+                "previous_price": None,
+                "price_change": None,
+                "price_change_pct": None,
+                "trend": None,
+            }
+
+        old_price = row["old_price"]
+        new_price = row["new_price"]
+        price_change = new_price - old_price
+
+        if price_change < 0:
+            trend = "down"
+        elif price_change > 0:
+            trend = "up"
+        else:
+            trend = "stable"
+
+        return {
+            "previous_price": old_price,
+            "price_change": price_change,
+            "price_change_pct": round(row["delta_pct"], 2),
+            "trend": trend,
+        }
+
     def count_properties(self) -> int:
         return self._conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
 

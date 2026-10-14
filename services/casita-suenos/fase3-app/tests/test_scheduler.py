@@ -387,6 +387,12 @@ class TestSchedulerRadar:
             ],
             "total": 1,
         }
+        scheduler._db.get_price_trend.return_value = {
+            "previous_price": None,
+            "price_change": None,
+            "price_change_pct": None,
+            "trend": None,
+        }
 
         result = scheduler.get_radar(limit=10)
 
@@ -395,6 +401,36 @@ class TestSchedulerRadar:
         # Should have distance_madrid_min from zone
         assert "distance_madrid_min" in result["items"][0]
         assert result["items"][0]["distance_madrid_min"] == 150  # zamora_meseta value
+
+    def test_get_radar_enriches_with_price_trend(self):
+        """Test that get_radar adds price trend fields to each item."""
+        from casita_scheduler import CasitaScheduler
+        from unittest.mock import MagicMock
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._db = MagicMock()
+        scheduler._db.get_radar_properties.return_value = {
+            "items": [
+                {"uid": "pisos:1", "zone_id": "zamora_meseta", "price": 160000}
+            ],
+            "total": 1,
+        }
+        scheduler._db.get_price_trend.return_value = {
+            "previous_price": 180000,
+            "price_change": -20000,
+            "price_change_pct": -11.11,
+            "trend": "down",
+        }
+
+        result = scheduler.get_radar(limit=10)
+
+        item = result["items"][0]
+        assert item["previous_price"] == 180000
+        assert item["price_change"] == -20000
+        assert item["price_change_pct"] == -11.11
+        assert item["trend"] == "down"
+        # Trend looked up by the property uid
+        scheduler._db.get_price_trend.assert_called_with("pisos:1")
 
 
 class TestSchedulerDelegation:

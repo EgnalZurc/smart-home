@@ -241,6 +241,58 @@ class TestDatabase:
         result = db.get_recent_price_drops()
         assert result == []
 
+    def test_get_price_trend_no_history(self, db, sample_property):
+        """Sin historial de precios, todos los campos son None."""
+        db.upsert_property(sample_property)
+        trend = db.get_price_trend(sample_property.unique_id)
+        assert trend == {
+            "previous_price": None,
+            "price_change": None,
+            "price_change_pct": None,
+            "trend": None,
+        }
+
+    def test_get_price_trend_unknown_uid(self, db):
+        """Un uid que no existe devuelve None en todos los campos."""
+        trend = db.get_price_trend("portal:no_existe")
+        assert trend["previous_price"] is None
+        assert trend["trend"] is None
+
+    def test_get_price_trend_down(self, db, sample_property):
+        """Una bajada de precio produce trend='down' y price_change negativo."""
+        db.upsert_property(sample_property)  # 180_000
+        sample_property.price = 160_000
+        db.upsert_property(sample_property)
+        trend = db.get_price_trend(sample_property.unique_id)
+        assert trend["previous_price"] == 180_000
+        assert trend["price_change"] == -20_000
+        assert trend["price_change_pct"] == pytest.approx(-11.11, rel=0.01)
+        assert trend["trend"] == "down"
+
+    def test_get_price_trend_up(self, db, sample_property):
+        """Una subida de precio produce trend='up' y price_change positivo."""
+        db.upsert_property(sample_property)  # 180_000
+        sample_property.price = 200_000
+        db.upsert_property(sample_property)
+        trend = db.get_price_trend(sample_property.unique_id)
+        assert trend["previous_price"] == 180_000
+        assert trend["price_change"] == 20_000
+        assert trend["price_change_pct"] > 0
+        assert trend["trend"] == "up"
+
+    def test_get_price_trend_uses_latest_change(self, db, sample_property):
+        """Con varios cambios, se usa el más reciente."""
+        db.upsert_property(sample_property)  # 180_000
+        sample_property.price = 170_000
+        db.upsert_property(sample_property)
+        sample_property.price = 175_000
+        db.upsert_property(sample_property)
+        trend = db.get_price_trend(sample_property.unique_id)
+        # Último cambio: 170_000 -> 175_000
+        assert trend["previous_price"] == 170_000
+        assert trend["price_change"] == 5_000
+        assert trend["trend"] == "up"
+
     def test_close_does_not_raise(self, db):
         db.close()
 

@@ -390,15 +390,21 @@ async def get_casita_alerts(request: Request):
         price = prop.get("price") or 0
         score = prop.get("score_total") or 0
         scored_at = prop.get("scored_at")
+        uid = prop.get("uid")
+        trend = db.get_price_trend(uid) if uid else {}
         alerts.append(
             {
                 "source": "casita",
                 "severity": "info",
-                "id": prop.get("uid"),  # Used by dashboard to build dismiss key
+                "id": uid,  # Used by dashboard to build dismiss key
                 "title": title[:50] if title else "Propiedad interesante",
                 "detail": f"Score: {score:.0f}/{scorer.MAX_SCORE:.0f} - {price:,.0f}€",
                 "timestamp": scored_at if scored_at else datetime.now().isoformat(),
                 "link": prop.get("url"),
+                "previous_price": trend.get("previous_price"),
+                "price_change": trend.get("price_change"),
+                "price_change_pct": trend.get("price_change_pct"),
+                "trend": trend.get("trend"),
             }
         )
     return {"alerts": alerts}
