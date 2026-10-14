@@ -700,3 +700,181 @@ class TestExceptionHandler:
 
         # Verify handler is registered
         assert Exception in main.app.exception_handlers
+
+
+class TestGlobalRateLimiting:
+    """Tests for global rate limiting middleware."""
+
+    def test_health_endpoint_bypasses_rate_limit(self):
+        """Health check should never be rate limited."""
+        import importlib
+
+        import main
+
+        importlib.reload(main)
+
+        # Reset any existing rate limit state
+        main._global_rate_limiter.reset("testclient")
+
+        # Mock scheduler for health endpoint
+        main._scheduler_instance = None
+        main.app.state.scheduler = None
+
+        local_client = TestClient(main.app)
+
+        # Make many requests - should all succeed
+        for _ in range(150):
+            response = local_client.get("/health")
+            assert response.status_code == 200
+
+    def test_api_endpoints_rate_limited(self, client, mock_scheduler):
+        """API endpoints should be rate limited after threshold."""
+        import importlib
+
+        import main
+
+        importlib.reload(main)
+
+        # Reset rate limiter state
+        main._global_rate_limiter.reset("testclient")
+
+        # Re-setup mocks after reload
+        main._scheduler_instance = mock_scheduler
+        main.app.state.scheduler = mock_scheduler
+        mock_db = MagicMock()
+        mock_db.get_price_trend.return_value = {
+            "previous_price": None,
+            "price_change": None,
+            "price_change_pct": None,
+            "trend": None,
+        }
+        main.app.state.db = mock_db
+
+        local_client = TestClient(main.app)
+
+        # Make requests up to the limit (120/min)
+        for _ in range(120):
+            response = local_client.get(f"{API}/status")
+            assert response.status_code == 200
+
+        # Next request should be rate limited
+        response = local_client.get(f"{API}/status")
+        assert response.status_code == 429
+        assert "Too many requests" in response.json()["error"]
+
+    def test_manual_trigger_stricter_rate_limit(self, client, mock_scheduler):
+        """Manual trigger endpoints have stricter 10/min limit."""
+        import importlib
+
+        import main
+
+        importlib.reload(main)
+
+        # Reset BOTH rate limiters (global and manual trigger)
+        main._global_rate_limiter.reset("testclient")
+        main._manual_trigger_limiter.reset("testclient")
+
+        # Re-setup mocks after reload
+        main._scheduler_instance = mock_scheduler
+        main.app.state.scheduler = mock_scheduler
+
+        local_client = TestClient(main.app)
+
+        # Make requests up to the manual trigger limit (10/min)
+        for _ in range(10):
+            response = local_client.post(f"{API}/run-scraping")
+            assert response.status_code == 200
+
+        # Next request should be rate limited by the manual trigger limiter
+        response = local_client.post(f"{API}/run-scraping")
+        assert response.status_code == 429
+
+    def test_rate_limit_per_ip(self, mock_scheduler):
+        """Rate limits should be tracked per IP address."""
+        import importlib
+        from unittest.mock import patch
+
+        import main
+
+        importlib.reload(main)
+
+        # Reset rate limiter state
+        main._global_rate_limiter.reset("192.168.1.1")
+        main._global_rate_limiter.reset("192.168.1.2")
+
+        # Re-setup mocks after reload
+        main._scheduler_instance = mock_scheduler
+        main.app.state.scheduler = mock_scheduler
+        mock_db = MagicMock()
+        mock_db.get_price_trend.return_value = {
+            "previous_price": None,
+            "price_change": None,
+            "price_change_pct": None,
+            "trend": None,
+        }
+        main.app.state.db = mock_db
+
+        local_client = TestClient(main.app)
+
+        # Exhaust limit for first IP
+        for _ in range(120):
+            with patch.object(main, "_get_client_ip", return_value="192.168.1.1"):
+                response = local_client.get(f"{API}/status")
+                assert response.status_code == 200
+
+        # First IP should be blocked
+        with patch.object(main, "_get_client_ip", return_value="192.168.1.1"):
+            response = local_client.get(f"{API}/status")
+            assert response.status_code == 429
+
+        # Second IP should still work
+        with patch.object(main, "_get_client_ip", return_value="192.168.1.2"):
+            response = local_client.get(f"{API}/status")
+            assert response.status_code == 200
+
+
+class TestClientIpExtraction:
+    """Tests for client IP extraction logic."""
+
+    def test_get_client_ip_direct(self):
+        """Should use client.host when no forwarded header."""
+        import importlib
+
+        import main
+
+        importlib.reload(main)
+
+        request = MagicMock()
+        request.headers = {}
+        request.client.host = "192.168.1.100"
+
+        assert main._get_client_ip(request) == "192.168.1.100"
+
+    def test_get_client_ip_from_x_forwarded_for(self):
+        """Should use X-Forwarded-For when present (nginx proxy)."""
+        import importlib
+
+        import main
+
+        importlib.reload(main)
+
+        request = MagicMock()
+        request.headers = {"x-forwarded-for": "203.0.113.50, 70.41.3.18, 150.172.238.178"}
+        request.client.host = "172.18.0.1"
+
+        # Should return the first IP (original client)
+        assert main._get_client_ip(request) == "203.0.113.50"
+
+    def test_get_client_ip_no_client(self):
+        """Should return 'unknown' when client is None."""
+        import importlib
+
+        import main
+
+        importlib.reload(main)
+
+        request = MagicMock()
+        request.headers = {}
+        request.client = None
+
+        assert main._get_client_ip(request) == "unknown"
