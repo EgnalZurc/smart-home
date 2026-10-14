@@ -23,13 +23,24 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query, Request
+from pydantic import BaseModel, Field
 
+from api import alert_reads_db
 from api.auth_helpers import require_authenticated
 from api.proxy.base import ServiceProxy
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/alerts", tags=["Alerts"])
+
+
+class MarkReadRequest(BaseModel):
+    """Body for ``POST /api/alerts/mark-read``."""
+
+    alert_key: str = Field(
+        ..., min_length=1, description="Stable identifier of the alert to mark read"
+    )
+
 
 # Remote sources: name -> (ServiceProxy, upstream path).
 # These are fetched concurrently over the internal Docker network.
@@ -138,3 +149,28 @@ async def get_unified_alerts(
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "alerts": all_alerts,
     }
+
+
+@router.post("/mark-read")
+async def mark_alert_read(request: Request, body: MarkReadRequest):
+    """Mark an alert as read for the current user.
+
+    Visible to any authenticated family member; the read state is scoped to the
+    calling user (``user_id`` is the authenticated username). Idempotent:
+    re-marking an already-read alert just refreshes its timestamp.
+    """
+    user = require_authenticated(request)
+    alert_reads_db.mark_alert_read(user, body.alert_key)
+    return {"status": "ok", "alert_key": body.alert_key}
+
+
+@router.get("/read-status")
+async def get_read_status(request: Request):
+    """Return the alert keys the current user has marked as read.
+
+    Visible to any authenticated family member; results are scoped to the
+    calling user.
+    """
+    user = require_authenticated(request)
+    read_keys = alert_reads_db.get_read_alerts(user)
+    return {"count": len(read_keys), "read": read_keys}
