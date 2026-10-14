@@ -63,7 +63,10 @@ class TestAdminGiftEndpoints:
 
     def test_update_nonexistent_gift_404(self, client):
         """PUT /api/baby-gifts/{id} should return 404 for non-existent gift."""
-        response = client.put("/api/baby-gifts/nonexistent", json={"name": "New Name"})
+        # Use a valid ID format that doesn't exist
+        response = client.put(
+            "/api/baby-gifts/g_9999999999999_deadbeef", json={"name": "New Name"}
+        )
 
         assert response.status_code == 404
 
@@ -647,6 +650,12 @@ class TestUpdateGiftValidation:
 
         response = client.put(f"/api/baby-gifts/{gift_id}", json={})
         assert response.status_code == 400
+
+    def test_update_gift_invalid_id_format_returns_400(self, client):
+        """PUT /api/baby-gifts/{id} with invalid ID format returns 400."""
+        response = client.put("/api/baby-gifts/invalid-format", json={"name": "New"})
+        assert response.status_code == 400
+        assert "Invalid gift_id format" in response.json()["detail"]
 
 
 class TestGuestEndpointsExtended:
