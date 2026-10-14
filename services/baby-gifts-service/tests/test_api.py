@@ -563,9 +563,7 @@ class TestUserEndpoints:
             )
 
         # Another FAMILIA user sees 'oculto'
-        response = client.get(
-            "/api/baby-gifts/user", headers={"X-Auth-User": "virchu"}
-        )
+        response = client.get("/api/baby-gifts/user", headers={"X-Auth-User": "virchu"})
         gift = next(g for g in response.json()["gifts"] if g["id"] == gift_id)
         assert gift["reserved_by"] == "oculto"
 
@@ -704,14 +702,10 @@ class TestGuestEndpointsExtended:
     ):
         """Guest cannot unreserve gift reserved by someone else."""
         # Create two invitations
-        inv1_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": "Guest 1"}
-        )
+        inv1_resp = client.post("/api/baby-gifts/invitations", json={"name": "Guest 1"})
         token1 = inv1_resp.json()["token"]
 
-        inv2_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": "Guest 2"}
-        )
+        inv2_resp = client.post("/api/baby-gifts/invitations", json={"name": "Guest 2"})
         token2 = inv2_resp.json()["token"]
 
         # Create and reserve gift as guest1
@@ -760,3 +754,187 @@ class TestGuestEndpointsExtended:
 
         response = client.post(f"/api/baby-gifts/guest/{token}/unreserve/{gift_id}")
         assert response.status_code == 400
+
+
+class TestInputSanitization:
+    """Tests for input sanitization on user-provided strings."""
+
+    def test_gift_name_strips_whitespace(self, client):
+        """Gift name should have leading/trailing whitespace stripped."""
+        response = client.post("/api/baby-gifts", json={"name": "  Carrito de bebé  "})
+
+        assert response.status_code == 200
+        gift = response.json()["gift"]
+        assert gift["name"] == "Carrito de bebé"
+
+    def test_gift_name_escapes_html(self, client):
+        """Gift name should have HTML characters escaped."""
+        response = client.post(
+            "/api/baby-gifts", json={"name": "<script>alert('xss')</script>"}
+        )
+
+        assert response.status_code == 200
+        gift = response.json()["gift"]
+        assert "<script>" not in gift["name"]
+        assert "&lt;script&gt;" in gift["name"]
+
+    def test_gift_description_escapes_html(self, client):
+        """Gift description should have HTML characters escaped."""
+        response = client.post(
+            "/api/baby-gifts",
+            json={"name": "Test", "description": "<img onerror='alert(1)'>"},
+        )
+
+        assert response.status_code == 200
+        gift = response.json()["gift"]
+        assert "<img" not in gift["description"]
+        assert "&lt;img" in gift["description"]
+
+    def test_gift_update_sanitizes_fields(self, client, sample_gift):
+        """Gift update should sanitize all text fields."""
+        # Create a gift
+        create_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_id = create_resp.json()["gift"]["id"]
+
+        # Update with dirty input
+        response = client.put(
+            f"/api/baby-gifts/{gift_id}",
+            json={"name": "  <b>Bold</b>  ", "description": "  <i>Italic</i>  "},
+        )
+
+        assert response.status_code == 200
+        gift = response.json()["gift"]
+        assert gift["name"] == "&lt;b&gt;Bold&lt;/b&gt;"
+        assert gift["description"] == "&lt;i&gt;Italic&lt;/i&gt;"
+
+    def test_invitation_name_strips_whitespace(self, client):
+        """Invitation name should have leading/trailing whitespace stripped."""
+        response = client.post(
+            "/api/baby-gifts/invitations", json={"name": "  Tía María  "}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == "Tía María"
+
+    def test_invitation_name_escapes_html(self, client):
+        """Invitation name should have HTML characters escaped."""
+        response = client.post(
+            "/api/baby-gifts/invitations", json={"name": "<script>hack</script>"}
+        )
+
+        assert response.status_code == 200
+        name = response.json()["name"]
+        assert "<script>" not in name
+        assert "&lt;script&gt;" in name
+
+    def test_gift_url_not_html_escaped(self, client):
+        """Gift URL should not have HTML escaping (URLs need special chars)."""
+        url = "https://example.com/search?q=carrito&page=1"
+        response = client.post("/api/baby-gifts", json={"name": "Test", "url": url})
+
+        assert response.status_code == 200
+        gift = response.json()["gift"]
+        # URL should preserve & without escaping to &amp;
+        assert gift["url"] == url
+
+    def test_gift_name_truncated_to_max_length(self, client):
+        """Gift name longer than 200 chars should be truncated."""
+        long_name = "A" * 300
+        response = client.post("/api/baby-gifts", json={"name": long_name})
+
+        assert response.status_code == 200
+        gift = response.json()["gift"]
+        assert len(gift["name"]) == 200
+
+    def test_invitation_name_truncated_to_max_length(self, client):
+        """Invitation name longer than 100 chars should be truncated."""
+        long_name = "B" * 150
+        response = client.post("/api/baby-gifts/invitations", json={"name": long_name})
+
+        assert response.status_code == 200
+        name = response.json()["name"]
+        assert len(name) == 100
+
+
+class TestInvitationRateLimiting:
+    """Tests for rate limiting on invitation creation endpoint."""
+
+    def test_invitation_rate_limit_returns_429(self, client):
+        """POST /api/baby-gifts/invitations should return 429 after limit exceeded."""
+        import config
+
+        # Save original values
+        original_attempts = config.INVITATION_RATE_LIMIT_ATTEMPTS
+        original_window = config.INVITATION_RATE_LIMIT_WINDOW_SECONDS
+
+        try:
+            # Set very low limit for testing
+            config.INVITATION_RATE_LIMIT_ATTEMPTS = 3
+            config.INVITATION_RATE_LIMIT_WINDOW_SECONDS = 60
+
+            # Make requests up to the limit
+            for i in range(3):
+                response = client.post(
+                    "/api/baby-gifts/invitations", json={"name": f"Guest {i}"}
+                )
+                assert response.status_code == 200
+
+            # Next request should be rate limited
+            response = client.post(
+                "/api/baby-gifts/invitations", json={"name": "One Too Many"}
+            )
+            assert response.status_code == 429
+            assert "Demasiadas invitaciones" in response.json()["detail"]
+
+        finally:
+            # Restore original values
+            config.INVITATION_RATE_LIMIT_ATTEMPTS = original_attempts
+            config.INVITATION_RATE_LIMIT_WINDOW_SECONDS = original_window
+
+    def test_invitation_rate_limit_separate_from_guest(
+        self, client, sample_invitation_name, sample_gift
+    ):
+        """Invitation rate limit should be separate from guest endpoint rate limit."""
+        import config
+
+        # Create invitation and gift for guest endpoint testing
+        inv_resp = client.post(
+            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+        )
+        token = inv_resp.json()["token"]
+
+        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        _gift_id = gift_resp.json()["gift"]["id"]
+
+        # Save original values
+        original_attempts = config.RATE_LIMIT_ATTEMPTS
+        original_window = config.RATE_LIMIT_WINDOW_SECONDS
+
+        try:
+            # Set low limit for guest endpoints
+            config.RATE_LIMIT_ATTEMPTS = 2
+            config.RATE_LIMIT_WINDOW_SECONDS = 60
+
+            # Use up guest rate limit
+            for _ in range(3):
+                client.get(f"/api/baby-gifts/guest/{token}")
+
+            # Guest endpoint should now be rate limited
+            guest_resp = client.get(f"/api/baby-gifts/guest/{token}")
+            assert guest_resp.status_code == 429
+
+            # But invitation creation should still work (different bucket)
+            inv_resp = client.post(
+                "/api/baby-gifts/invitations", json={"name": "Another Guest"}
+            )
+            # This may succeed or fail depending on invitation rate limit state,
+            # but it should NOT be a 429 from the guest rate limiter
+            # (either 200 success or 429 from invitation limiter with different message)
+            if inv_resp.status_code == 429:
+                assert "invitaciones" in inv_resp.json()["detail"]
+            else:
+                assert inv_resp.status_code == 200
+
+        finally:
+            config.RATE_LIMIT_ATTEMPTS = original_attempts
+            config.RATE_LIMIT_WINDOW_SECONDS = original_window

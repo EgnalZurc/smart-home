@@ -23,6 +23,14 @@ FAMILIA_USERS = {u.strip().lower() for u in _familia_raw.split(",") if u.strip()
 RATE_LIMIT_ATTEMPTS = int(os.environ.get("RATE_LIMIT_ATTEMPTS", "20"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
 
+# Rate limiting for invitation creation (admin endpoint, more restrictive)
+INVITATION_RATE_LIMIT_ATTEMPTS = int(
+    os.environ.get("INVITATION_RATE_LIMIT_ATTEMPTS", "30")
+)
+INVITATION_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.environ.get("INVITATION_RATE_LIMIT_WINDOW_SECONDS", "60")
+)
+
 # ── Telegram notifications ────────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_IDS_RAW = os.environ.get("TELEGRAM_CHAT_IDS", "")
