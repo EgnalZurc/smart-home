@@ -97,7 +97,7 @@ CASITA_DATA_DIR=/app/data
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Service health check |
+| GET | `/health` | Service health check (incluye `last_scheduler_tick` y `scheduler_stale`) |
 | GET | `/status` | Property listings with status |
 | GET | `/api/casita/radar` | Properties above alert threshold |
 | GET | `/api/casita/alerts` | **High-scoring properties** for unified dashboard alerts (score ≥119 in last 24h) |
@@ -109,3 +109,29 @@ CASITA_DATA_DIR=/app/data
 | POST | `/api/casita/mark-viewed` | Mark as viewed |
 | POST | `/api/casita/save-comment` | Save comment |
 | POST | `/run-scraping` | Trigger manual scraping |
+
+### Health check (`GET /health`)
+
+Además del flag `online`, el endpoint expone el estado del loop del scheduler
+para detectar cuelgues (el loop se queda parado sin lanzar jobs):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `online` | bool | `true` si el servidor HTTP responde |
+| `last_scheduler_tick` | string \| null | ISO timestamp del último tick del loop del scheduler. `null` si aún no ha ejecutado ninguno |
+| `scheduler_stale` | bool | `true` si han pasado más de 2h desde el último tick (loop colgado) |
+
+El scheduler registra `last_scheduler_tick` en cada iteración de su loop
+principal. Durante el grace period de arranque (antes del primer tick)
+`last_scheduler_tick` es `null` y `scheduler_stale` es `false` para no reportar
+un falso positivo.
+
+Ejemplo de respuesta:
+
+```json
+{
+  "online": true,
+  "last_scheduler_tick": "2026-10-14T10:00:00",
+  "scheduler_stale": false
+}
+```

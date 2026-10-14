@@ -90,10 +90,46 @@ def client(mock_scheduler):
 class TestHealthEndpoint:
     """Tests for /health endpoint."""
 
-    def test_health_returns_online(self, client):
+    def test_health_returns_online(self, client, mock_scheduler):
+        mock_scheduler.get_last_tick.return_value = None
+        mock_scheduler.is_stale.return_value = False
         response = client.get("/health")
         assert response.status_code == 200
-        assert response.json() == {"online": True}
+        data = response.json()
+        assert data["online"] is True
+
+    def test_health_includes_scheduler_tick_fields(self, client, mock_scheduler):
+        tick = datetime(2026, 10, 14, 10, 0, 0)
+        mock_scheduler.get_last_tick.return_value = tick
+        mock_scheduler.is_stale.return_value = False
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["last_scheduler_tick"] == tick.isoformat()
+        assert data["scheduler_stale"] is False
+
+    def test_health_reports_stale_scheduler(self, client, mock_scheduler):
+        tick = datetime(2026, 10, 14, 2, 0, 0)
+        mock_scheduler.get_last_tick.return_value = tick
+        mock_scheduler.is_stale.return_value = True
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["last_scheduler_tick"] == tick.isoformat()
+        assert data["scheduler_stale"] is True
+
+    def test_health_tick_none_when_no_scheduler(self, mock_scheduler):
+        import main
+
+        main._scheduler_instance = None
+        main.app.state.scheduler = None
+        local_client = TestClient(main.app)
+        response = local_client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["online"] is True
+        assert data["last_scheduler_tick"] is None
+        assert data["scheduler_stale"] is False
 
 
 class TestStatusEndpoint:

@@ -275,8 +275,30 @@ api = APIRouter(prefix="/api/casita")
 
 
 @app.get("/health")
-async def health():
-    return {"online": True}
+async def health(request: Request):
+    """Health check con detección de scheduler colgado.
+
+    Incluye:
+      - online: siempre True si el servidor HTTP responde.
+      - last_scheduler_tick: ISO timestamp del último tick del loop del
+        scheduler, o None si aún no ha ejecutado ninguno (o no está listo).
+      - scheduler_stale: True si han pasado más de 2h desde el último tick,
+        lo que indica que el loop del scheduler se ha quedado colgado.
+    """
+    scheduler = getattr(request.app.state, "scheduler", None)
+
+    last_tick = None
+    scheduler_stale = False
+    if scheduler is not None:
+        tick = scheduler.get_last_tick()
+        last_tick = tick.isoformat() if tick else None
+        scheduler_stale = scheduler.is_stale(max_age_hours=2)
+
+    return {
+        "online": True,
+        "last_scheduler_tick": last_tick,
+        "scheduler_stale": scheduler_stale,
+    }
 
 
 # ── Status endpoint ───────────────────────────────────────────────────────────

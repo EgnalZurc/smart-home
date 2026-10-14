@@ -643,6 +643,71 @@ class TestLoopIteration:
         m_sum.assert_not_called()
 
 
+# ── Scheduler tick tracking (health check) ───────────────────────────────────
+
+
+class TestSchedulerTick:
+    def test_last_tick_none_before_loop_runs(self, scheduler):
+        assert scheduler.get_last_tick() is None
+
+    def test_is_stale_false_when_no_tick_yet(self, scheduler):
+        # During the startup grace period no tick has been recorded; must not
+        # report a false positive.
+        assert scheduler._last_tick is None
+        assert scheduler.is_stale() is False
+
+    def test_is_stale_false_for_recent_tick(self, scheduler):
+        scheduler._last_tick = datetime.now()
+        assert scheduler.is_stale(max_age_hours=2) is False
+
+    def test_is_stale_true_for_old_tick(self, scheduler):
+        from datetime import timedelta
+
+        scheduler._last_tick = datetime.now() - timedelta(hours=3)
+        assert scheduler.is_stale(max_age_hours=2) is True
+
+    def test_is_stale_boundary_just_under_threshold(self, scheduler):
+        from datetime import timedelta
+
+        # 1h59m is under the 2h threshold → not stale.
+        scheduler._last_tick = datetime.now() - timedelta(hours=1, minutes=59)
+        assert scheduler.is_stale(max_age_hours=2) is False
+
+    def test_loop_updates_last_tick(self, scheduler):
+        fixed_now = datetime(2026, 9, 1, 12, 0, 0)  # Tuesday noon, nothing due
+        scheduler._db.get_schedule_config.return_value = {
+            "scraping_enabled": False,
+            "gmail_check_enabled": False,
+            "summary_enabled": False,
+        }
+
+        class _FakeDateTime:
+            @staticmethod
+            def now():
+                return fixed_now
+
+        scheduler._running = True
+
+        # The loop sleeps once for the startup grace period before the first
+        # iteration, then again at the end of each iteration. Let the grace
+        # sleep pass and stop the loop after the first real iteration.
+        sleep_calls = {"n": 0}
+
+        def _fake_sleep(_secs):
+            sleep_calls["n"] += 1
+            if sleep_calls["n"] >= 2:
+                scheduler._running = False
+
+        with (
+            patch("casita_scheduler.datetime", _FakeDateTime),
+            patch("casita_scheduler.time.sleep", side_effect=_fake_sleep),
+        ):
+            scheduler._loop()
+
+        assert scheduler.get_last_tick() == fixed_now
+
+
+
 # ── run_scraping ──────────────────────────────────────────────────────────────
 
 

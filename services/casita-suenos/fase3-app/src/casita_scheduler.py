@@ -77,6 +77,10 @@ class CasitaScheduler:
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
 
+        # Timestamp del último tick del loop principal. Permite al health check
+        # detectar si el scheduler se ha quedado colgado (ver is_stale / main.py).
+        self._last_tick: datetime | None = None
+
         # Tracking de cuándo se ejecutó cada job por última vez
         self._last_scraping_date: datetime | None = None
         self._last_gmail_check: datetime | None = None
@@ -122,6 +126,9 @@ class CasitaScheduler:
 
         while self._running:
             now = datetime.now()
+            # Registrar el tick actual para el health check (detección de cuelgues).
+            with self._lock:
+                self._last_tick = now
             cfg = self._db.get_schedule_config()
 
             # ── Scraping completo ────────────────────────────────────────────
@@ -231,6 +238,29 @@ class CasitaScheduler:
     def run_summary_now(self) -> None:
         """Envía el resumen semanal inmediatamente."""
         self._run_weekly_summary()
+
+    def get_last_tick(self) -> datetime | None:
+        """Devuelve el timestamp del último tick del loop principal.
+
+        Es ``None`` hasta que el loop ejecuta su primera iteración (tras el
+        grace period inicial). El health check lo usa para detectar cuelgues.
+        """
+        with self._lock:
+            return self._last_tick
+
+    def is_stale(self, max_age_hours: float = 2.0) -> bool:
+        """Indica si el scheduler lleva demasiado tiempo sin ejecutar un tick.
+
+        Devuelve ``True`` si han pasado más de ``max_age_hours`` desde el último
+        tick registrado. Si todavía no se ha registrado ningún tick (loop recién
+        arrancado), devuelve ``False`` para no reportar un falso positivo durante
+        el grace period de arranque.
+        """
+        with self._lock:
+            last = self._last_tick
+        if last is None:
+            return False
+        return (datetime.now() - last).total_seconds() > max_age_hours * 3600
 
     def get_status(self) -> SchedulerStatus:
         """Devuelve el estado actual para el endpoint del dashboard."""
