@@ -881,3 +881,198 @@ class TestGetRecentHighScorers:
     def test_empty_when_no_scores(self, db):
         cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
         assert db.get_recent_high_scorers(cutoff, 119.0) == []
+
+
+
+# ── Tests de get_zone_trends ──────────────────────────────────────────────────
+
+
+class TestGetZoneTrends:
+    def _insert(self, db, prop, zone, total=130.0):
+        """Inserta una propiedad y su score (suma = ``total``)."""
+        db.upsert_property(prop)
+        breakdown = ScoreBreakdown(
+            r1_rooms=total,
+            r2_terrain=0.0,
+            r3_garage=0.0,
+            r4_habitability=0.0,
+            r5_piscina=0.0,
+            r6_ac=0.0,
+            r7_price=0.0,
+            r8_supermarket=0.0,
+            r9_health=0.0,
+            r10_hospital=0.0,
+            r11_internet=0.0,
+            r12_madrid=0.0,
+            r13_beach=0.0,
+            r14_pools=0.0,
+            r15_fire=0.0,
+            r16_flood=0.0,
+            r17_coast=0.0,
+            r18_beach_plot=0.0,
+        )
+        db.upsert_score(ScoredProperty(prop=prop, zone=zone, score=breakdown))
+
+    def test_empty_when_no_properties(self, db):
+        assert db.get_zone_trends() == []
+
+    def test_single_zone_single_day(self, db, sample_zone):
+        now = datetime.now()
+        prop = _make_property(portal_id="zt_001", price=100_000, first_seen=now)
+        self._insert(db, prop, sample_zone)
+
+        trends = db.get_zone_trends(days=30)
+        assert len(trends) == 1
+        zone = trends[0]
+        assert zone["zone_id"] == "zamora_meseta"
+        # zone_name se resuelve desde el catálogo zones.ZONES
+        assert zone["zone_name"].startswith("Zamora")
+        assert zone["total_properties"] == 1
+        assert len(zone["data_points"]) == 1
+
+        dp = zone["data_points"][0]
+        assert dp["date"] == now.isoformat()[:10]
+        assert dp["count"] == 1
+        assert dp["avg_price"] == 100_000
+        assert dp["avg_score"] == pytest.approx(130.0)
+
+    def test_zone_name_fallback_to_id(self, db, sample_zone):
+        """Si la zona no está en el catálogo, zone_name cae al zone_id."""
+        now = datetime.now()
+        prop = _make_property(portal_id="zt_unknown", zone_id="zona_inexistente_xyz")
+        self._insert(db, prop, sample_zone)
+
+        trends = db.get_zone_trends(days=30)
+        zone = next(z for z in trends if z["zone_id"] == "zona_inexistente_xyz")
+        assert zone["zone_name"] == "zona_inexistente_xyz"
+
+    def test_avg_price_and_score_aggregated_per_day(self, db, sample_zone):
+        now = datetime.now()
+        p1 = _make_property(portal_id="zt_a", price=100_000, first_seen=now)
+        p2 = _make_property(portal_id="zt_b", price=200_000, first_seen=now)
+        self._insert(db, p1, sample_zone, total=100.0)
+        self._insert(db, p2, sample_zone, total=140.0)
+
+        trends = db.get_zone_trends(days=30)
+        assert len(trends) == 1
+        dps = trends[0]["data_points"]
+        assert len(dps) == 1
+        assert dps[0]["count"] == 2
+        assert dps[0]["avg_price"] == pytest.approx(150_000)
+        assert dps[0]["avg_score"] == pytest.approx(120.0)
+
+    def test_data_points_split_across_days(self, db, sample_zone):
+        now = datetime.now()
+        old = _make_property(portal_id="zt_old", first_seen=now - timedelta(days=5))
+        new = _make_property(portal_id="zt_new", first_seen=now)
+        self._insert(db, old, sample_zone)
+        self._insert(db, new, sample_zone)
+
+        trends = db.get_zone_trends(days=30)
+        dps = trends[0]["data_points"]
+        assert len(dps) == 2
+        # Ordenados cronológicamente ascendente
+        assert dps[0]["date"] < dps[1]["date"]
+
+    def test_window_excludes_old_properties(self, db, sample_zone):
+        now = datetime.now()
+        inside = _make_property(portal_id="zt_in", first_seen=now - timedelta(days=3))
+        outside = _make_property(
+            portal_id="zt_out", first_seen=now - timedelta(days=40)
+        )
+        self._insert(db, inside, sample_zone)
+        self._insert(db, outside, sample_zone)
+
+        trends = db.get_zone_trends(days=7)
+        assert len(trends) == 1
+        # Solo la propiedad dentro de la ventana aparece en los puntos diarios
+        total_count = sum(dp["count"] for dp in trends[0]["data_points"])
+        assert total_count == 1
+        # total_properties cuenta todas las puntuadas no descartadas de la zona
+        assert trends[0]["total_properties"] == 2
+
+    def test_trend_growing(self, db, sample_zone):
+        now = datetime.now()
+        # Ventana de 30 días → midpoint ~día -15.
+        # 1 propiedad en la primera mitad (día -20), 2 en la segunda (días -5, 0)
+        # → growing.
+        self._insert(
+            db,
+            _make_property(portal_id="g0", first_seen=now - timedelta(days=20)),
+            sample_zone,
+        )
+        self._insert(
+            db,
+            _make_property(portal_id="g1", first_seen=now - timedelta(days=5)),
+            sample_zone,
+        )
+        self._insert(
+            db,
+            _make_property(portal_id="g2", first_seen=now),
+            sample_zone,
+        )
+        trends = db.get_zone_trends(days=30)
+        assert trends[0]["trend"] == "growing"
+
+    def test_trend_declining(self, db, sample_zone):
+        now = datetime.now()
+        # Ventana de 30 días → midpoint ~día -15.
+        # 2 propiedades en la primera mitad (días -25, -20), 1 en la segunda
+        # (día 0) → declining.
+        self._insert(
+            db,
+            _make_property(portal_id="d0", first_seen=now - timedelta(days=25)),
+            sample_zone,
+        )
+        self._insert(
+            db,
+            _make_property(portal_id="d1", first_seen=now - timedelta(days=20)),
+            sample_zone,
+        )
+        self._insert(
+            db,
+            _make_property(portal_id="d2", first_seen=now),
+            sample_zone,
+        )
+        trends = db.get_zone_trends(days=30)
+        assert trends[0]["trend"] == "declining"
+
+    def test_trend_stable_single_point(self, db, sample_zone):
+        now = datetime.now()
+        self._insert(
+            db, _make_property(portal_id="s0", first_seen=now), sample_zone
+        )
+        trends = db.get_zone_trends(days=30)
+        assert trends[0]["trend"] == "stable"
+
+    def test_dismissed_excluded_from_total_properties(self, db, sample_zone):
+        now = datetime.now()
+        keep = _make_property(portal_id="zt_keep", first_seen=now)
+        drop = _make_property(portal_id="zt_drop", first_seen=now)
+        self._insert(db, keep, sample_zone)
+        self._insert(db, drop, sample_zone)
+        db.dismiss(drop.unique_id)
+
+        trends = db.get_zone_trends(days=30)
+        assert trends[0]["total_properties"] == 1
+
+    def test_multiple_zones_sorted_by_id(self, db, sample_zone):
+        now = datetime.now()
+        pa = _make_property(portal_id="mz_a", zone_id="aaa_zone", first_seen=now)
+        pb = _make_property(portal_id="mz_b", zone_id="bbb_zone", first_seen=now)
+        self._insert(db, pa, sample_zone)
+        self._insert(db, pb, sample_zone)
+
+        trends = db.get_zone_trends(days=30)
+        zone_ids = [z["zone_id"] for z in trends]
+        assert zone_ids == sorted(zone_ids)
+
+    def test_days_clamped_to_minimum(self, db, sample_zone):
+        """days <= 0 se trata como 1 (no explota)."""
+        now = datetime.now()
+        self._insert(
+            db, _make_property(portal_id="zt_clamp", first_seen=now), sample_zone
+        )
+        # No debe lanzar excepción y devuelve la zona del día de hoy
+        trends = db.get_zone_trends(days=0)
+        assert len(trends) == 1

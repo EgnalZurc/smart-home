@@ -121,7 +121,7 @@ CASITA_DATA_DIR=/app/data
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Service health check (incluye `last_scheduler_tick` y `scheduler_stale`) |
+| GET | `/health` | Service health check |
 | GET | `/status` | Property listings with status |
 | GET | `/api/casita/radar` | Properties above alert threshold (incl. price/m² vs zone-average analysis) |
 | GET | `/api/casita/alerts` | **High-scoring properties** for unified dashboard alerts (score ≥119 in last 24h) |
@@ -133,61 +133,4 @@ CASITA_DATA_DIR=/app/data
 | POST | `/api/casita/mark-viewed` | Mark as viewed |
 | POST | `/api/casita/save-comment` | Save comment |
 | POST | `/run-scraping` | Trigger manual scraping |
-
-### Health check (`GET /health`)
-
-Además del flag `online`, el endpoint expone el estado del loop del scheduler
-para detectar cuelgues (el loop se queda parado sin lanzar jobs):
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `online` | bool | `true` si el servidor HTTP responde |
-| `last_scheduler_tick` | string \| null | ISO timestamp del último tick del loop del scheduler. `null` si aún no ha ejecutado ninguno |
-| `scheduler_stale` | bool | `true` si han pasado más de 2h desde el último tick (loop colgado) |
-
-El scheduler registra `last_scheduler_tick` en cada iteración de su loop
-principal. Durante el grace period de arranque (antes del primer tick)
-`last_scheduler_tick` es `null` y `scheduler_stale` es `false` para no reportar
-un falso positivo.
-
-Ejemplo de respuesta:
-
-```json
-{
-  "online": true,
-  "last_scheduler_tick": "2026-10-14T10:00:00",
-  "scheduler_stale": false
-}
-```
-
-### Tendencia de precio (`GET /api/casita/radar` y `GET /api/casita/alerts`)
-
-Cada propiedad devuelta por el radar y cada alerta de casita se enriquecen con
-información de la tendencia de precio, calculada a partir del último cambio
-registrado en la tabla `price_history`:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `previous_price` | int \| null | Precio anterior al último cambio. `null` si la propiedad no tiene historial de precios |
-| `price_change` | int \| null | Diferencia en euros respecto al precio anterior (`nuevo − anterior`; negativo = bajada). `null` sin historial |
-| `price_change_pct` | float \| null | Porcentaje de cambio respecto al precio anterior, redondeado a 2 decimales. `null` sin historial |
-| `trend` | string \| null | `"down"` (bajada), `"up"` (subida), `"stable"` (sin variación) o `null` si no hay historial |
-
-Ejemplo de propiedad con bajada de precio en la respuesta de `/api/casita/radar`:
-
-```json
-{
-  "uid": "idealista:12345",
-  "title": "Casa en Zamora meseta",
-  "price": 160000,
-  "previous_price": 180000,
-  "price_change": -20000,
-  "price_change_pct": -11.11,
-  "trend": "down"
-}
-```
-
-En `/api/casita/alerts` los mismos cuatro campos se añaden a cada objeto de
-alerta normalizado (junto a `source`, `severity`, `id`, `title`, `detail`,
-`timestamp` y `link`). Una propiedad sin cambios de precio registrados devuelve
-los cuatro campos a `null`.
+| GET | `/api/casita/zone-trends` | Zone time-series for charts (`?days=30`) |

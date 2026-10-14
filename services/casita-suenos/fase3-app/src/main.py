@@ -410,6 +410,24 @@ async def get_casita_alerts(request: Request):
     return {"alerts": alerts}
 
 
+@api.get("/zone-trends")
+async def get_zone_trends(request: Request, days: int = 30):
+    """Return per-zone time series for dashboard charts.
+
+    For each zone with properties in the window, returns daily data points
+    (count, average price and average score), the number of properties
+    currently on the radar, and a growing/stable/declining trend flag.
+    """
+    db = request.app.state.db
+    if db is None:
+        raise HTTPException(status_code=503, detail="Not ready")
+
+    # Clamp the window to a sane range: at least 1 day, at most ~1 year.
+    days = max(1, min(days, 365))
+
+    return {"days": days, "zones": db.get_zone_trends(days=days)}
+
+
 @api.get("/radar")
 async def get_radar(
     request: Request,
