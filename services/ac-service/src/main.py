@@ -6,6 +6,7 @@ Serves:
   GET  /api/ac/sensors             → per-sensor readings
   GET  /api/ac/sensors/history     → sensor reading history
   GET  /api/ac/history             → controller action history
+  GET  /api/ac/learning            → usage patterns & recommendations
   GET  /api/ac/config              → controller config
   POST /api/ac/config              → update config
   POST /api/ac/control             → set auto/manual/off
@@ -42,6 +43,7 @@ from controllers.ac_controller import ACController, ControlConfig
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from learning import analyze_history
 from outdoor import build_outdoor_fetcher
 from pydantic import BaseModel
 from smart_home_common.clients.melcloud import MelCloudClient
@@ -434,6 +436,24 @@ def get_history(limit: int = 100):
     """Get controller action history."""
     limit = max(1, min(limit, 1000))  # Cap between 1 and 1000
     return {"history": ac_controller.get_history(limit)}
+
+
+@app.get("/api/ac/learning", tags=["AC Control"])
+def get_learning(window: int = 1000):
+    """Return usage patterns, correlations and recommendations.
+
+    Performs a basic statistical analysis over the controller action history
+    (no machine learning): frequent on-hours, preferred setpoints, the
+    temperature-vs-setpoint correlation and short human-readable hints.
+
+    Args:
+        window: number of most-recent history records to analyse (1-1000).
+    """
+    window = max(1, min(window, 1000))  # Cap between 1 and 1000
+    if ac_controller is None:
+        return analyze_history([])
+    records = ac_controller.get_history(window)
+    return analyze_history(records)
 
 
 @app.get("/api/ac/config", tags=["AC Control"])

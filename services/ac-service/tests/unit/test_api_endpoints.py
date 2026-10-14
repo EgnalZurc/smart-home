@@ -382,6 +382,91 @@ class TestHistoryEndpoint:
         assert "history" in data
 
 
+class TestLearningEndpoint:
+    """Tests for the learning endpoint."""
+
+    def _make_records(self, hour: int, count: int):
+        from datetime import datetime, timezone
+
+        ts = datetime(2026, 1, 1, hour, 0, 0, tzinfo=timezone.utc).timestamp()
+        return [
+            {
+                "timestamp": ts,
+                "average_temp": 27.0,
+                "state": "cooling_max",
+                "setpoint": 24.0,
+                "active_sensors": 3,
+            }
+            for _ in range(count)
+        ]
+
+    def test_get_learning_empty_history(self, client, mock_components):
+        """GET /api/ac/learning with no history reports not enough data."""
+        mock_components["ac_controller"].get_history.return_value = []
+
+        response = client.get("/api/ac/learning")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["enough_data"] is False
+        assert data["sample_size"] == 0
+        assert data["recommendations"] == []
+        assert "patterns" in data
+        assert "correlations" in data
+
+    def test_get_learning_with_patterns(self, client, mock_components):
+        """GET /api/ac/learning derives patterns and recommendations."""
+        mock_components["ac_controller"].get_history.return_value = (
+            self._make_records(18, 5)
+        )
+
+        response = client.get("/api/ac/learning")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["enough_data"] is True
+        assert data["sample_size"] == 5
+        hours = data["patterns"]["frequent_hours"]
+        assert hours[0]["hour"] == 18
+        types = {rec["type"] for rec in data["recommendations"]}
+        assert "frequent_hour" in types
+        assert "preferred_setpoint" in types
+
+    def test_get_learning_window_param_is_capped(self, client, mock_components):
+        """The window query param is clamped to 1-1000."""
+        mock_components["ac_controller"].get_history.return_value = []
+
+        response = client.get("/api/ac/learning?window=99999")
+
+        assert response.status_code == 200
+        # get_history must be called with the capped window (1000).
+        mock_components["ac_controller"].get_history.assert_called_with(1000)
+
+    def test_get_learning_window_param_minimum(self, client, mock_components):
+        """A window below 1 is clamped up to 1."""
+        mock_components["ac_controller"].get_history.return_value = []
+
+        response = client.get("/api/ac/learning?window=0")
+
+        assert response.status_code == 200
+        mock_components["ac_controller"].get_history.assert_called_with(1)
+
+    def test_get_learning_when_controller_none(self, client):
+        """GET /api/ac/learning returns empty analysis when controller is None."""
+        import main
+
+        original = main.ac_controller
+        main.ac_controller = None
+        try:
+            response = client.get("/api/ac/learning")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["enough_data"] is False
+            assert data["sample_size"] == 0
+        finally:
+            main.ac_controller = original
+
+
 class TestSubscriptionStatsEndpoint:
     """Tests for subscription stats endpoint."""
 
