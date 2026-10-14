@@ -103,3 +103,80 @@ async def test_db_ok_helper_true_and_false(monkeypatch, tmp_path):
 
     monkeypatch.setattr(main.collector, "store", Broken())
     assert main._db_ok() is False
+
+
+# ── History endpoint ──────────────────────────────────────────────────────────
+async def test_history_empty_defaults_to_day(client):
+    async with client as c:
+        resp = await c.get("/api/energy/history")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["period"] == "day"
+    assert body["count"] == 24
+    assert len(body["series"]) == 24
+    assert all(p["consumption_wh"] is None for p in body["series"])
+
+
+async def test_history_returns_deltas(client):
+    import time as _time
+
+    main.collector.store.write_energy(int(_time.time()) - 7200, [("ch0", 0.0)])
+    main.collector.store.write_energy(int(_time.time()) - 3600, [("ch0", 1500.0)])
+    async with client as c:
+        resp = await c.get("/api/energy/history?period=hour&count=3&channel=ch0")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["period"] == "hour"
+    assert body["channel"] == "ch0"
+    values = [p["consumption_wh"] for p in body["series"] if p["consumption_wh"]]
+    assert 1500.0 in values
+
+
+async def test_history_invalid_period_422(client):
+    async with client as c:
+        resp = await c.get("/api/energy/history?period=decade")
+    assert resp.status_code == 422
+
+
+async def test_history_count_out_of_range_422(client):
+    async with client as c:
+        resp = await c.get("/api/energy/history?period=day&count=0")
+    assert resp.status_code == 422
+
+
+# ── Stats endpoint ────────────────────────────────────────────────────────────
+async def test_stats_empty_shape(client):
+    async with client as c:
+        resp = await c.get("/api/energy/stats")
+    assert resp.status_code == 200
+    body = resp.json()
+    for key in (
+        "month_start",
+        "days_elapsed",
+        "total_kwh",
+        "avg_daily_kwh",
+        "peak_daily_kwh",
+        "peak_power_w",
+    ):
+        assert key in body
+    assert body["total_kwh"] is None
+
+
+# ── Alerts endpoint ───────────────────────────────────────────────────────────
+async def test_alerts_empty(client):
+    async with client as c:
+        resp = await c.get("/api/energy/alerts")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["count"] == 0
+    assert body["alerts"] == []
+
+
+async def test_alerts_returns_recorded(client):
+    main.collector.store.record_alert("daily_budget", "warning", "fired", value=25.0)
+    async with client as c:
+        resp = await c.get("/api/energy/alerts?limit=10")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["count"] == 1
+    assert body["alerts"][0]["rule_key"] == "daily_budget"

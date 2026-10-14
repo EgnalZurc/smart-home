@@ -109,4 +109,149 @@ def test_prune_nothing_to_delete(store):
     store.write_power(now - 3600, [("ch0", 1.0, 1.0, None, None)])
     store.write_energy(now - 3600, [("ch0", 1.0)])
     deleted = store.prune(now=now)
-    assert deleted == {"power_samples": 0, "energy_readings": 0}
+    assert deleted == {
+        "power_samples": 0,
+        "energy_readings": 0,
+        "energy_alerts": 0,
+    }
+
+
+# ── Aggregation / consumption-by-period ───────────────────────────────────────
+# Fixed reference time: 2023-06-15 12:30:00 UTC (a Thursday).
+_NOW = 1_686_832_200
+
+
+def test_consumption_by_period_invalid_period(store):
+    import pytest
+
+    with pytest.raises(ValueError):
+        store.consumption_by_period("fortnight", 3, now=_NOW)
+
+
+def test_consumption_hourly_deltas(store):
+    # Three hourly cumulative snapshots on one channel; deltas should be 100/150.
+    hour = 3600
+    base = _NOW - 3 * hour
+    # Align readings to the top of each hour window.
+    store.write_energy(base, [("ch0", 1000.0)])
+    store.write_energy(base + hour, [("ch0", 1100.0)])
+    store.write_energy(base + 2 * hour, [("ch0", 1250.0)])
+    series = store.consumption_by_period("hour", 4, channel="ch0", now=_NOW)
+    assert len(series) == 4
+    assert all(s["period"] == "hour" for s in series)
+    # Oldest → newest ordering.
+    starts = [s["period_start"] for s in series]
+    assert starts == sorted(starts)
+    # The buckets with two bounding readings carry the deltas.
+    deltas = [s["consumption_wh"] for s in series]
+    assert 100.0 in deltas and 150.0 in deltas
+
+
+def test_consumption_kwh_conversion(store):
+    store.write_energy(_NOW - 7200, [("ch0", 0.0)])
+    store.write_energy(_NOW - 3600, [("ch0", 2000.0)])
+    series = store.consumption_by_period("hour", 3, channel="ch0", now=_NOW)
+    with_data = [s for s in series if s["consumption_kwh"] is not None]
+    assert any(abs(s["consumption_kwh"] - 2.0) < 1e-6 for s in with_data)
+
+
+def test_consumption_none_when_no_data(store):
+    series = store.consumption_by_period("day", 3, channel="ch0", now=_NOW)
+    assert len(series) == 3
+    assert all(s["consumption_wh"] is None for s in series)
+
+
+def test_consumption_count_clamped(store):
+    series = store.consumption_by_period("hour", 0, now=_NOW)
+    assert len(series) == 1  # clamped to minimum of 1
+
+
+def test_consumption_whole_home_sums_channels(store):
+    # Two channels, each +500 Wh across one hour → whole-home delta 1000 Wh.
+    base = _NOW - 3600
+    store.write_energy(base, [("ch0", 100.0), ("ch1", 200.0)])
+    store.write_energy(_NOW, [("ch0", 600.0), ("ch1", 700.0)])
+    series = store.consumption_by_period("hour", 2, now=_NOW)  # channel=None
+    totals = [s["consumption_wh"] for s in series if s["consumption_wh"] is not None]
+    assert 1000.0 in totals
+
+
+def test_consumption_monthly_period(store):
+    series = store.consumption_by_period("month", 3, now=_NOW)
+    assert len(series) == 3
+    assert all(s["period"] == "month" for s in series)
+    starts = [s["period_start"] for s in series]
+    assert starts == sorted(starts)
+
+
+def test_consumption_weekly_period_starts_monday(store):
+    import datetime as _dt
+
+    series = store.consumption_by_period("week", 2, now=_NOW)
+    for s in series:
+        dt = _dt.datetime.fromtimestamp(s["period_start"], tz=_dt.timezone.utc)
+        assert dt.weekday() == 0  # Monday
+        assert (dt.hour, dt.minute, dt.second) == (0, 0, 0)
+
+
+# ── Stats ─────────────────────────────────────────────────────────────────────
+def test_stats_empty(store):
+    s = store.stats(now=_NOW)
+    assert s["total_kwh"] is None
+    assert s["avg_daily_kwh"] is None
+    assert s["peak_daily_kwh"] is None
+    assert s["peak_power_w"] is None
+    assert s["days_elapsed"] == 15  # 2023-06-15
+
+
+def test_stats_total_and_peak(store):
+    import datetime as _dt
+
+    month_start = int(
+        _dt.datetime(2023, 6, 1, tzinfo=_dt.timezone.utc).timestamp()
+    )
+    day = 24 * 3600
+    # Daily cumulative readings: +5 kWh day 1, +8 kWh day 2, +3 kWh day 3.
+    store.write_energy(month_start, [("ch0", 0.0)])
+    store.write_energy(month_start + day, [("ch0", 5000.0)])
+    store.write_energy(month_start + 2 * day, [("ch0", 13000.0)])
+    store.write_energy(month_start + 3 * day, [("ch0", 16000.0)])
+    # A power spike this month.
+    store.write_power(month_start + day, [("ch0", 1200.0, 4100.0, 230.0, 0.9)])
+    s = store.stats(now=_NOW)
+    assert s["total_kwh"] is not None and s["total_kwh"] > 0
+    assert s["peak_daily_kwh"] is not None
+    assert s["peak_power_w"] == 4100.0
+
+
+# ── Alerts persistence ────────────────────────────────────────────────────────
+def test_record_and_read_alert(store):
+    rid = store.record_alert(
+        "daily_budget",
+        "warning",
+        "fired",
+        value=22.5,
+        message="over budget",
+        ts=_NOW,
+    )
+    assert rid >= 1
+    events = store.recent_alerts()
+    assert len(events) == 1
+    assert events[0]["rule_key"] == "daily_budget"
+    assert events[0]["state"] == "fired"
+    assert events[0]["value"] == 22.5
+
+
+def test_recent_alerts_newest_first(store):
+    store.record_alert("r", "warning", "fired", ts=_NOW - 10)
+    store.record_alert("r", "warning", "resolved", ts=_NOW)
+    events = store.recent_alerts()
+    assert [e["state"] for e in events] == ["resolved", "fired"]
+
+
+def test_prune_deletes_old_alerts(store):
+    now = 400_000_000
+    old = now - 400 * 24 * 3600  # beyond 365-day alert retention
+    store.record_alert("r", "warning", "fired", ts=old)
+    deleted = store.prune(now=now)
+    assert deleted["energy_alerts"] == 1
