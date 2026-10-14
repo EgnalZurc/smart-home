@@ -15,13 +15,60 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
 
 from config import DB_PATH, LOG_LEVEL, PORT, SERVICE_NAME
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Input validation (M-7)
+# ═══════════════════════════════════════════════════════════════════════════════
+_VALID_CONTAINER_NAME = re.compile(r"^[a-zA-Z0-9_-]+$")
+_VALID_METRIC_NAME = re.compile(r"^[a-zA-Z0-9_.-]+$")
+
+
+def _validate_container_name(name: str) -> bool:
+    """Validate container name: alphanumeric, underscore, hyphen; max 64 chars."""
+    return bool(name and len(name) <= 64 and _VALID_CONTAINER_NAME.match(name))
+
+
+def _validate_metric_name(name: str) -> bool:
+    """Validate metric name: alphanumeric, underscore, hyphen, dot; max 128 chars."""
+    return bool(name and len(name) <= 128 and _VALID_METRIC_NAME.match(name))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Rate limiting (M-8) — simple in-memory, per-IP
+# ═══════════════════════════════════════════════════════════════════════════════
+_rate_limit: dict[str, list[float]] = defaultdict(list)
+MAX_REQUESTS_PER_MINUTE = 60
+
+
+def _check_rate_limit(client_ip: str) -> bool:
+    """Return True if request is allowed, False if rate-limited."""
+    now = time.time()
+    # Prune timestamps older than 60 seconds
+    _rate_limit[client_ip] = [t for t in _rate_limit[client_ip] if now - t < 60]
+    if len(_rate_limit[client_ip]) >= MAX_REQUESTS_PER_MINUTE:
+        return False
+    _rate_limit[client_ip].append(now)
+    return True
+
+
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP from request, respecting X-Forwarded-For if present."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        # Take the first IP in the chain (original client)
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
 
 # Shared libs live at /app/libs in the container; add to path for imports.
 _LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
@@ -58,6 +105,23 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Apply rate limiting to all endpoints except health checks."""
+    # Skip rate limiting for health endpoints (needed for monitoring/CI)
+    if request.url.path in ("/health", "/api/health/metrics"):
+        return await call_next(request)
+
+    client_ip = _get_client_ip(request)
+    if not _check_rate_limit(client_ip):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Rate limit exceeded. Try again later."},
+        )
+
+    return await call_next(request)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -146,6 +210,20 @@ async def get_series(
     ``resolution=hi`` reads the in-memory ring buffer (30 s points, last 2 h);
     ``resolution=rollup`` reads SQLite (5-min avg/max, 30-day history).
     """
+    # Validate label if provided (may be container name)
+    if label and not _validate_container_name(label):
+        raise HTTPException(
+            400,
+            "Invalid label: must be alphanumeric, underscore, or hyphen (max 64 chars)",
+        )
+
+    # Validate metric name
+    if not _validate_metric_name(metric):
+        raise HTTPException(
+            400,
+            "Invalid metric: must be alphanumeric, underscore, hyphen, or dot (max 128 chars)",
+        )
+
     since_ts = _parse_since(since)
     until_ts = _parse_since(until)
 
