@@ -1,19 +1,19 @@
-"""energy-monitor — Shelly EM power/energy time-series collector (scaffold).
+"""energy-monitor — Shelly EM power/energy time-series collector.
 
 Infrastructure service (not user-facing, not stoppable; see design §1.2/§10).
 Reached only through the backend proxy under ``/api/energy/*``. The browser
 never talks to :8012 directly.
 
-This is the *scaffold*: it stands up the FastAPI app, the SQLite store and the
-health surface the dashboard/CI expect. The Shelly polling collector, the alert
-engine and the full read API (``/api/energy/power``, ``/consumption``,
-``/summary``) arrive in later tasks — their routes are stubbed here so the
-contract is visible and testable.
+Stands up the FastAPI app, the SQLite store and the Shelly polling collector.
+The collector (``collector.py``) polls every device in ``ENERGY_DEVICES`` and
+persists power rollups + hourly energy snapshots; the alert engine and the full
+read API (``/api/energy/power``, ``/consumption``, ``/summary``) arrive in later
+tasks — their routes are stubbed here so the contract is visible and testable.
 
 Endpoints (served on :8012):
   GET /health               → {online, service, db_ok, meter_online, ...}
   GET /api/health/energy     → health alias for the dashboard catalogue / CI
-  GET /api/energy/current    → newest power per channel (empty until collector)
+  GET /api/energy/current    → newest power per channel (live from the collector)
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ from __future__ import annotations
 import logging
 import os
 import sys
-import time
 from contextlib import asynccontextmanager
 
 from config import DB_PATH, LOG_LEVEL, PORT, SERVICE_NAME
@@ -33,6 +32,7 @@ if _LIBS_PATH not in sys.path:
     sys.path.insert(0, _LIBS_PATH)
 
 from alerts import AlertEngine  # noqa: E402
+from collector import Collector  # noqa: E402
 from database import VALID_PERIODS, EnergyStore  # noqa: E402
 
 logging.basicConfig(
@@ -41,29 +41,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Single store instance for the process lifetime. The collector (later task)
-# will own the ring buffer and poll loop; the scaffold only needs the store so
-# the health check can exercise the DB.
-store = EnergyStore()
-alert_engine = AlertEngine(store)
+# Single collector instance for the process lifetime. It owns the SQLite store,
+# the per-channel ring buffer and the Shelly poll loops.
+collector = Collector()
+alert_engine = AlertEngine(collector.store)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Open/close service resources with the app.
-
-    The background collector is introduced in a later task; for the scaffold we
-    just log start/stop and ensure the store (and its schema) is initialised.
-    """
+    """Start/stop the collector background tasks with the app."""
     logger.info("Starting %s...", SERVICE_NAME)
     # Touch the DB so the schema is created eagerly (surfaces a bad bind mount
     # as db_ok=false at the first health check rather than on first write).
     try:
-        store.count()
+        collector.store.count()
     except Exception as exc:  # pragma: no cover - defensive startup log
         logger.warning("initial DB touch failed: %s", exc)
+    await collector.start()
     yield
     logger.info("Shutting down %s...", SERVICE_NAME)
+    await collector.stop()
 
 
 app = FastAPI(
@@ -82,7 +79,7 @@ app = FastAPI(
 def _db_ok() -> bool:
     """Return True if the SQLite store answers a trivial query."""
     try:
-        store.count()
+        collector.store.count()
         return True
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("db health check failed: %s", exc)
@@ -90,19 +87,18 @@ def _db_ok() -> bool:
 
 
 def _health_payload() -> dict:
-    """Build the health dict exercising DB liveness.
+    """Build the health dict exercising DB + collector/meter liveness.
 
-    ``meter_online`` and ``collector_last_tick_age_s`` are part of the design's
-    health contract (§7/§10). Until the collector exists they report their
-    "no data yet" values (``None``) so the shape is stable for the dashboard
-    and CI, and turns informative automatically once polling is wired in.
+    ``meter_online`` is True once at least one device has answered a poll,
+    ``collector_last_tick_age_s`` reports seconds since the last poll — both are
+    part of the design's health contract (§7/§10).
     """
     return {
         "online": True,
         "service": SERVICE_NAME,
         "db_ok": _db_ok(),
-        "meter_online": None,
-        "collector_last_tick_age_s": None,
+        "meter_online": collector.meter_online,
+        "collector_last_tick_age_s": collector.last_tick_age_s(),
         "db_path": DB_PATH,
     }
 
@@ -126,16 +122,11 @@ async def health_alias() -> dict:
 async def get_current() -> dict:
     """Return the newest power reading per channel.
 
-    Scaffold stub: with no collector running yet there are no live readings, so
-    this returns an empty channel set. The full implementation (reading the
-    ring buffer) lands with the collector task.
+    Served live from the collector's ring buffer. Before the first successful
+    poll (or with no devices configured) ``channels`` is empty and
+    ``meter_online`` reflects collector state.
     """
-    return {
-        "ts": int(time.time()),
-        "total_w": 0.0,
-        "channels": {},
-        "meter_online": None,
-    }
+    return collector.current()
 
 
 @app.get("/api/energy/history")

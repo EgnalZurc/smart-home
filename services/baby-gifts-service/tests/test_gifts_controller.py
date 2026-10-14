@@ -60,7 +60,58 @@ class TestGiftsCRUD:
         """update_gift should return None for non-existent gift."""
         from gifts_controller import update_gift
 
-        result = update_gift("nonexistent", {"name": "New"})
+        # Use a valid format that doesn't exist
+        result = update_gift("g_12345_abcd1234", {"name": "New"})
+        assert result is None
+
+    def test_update_gift_invalid_format_returns_400(self, tmp_data_dir):
+        """update_gift should return 400 for invalid gift_id format."""
+        from gifts_controller import update_gift
+
+        result = update_gift("invalid-format", {"name": "New"})
+
+        assert isinstance(result, tuple)
+        assert result[0] is None
+        assert result[1] == 400
+        assert "Invalid gift_id format" in result[2]
+
+    def test_update_gift_empty_id_returns_400(self, tmp_data_dir):
+        """update_gift should return 400 for empty gift_id."""
+        from gifts_controller import update_gift
+
+        result = update_gift("", {"name": "New"})
+
+        assert isinstance(result, tuple)
+        assert result[0] is None
+        assert result[1] == 400
+        assert "non-empty string" in result[2]
+
+    def test_update_gift_none_id_returns_400(self, tmp_data_dir):
+        """update_gift should return 400 for None gift_id."""
+        from gifts_controller import update_gift
+
+        result = update_gift(None, {"name": "New"})
+
+        assert isinstance(result, tuple)
+        assert result[0] is None
+        assert result[1] == 400
+
+    def test_update_gift_accepts_uuid_format(self, tmp_data_dir):
+        """update_gift should accept valid UUID format."""
+        from gifts_controller import add_gift, update_gift
+
+        # Create a gift to ensure data file exists
+        add_gift({"name": "Test"})
+
+        # Valid UUID format should pass validation but return None (not found)
+        result = update_gift("550e8400-e29b-41d4-a716-446655440000", {"name": "New"})
+        assert result is None  # Valid format, but gift doesn't exist
+
+    def test_update_gift_valid_id_not_found_returns_none(self, tmp_data_dir):
+        """update_gift with valid format but non-existent ID returns None (404)."""
+        from gifts_controller import update_gift
+
+        result = update_gift("g_9999999999999_deadbeef", {"name": "New"})
         assert result is None
 
     def test_delete_gift_removes_gift(self, tmp_data_dir):
@@ -79,6 +130,31 @@ class TestGiftsCRUD:
 
         result = delete_gift("nonexistent")
         assert result is False
+
+
+class TestGiftIdValidation:
+    """Tests for gift_id validation helper."""
+
+    def test_validate_gift_id_accepts_valid_uuid(self, tmp_data_dir):
+        """_validate_gift_id should return True for valid UUID."""
+        from gifts_controller import _validate_gift_id
+
+        assert _validate_gift_id("550e8400-e29b-41d4-a716-446655440000") is True
+        assert _validate_gift_id("6ba7b810-9dad-11d1-80b4-00c04fd430c8") is True
+
+    def test_validate_gift_id_rejects_invalid(self, tmp_data_dir):
+        """_validate_gift_id should return False for invalid UUID."""
+        from gifts_controller import _validate_gift_id
+
+        assert _validate_gift_id("not-a-uuid") is False
+        assert _validate_gift_id("g_12345_abc") is False
+        assert _validate_gift_id("") is False
+
+    def test_validate_gift_id_handles_none(self, tmp_data_dir):
+        """_validate_gift_id should handle None gracefully."""
+        from gifts_controller import _validate_gift_id
+
+        assert _validate_gift_id(None) is False
 
 
 class TestGiftReservations:

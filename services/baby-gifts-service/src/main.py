@@ -240,10 +240,18 @@ def modify_gift(gift_id: str, gift: GiftUpdate):
     updates = {k: v for k, v in gift.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No hay cambios")
-    updated = update_gift(gift_id, updates)
-    if not updated:
+    result = update_gift(gift_id, updates)
+
+    # Handle validation errors (tuple: None, status_code, message)
+    if isinstance(result, tuple):
+        _, status_code, message = result
+        raise HTTPException(status_code=status_code, detail=message)
+
+    # Handle not found (None)
+    if result is None:
         raise HTTPException(status_code=404, detail="Regalo no encontrado")
-    return {"status": "ok", "gift": updated}
+
+    return {"status": "ok", "gift": result}
 
 
 @app.delete("/api/baby-gifts/{gift_id}")

@@ -166,9 +166,7 @@ class TestDatabase:
     def test_count_radar_empty_by_default(self, db):
         assert db.count_radar_properties(min_score=0.0) == 0
 
-    def test_count_radar_only_counts_scored_above_threshold(
-        self, db, sample_zone
-    ):
+    def test_count_radar_only_counts_scored_above_threshold(self, db, sample_zone):
         """count_radar_properties cuenta solo las que pasan el threshold.
 
         Una propiedad sin score, o con score por debajo del umbral, no debe
@@ -468,7 +466,9 @@ class TestRadar:
 
         assert len(db.get_radar_properties(min_score=0.0, limit=3)["items"]) == 3
 
-    def test_radar_sort_params_are_injection_safe(self, db, sample_property, sample_zone):
+    def test_radar_sort_params_are_injection_safe(
+        self, db, sample_property, sample_zone
+    ):
         """Malicious sort_by/sort_dir must not break out of the query.
 
         sort_by is whitelisted via _SORT_MAP (unknown -> score fallback) and
@@ -548,7 +548,8 @@ class TestPricePerM2Analysis:
     # ── get_price_per_m2_analysis ──────────────────────────────────────────
 
     def test_analysis_unknown_uid_all_none(self, db):
-        result = db.get_price_per_m2_analysis("no-existe")
+        # Use a valid format that doesn't exist in the DB
+        result = db.get_price_per_m2_analysis("pisos:no_existe")
         assert result == {
             "price_per_m2": None,
             "zone_avg_price_per_m2": None,
@@ -614,9 +615,7 @@ class TestPricePerM2Analysis:
         exp = _make_property(portal_id="exp", price=250_000, size_m2=100.0)
         for p in (cheap, exp):
             self._insert(db, p, sample_zone)
-        items = {
-            i["uid"]: i for i in db.get_radar_properties(min_score=0.0)["items"]
-        }
+        items = {i["uid"]: i for i in db.get_radar_properties(min_score=0.0)["items"]}
         cheap_item = items[cheap.unique_id]
         # media (1500 + 2500) / 2 = 2000 €/m²
         assert cheap_item["price_per_m2"] == 1500.0
@@ -766,7 +765,6 @@ class TestUpsertScore:
         assert db.is_alerted(sample_property.unique_id) is True
 
 
-
 # ── Tests de get_recent_high_scorers ──────────────────────────────────────────
 
 
@@ -881,7 +879,6 @@ class TestGetRecentHighScorers:
     def test_empty_when_no_scores(self, db):
         cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
         assert db.get_recent_high_scorers(cutoff, 119.0) == []
-
 
 
 # ── Tests de get_zone_trends ──────────────────────────────────────────────────
@@ -1039,9 +1036,7 @@ class TestGetZoneTrends:
 
     def test_trend_stable_single_point(self, db, sample_zone):
         now = datetime.now()
-        self._insert(
-            db, _make_property(portal_id="s0", first_seen=now), sample_zone
-        )
+        self._insert(db, _make_property(portal_id="s0", first_seen=now), sample_zone)
         trends = db.get_zone_trends(days=30)
         assert trends[0]["trend"] == "stable"
 
@@ -1076,3 +1071,114 @@ class TestGetZoneTrends:
         # No debe lanzar excepción y devuelve la zona del día de hoy
         trends = db.get_zone_trends(days=0)
         assert len(trends) == 1
+
+
+# ── Tests de validación de property_uid (SQL injection prevention) ────────────
+
+
+class TestPropertyUidValidation:
+    """Tests for _validate_property_uid() SQL injection prevention.
+
+    property_uid values should match the pattern 'portal:id' where both parts
+    contain only alphanumeric characters, underscores, and hyphens.
+    """
+
+    def test_valid_uid_passes(self, db, sample_property, sample_zone):
+        """Standard portal:id format should work."""
+        db.upsert_property(sample_property)
+        scored = _make_scored(sample_property, sample_zone)
+        db.upsert_score(scored)
+        # These should not raise
+        uid = sample_property.unique_id
+        assert db.is_alerted(uid) is False
+        db.mark_alerted(uid)
+        assert db.is_alerted(uid) is True
+
+    def test_valid_uid_with_underscores(self, db, sample_zone):
+        """UIDs with underscores should pass validation."""
+        prop = _make_property(portal_id="prop_123_abc")
+        db.upsert_property(prop)
+        db.upsert_score(_make_scored(prop, sample_zone))
+        # Should not raise
+        assert db.dismiss(prop.unique_id) is True
+
+    def test_valid_uid_with_hyphens(self, db, sample_zone):
+        """UIDs with hyphens should pass validation."""
+        prop = _make_property(portal_id="prop-123-abc")
+        db.upsert_property(prop)
+        db.upsert_score(_make_scored(prop, sample_zone))
+        # Should not raise
+        assert db.mark_viewed(prop.unique_id) is True
+
+    def test_sql_injection_in_dismiss_rejected(self, db):
+        """SQL injection attempt via dismiss() should raise ValueError."""
+        malicious_uid = "pisos:123'; DROP TABLE properties;--"
+        with pytest.raises(ValueError, match="Invalid property_uid format"):
+            db.dismiss(malicious_uid)
+
+    def test_sql_injection_in_undismiss_rejected(self, db):
+        """SQL injection attempt via undismiss() should raise ValueError."""
+        malicious_uid = "pisos:123 OR 1=1"
+        with pytest.raises(ValueError, match="Invalid property_uid format"):
+            db.undismiss(malicious_uid)
+
+    def test_sql_injection_in_mark_alerted_rejected(self, db):
+        """SQL injection attempt via mark_alerted() should raise ValueError."""
+        malicious_uid = "pisos:'; DELETE FROM scored_properties;--"
+        with pytest.raises(ValueError, match="Invalid property_uid format"):
+            db.mark_alerted(malicious_uid)
+
+    def test_sql_injection_in_is_alerted_rejected(self, db):
+        """SQL injection attempt via is_alerted() should raise ValueError."""
+        malicious_uid = "pisos:1 UNION SELECT * FROM properties"
+        with pytest.raises(ValueError, match="Invalid property_uid format"):
+            db.is_alerted(malicious_uid)
+
+    def test_sql_injection_in_mark_viewed_rejected(self, db):
+        """SQL injection attempt via mark_viewed() should raise ValueError."""
+        malicious_uid = "pisos:x'; UPDATE properties SET price=0;--"
+        with pytest.raises(ValueError, match="Invalid property_uid format"):
+            db.mark_viewed(malicious_uid)
+
+    def test_sql_injection_in_save_comment_rejected(self, db):
+        """SQL injection attempt via save_comment() should raise ValueError."""
+        malicious_uid = "pisos:1; INSERT INTO telegram_chats VALUES('hacker','','')"
+        with pytest.raises(ValueError, match="Invalid property_uid format"):
+            db.save_comment(malicious_uid, "test comment")
+
+    def test_sql_injection_in_get_price_trend_rejected(self, db):
+        """SQL injection attempt via get_price_trend() should raise ValueError."""
+        malicious_uid = "pisos:123'; DROP TABLE--"
+        with pytest.raises(ValueError, match="Invalid property_uid format"):
+            db.get_price_trend(malicious_uid)
+
+    def test_sql_injection_in_get_price_per_m2_analysis_rejected(self, db):
+        """SQL injection attempt via get_price_per_m2_analysis() should raise ValueError."""
+        malicious_uid = "pisos:1' OR '1'='1"
+        with pytest.raises(ValueError, match="Invalid property_uid format"):
+            db.get_price_per_m2_analysis(malicious_uid)
+
+    def test_empty_uid_rejected(self, db):
+        """Empty UID should raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid property_uid format"):
+            db.dismiss("")
+
+    def test_uid_without_colon_rejected(self, db):
+        """UID without colon separator should raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid property_uid format"):
+            db.dismiss("pisos12345")
+
+    def test_uid_with_spaces_rejected(self, db):
+        """UID with spaces should raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid property_uid format"):
+            db.dismiss("pisos:123 456")
+
+    def test_uid_with_quotes_rejected(self, db):
+        """UID with quotes should raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid property_uid format"):
+            db.dismiss("pisos:'test'")
+
+    def test_uid_with_semicolon_rejected(self, db):
+        """UID with semicolon should raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid property_uid format"):
+            db.dismiss("pisos:test;drop")

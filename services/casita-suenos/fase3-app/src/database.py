@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import re
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -24,6 +25,42 @@ from pathlib import Path
 from models import PriceEvent, Property, ScoredProperty
 
 logger = logging.getLogger(__name__)
+
+# --------------------------------------------------------------------------
+# SQL Injection Prevention
+# --------------------------------------------------------------------------
+# All user-facing data is passed via parameterized queries (?-placeholders).
+# String interpolation (f-strings) is ONLY used for:
+#   1. Column/table names from internal constants (schema, migrations)
+#   2. Validated sort columns (resolved through _SORT_MAP whitelist)
+#   3. Hardcoded filter clauses (e.g., "AND s.viewed = 1")
+#
+# property_uid values originate from scraper discovery (portal:portal_id format)
+# and are validated before any SQL operation to prevent injection if the data
+# source changes in the future.
+# --------------------------------------------------------------------------
+
+# Pattern for valid property UIDs: portal:id where both are alphanumeric/underscore
+# Examples: "pisos:12345", "idealista:abc_123", "habitaclia:prop-456"
+_VALID_UID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+$")
+
+
+def _validate_property_uid(uid: str) -> None:
+    """Validate that a property UID matches the expected format.
+
+    UIDs come from portal discovery (portal:portal_id) and should only contain
+    alphanumeric characters, underscores, and hyphens. This validation prevents
+    SQL injection if the data source changes or is compromised.
+
+    Raises:
+        ValueError: If the UID contains unexpected characters.
+    """
+    if not uid or not _VALID_UID_PATTERN.match(uid):
+        raise ValueError(
+            f"Invalid property_uid format: {uid!r}. "
+            "Expected 'portal:id' with alphanumeric/underscore/hyphen characters."
+        )
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS properties (
@@ -396,6 +433,9 @@ class Database:
         self._conn.commit()
 
     def mark_alerted(self, property_uid: str) -> None:
+        # NOTE: property_uid comes from internal DB lookup after scraper discovery.
+        # Validated to prevent injection if data source changes in the future.
+        _validate_property_uid(property_uid)
         self._conn.execute(
             """INSERT OR IGNORE INTO scored_properties
                (property_uid, zone_id, score_total,
@@ -412,6 +452,9 @@ class Database:
         self._conn.commit()
 
     def is_alerted(self, property_uid: str) -> bool:
+        # NOTE: property_uid comes from internal DB lookup after scraper discovery.
+        # Validated to prevent injection if data source changes in the future.
+        _validate_property_uid(property_uid)
         row = self._conn.execute(
             "SELECT alerted FROM scored_properties WHERE property_uid = ?",
             (property_uid,),
@@ -424,6 +467,9 @@ class Database:
 
     def dismiss(self, property_uid: str) -> bool:
         """Descarta una propiedad. Devuelve True si exist├¡a."""
+        # NOTE: property_uid comes from internal DB lookup after scraper discovery.
+        # Validated to prevent injection if data source changes in the future.
+        _validate_property_uid(property_uid)
         row = self._conn.execute(
             "SELECT 1 FROM scored_properties WHERE property_uid = ?",
             (property_uid,),
@@ -440,6 +486,9 @@ class Database:
 
     def undismiss(self, property_uid: str) -> bool:
         """Recupera una propiedad descartada. Devuelve True si exist├¡a."""
+        # NOTE: property_uid comes from internal DB lookup after scraper discovery.
+        # Validated to prevent injection if data source changes in the future.
+        _validate_property_uid(property_uid)
         row = self._conn.execute(
             "SELECT 1 FROM scored_properties WHERE property_uid = ?",
             (property_uid,),
@@ -679,6 +728,9 @@ class Database:
               - ``price_change_pct``: porcentaje de cambio redondeado o None
               - ``trend``: 'down' | 'up' | 'stable' | None (None si no hay historial)
         """
+        # NOTE: uid comes from internal DB lookup after scraper discovery.
+        # Validated to prevent injection if data source changes in the future.
+        _validate_property_uid(uid)
         row = self._conn.execute(
             "SELECT old_price, new_price, delta_pct FROM price_history "
             "WHERE property_uid = ? ORDER BY detected_at DESC, id DESC LIMIT 1",
@@ -791,6 +843,9 @@ class Database:
 
         Si el ``uid`` no existe, todos los campos son ``None``.
         """
+        # NOTE: uid comes from internal DB lookup after scraper discovery.
+        # Validated to prevent injection if data source changes in the future.
+        _validate_property_uid(uid)
         empty = {
             "price_per_m2": None,
             "zone_avg_price_per_m2": None,
@@ -931,6 +986,9 @@ class Database:
     # ------------------------------------------------------------------
     def mark_viewed(self, property_uid: str) -> bool:
         """Marca una propiedad como vista. Devuelve True si existia."""
+        # NOTE: property_uid comes from internal DB lookup after scraper discovery.
+        # Validated to prevent injection if data source changes in the future.
+        _validate_property_uid(property_uid)
         row = self._conn.execute(
             "SELECT 1 FROM scored_properties WHERE property_uid = ?", (property_uid,)
         ).fetchone()
@@ -946,6 +1004,9 @@ class Database:
 
     def save_comment(self, property_uid: str, comment: str) -> bool:
         """Guarda un comentario para una propiedad. Devuelve True si existia."""
+        # NOTE: property_uid comes from internal DB lookup after scraper discovery.
+        # Validated to prevent injection if data source changes in the future.
+        _validate_property_uid(property_uid)
         row = self._conn.execute(
             "SELECT 1 FROM scored_properties WHERE property_uid = ?", (property_uid,)
         ).fetchone()
