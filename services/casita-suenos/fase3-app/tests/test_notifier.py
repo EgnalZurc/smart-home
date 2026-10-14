@@ -458,3 +458,119 @@ class TestPriceDropFormatting:
         result = _format_price_drop_alert(event, "Test Casa", "https://example.com", "Zamora")
 
         assert "📈" in result
+
+
+class TestHighScorerAlert:
+    """Tests for the high-scorer alert formatting and notifier method."""
+
+    def test_format_high_scorer_includes_core_fields(self):
+        """Should include title, price, score and link."""
+        from notifier import _format_high_scorer_alert
+
+        result = _format_high_scorer_alert(
+            {
+                "title": "Casa con piscina",
+                "price": 150000,
+                "score": 125.5,
+                "url": "https://example.com/casa",
+            }
+        )
+
+        assert "Casa con piscina" in result
+        assert "150.000€" in result
+        assert "125.5" in result
+        assert "https://example.com/casa" in result
+
+    def test_format_high_scorer_optional_fields(self):
+        """Should include zone, rooms and size when present."""
+        from notifier import _format_high_scorer_alert
+
+        result = _format_high_scorer_alert(
+            {
+                "title": "Casa",
+                "price": 120000,
+                "score": 130.0,
+                "url": "https://example.com/x",
+                "zone": "Zamora Meseta",
+                "rooms": 4,
+                "size_m2": 110.0,
+            }
+        )
+
+        assert "Zamora Meseta" in result
+        assert "4 hab." in result
+        assert "110 m²" in result
+
+    def test_format_high_scorer_handles_missing_optionals(self):
+        """Should format with only the core fields present."""
+        from notifier import _format_high_scorer_alert
+
+        result = _format_high_scorer_alert(
+            {
+                "title": "Minimal",
+                "price": 100000,
+                "score": 120.0,
+                "url": "https://example.com/min",
+            }
+        )
+
+        assert "Minimal" in result
+        assert "100.000€" in result
+        # No rooms/size lines should break formatting
+        assert "hab." not in result
+        assert "m²" not in result
+
+    def test_notify_high_scorer_sends_message(self):
+        """notify_high_scorer should send a message built from the dict."""
+        from notifier import TelegramNotifier
+
+        sent_texts = []
+
+        def mock_post(*args, **kwargs):
+            sent_texts.append(kwargs.get("json", {}).get("text", ""))
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = {"ok": True}
+            return mock_resp
+
+        notifier = TelegramNotifier.__new__(TelegramNotifier)
+        notifier._bot = MagicMock()
+        notifier._bot.token = "fake_token"
+        notifier._fallback_chat_id = "123456"
+        notifier._db = None
+
+        with patch("httpx.post", mock_post):
+            result = notifier.notify_high_scorer(
+                {
+                    "title": "Casa destacada",
+                    "price": 140000,
+                    "score": 128.0,
+                    "url": "https://example.com/casa",
+                }
+            )
+
+        assert result is True
+        assert len(sent_texts) == 1
+        assert "Casa destacada" in sent_texts[0]
+        assert "140.000€" in sent_texts[0]
+        assert "https://example.com/casa" in sent_texts[0]
+
+    def test_notify_high_scorer_without_chat_ids(self):
+        """Should return False gracefully when there are no chats."""
+        from notifier import TelegramNotifier
+
+        notifier = TelegramNotifier.__new__(TelegramNotifier)
+        notifier._bot = MagicMock()
+        notifier._bot.token = "fake_token"
+        notifier._fallback_chat_id = ""
+        notifier._db = None
+
+        result = notifier.notify_high_scorer(
+            {
+                "title": "Casa",
+                "price": 100000,
+                "score": 120.0,
+                "url": "https://example.com/x",
+            }
+        )
+
+        assert result is False

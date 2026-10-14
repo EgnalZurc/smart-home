@@ -56,6 +56,27 @@ casita-suenos/
 | **Pisos.com** | Scraping directo | Activo |
 | **Habitaclia** | Scraping directo | Activo |
 
+## Notificaciones Telegram
+
+Cada vez que una propiedad **nueva** supera el umbral de score (`ALERT_THRESHOLD = 119`
+pts, el 66 % de los 180 posibles) al ser procesada, se envía una notificación
+individual por Telegram a todos los chats registrados (fallback a `TELEGRAM_CHAT_ID`).
+
+- Se dispara desde `casita_scheduler.py` en los tres flujos de ingestión: scraping web
+  completo (`_run_scraping`), check de email de Idealista (`_do_gmail_check`) y check de
+  email de Fotocasa (`_do_fotocasa_check`).
+- La notificación se envía **una sola vez por propiedad**: el scheduler marca la casa
+  como alertada (`db.mark_alerted`) antes de notificar, de modo que las reejecuciones
+  no repiten el aviso.
+- El mensaje lo construye `TelegramNotifier.notify_high_scorer(property_dict)` e incluye
+  **título, precio, score y enlace** al anuncio (y, si están disponibles, zona,
+  habitaciones y superficie).
+- Un fallo al enviar la notificación se registra en el log pero no interrumpe el
+  procesamiento del resto de propiedades.
+
+Esto es independiente del resumen agregado de cada scraping y del resumen semanal, que
+siguen enviándose como antes.
+
 ## Referencia técnica completa
 
 - **Requisitos, scoring, zonas, endpoints, operaciones:** `.kiro/steering/casita-suenos.md`
