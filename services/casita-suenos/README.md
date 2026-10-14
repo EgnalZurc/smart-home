@@ -77,6 +77,30 @@ individual por Telegram a todos los chats registrados (fallback a `TELEGRAM_CHAT
 Esto es independiente del resumen agregado de cada scraping y del resumen semanal, que
 siguen enviándose como antes.
 
+## Análisis precio/m² vs media de zona
+
+Cada propiedad del radar se enriquece con un análisis de su precio por metro cuadrado
+comparado con la **media de su zona**, para detectar de un vistazo chollos (por debajo
+de la media) y sobreprecios.
+
+El cálculo vive en `database.py`:
+
+- **`get_zone_avg_price_per_m2(zone_id)`** — media de `price / size_m2` de las
+  propiedades **activas** (no descartadas) de la zona con metros cuadrados válidos
+  (`size_m2 > 0`). Devuelve `None` si la zona no tiene datos utilizables.
+- **`get_price_per_m2_analysis(uid)`** — análisis de una propiedad concreta. Devuelve:
+
+  | Campo | Descripción |
+  |-------|-------------|
+  | `price_per_m2` | Precio/m² de esta propiedad (`None` si no hay m²) |
+  | `zone_avg_price_per_m2` | Media de la zona (`None` si no hay datos) |
+  | `below_zone_avg` | `True` si está por debajo de la media de la zona |
+  | `pct_vs_zone_avg` | % respecto a la media; negativo = más barato (ej. `-15.0` = 15 % más barato), positivo = más caro |
+
+Estos cuatro campos se añaden automáticamente a cada item de
+`GET /api/casita/radar`. La media por zona se cachea dentro de la llamada para no
+repetir la agregación por cada propiedad.
+
 ## Referencia técnica completa
 
 - **Requisitos, scoring, zonas, endpoints, operaciones:** `.kiro/steering/casita-suenos.md`
@@ -99,7 +123,7 @@ CASITA_DATA_DIR=/app/data
 |--------|----------|-------------|
 | GET | `/health` | Service health check (incluye `last_scheduler_tick` y `scheduler_stale`) |
 | GET | `/status` | Property listings with status |
-| GET | `/api/casita/radar` | Properties above alert threshold |
+| GET | `/api/casita/radar` | Properties above alert threshold (incl. price/m² vs zone-average analysis) |
 | GET | `/api/casita/alerts` | **High-scoring properties** for unified dashboard alerts (score ≥119 in last 24h) |
 | GET | `/api/casita/dismissed` | Dismissed properties |
 | GET | `/api/casita/schedule` | Scraping schedule |

@@ -541,6 +541,22 @@ class Database:
         ).fetchall()
 
         items = [dict(r) for r in rows]
+        # Enriquecer cada item con el análisis precio/m² vs media de la zona.
+        # Se cachea la media por zona para no repetir la agregación por item.
+        _zone_avg_cache: dict[str, float | None] = {}
+        for item in items:
+            zone_id = item.get("zone_id", "")
+            size_m2 = item.get("size_m2")
+            price = item.get("price")
+            if size_m2 and size_m2 > 0 and price is not None:
+                price_per_m2 = round(price / size_m2, 2)
+            else:
+                price_per_m2 = None
+            if zone_id not in _zone_avg_cache:
+                _zone_avg_cache[zone_id] = self.get_zone_avg_price_per_m2(zone_id)
+            item.update(
+                self._build_price_per_m2_dict(price_per_m2, _zone_avg_cache[zone_id])
+            )
         return {
             "items": items,
             "total": total,
@@ -733,6 +749,96 @@ class Database:
             (min_score,),
         ).fetchall()
         return {r["zone_id"]: r["cnt"] for r in rows}
+
+    # ------------------------------------------------------------------
+    # Análisis precio/m² vs media de zona
+    # ------------------------------------------------------------------
+
+    def get_zone_avg_price_per_m2(self, zone_id: str) -> float | None:
+        """Media de precio/m² de las propiedades activas (no descartadas) de la zona.
+
+        Solo considera propiedades con ``size_m2`` positivo (necesario para
+        calcular el precio por metro cuadrado). Devuelve ``None`` si la zona no
+        tiene ninguna propiedad con metros cuadrados válidos.
+
+        Las propiedades descartadas (``scored_properties.dismissed = 1``) se
+        excluyen para que la media refleje el mercado vigente del radar.
+        """
+        row = self._conn.execute(
+            """SELECT AVG(p.price * 1.0 / p.size_m2) AS avg_ppm2
+               FROM properties p
+               LEFT JOIN scored_properties s ON s.property_uid = p.uid
+               WHERE p.zone_id = ?
+                 AND p.size_m2 IS NOT NULL
+                 AND p.size_m2 > 0
+                 AND COALESCE(s.dismissed, 0) = 0""",
+            (zone_id,),
+        ).fetchone()
+        avg = row["avg_ppm2"] if row else None
+        return round(avg, 2) if avg is not None else None
+
+    def get_price_per_m2_analysis(self, uid: str) -> dict:
+        """Analiza el precio/m² de una propiedad frente a la media de su zona.
+
+        Devuelve un dict con:
+          - ``price_per_m2``: precio/m² de esta propiedad (``None`` si no hay m²)
+          - ``zone_avg_price_per_m2``: media de la zona (``None`` si no hay datos)
+          - ``below_zone_avg``: ``True`` si el precio/m² está por debajo de la
+            media de la zona (``None`` si falta algún dato para comparar)
+          - ``pct_vs_zone_avg``: porcentaje respecto a la media; negativo = más
+            barato que la media (ej. ``-15.0`` = 15% más barato), positivo = más
+            caro. ``None`` si falta algún dato.
+
+        Si el ``uid`` no existe, todos los campos son ``None``.
+        """
+        empty = {
+            "price_per_m2": None,
+            "zone_avg_price_per_m2": None,
+            "below_zone_avg": None,
+            "pct_vs_zone_avg": None,
+        }
+
+        row = self._conn.execute(
+            "SELECT zone_id, price, size_m2 FROM properties WHERE uid = ?",
+            (uid,),
+        ).fetchone()
+        if row is None:
+            return empty
+
+        size_m2 = row["size_m2"]
+        price = row["price"]
+        if not size_m2 or size_m2 <= 0:
+            # Sin metros cuadrados no se puede calcular precio/m²
+            return empty
+
+        price_per_m2 = round(price / size_m2, 2)
+        zone_avg = self.get_zone_avg_price_per_m2(row["zone_id"])
+
+        return self._build_price_per_m2_dict(price_per_m2, zone_avg)
+
+    @staticmethod
+    def _build_price_per_m2_dict(
+        price_per_m2: float | None, zone_avg: float | None
+    ) -> dict:
+        """Construye el dict de análisis a partir de precio/m² y media de zona.
+
+        Reutilizable por ``get_price_per_m2_analysis`` y por el enriquecido del
+        radar, donde el precio/m² y la media de zona ya se han calculado.
+        """
+        if price_per_m2 is None or zone_avg is None or zone_avg <= 0:
+            return {
+                "price_per_m2": price_per_m2,
+                "zone_avg_price_per_m2": zone_avg,
+                "below_zone_avg": None,
+                "pct_vs_zone_avg": None,
+            }
+        pct = round((price_per_m2 - zone_avg) / zone_avg * 100, 1)
+        return {
+            "price_per_m2": price_per_m2,
+            "zone_avg_price_per_m2": zone_avg,
+            "below_zone_avg": price_per_m2 < zone_avg,
+            "pct_vs_zone_avg": pct,
+        }
 
     # ------------------------------------------------------------------
     # Visto y comentarios

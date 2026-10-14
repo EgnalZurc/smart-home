@@ -489,6 +489,142 @@ class TestRadar:
         assert len(db.get_radar_properties(min_score=0.0)["items"]) == 1
 
 
+# ── Tests del análisis precio/m² vs media de zona ─────────────────────────────
+
+
+class TestPricePerM2Analysis:
+    """Tests de get_zone_avg_price_per_m2, get_price_per_m2_analysis y del
+    enriquecido del radar con los campos precio/m²."""
+
+    def _insert(self, db, prop, zone, score_total=120.0):
+        db.upsert_property(prop)
+        db.upsert_score(_make_scored(prop, zone, score_total))
+
+    # ── get_zone_avg_price_per_m2 ──────────────────────────────────────────
+
+    def test_zone_avg_none_when_no_properties(self, db):
+        assert db.get_zone_avg_price_per_m2("zamora_meseta") is None
+
+    def test_zone_avg_single_property(self, db, sample_zone):
+        # 200_000€ / 100 m² = 2000 €/m²
+        p = _make_property(portal_id="a", price=200_000, size_m2=100.0)
+        self._insert(db, p, sample_zone)
+        assert db.get_zone_avg_price_per_m2(sample_zone.id) == 2000.0
+
+    def test_zone_avg_averages_multiple_properties(self, db, sample_zone):
+        # 2000 €/m² y 3000 €/m² -> media 2500 €/m²
+        p1 = _make_property(portal_id="a", price=200_000, size_m2=100.0)
+        p2 = _make_property(portal_id="b", price=300_000, size_m2=100.0)
+        self._insert(db, p1, sample_zone)
+        self._insert(db, p2, sample_zone)
+        assert db.get_zone_avg_price_per_m2(sample_zone.id) == 2500.0
+
+    def test_zone_avg_ignores_properties_without_m2(self, db, sample_zone):
+        p1 = _make_property(portal_id="a", price=200_000, size_m2=100.0)
+        p2 = _make_property(portal_id="b", price=300_000, size_m2=None)
+        self._insert(db, p1, sample_zone)
+        self._insert(db, p2, sample_zone)
+        # Solo p1 cuenta -> 2000 €/m²
+        assert db.get_zone_avg_price_per_m2(sample_zone.id) == 2000.0
+
+    def test_zone_avg_excludes_dismissed(self, db, sample_zone):
+        p1 = _make_property(portal_id="a", price=200_000, size_m2=100.0)
+        p2 = _make_property(portal_id="b", price=400_000, size_m2=100.0)
+        self._insert(db, p1, sample_zone)
+        self._insert(db, p2, sample_zone)
+        db.dismiss(p2.unique_id)
+        # Solo p1 activa -> 2000 €/m² (p2 descartada no infla la media)
+        assert db.get_zone_avg_price_per_m2(sample_zone.id) == 2000.0
+
+    def test_zone_avg_scoped_by_zone(self, db, sample_zone):
+        p1 = _make_property(portal_id="a", price=200_000, size_m2=100.0)
+        p2 = _make_property(
+            portal_id="b", price=500_000, size_m2=100.0, zone_id="otra_zona"
+        )
+        self._insert(db, p1, sample_zone)
+        db.upsert_property(p2)  # p2 en otra zona
+        assert db.get_zone_avg_price_per_m2(sample_zone.id) == 2000.0
+
+    # ── get_price_per_m2_analysis ──────────────────────────────────────────
+
+    def test_analysis_unknown_uid_all_none(self, db):
+        result = db.get_price_per_m2_analysis("no-existe")
+        assert result == {
+            "price_per_m2": None,
+            "zone_avg_price_per_m2": None,
+            "below_zone_avg": None,
+            "pct_vs_zone_avg": None,
+        }
+
+    def test_analysis_property_without_m2(self, db, sample_zone):
+        p = _make_property(portal_id="a", price=200_000, size_m2=None)
+        self._insert(db, p, sample_zone)
+        result = db.get_price_per_m2_analysis(p.unique_id)
+        assert result["price_per_m2"] is None
+        assert result["below_zone_avg"] is None
+        assert result["pct_vs_zone_avg"] is None
+
+    def test_analysis_below_zone_average(self, db, sample_zone):
+        # cheap: 1500 €/m², otras dos a 2000 y 2500 -> media 2000 €/m²
+        cheap = _make_property(portal_id="cheap", price=150_000, size_m2=100.0)
+        mid = _make_property(portal_id="mid", price=200_000, size_m2=100.0)
+        exp = _make_property(portal_id="exp", price=250_000, size_m2=100.0)
+        for p in (cheap, mid, exp):
+            self._insert(db, p, sample_zone)
+        result = db.get_price_per_m2_analysis(cheap.unique_id)
+        assert result["price_per_m2"] == 1500.0
+        assert result["zone_avg_price_per_m2"] == 2000.0
+        assert result["below_zone_avg"] is True
+        # (1500 - 2000) / 2000 * 100 = -25.0 -> 25% más barato
+        assert result["pct_vs_zone_avg"] == -25.0
+
+    def test_analysis_above_zone_average(self, db, sample_zone):
+        cheap = _make_property(portal_id="cheap", price=150_000, size_m2=100.0)
+        mid = _make_property(portal_id="mid", price=200_000, size_m2=100.0)
+        exp = _make_property(portal_id="exp", price=250_000, size_m2=100.0)
+        for p in (cheap, mid, exp):
+            self._insert(db, p, sample_zone)
+        result = db.get_price_per_m2_analysis(exp.unique_id)
+        assert result["price_per_m2"] == 2500.0
+        assert result["zone_avg_price_per_m2"] == 2000.0
+        assert result["below_zone_avg"] is False
+        # (2500 - 2000) / 2000 * 100 = 25.0 -> 25% más caro
+        assert result["pct_vs_zone_avg"] == 25.0
+
+    # ── Enriquecido del radar ──────────────────────────────────────────────
+
+    def test_radar_includes_price_per_m2_fields(self, db, sample_zone):
+        cheap = _make_property(portal_id="cheap", price=150_000, size_m2=100.0)
+        exp = _make_property(portal_id="exp", price=250_000, size_m2=100.0)
+        for p in (cheap, exp):
+            self._insert(db, p, sample_zone)
+        items = db.get_radar_properties(min_score=0.0)["items"]
+        assert len(items) == 2
+        for item in items:
+            for field in (
+                "price_per_m2",
+                "zone_avg_price_per_m2",
+                "below_zone_avg",
+                "pct_vs_zone_avg",
+            ):
+                assert field in item, f"Campo '{field}' no encontrado en el radar"
+
+    def test_radar_price_per_m2_values_match_analysis(self, db, sample_zone):
+        cheap = _make_property(portal_id="cheap", price=150_000, size_m2=100.0)
+        exp = _make_property(portal_id="exp", price=250_000, size_m2=100.0)
+        for p in (cheap, exp):
+            self._insert(db, p, sample_zone)
+        items = {
+            i["uid"]: i for i in db.get_radar_properties(min_score=0.0)["items"]
+        }
+        cheap_item = items[cheap.unique_id]
+        # media (1500 + 2500) / 2 = 2000 €/m²
+        assert cheap_item["price_per_m2"] == 1500.0
+        assert cheap_item["zone_avg_price_per_m2"] == 2000.0
+        assert cheap_item["below_zone_avg"] is True
+        assert cheap_item["pct_vs_zone_avg"] == -25.0
+
+
 # ── Tests del resumen semanal ─────────────────────────────────────────────────
 
 
