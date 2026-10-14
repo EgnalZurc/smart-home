@@ -3,6 +3,17 @@
 Orchestrates the state machine, reads sensors, applies outputs via MELCloud.
 Decision logic is 100% in state_machine.py (pure function).
 This module only does I/O and maintains temporal state.
+
+The controller runs a background thread that periodically:
+1. Reads temperature sensors via MQTT
+2. Evaluates the state machine to determine desired AC state
+3. Sends commands to MELCloud when state changes
+4. Updates observable state for the API/UI
+5. Records history for debugging and analysis
+
+Thread Safety:
+    All public methods that access mutable state use _lock for thread safety.
+    MELCloud API calls are serialized with _melcloud_lock to prevent races.
 """
 
 import logging
@@ -10,6 +21,16 @@ import threading
 import time
 from dataclasses import dataclass
 
+from config import (
+    DEFAULT_AC_MODE,
+    DEFAULT_FAN_SPEED,
+    DEFAULT_FAN_SPEED_MAX,
+    DEFAULT_MANUAL_TEMP,
+    DEFAULT_SETPOINT,
+    HISTORY_MAX_SIZE,
+    HISTORY_TRIM_SIZE,
+    SECONDS_SINCE_OFF_INITIAL,
+)
 from smart_home_common.clients.melcloud import MelCloudClient
 from smart_home_common.mqtt.handler import MqttHandler
 from state_persistence import PersistedState, load_state, save_state
@@ -29,7 +50,32 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ControlConfig:
-    """Control parameters."""
+    """Control parameters for the AC controller.
+
+    These parameters can be adjusted at runtime through the API and are
+    persisted to disk to survive restarts.
+
+    Attributes:
+        target_temperature: Desired room temperature in Celsius.
+        hysteresis_on: Temperature above target to start cooling (°C).
+        hysteresis_off: Temperature below target to stop cooling (°C).
+        min_setpoint: Minimum AC setpoint for proportional control (°C).
+        max_setpoint: Maximum AC setpoint for proportional control (°C).
+        cooldown_seconds: Compressor protection period after shutdown.
+        loop_interval: Seconds between control loop iterations.
+        sensor_timeout: Seconds before a sensor is considered offline.
+        ac_state_update_interval: Seconds between MELCloud state polls.
+        ac_mode: Default AC operation mode ("cool" or "heat").
+        fan_speed_max: Maximum fan speed for cooling_max state.
+        fan_speed_modulate: Fan speed for modulating state (0=auto).
+        device_id: MELCloud device identifier.
+        building_id: MELCloud building identifier.
+        melcloud_max_failures: Consecutive failures before ERROR state.
+        ac_power_cooling_max: Power consumption in cooling_max (kW).
+        ac_power_cooling_mid: Power consumption in cooling_mid (kW).
+        ac_power_modulating: Power consumption in modulating (kW).
+        ac_power_forced_on: Power consumption in manual/forced_on (kW).
+    """
 
     target_temperature: float = 26.0
     hysteresis_on: float = 0.5
@@ -39,14 +85,13 @@ class ControlConfig:
     cooldown_seconds: int = 180
     loop_interval: int = 45
     sensor_timeout: int = 600
-    ac_state_update_interval: int = 30  # Seconds between AC real state updates
-    ac_mode: str = "cool"
-    fan_speed_max: int = 3
-    fan_speed_modulate: int = 0
+    ac_state_update_interval: int = 30
+    ac_mode: str = DEFAULT_AC_MODE
+    fan_speed_max: int = DEFAULT_FAN_SPEED_MAX
+    fan_speed_modulate: int = DEFAULT_FAN_SPEED
     device_id: int = 0
     building_id: int = 0
     melcloud_max_failures: int = 100
-    # Power for energy calculation (kW)
     ac_power_cooling_max: float = 2.5
     ac_power_cooling_mid: float = 1.75
     ac_power_modulating: float = 1.25
@@ -55,26 +100,51 @@ class ControlConfig:
 
 @dataclass
 class ControlState:
-    """Observable controller state (for API/UI)."""
+    """Observable controller state for API/UI.
+
+    This dataclass represents the current state of the controller as seen
+    by external consumers (REST API, web UI). It is updated after each
+    control loop tick.
+
+    Attributes:
+        state: Current controller state name (e.g., "off", "cooling_max").
+        setpoint: Current AC setpoint temperature (°C).
+        average_temp: Average temperature from active sensors (°C).
+        average_humidity: Average humidity from active sensors (%).
+        active_sensors: Number of sensors reporting within timeout.
+        total_sensors: Total number of configured sensors.
+        last_update: Timestamp of last state update.
+        control_mode: User-selected mode ("auto", "manual", "off").
+        sensor_alert: True if sensor data is stale or missing.
+        melcloud_error: True if MELCloud communication has failed.
+        manual_params: User-specified parameters for manual mode.
+        ac_mode: Current AC operation mode ("cool" or "heat").
+        fan_speed: Current fan speed setting (0-3).
+        ac_real_power: Real AC power state from MELCloud (cached).
+        ac_real_mode: Real AC mode from MELCloud (cached).
+        ac_real_fan_speed: Real AC fan speed from MELCloud (cached).
+        ac_real_setpoint: Real AC setpoint from MELCloud (cached).
+        ac_real_room_temp: Real room temp from AC sensor (cached).
+        ac_real_last_update: Timestamp of last MELCloud cache update.
+    """
 
     state: str = "off"
-    setpoint: float = 24.0
+    setpoint: float = DEFAULT_SETPOINT
     average_temp: float | None = None
-    average_humidity: float | None = None  # Added to avoid recalculating in API
+    average_humidity: float | None = None
     active_sensors: int = 0
     total_sensors: int = 5
     last_update: float = 0.0
-    control_mode: str = "auto"  # "auto", "manual", "off" - STARTS IN AUTO (neutral)
+    control_mode: str = "auto"
     sensor_alert: bool = False
     melcloud_error: bool = False
     manual_params: ManualParams | None = None
-    ac_mode: str = "cool"  # Current AC mode: "cool" or "heat"
-    fan_speed: int = 0  # Current fan speed
+    ac_mode: str = DEFAULT_AC_MODE
+    fan_speed: int = DEFAULT_FAN_SPEED
 
-    # Real AC state (cached from MELCloud)
     ac_real_power: bool | None = None
-    ac_real_mode: str | None = None  # "cool" or "heat"
-    ac_real_fan_speed: int | None = None  # 0-3
+    ac_real_mode: str | None = None
+    ac_real_fan_speed: int | None = None
     ac_real_setpoint: float | None = None
     ac_real_room_temp: float | None = None
     ac_real_last_update: float = 0.0
@@ -82,7 +152,17 @@ class ControlState:
 
 @dataclass
 class HistoryRecord:
-    """History record."""
+    """Single history record for controller action tracking.
+
+    Used for debugging, analysis, and the /api/ac/history endpoint.
+
+    Attributes:
+        timestamp: Unix timestamp of the record.
+        average_temp: Average temperature at the time (°C).
+        state: Controller state at the time.
+        setpoint: AC setpoint at the time (°C).
+        active_sensors: Number of active sensors.
+    """
 
     timestamp: float
     average_temp: float | None
@@ -92,40 +172,73 @@ class HistoryRecord:
 
 
 class ACController:
-    """Virtual thermostat controller. Uses state machine to decide."""
+    """Virtual thermostat controller using a state machine for decisions.
+
+    This class implements a smart thermostat that:
+    - Reads temperature from multiple Zigbee sensors via MQTT
+    - Uses a hysteresis-based state machine for control decisions
+    - Sends commands to MELCloud to control a Mitsubishi AC unit
+    - Provides observable state for a web UI and REST API
+    - Persists configuration and state across restarts
+
+    The control logic is fully delegated to the state_machine module,
+    keeping this class focused on I/O and state management.
+
+    Thread Safety:
+        The controller runs a background thread for the control loop.
+        All public state access methods are protected by _lock.
+        MELCloud API calls are serialized by _melcloud_lock.
+
+    Example:
+        >>> mqtt_handler = MqttHandler(...)
+        >>> melcloud = MelCloudClient(...)
+        >>> config = ControlConfig(target_temperature=26.0)
+        >>> controller = ACController(mqtt_handler, melcloud, config)
+        >>> controller.restore_state()  # Load previous state if available
+        >>> controller.start()  # Begin control loop
+        >>> # ... later ...
+        >>> controller.stop()  # Clean shutdown
+    """
 
     def __init__(
         self,
         mqtt_handler: MqttHandler,
         melcloud: MelCloudClient,
         config: ControlConfig,
-    ):
+    ) -> None:
+        """Initialize the AC controller.
+
+        Args:
+            mqtt_handler: MQTT handler for sensor data subscription.
+            melcloud: MELCloud client for AC control commands.
+            config: Controller configuration parameters.
+        """
         self.mqtt = mqtt_handler
         self.melcloud = melcloud
         self.config = config
         self.state = ControlState()
         # Initialize manual_params with defaults
         self.state.manual_params = ManualParams(
-            temperature=23.0, fan_speed=0, mode="cool"
+            temperature=DEFAULT_MANUAL_TEMP,
+            fan_speed=DEFAULT_FAN_SPEED,
+            mode=DEFAULT_AC_MODE,
         )
         self.history: list[HistoryRecord] = []
         self._running = False
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
-        self._melcloud_lock = threading.Lock()  # Serialize MELCloud API calls
+        self._melcloud_lock = threading.Lock()
 
         # Internal state machine variables
         self._current_sm_state: ControllerState = ControllerState.OFF
         self._last_off_time: float = 0.0
         self._last_sensor_update_time: float = time.time()
         self._consecutive_melcloud_failures: int = 0
-        self._error_tracker = None  # injected via set_error_tracker()
+        self._error_tracker = None
         self._last_outputs: StateMachineOutputs | None = None
-        self._last_modulating_setpoint: float = 24.0
+        self._last_modulating_setpoint: float = DEFAULT_SETPOINT
 
-        # Thermal analysis (optional, injected via set_thermal_buffer()).
-        # When present, one ThermalSample is appended per tick so the
-        # /api/ac/thermal-curves endpoint can derive heating/cooling curves.
+        # Thermal analysis (optional, injected via set_thermal_buffer())
         self._thermal_buffer = None
         self._outdoor_temp_provider = None
 
@@ -133,16 +246,28 @@ class ACController:
         self._energy_state = {
             "last_state": "off",
             "last_transition": time.time(),
-            "kwh_session": 0.0,  # kWh accumulated in current session
+            "kwh_session": 0.0,
         }
 
     @property
     def current_state(self) -> ControlState:
+        """Get the current observable controller state (thread-safe).
+
+        Returns:
+            Copy of the current ControlState.
+        """
         with self._lock:
             return self.state
 
     def get_history(self, limit: int = 100) -> list[dict]:
-        """Returns the last N history entries."""
+        """Return the last N history entries as dictionaries.
+
+        Args:
+            limit: Maximum number of entries to return.
+
+        Returns:
+            List of history records as dictionaries, newest last.
+        """
         with self._lock:
             records = self.history[-limit:]
         return [
@@ -156,26 +281,49 @@ class ACController:
             for r in records
         ]
 
-    def update_config(self, **kwargs):
-        """Updates configuration parameters on the fly."""
+    def update_config(self, **kwargs) -> None:
+        """Update configuration parameters on the fly.
+
+        Any keyword argument that matches a ControlConfig attribute will
+        be updated. Changes are persisted to disk.
+
+        Args:
+            **kwargs: Configuration parameters to update.
+
+        Example:
+            >>> controller.update_config(target_temperature=25.0)
+        """
         with self._lock:
             for key, value in kwargs.items():
                 if hasattr(self.config, key):
                     setattr(self.config, key, value)
                     logger.info("Config updated: %s = %s", key, value)
-        # Persist state after user change
         self._persist_state()
 
-    def set_control_mode(self, mode: str):
-        """Sets control mode: 'auto', 'manual', or 'off'."""
+    def set_control_mode(self, mode: str) -> None:
+        """Set the control mode.
+
+        Args:
+            mode: One of "auto", "manual", or "off".
+                - auto: Automatic temperature-based control
+                - manual: User-specified settings
+                - off: AC disabled regardless of temperature
+        """
         with self._lock:
             self.state.control_mode = mode
         logger.info("Control mode set: %s", mode)
-        # Persist state after user change
         self._persist_state()
 
-    def set_manual_params(self, temperature: float, fan_speed: int, mode: str):
-        """Saves manual mode parameters."""
+    def set_manual_params(self, temperature: float, fan_speed: int, mode: str) -> None:
+        """Save manual mode parameters.
+
+        These parameters are applied when control_mode is "manual".
+
+        Args:
+            temperature: Target setpoint temperature (°C).
+            fan_speed: Fan speed (0=auto, 1=low, 2=mid, 3=high).
+            mode: AC mode ("cool" or "heat").
+        """
         with self._lock:
             self.state.manual_params = ManualParams(
                 temperature=temperature, fan_speed=fan_speed, mode=mode
@@ -186,11 +334,15 @@ class ACController:
             fan_speed,
             mode,
         )
-        # Persist state after user change
         self._persist_state()
 
-    def update_manual_param(self, param: str, value):
-        """Updates a single manual parameter (for real-time UI updates)."""
+    def update_manual_param(self, param: str, value) -> None:
+        """Update a single manual parameter for real-time UI updates.
+
+        Args:
+            param: Parameter name ("temperature", "fan_speed", or "mode").
+            value: New value for the parameter.
+        """
         with self._lock:
             if self.state.manual_params is None:
                 self.state.manual_params = ManualParams()
@@ -212,48 +364,59 @@ class ACController:
                 )
 
         logger.info("Manual param updated: %s = %s", param, value)
-        # Persist state after user change
         self._persist_state()
 
-    def start(self):
-        """Starts the control loop in a thread."""
+    def start(self) -> None:
+        """Start the control loop in a background thread.
+
+        The control loop runs periodically (every loop_interval seconds)
+        until stop() is called.
+        """
         self._running = True
         self._thread = threading.Thread(target=self._control_loop, daemon=True)
         self._thread.start()
         logger.info("AC controller started (interval=%ds)", self.config.loop_interval)
 
-    def stop(self):
-        """Stops the control loop and persists final state."""
+    def stop(self) -> None:
+        """Stop the control loop and persist final state.
+
+        Waits up to 10 seconds for the control thread to finish.
+        """
         self._running = False
         if self._thread:
             self._thread.join(timeout=10)
-        # Save state before shutdown
         self._persist_state()
         logger.info("AC controller stopped")
 
     def set_error_tracker(self, tracker) -> None:
-        """Inject error tracker (F0.30)."""
+        """Inject error tracker for centralized error reporting.
+
+        Args:
+            tracker: ErrorTracker instance for registering/clearing errors.
+        """
         self._error_tracker = tracker
 
     def set_thermal_buffer(self, buffer, outdoor_temp_provider=None) -> None:
-        """Inject a ThermalBuffer and optional outdoor-temperature provider.
+        """Inject thermal buffer and optional outdoor temperature provider.
 
         When set, the controller appends one ThermalSample per tick so the
-        thermal-curves analysis can run. ``outdoor_temp_provider`` is a
-        zero-arg callable returning the current outdoor temperature in °C
-        (or None when unknown); it is called defensively so a failing
-        provider never breaks the control loop.
+        thermal-curves analysis can run.
+
+        Args:
+            buffer: ThermalBuffer instance for sample storage.
+            outdoor_temp_provider: Zero-arg callable returning outdoor temp (°C)
+                or None. Called defensively so failures don't break control.
         """
         self._thermal_buffer = buffer
         self._outdoor_temp_provider = outdoor_temp_provider
 
     def restore_state(self) -> bool:
-        """Restores controller state from disk.
+        """Restore controller state from disk.
 
         Must be called BEFORE start() to restore previous session.
 
         Returns:
-            True if state was restored, False if no state found
+            True if state was restored, False if no state found.
         """
         persisted = load_state()
         if persisted is None:
@@ -271,7 +434,6 @@ class ACController:
 
         # Restore manual mode
         with self._lock:
-            # Map old override values to new control_mode
             if persisted.override == "on":
                 self.state.control_mode = "manual"
             elif persisted.override == "off":
@@ -279,22 +441,21 @@ class ACController:
             else:
                 self.state.control_mode = "auto"
 
-            # Always initialize manual_params (even if not in manual mode)
             if persisted.force_on_temperature is not None:
                 self.state.manual_params = ManualParams(
                     temperature=persisted.force_on_temperature,
-                    fan_speed=persisted.force_on_fan_speed or 0,
-                    mode="cool",  # Default to cool for backward compatibility
+                    fan_speed=persisted.force_on_fan_speed or DEFAULT_FAN_SPEED,
+                    mode=DEFAULT_AC_MODE,
                 )
             else:
-                # Initialize with defaults if not present
                 self.state.manual_params = ManualParams(
-                    temperature=23.0, fan_speed=0, mode="cool"
+                    temperature=DEFAULT_MANUAL_TEMP,
+                    fan_speed=DEFAULT_FAN_SPEED,
+                    mode=DEFAULT_AC_MODE,
                 )
 
         # Restore internal state machine state
         try:
-            # Map old state names to new ones
             state_mapping = {"forced_on": "manual", "forced_off": "system_off"}
             state_value = state_mapping.get(
                 persisted.current_sm_state, persisted.current_sm_state
@@ -313,8 +474,8 @@ class ACController:
         logger.info("Controller state restored successfully")
         return True
 
-    def _persist_state(self):
-        """Saves current controller state to disk."""
+    def _persist_state(self) -> None:
+        """Save current controller state to disk."""
         with self._lock:
             manual_temp = (
                 self.state.manual_params.temperature
@@ -325,14 +486,11 @@ class ACController:
                 self.state.manual_params.fan_speed if self.state.manual_params else None
             )
 
-            # Map new control_mode to old override for backward compatibility
             override_value = None
             if self.state.control_mode == "manual":
                 override_value = "on"
             elif self.state.control_mode == "off":
                 override_value = "off"
-            else:
-                override_value = None
 
             state = PersistedState(
                 target_temperature=self.config.target_temperature,
@@ -352,8 +510,12 @@ class ACController:
 
         save_state(state)
 
-    def _control_loop(self):
-        """Main control loop."""
+    def _control_loop(self) -> None:
+        """Main control loop running in background thread.
+
+        Executes one tick per loop_interval seconds until stopped.
+        Exceptions are caught and logged to prevent thread death.
+        """
         while self._running:
             try:
                 self._tick()
@@ -362,9 +524,12 @@ class ACController:
 
             time.sleep(self.config.loop_interval)
 
-    def _tick(self):
-        """One control cycle: read → evaluate → apply → record."""
-        # 1. READ: Get inputs (calculate avg_temp and avg_hum ONCE)
+    def _tick(self) -> None:
+        """Execute one control cycle: read → evaluate → apply → record.
+
+        This is the core of the control loop, called once per interval.
+        """
+        # 1. READ: Get inputs
         avg_temp, avg_hum, active_count, last_sensor_time = self._read_sensors()
         inputs = self._build_inputs(avg_temp, last_sensor_time)
         sm_config = self._build_sm_config()
@@ -380,13 +545,14 @@ class ACController:
         # 3. APPLY: Send to MELCloud if changed
         self._apply_outputs(outputs)
 
-        # 4. RECORD: Update visible state and history (includes avg_temp and avg_hum)
+        # 4. RECORD: Update visible state and history
         self._update_state(outputs, avg_temp, avg_hum, active_count)
 
         # 5. LOG
         if avg_temp is not None:
             logger.info(
-                "Tick: avg=%.1f°C, target=%.1f°C, state=%s, setpoint=%.1f°C, sensors=%d/%d%s%s",
+                "Tick: avg=%.1f°C, target=%.1f°C, state=%s, setpoint=%.1f°C, "
+                "sensors=%d/%d%s%s",
                 avg_temp,
                 self.config.target_temperature,
                 outputs.state.value,
@@ -398,17 +564,17 @@ class ACController:
             )
 
     def _read_sensors(self) -> tuple[float | None, float | None, int, float]:
-        """Reads sensors and returns (avg_temp, avg_hum, active_count, most recent timestamp).
+        """Read sensors and calculate averages.
 
-        Average is calculated only from ACTIVE sensors (within sensor_timeout).
-        active_count and the average use the same set of sensors for consistency.
+        Returns:
+            Tuple of (avg_temp, avg_hum, active_count, most_recent_timestamp).
+            avg_temp and avg_hum are None if no valid readings available.
         """
         avg_temp = None
         avg_hum = None
         last_sensor_time = self._last_sensor_update_time
 
-        # Use only active readings so that avg and active_count are consistent
-        # Exclude the virtual 'AC' sensor (MELCloud room temp recorder) from averages
+        # Exclude virtual 'AC' sensor from averages
         active_readings = {
             name: r
             for name, r in self.mqtt.get_active_readings(
@@ -445,7 +611,15 @@ class ACController:
     def _build_inputs(
         self, avg_temp: float | None, last_sensor_time: float
     ) -> StateMachineInputs:
-        """Builds inputs for state machine."""
+        """Build inputs dataclass for state machine evaluation.
+
+        Args:
+            avg_temp: Current average temperature from sensors (°C).
+            last_sensor_time: Timestamp of most recent sensor reading.
+
+        Returns:
+            StateMachineInputs populated with current system state.
+        """
         with self._lock:
             control_mode = self.state.control_mode
             manual_params = self.state.manual_params or ManualParams()
@@ -460,7 +634,7 @@ class ACController:
 
         # Time since last off
         if self._last_off_time == 0.0:
-            seconds_since_off = 99999.0
+            seconds_since_off = SECONDS_SINCE_OFF_INITIAL
         else:
             seconds_since_off = time.time() - self._last_off_time
 
@@ -478,7 +652,11 @@ class ACController:
         )
 
     def _build_sm_config(self) -> StateMachineConfig:
-        """Builds config for state machine."""
+        """Build configuration dataclass for state machine.
+
+        Returns:
+            StateMachineConfig populated from current ControlConfig.
+        """
         return StateMachineConfig(
             hysteresis_on=self.config.hysteresis_on,
             hysteresis_off=self.config.hysteresis_off,
@@ -489,18 +667,22 @@ class ACController:
             melcloud_max_failures=self.config.melcloud_max_failures,
         )
 
-    def _apply_outputs(self, outputs: StateMachineOutputs):
-        """Apply outputs to AC via MELCloud if necessary."""
+    def _apply_outputs(self, outputs: StateMachineOutputs) -> None:
+        """Apply state machine outputs to AC via MELCloud.
+
+        Only sends commands when outputs have changed from the previous tick.
+
+        Args:
+            outputs: State machine outputs to apply.
+        """
         # Don't act if we're in ERROR state
         if outputs.state == ControllerState.ERROR:
             self._current_sm_state = outputs.state
             return
 
-        # Detect if outputs changed compared to last send
         needs_send = self._needs_melcloud_update(outputs)
 
         if needs_send:
-            # Serialize MELCloud API calls to avoid concurrent access issues
             with self._melcloud_lock:
                 success = self.melcloud.set_temperature(
                     self.config.device_id,
@@ -512,7 +694,6 @@ class ACController:
 
             if success:
                 self._consecutive_melcloud_failures = 0
-                # Register shutdown for cooldown
                 if not outputs.power and self._current_sm_state not in (
                     ControllerState.OFF,
                     ControllerState.COOLDOWN,
@@ -537,30 +718,31 @@ class ACController:
                     outputs.state.value,
                 )
 
-        # Update internal state machine state
         old_sm_state = self._current_sm_state
         self._current_sm_state = outputs.state
 
-        # Track energy transition if state changed
         if old_sm_state != outputs.state:
             self._track_energy_transition(outputs.state.value)
 
-        # Save last modulation setpoint
         if outputs.state == ControllerState.MODULATING:
             self._last_modulating_setpoint = outputs.setpoint
 
-        # Save outputs for comparison in next tick
         self._last_outputs = outputs
 
     def _needs_melcloud_update(self, outputs: StateMachineOutputs) -> bool:
-        """Determina si hay que enviar un comando a MELCloud."""
+        """Determine if MELCloud command is needed.
+
+        Args:
+            outputs: New state machine outputs.
+
+        Returns:
+            True if any controllable parameter has changed.
+        """
         with self._lock:
             if self._last_outputs is None:
                 return True
-
             last = self._last_outputs
 
-        # If power, mode, setpoint or fan changed → send
         if outputs.power != last.power:
             return True
         if outputs.mode != last.mode:
@@ -575,23 +757,28 @@ class ACController:
         avg_temp: float | None,
         avg_hum: float | None,
         active_count: int,
-    ):
-        """Updates visible state (for API/UI) and history."""
+    ) -> None:
+        """Update visible state and history after a tick.
+
+        Args:
+            outputs: State machine outputs from this tick.
+            avg_temp: Average temperature from sensors (°C).
+            avg_hum: Average humidity from sensors (%).
+            active_count: Number of active sensors.
+        """
         with self._lock:
             self.state.state = outputs.state.value
             self.state.setpoint = outputs.setpoint
             self.state.ac_mode = outputs.mode
             self.state.fan_speed = outputs.fan_speed
             self.state.average_temp = round(avg_temp, 2) if avg_temp else None
-            self.state.average_humidity = (
-                round(avg_hum, 1) if avg_hum else None
-            )  # Guardamos para la API
+            self.state.average_humidity = round(avg_hum, 1) if avg_hum else None
             self.state.active_sensors = active_count
             self.state.last_update = time.time()
             self.state.sensor_alert = outputs.sensor_alert
             self.state.melcloud_error = outputs.melcloud_error
 
-            # F0.30 - Register/clear errors in error tracker
+            # Register/clear errors in error tracker
             if self._error_tracker:
                 if outputs.sensor_alert:
                     self._error_tracker.register(
@@ -607,13 +794,14 @@ class ACController:
                     self._error_tracker.register(
                         "melcloud_error",
                         "error",
-                        f"MELCloud unreachable ({self._consecutive_melcloud_failures} consecutive failures)",
+                        f"MELCloud unreachable ({self._consecutive_melcloud_failures} "
+                        "consecutive failures)",
                         "melcloud",
                     )
                 else:
                     self._error_tracker.clear("melcloud_error")
 
-            # History
+            # Record history
             self.history.append(
                 HistoryRecord(
                     timestamp=time.time(),
@@ -624,18 +812,21 @@ class ACController:
                 )
             )
 
-            # Limit history
-            if len(self.history) > 1000:
-                self.history = self.history[-500:]
+            # Trim history if needed
+            if len(self.history) > HISTORY_MAX_SIZE:
+                self.history = self.history[-HISTORY_TRIM_SIZE:]
 
-        # Record thermal sample (outside the lock: the outdoor provider may do
-        # I/O and the buffer has its own lock).
         self._record_thermal_sample(outputs, avg_temp)
 
     def _record_thermal_sample(
         self, outputs: StateMachineOutputs, avg_temp: float | None
     ) -> None:
-        """Append one ThermalSample to the injected buffer, if any."""
+        """Append one ThermalSample to the injected buffer if configured.
+
+        Args:
+            outputs: State machine outputs from this tick.
+            avg_temp: Average temperature from sensors (°C).
+        """
         buffer = self._thermal_buffer
         if buffer is None:
             return
@@ -648,8 +839,6 @@ class ACController:
             except Exception:
                 logger.debug("Outdoor temp provider failed for thermal sample")
 
-        # Imported lazily so the controller has no hard dependency on the
-        # thermal_analysis module when the buffer is not wired in.
         from thermal_analysis import ThermalSample
 
         buffer.add(
@@ -663,19 +852,17 @@ class ACController:
             )
         )
 
-    def update_ac_real_cache(self, melcloud_data: dict):
-        """Updates AC real state cache from subscription manager data.
+    def update_ac_real_cache(self, melcloud_data: dict) -> None:
+        """Update AC real state cache from MELCloud subscription data.
 
         Called by SubscriptionManager after fetching from MELCloud.
 
         Args:
-            melcloud_data: Raw data from MELCloud API
+            melcloud_data: Raw data dictionary from MELCloud API.
         """
         if melcloud_data is None:
             return
 
-        # Map MELCloud format to internal format
-        # OperationMode: 1=HEAT, 2=DRY, 3=COOL, 7=FAN, 8=AUTO
         mode_map = {1: "heat", 2: "dry", 3: "cool", 7: "fan", 8: "auto"}
 
         with self._lock:
@@ -688,25 +875,26 @@ class ACController:
             self.state.ac_real_room_temp = melcloud_data.get("RoomTemperature")
             self.state.ac_real_last_update = time.time()
 
-    # ===== Energy tracking methods =====
+    def _track_energy_transition(self, new_state: str) -> None:
+        """Record state transition for energy calculation.
 
-    def _track_energy_transition(self, new_state: str):
-        """Record state transition for energy calculation."""
+        Args:
+            new_state: New controller state name.
+        """
         now = time.time()
         elapsed_hours = (now - self._energy_state["last_transition"]) / 3600
 
-        # Calcular consumo del estado anterior
         power_kw = self._get_power_for_state(self._energy_state["last_state"])
         kwh_consumed = power_kw * elapsed_hours
         self._energy_state["kwh_session"] += kwh_consumed
 
-        # Update state
         self._energy_state["last_state"] = new_state
         self._energy_state["last_transition"] = now
 
         if kwh_consumed > 0:
             logger.debug(
-                "Energía: estado %s durante %.2fh consumió %.4f kWh (total sesión: %.4f kWh)",
+                "Energía: estado %s durante %.2fh consumió %.4f kWh "
+                "(total sesión: %.4f kWh)",
                 self._energy_state["last_state"],
                 elapsed_hours,
                 kwh_consumed,
@@ -714,13 +902,13 @@ class ACController:
             )
 
     def _get_power_for_state(self, state: str) -> float:
-        """Return power in kW for a state.
+        """Return power consumption in kW for a given state.
 
         Args:
-            state: Estado del controlador
+            state: Controller state name.
 
         Returns:
-            Potencia en kW
+            Power consumption in kW, or 0.0 for off states.
         """
         power_map = {
             "cooling_max": self.config.ac_power_cooling_max,
@@ -731,21 +919,21 @@ class ACController:
         return power_map.get(state, 0.0)
 
     def get_session_kwh(self) -> float:
-        """Return kWh consumed in current session (since last record).
+        """Return kWh consumed in current session since last reset.
+
+        Includes energy consumed in the current state up to now.
 
         Returns:
-            kWh acumulados en la sesión
+            Total kWh consumed in the current session.
         """
-        # Add current state consumption until now
         now = time.time()
         elapsed_hours = (now - self._energy_state["last_transition"]) / 3600
         power_kw = self._get_power_for_state(self._energy_state["last_state"])
         current_kwh = power_kw * elapsed_hours
-        total = self._energy_state["kwh_session"] + current_kwh
-        return total
+        return self._energy_state["kwh_session"] + current_kwh
 
-    def reset_session_kwh(self):
-        """Reset session counter (called after hourly log)."""
+    def reset_session_kwh(self) -> None:
+        """Reset session energy counter (called after hourly log)."""
         logger.info(
             "Resetting energy session (accumulated: %.4f kWh)",
             self._energy_state["kwh_session"],
