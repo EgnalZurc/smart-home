@@ -63,6 +63,16 @@ Single Swagger UI at `/swagger` documents ALL platform APIs.
 | POST | `/api/system/containers/{name}/start` | Start container |
 | POST | `/api/system/containers/{name}/stop` | Stop container |
 | GET | `/api/system/stats` | System resources |
+| GET | `/api/system/summary` | Unified snapshot: containers + stats + alerts + per-service health (SUPER, 30s cache) |
+
+`/api/system/summary` bundles the four home-view data sources into a single
+SUPER-gated call so the dashboard does not have to fan out on every refresh. It
+returns `{containers, stats, alerts, services_health, cached, timestamp}`,
+gathering the sources concurrently in-process. A failing source degrades to an
+`{"error": ...}` slot instead of failing the whole response. The payload is
+cached for 30 seconds, keyed per user (because `alerts` embeds per-user
+read-state). The optional `days` query param (1-30, default 1) sets the memory
+alert look-back window and is forwarded to the alerts source.
 
 ### Unified Alerts
 | Method | Endpoint | Description |
