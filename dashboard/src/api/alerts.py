@@ -19,6 +19,7 @@ Design notes
 """
 
 import asyncio
+import hashlib
 import logging
 from datetime import datetime, timezone
 
@@ -82,6 +83,33 @@ def _extract_alerts(data: dict, source: str) -> list[dict]:
     return alerts
 
 
+def _alert_identifier(alert: dict) -> str:
+    """Derive a stable per-alert identifier within its source.
+
+    Prefers an explicit unique field (``id``/``alert_id``/``container``). When
+    none is present, falls back to a short hash of the alert's title and/or URL
+    so the same alert maps to the same key across polls. As a last resort the
+    full alert payload is hashed.
+    """
+    for field in ("id", "alert_id", "container"):
+        value = alert.get(field)
+        if value not in (None, ""):
+            return str(value)
+
+    title = str(alert.get("title") or "")
+    url = str(alert.get("url") or "")
+    basis = f"{title}|{url}" if (title or url) else repr(sorted(alert.items()))
+    # Not a security control: this is a short, stable content fingerprint used
+    # only to key read-state, so SHA1 (fast, compact) is fine.
+    return hashlib.sha1(basis.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
+
+
+def _alert_key(alert: dict) -> str:
+    """Build the stable ``"{source}:{identifier}"`` key for an alert."""
+    source = alert.get("source", "unknown")
+    return f"{source}:{_alert_identifier(alert)}"
+
+
 async def _fetch_remote(name: str, proxy: ServiceProxy, path: str) -> list[dict]:
     """Fetch alerts from a remote service, returning [] on any failure."""
     try:
@@ -122,14 +150,28 @@ async def get_unified_alerts(
     days: int = Query(
         1, ge=1, le=30, description="Look-back window for memory alerts (days)"
     ),
+    unread_only: bool = Query(
+        False, description="When true, return only alerts the user has not read"
+    ),
 ):
     """Aggregate alerts from every source into a single unified list.
 
     Visible to any authenticated family member. Sources are queried
     concurrently; a failing source contributes no alerts rather than erroring
     the whole response.
+
+    Each alert is tagged with a stable ``key`` (``"{source}:{identifier}"``) and
+    a per-user ``read`` flag derived from the caller's read records. The response
+    also carries ``unread_count``. Pass ``unread_only=true`` to filter the list
+    down to the alerts the current user has not yet read.
     """
-    require_authenticated(request)
+    user = require_authenticated(request)
+
+    # ``unread_only`` is a bool when resolved by FastAPI, but unit tests call
+    # this coroutine directly, in which case it is still the ``Query(...)``
+    # default sentinel. Coerce to a real bool so the sentinel (truthy) does not
+    # accidentally enable filtering.
+    unread_only = unread_only is True
 
     tasks = [_fetch_memory(days)]
     tasks += [
@@ -144,10 +186,26 @@ async def get_unified_alerts(
 
     all_alerts.sort(key=_sort_key)
 
+    read_keys = set(alert_reads_db.get_read_alerts(user))
+
+    unread_count = 0
+    enriched: list[dict] = []
+    for alert in all_alerts:
+        key = _alert_key(alert)
+        is_read = key in read_keys
+        if not is_read:
+            unread_count += 1
+        if unread_only and is_read:
+            continue
+        alert["key"] = key
+        alert["read"] = is_read
+        enriched.append(alert)
+
     return {
-        "count": len(all_alerts),
+        "count": len(enriched),
+        "unread_count": unread_count,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "alerts": all_alerts,
+        "alerts": enriched,
     }
 
 

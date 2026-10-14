@@ -71,6 +71,35 @@ Single Swagger UI at `/swagger` documents ALL platform APIs.
 | POST | `/api/alerts/mark-read` | Mark an alert as read for the current user (body: `{"alert_key": "..."}`) |
 | GET | `/api/alerts/read-status` | List the alert keys the current user has marked as read |
 
+Each alert returned by `/api/alerts/unified` carries a stable `key`
+(`"{source}:{identifier}"`, e.g. `casita:fotocasa_182159128`) and a per-user
+`read` boolean. The identifier is taken from the alert's `id`/`alert_id`/
+`container` field when present, otherwise a short hash of its title and/or URL.
+That same `key` is what you pass to `POST /api/alerts/mark-read`.
+
+The response also includes `unread_count` — the number of alerts the current
+user has not read across the whole aggregate (unaffected by filtering). Pass
+`?unread_only=true` to return only the unread alerts while still reporting the
+full `unread_count`. The existing `?days=` parameter still controls the memory
+alert look-back window.
+
+```json
+{
+  "count": 3,
+  "unread_count": 2,
+  "timestamp": "2026-10-14T06:54:00+00:00",
+  "alerts": [
+    {
+      "source": "casita",
+      "key": "casita:fotocasa_182159128",
+      "severity": "info",
+      "title": "New listing matched",
+      "read": false
+    }
+  ]
+}
+```
+
 Read state is tracked per user in the `alert_reads` SQLite table (shared
 `AUTH_DB_PATH` database). Marking an alert read is idempotent — re-marking the
 same `alert_key` just refreshes its timestamp. All three endpoints require an
