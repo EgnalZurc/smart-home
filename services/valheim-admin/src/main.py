@@ -91,6 +91,21 @@ app = FastAPI(title="Valheim Admin", version="2.1.0", lifespan=lifespan)
 WORLD_NAME_MAX_LENGTH = 64
 _WORLD_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
+# server_name: alphanumeric + spaces, max 64 chars. Displayed in server browser.
+SERVER_NAME_MAX_LENGTH = 64
+_SERVER_NAME_RE = re.compile(r"^[A-Za-z0-9 ]{1,64}$")
+
+# server_pass: max 128 chars, no newlines or null bytes (would break config files).
+SERVER_PASS_MAX_LENGTH = 128
+
+# save_interval bounds: 5 minutes to 24 hours (in seconds)
+SAVE_INTERVAL_MIN = 300
+SAVE_INTERVAL_MAX = 86400
+
+# backups bounds: 1 to 100
+BACKUPS_MIN = 1
+BACKUPS_MAX = 100
+
 
 def validate_world_name(world_name: str) -> str:
     """Validate a world name before forwarding it to pc-agent.
@@ -115,6 +130,51 @@ def validate_world_name(world_name: str) -> str:
             ),
         )
     return world_name
+
+
+def validate_server_name(name: str) -> str:
+    """Validate server name before forwarding to pc-agent.
+
+    Allowed: ASCII alphanumerics and spaces, 1..64 chars.
+    Raises HTTPException(400) if invalid.
+    """
+    if not name or not _SERVER_NAME_RE.match(name):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid server_name: must be 1 to {SERVER_NAME_MAX_LENGTH} "
+                "characters, only letters, digits and spaces allowed."
+            ),
+        )
+    return name
+
+
+def validate_server_pass(password: str) -> str:
+    """Validate server password before forwarding to pc-agent.
+
+    Raises HTTPException(400) if too long or contains newlines/null bytes.
+    """
+    if len(password) > SERVER_PASS_MAX_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid server_pass: max {SERVER_PASS_MAX_LENGTH} characters.",
+        )
+    if "\n" in password or "\0" in password:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid server_pass: newlines and null bytes not allowed.",
+        )
+    return password
+
+
+def clamp_save_interval(value: int) -> int:
+    """Clamp save_interval to valid bounds (5 min to 24 hours)."""
+    return max(SAVE_INTERVAL_MIN, min(value, SAVE_INTERVAL_MAX))
+
+
+def clamp_backups(value: int) -> int:
+    """Clamp backup count to valid bounds (1 to 100)."""
+    return max(BACKUPS_MIN, min(value, BACKUPS_MAX))
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -232,7 +292,11 @@ async def update_config(
     backups: int = Form(4),
 ):
     """Update Valheim server configuration."""
+    validate_server_name(server_name)
     validate_world_name(world_name)
+    validate_server_pass(server_pass)
+    save_interval = clamp_save_interval(save_interval)
+    backups = clamp_backups(backups)
     return await pc_agent.post(
         "/valheim/config",
         {

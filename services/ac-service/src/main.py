@@ -7,6 +7,7 @@ Serves:
   GET  /api/ac/sensors/history     → sensor reading history
   GET  /api/ac/history             → controller action history
   GET  /api/ac/event-log           → control command event log history
+  GET  /api/ac/learning            → usage patterns & recommendations
   GET  /api/ac/config              → controller config
   POST /api/ac/config              → update config
   POST /api/ac/control             → set auto/manual/off
@@ -44,6 +45,7 @@ from event_log import ACEventLog
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from learning import analyze_history
 from outdoor import build_outdoor_fetcher
 from pydantic import BaseModel
 from smart_home_common.clients.melcloud import MelCloudClient
@@ -76,6 +78,11 @@ MQTT_BROKER = os.environ.get("MQTT_BROKER", "mosquitto")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
 MQTT_USER = os.environ.get("MQTT_USER")
 MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD")
+if not MQTT_USER or not MQTT_PASSWORD:
+    logger.warning(
+        "MQTT credentials not set - connecting without auth. "
+        "Set MQTT_USER and MQTT_PASSWORD in production."
+    )
 MQTT_CONNECT_RETRIES = int(os.environ.get("MQTT_CONNECT_RETRIES", "30"))
 MQTT_RETRY_DELAY = int(os.environ.get("MQTT_RETRY_DELAY", "2"))
 MQTT_KEEPALIVE = int(os.environ.get("MQTT_KEEPALIVE", "60"))
@@ -471,6 +478,24 @@ def get_event_log(hours: int = 24):
     if event_log is None:
         return {"events": [], "hours": hours}
     return {"events": event_log.get_history(hours), "hours": hours}
+
+
+@app.get("/api/ac/learning", tags=["AC Control"])
+def get_learning(window: int = 1000):
+    """Return usage patterns, correlations and recommendations.
+
+    Performs a basic statistical analysis over the controller action history
+    (no machine learning): frequent on-hours, preferred setpoints, the
+    temperature-vs-setpoint correlation and short human-readable hints.
+
+    Args:
+        window: number of most-recent history records to analyse (1-1000).
+    """
+    window = max(1, min(window, 1000))  # Cap between 1 and 1000
+    if ac_controller is None:
+        return analyze_history([])
+    records = ac_controller.get_history(window)
+    return analyze_history(records)
 
 
 @app.get("/api/ac/config", tags=["AC Control"])

@@ -247,8 +247,7 @@ class TestBuiltinEmailSender:
 
         with patch.dict("os.environ", {"SMTP_USER": "", "AUTH_SMTP_USER": ""}):
             sender = _BuiltinEmailSender()
-
-        assert sender.enabled is False
+            assert sender.enabled is False
 
     def test_builtin_sender_enabled_with_creds(self):
         """Built-in sender is enabled with credentials."""
@@ -259,8 +258,8 @@ class TestBuiltinEmailSender:
             {"SMTP_USER": "test@test.com", "SMTP_PASSWORD": "password123"},
         ):
             sender = _BuiltinEmailSender()
-
-        assert sender.enabled is True
+            # Check enabled inside the patch context since password is lazy-loaded
+            assert sender.enabled is True
 
     def test_builtin_sender_send_disabled(self):
         """Send returns failure when disabled."""
@@ -269,9 +268,8 @@ class TestBuiltinEmailSender:
         with patch.dict("os.environ", {"SMTP_USER": "", "AUTH_SMTP_USER": ""}):
             sender = _BuiltinEmailSender()
             result = sender.send("Subject", "<html></html>")
-
-        assert result.success is False
-        assert "disabled" in result.message.lower()
+            assert result.success is False
+            assert "disabled" in result.message.lower()
 
     def test_builtin_sender_send_success(self):
         """Send returns success when SMTP works."""
@@ -287,18 +285,18 @@ class TestBuiltinEmailSender:
         ):
             sender = _BuiltinEmailSender()
 
-        # Mock the SMTP connection
-        with patch.object(sender, "_smtplib") as mock_smtplib:
-            mock_smtp = MagicMock()
-            mock_smtplib.SMTP.return_value.__enter__.return_value = mock_smtp
+            # Mock the SMTP connection
+            with patch.object(sender, "_smtplib") as mock_smtplib:
+                mock_smtp = MagicMock()
+                mock_smtplib.SMTP.return_value.__enter__.return_value = mock_smtp
 
-            result = sender.send("Test Subject", "<html>Test</html>")
+                result = sender.send("Test Subject", "<html>Test</html>")
 
-        assert result.success is True
-        assert result.message == "Email sent"
-        mock_smtp.starttls.assert_called_once()
-        mock_smtp.login.assert_called_once()
-        mock_smtp.sendmail.assert_called_once()
+            assert result.success is True
+            assert result.message == "Email sent"
+            mock_smtp.starttls.assert_called_once()
+            mock_smtp.login.assert_called_once()
+            mock_smtp.sendmail.assert_called_once()
 
     def test_builtin_sender_send_failure(self):
         """Send returns failure when SMTP fails."""
@@ -310,16 +308,16 @@ class TestBuiltinEmailSender:
         ):
             sender = _BuiltinEmailSender()
 
-        # Mock the SMTP connection to fail
-        with patch.object(sender, "_smtplib") as mock_smtplib:
-            mock_smtplib.SMTP.return_value.__enter__.side_effect = Exception(
-                "Connection failed"
-            )
+            # Mock the SMTP connection to fail
+            with patch.object(sender, "_smtplib") as mock_smtplib:
+                mock_smtplib.SMTP.return_value.__enter__.side_effect = Exception(
+                    "Connection failed"
+                )
 
-            result = sender.send("Test Subject", "<html>Test</html>")
+                result = sender.send("Test Subject", "<html>Test</html>")
 
-        assert result.success is False
-        assert "Connection failed" in result.message
+            assert result.success is False
+            assert "Connection failed" in result.message
 
     def test_builtin_sender_uses_auth_smtp_env_vars(self):
         """Built-in sender falls back to AUTH_SMTP_* env vars when SMTP_* not set."""
