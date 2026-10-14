@@ -489,10 +489,58 @@ class TestAlertsEndpoint:
         assert "upcoming" in data
         assert "count" in data
 
+    def test_validate_alert_id_valid_formats(self):
+        """_validate_alert_id accepts valid formats."""
+        from api.routes.alerts import _validate_alert_id
+
+        # Valid: alphanumeric, underscores, hyphens
+        assert _validate_alert_id("alert-id-123") is True
+        assert _validate_alert_id("alert_id_123") is True
+        assert _validate_alert_id("alertId123") is True
+        assert _validate_alert_id("ALERT-ID") is True
+        assert _validate_alert_id("a") is True
+        assert _validate_alert_id("123") is True
+        assert _validate_alert_id("a-b_c") is True
+
+    def test_validate_alert_id_invalid_formats(self):
+        """_validate_alert_id rejects invalid formats."""
+        from api.routes.alerts import _validate_alert_id
+
+        # Invalid: special characters, spaces, empty, path traversal
+        assert _validate_alert_id("") is False
+        assert _validate_alert_id(None) is False  # type: ignore[arg-type]
+        assert _validate_alert_id("alert id") is False  # space
+        assert _validate_alert_id("alert.id") is False  # dot
+        assert _validate_alert_id("alert/id") is False  # slash
+        assert _validate_alert_id("../etc/passwd") is False  # path traversal
+        assert _validate_alert_id("alert\x00id") is False  # null byte
+        assert _validate_alert_id("alert;id") is False  # semicolon
+        assert _validate_alert_id("alert'id") is False  # quote
+
     def test_complete_alert_not_found(self, client):
-        """Complete alert returns 400 for non-existent alert."""
+        """Complete alert returns 404 for non-existent alert."""
         response = client.post("/api/portfolio/alerts/nonexistent-alert-id/complete")
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_complete_alert_invalid_format_special_chars(self, client):
+        """Complete alert returns 400 for alert_id with special characters."""
+        # Use dot which is invalid but doesn't cause path routing issues
+        response = client.post("/api/portfolio/alerts/alert.id/complete")
         assert response.status_code == 400
+        assert "invalid" in response.json()["detail"].lower()
+
+    def test_complete_alert_invalid_format_spaces(self, client):
+        """Complete alert returns 400 for alert_id with spaces."""
+        response = client.post("/api/portfolio/alerts/alert%20id/complete")
+        assert response.status_code == 400
+        assert "invalid" in response.json()["detail"].lower()
+
+    def test_complete_alert_valid_format_accepted(self, client):
+        """Complete alert accepts valid format but returns 404 if not found."""
+        # Valid format: alphanumeric, underscore, hyphen
+        response = client.post("/api/portfolio/alerts/valid-alert_id-123/complete")
+        assert response.status_code == 404  # Format OK, but alert doesn't exist
 
 
 class TestSavingsEndpoint:
@@ -952,16 +1000,34 @@ class TestCompleteAlertEndpoint:
 
     def test_complete_alert_success(self, client):
         """Complete alert succeeds when alert exists and date arrived."""
-        with patch("alerts.mark_alert_completed", return_value=True):
-            with patch("api.routes.get_orchestrator") as mock_get_orch:
-                mock_orch = MagicMock()
-                mock_get_orch.return_value = mock_orch
+        mock_alert = MagicMock()
+        mock_alert.alert_id = "valid-alert-id"
 
-                response = client.post("/api/portfolio/alerts/valid-alert-id/complete")
+        with patch("alerts.get_all_alerts", return_value=[mock_alert]):
+            with patch("alerts.mark_alert_completed", return_value=True):
+                with patch("api.routes.get_orchestrator") as mock_get_orch:
+                    mock_orch = MagicMock()
+                    mock_get_orch.return_value = mock_orch
+
+                    response = client.post(
+                        "/api/portfolio/alerts/valid-alert-id/complete"
+                    )
 
         assert response.status_code == 200
         assert response.json()["status"] == "completed"
         mock_orch._load_upcoming_alerts.assert_called_once()
+
+    def test_complete_alert_date_not_arrived(self, client):
+        """Complete alert returns 400 when alert exists but date hasn't arrived."""
+        mock_alert = MagicMock()
+        mock_alert.alert_id = "future-alert"
+
+        with patch("alerts.get_all_alerts", return_value=[mock_alert]):
+            with patch("alerts.mark_alert_completed", return_value=False):
+                response = client.post("/api/portfolio/alerts/future-alert/complete")
+
+        assert response.status_code == 400
+        assert "date" in response.json()["detail"].lower()
 
 
 class TestRateLimiterWindowExpiry:

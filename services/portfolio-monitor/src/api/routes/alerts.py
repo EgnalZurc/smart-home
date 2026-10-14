@@ -10,12 +10,22 @@ WARN/DANGER market alerts for the unified alerts system.
 call time so tests patching ``api.routes.get_orchestrator`` take effect here.
 """
 
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 from models import AlertLevel
 
 from .helpers import _safe_json, _serialize_alert
+
+# Valid alert_id: alphanumeric, underscore, hyphen only
+_VALID_ALERT_ID = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _validate_alert_id(alert_id: str) -> bool:
+    """Validate alert_id format: alphanumeric, underscore, hyphen only."""
+    return bool(alert_id and _VALID_ALERT_ID.match(alert_id))
+
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
@@ -110,16 +120,33 @@ async def get_active_alerts():
 @router.post("/alerts/{alert_id}/complete")
 async def complete_alert(alert_id: str):
     """Mark an alert as completed. Only allowed if date has arrived."""
-    from alerts import mark_alert_completed
+    from alerts import get_all_alerts, mark_alert_completed
 
     import api.routes as routes
 
+    # Validate alert_id format
+    if not _validate_alert_id(alert_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid alert_id format",
+        )
+
+    # Check if alert exists
+    all_alerts = get_all_alerts()
+    alert = next((a for a in all_alerts if a.alert_id == alert_id), None)
+    if not alert:
+        raise HTTPException(
+            status_code=404,
+            detail="Alert not found",
+        )
+
+    # Attempt to complete (may still fail if date hasn't arrived)
     success = mark_alert_completed(alert_id)
 
     if not success:
         raise HTTPException(
             status_code=400,
-            detail="Cannot complete alert — either not found or date hasn't arrived",
+            detail="Cannot complete alert — date hasn't arrived yet",
         )
 
     # Reload alerts in summary
