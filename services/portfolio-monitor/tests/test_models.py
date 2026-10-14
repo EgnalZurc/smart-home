@@ -4,7 +4,13 @@ Test data models.
 Ensures dataclasses and enums work correctly.
 """
 
-from models import AlertLevel, CryptoAnalysis, ETFAnalysis, Signal
+from models import (
+    AlertLevel,
+    CryptoAnalysis,
+    DeFiAnalysis,
+    ETFAnalysis,
+    Signal,
+)
 
 
 class TestAlertLevel:
@@ -131,3 +137,46 @@ class TestCryptoAnalysis:
         assert analysis.symbol == "ETH"
         assert analysis.amount == 0.5
         assert analysis.position_type == "flexible"
+
+
+class TestDeFiAnalysis:
+    """Tests for DeFiAnalysis dataclass."""
+
+    def test_defi_analysis_creation(self):
+        """DeFiAnalysis should be creatable with required fields."""
+        analysis = DeFiAnalysis(
+            position_id="Aave:USDC",
+            protocol="Aave",
+            asset="USDC",
+            amount=1000.0,
+            apy_pct=4.5,
+            platform_url="https://app.aave.com/",
+            estimated_value=1000.0,
+            daily_yield=45 / 365,
+            monthly_yield=45 / 12,
+            yearly_yield=45.0,
+            level=AlertLevel.OK,
+        )
+
+        assert analysis.position_id == "Aave:USDC"
+        assert analysis.protocol == "Aave"
+        assert analysis.asset == "USDC"
+        assert analysis.amount == 1000.0
+        assert analysis.apy_pct == 4.5
+        assert analysis.yearly_yield == 45.0
+        assert analysis.level == AlertLevel.OK
+
+    def test_defi_analysis_defaults(self):
+        """DeFiAnalysis defaults to zeroed values and OK level."""
+        analysis = DeFiAnalysis(
+            position_id="x",
+            protocol="Lido",
+            asset="stETH",
+        )
+
+        assert analysis.amount == 0.0
+        assert analysis.apy_pct == 0.0
+        assert analysis.platform_url == ""
+        assert analysis.estimated_value == 0.0
+        assert analysis.yearly_yield == 0.0
+        assert analysis.level == AlertLevel.OK

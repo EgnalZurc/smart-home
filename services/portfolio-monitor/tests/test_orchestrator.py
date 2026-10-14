@@ -72,10 +72,23 @@ def mock_monitors():
         }
     )
 
+    defi_monitor = MagicMock()
+    defi_monitor.name = "defi"
+    defi_monitor.run = AsyncMock(
+        return_value={
+            "total_value": 1500,
+            "yearly_yield": 55,
+            "analysis": [],
+            "level": AlertLevel.OK,
+            "last_update": datetime.now(timezone.utc),
+        }
+    )
+
     return {
         "etf": etf_monitor,
         "crypto": crypto_monitor,
         "savings": savings_monitor,
+        "defi": defi_monitor,
     }
 
 
@@ -202,6 +215,20 @@ class TestRunMonitor:
         assert orch._summary.savings_total_balance == 20000
 
     @pytest.mark.asyncio
+    async def test_run_defi_monitor(
+        self, temp_data_dir, mock_notifier, mock_monitors
+    ):
+        """Running the DeFi monitor updates summary state."""
+        from orchestrator import Orchestrator
+
+        orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
+        result = await orch.run_monitor("defi")
+
+        assert result["total_value"] == 1500
+        assert orch._summary.defi_total_value == 1500
+        assert orch._summary.defi_yearly_yield == 55
+
+    @pytest.mark.asyncio
     async def test_run_unknown_monitor(
         self, temp_data_dir, mock_notifier, mock_monitors
     ):
@@ -233,6 +260,8 @@ class TestRunAllMonitors:
         assert orch._summary.etf_total_value == 10000
         assert orch._summary.crypto_total_value == 5000
         assert orch._summary.savings_total_balance == 20000
+        assert "defi" in results
+        assert orch._summary.defi_total_value == 1500
 
     @pytest.mark.asyncio
     async def test_run_all_handles_failures(

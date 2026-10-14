@@ -7,12 +7,19 @@ Portfolio monitoring service with ETF, crypto staking, and savings tracking.
 - **ETF Monitor**: Yahoo Finance data, technical analysis (MA50/MA200), signals
 - **Crypto Monitor**: CoinGecko data, staking APY tracking, Fear & Greed index
 - **Savings Monitor**: Bank account tracking with interest projections
+- **DeFi Monitor**: Manual-APY yield tracking for DeFi positions (no external APIs)
 - **Email Notifications**: Alert emails for significant changes
 - **Scheduled Alerts**: Recurring reminders (contributions, distributions)
 
 ## Configuration
 
 Copy `settings.example.toml` to `data/settings.toml` and configure your positions.
+
+DeFi positions are tracked under `[[defi]]` blocks. Each block records the
+`protocol`, `asset`, deposited `amount` (in EUR), the advertised `apy_pct`, and
+an optional `platform_url`. The yield is entered **manually** — there is no
+external API integration — and the monitor projects the expected daily, monthly
+and yearly yield from those static inputs.
 
 Environment variables:
 - `MONITOR_LANG`: Language (es/en), default: es
@@ -25,6 +32,7 @@ Environment variables:
 - `GET /api/portfolio/etf` - ETF positions
 - `GET /api/portfolio/crypto` - Crypto staking positions
 - `GET /api/portfolio/savings` - Savings accounts
+- `GET /api/portfolio/defi` - DeFi yield positions (manual APY, no external APIs)
 - `GET /api/portfolio/alerts` - Scheduled alerts (upcoming reminders)
 - `GET /api/portfolio/alerts/active` - **Active market alerts** for unified dashboard (WARN/DANGER signals)
 - `GET /api/portfolio/health/external` - External service health checks
