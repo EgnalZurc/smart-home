@@ -179,3 +179,32 @@ ath_warn_pct      = -15   # ATH: approaching all-time high
 
 # Staking maturity warning window: alert when a fixed stake matures within N days
 staking_maturity_warn_days = 7
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DeFi YIELD MONITOR
+# ═══════════════════════════════════════════════════════════════════════════════
+# DeFi (decentralised finance) positions with MANUAL yield tracking.
+# There is NO external API integration: the APY is entered by hand from whatever
+# the platform advertises, and the monitor projects the expected daily/monthly/
+# yearly yield from the deposited amount.
+#
+# The `amount` is the deposited value in the portfolio base currency (EUR) — DeFi
+# deposits are typically stablecoins or LP positions already valued in fiat, so
+# no price lookup is performed.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [[defi]] — One block per DeFi yield position
+# ─────────────────────────────────────────────────────────────────────────────
+[[defi]]
+protocol     = "Aave"            # Protocol / platform name
+asset        = "USDC"            # Deposited asset
+amount       = 1000.0           # Deposited value in EUR
+apy_pct      = 4.50              # Advertised annual percentage yield (%)
+platform_url = "https://app.aave.com/"
+
+[[defi]]
+protocol     = "Lido"
+asset        = "stETH"
+amount       = 500.0
+apy_pct      = 3.20
+platform_url = "https://stake.lido.fi/"

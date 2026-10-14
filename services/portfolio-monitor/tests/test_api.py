@@ -504,6 +504,35 @@ class TestSavingsEndpoint:
         assert response.status_code != 404
 
 
+class TestDeFiEndpoint:
+    """Tests for the DeFi endpoint."""
+
+    def test_defi_endpoint_exists(self, client):
+        """DeFi endpoint should exist."""
+        response = client.get("/api/portfolio/defi")
+        assert response.status_code != 404
+
+    def test_defi_endpoint_returns_expected_shape(self, client):
+        """DeFi endpoint returns the yield-tracking fields."""
+        response = client.get("/api/portfolio/defi")
+        assert response.status_code == 200
+        data = response.json()
+        assert "total_value" in data
+        assert "yearly_yield" in data
+        assert "analysis" in data
+        assert isinstance(data["analysis"], list)
+
+    def test_summary_includes_defi_block(self, client):
+        """The full summary exposes a defi block."""
+        response = client.get("/api/portfolio/summary")
+        assert response.status_code == 200
+        data = response.json()
+        assert "defi" in data
+        assert "total_value" in data["defi"]
+        assert "yearly_yield" in data["defi"]
+        assert "analysis" in data["defi"]
+
+
 class TestNotificationEndpoint:
     """Tests for notification endpoints."""
 

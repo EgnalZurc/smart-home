@@ -199,6 +199,7 @@ ETF_THRESHOLDS: dict[str, Any] = _build_etf_thresholds(_S)
 CRYPTO_POSITIONS: list[dict[str, Any]] = _get(_S, "crypto.positions", [])
 CRYPTO_THRESHOLDS: dict[str, Any] = _build_crypto_thresholds(_S)
 SAVINGS_ACCOUNTS: list[dict[str, Any]] = _get(_S, "savings.accounts", [])
+DEFI_POSITIONS: list[dict[str, Any]] = _get(_S, "defi", [])
 SCHEDULED_ALERTS: list[dict[str, Any]] = _get(_S, "alerts.scheduled", [])
 
 
@@ -236,6 +237,10 @@ def get_savings_accounts() -> list[dict[str, Any]]:
     return SAVINGS_ACCOUNTS
 
 
+def get_defi_positions() -> list[dict[str, Any]]:
+    return DEFI_POSITIONS
+
+
 def get_scheduled_alerts() -> list[dict[str, Any]]:
     return SCHEDULED_ALERTS
 
@@ -258,6 +263,7 @@ def reload_config() -> dict[str, Any]:
     global ETF_PORTFOLIO, ETF_FUND_IDS, ETF_PLAN, ETF_THRESHOLDS
     global CRYPTO_POSITIONS, CRYPTO_THRESHOLDS
     global SAVINGS_ACCOUNTS, SCHEDULED_ALERTS
+    global DEFI_POSITIONS
 
     _S = _load_settings()
 
@@ -272,6 +278,7 @@ def reload_config() -> dict[str, Any]:
     CRYPTO_POSITIONS = _get(_S, "crypto.positions", [])
     CRYPTO_THRESHOLDS = _build_crypto_thresholds(_S)
     SAVINGS_ACCOUNTS = _get(_S, "savings.accounts", [])
+    DEFI_POSITIONS = _get(_S, "defi", [])
     SCHEDULED_ALERTS = _get(_S, "alerts.scheduled", [])
 
     return _S

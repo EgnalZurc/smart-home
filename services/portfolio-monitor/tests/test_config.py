@@ -199,3 +199,45 @@ class TestConfigReloadPropagation:
         finally:
             monkeypatch.undo()
             config.reload_config()
+
+
+class TestDeFiConfig:
+    """Tests for DeFi position configuration loading."""
+
+    def _write_settings(self, tmp_path, body: str):
+        settings = tmp_path / "settings.toml"
+        settings.write_text(body, encoding="utf-8")
+        return settings
+
+    def test_defi_positions_default_empty(self):
+        """get_defi_positions returns a list (empty by default)."""
+        from config import get_defi_positions
+
+        assert isinstance(get_defi_positions(), list)
+
+    def test_reload_loads_defi_positions(self, tmp_path, monkeypatch):
+        """Reloading a settings file with [[defi]] populates the positions."""
+        import config
+
+        settings = self._write_settings(
+            tmp_path,
+            "[[defi]]\n"
+            "protocol = 'Aave'\n"
+            "asset = 'USDC'\n"
+            "amount = 1000.0\n"
+            "apy_pct = 4.5\n"
+            "platform_url = 'https://app.aave.com/'\n",
+        )
+        monkeypatch.setattr(config, "SETTINGS_PATH", settings)
+
+        try:
+            config.reload_config()
+            positions = config.get_defi_positions()
+            assert len(positions) == 1
+            assert positions[0]["protocol"] == "Aave"
+            assert positions[0]["asset"] == "USDC"
+            assert positions[0]["amount"] == 1000.0
+            assert positions[0]["apy_pct"] == 4.5
+        finally:
+            monkeypatch.undo()
+            config.reload_config()
