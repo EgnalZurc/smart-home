@@ -45,6 +45,7 @@ from .helpers import (  # noqa: F401
     rate_limit,
 )
 from .notifications import router as _notifications_router
+from .rebalance import router as _rebalance_router
 from .summary import router as _summary_router
 
 # ─── Aggregate router ───────────────────────────────────────────────────────
@@ -54,3 +55,4 @@ router.include_router(_control_router)
 router.include_router(_alerts_router)
 router.include_router(_notifications_router)
 router.include_router(_health_router)
+router.include_router(_rebalance_router)
