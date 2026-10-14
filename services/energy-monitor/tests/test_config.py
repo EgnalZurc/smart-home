@@ -21,6 +21,9 @@ def test_defaults_match_design(monkeypatch):
         "ENERGY_ENERGY_RETENTION_DAYS",
         "ENERGY_DEVICES",
         "ENERGY_ALERTS_ENABLED",
+        "ENERGY_POWER_ALERT_W",
+        "ENERGY_DAILY_KWH_ALERT",
+        "ENERGY_MONTHLY_KWH_ALERT",
     ):
         monkeypatch.delenv(var, raising=False)
     cfg = _reload_config(monkeypatch)
@@ -31,6 +34,9 @@ def test_defaults_match_design(monkeypatch):
     assert cfg.ENERGY_RETENTION_DAYS == 1095
     assert cfg.DEVICES_JSON == "[]"
     assert cfg.ALERTS_ENABLED is True
+    assert cfg.POWER_ALERT_W == 3500
+    assert cfg.DAILY_KWH_ALERT == 20
+    assert cfg.MONTHLY_KWH_ALERT == 400
 
 
 def test_env_overrides(monkeypatch):

@@ -44,6 +44,14 @@ price_eur_kwh = 0.15
 [alerts]
 # ENERGY_ALERTS_ENABLED — master switch for the alert engine.
 enabled = true
+# Consumption thresholds (set <= 0 to disable a rule). Alerts fire when the
+# whole-home total crosses the threshold and resolve when it drops back under.
+# ENERGY_POWER_ALERT_W — instantaneous power spike (latest 1-min max sample).
+power_alert_w = 3500
+# ENERGY_DAILY_KWH_ALERT — day-to-date energy budget.
+daily_kwh_alert = 20
+# ENERGY_MONTHLY_KWH_ALERT — month-to-date energy budget.
+monthly_kwh_alert = 400
 
 # ENERGY_DEVICES — Shelly device inventory as a JSON string (env var only).
 # Each entry: {"id","ip","gen" (1|2),"channels":{"ch0":"label", ...}}.
