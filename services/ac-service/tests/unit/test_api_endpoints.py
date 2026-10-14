@@ -889,3 +889,60 @@ class TestSubscriptionManagerNone:
         assert response.status_code == 200
         data = response.json()
         assert "error" in data
+
+
+
+class TestThermalCurvesEndpoint:
+    """Tests for /api/ac/thermal-curves endpoint."""
+
+    def test_thermal_curves_empty(self, client):
+        """GET /api/ac/thermal-curves returns empty metrics with no samples."""
+        import main
+
+        main.thermal_buffer.clear()
+
+        response = client.get("/api/ac/thermal-curves")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["heating_rate"] is None
+        assert data["cooling_rate"] is None
+        assert data["avg_time_to_target"] == {
+            "heating": None,
+            "cooling": None,
+            "overall": None,
+        }
+        assert data["efficiency_by_outdoor_temp"] == {}
+        assert data["sample_count"] == 0
+        assert data["segment_count"] == 0
+
+    def test_thermal_curves_with_cooling_samples(self, client):
+        """GET /api/ac/thermal-curves computes a cooling rate from samples."""
+        import main
+        from thermal_analysis import ThermalSample
+
+        main.thermal_buffer.clear()
+        for i, temp in enumerate([28.0, 27.0, 26.0, 25.0, 24.0]):
+            main.thermal_buffer.add(
+                ThermalSample(
+                    timestamp=float(i * 60),
+                    average_temp=temp,
+                    setpoint=24.0,
+                    state="modulating",
+                    mode="cool",
+                    outdoor_temp=30.0,
+                )
+            )
+
+        response = client.get("/api/ac/thermal-curves")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cooling_rate"] == pytest.approx(-1.0)
+        assert data["heating_rate"] is None
+        assert data["segment_count"] == 1
+        assert data["sample_count"] == 5
+        assert "30-35" in data["efficiency_by_outdoor_temp"]
+
+        # Clean up shared module-level buffer so later tests see a clean slate.
+        main.thermal_buffer.clear()
