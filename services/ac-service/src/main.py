@@ -628,6 +628,11 @@ def set_control_mode(req: ControlModeRequest):
 def set_manual_params(req: ManualParamsRequest):
     """Set manual control parameters."""
     # Pydantic validates temperature (16-31), fan_speed (0-3), and mode (cool/heat)
+    params = {
+        "mode": req.mode,
+        "fan_speed": req.fan_speed,
+        "temperature": req.temperature,
+    }
     ac_controller.set_manual_params(
         temperature=req.temperature, fan_speed=req.fan_speed, mode=req.mode
     )
