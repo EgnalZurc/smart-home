@@ -110,6 +110,7 @@ async def get_all_health() -> dict[str, Any]:
         get_valheim_health(),
         get_metrics_health(),
         get_energy_health(),
+        get_presence_health(),
         return_exceptions=True,
     )
 
@@ -126,6 +127,7 @@ async def get_all_health() -> dict[str, Any]:
         "valheim",
         "metrics",
         "energy",
+        "presence",
     ]
 
     response = {}
@@ -586,3 +588,48 @@ async def get_energy_health() -> dict[str, Any]:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("energy", _check)
+
+
+# ── Presence Service (infrastructure) ─────────────────────────────────────────
+
+
+@router.get("/presence")
+async def get_presence_health() -> dict[str, Any]:
+    """Health check for the presence-service (multi-signal presence detection).
+
+    Exercises the service's own DB-aware /health, which reports:
+    - online: whether presence-service is running
+    - db_ok: whether its SQLite store answers a query
+    - router_online: whether the router poll succeeded (None until the collector
+      task lands)
+    - mqtt_online: whether the broker connection is up (None until the MQTT
+      handler lands)
+    - last_tick_age_s: seconds since the last engine tick
+
+    Public (like all /api/health/*) so the dashboard status view and CI verify
+    step can reach it without a session; the data endpoints under /api/presence/*
+    remain SUPER-gated via the proxy router.
+    """
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                r = await client.get("http://presence-service:8013/health")
+                if r.status_code == 200:
+                    data = r.json()
+                    return {
+                        "online": data.get("online", False),
+                        "db_ok": data.get("db_ok"),
+                        "router_online": data.get("router_online"),
+                        "mqtt_online": data.get("mqtt_online"),
+                        "last_tick_age_s": data.get("last_tick_age_s"),
+                    }
+                return {"online": False, "error": f"HTTP {r.status_code}"}
+        except httpx.ConnectError:
+            return {"online": False, "error": "Cannot connect to presence-service"}
+        except httpx.TimeoutException:
+            return {"online": False, "error": "Timeout"}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
+    return await _cached_health_check("presence", _check)
