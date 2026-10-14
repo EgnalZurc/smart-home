@@ -381,8 +381,9 @@ class CasitaScheduler:
                     total_scored += 1
                     if scored.passes_alert_threshold:  # notificar si pasa threshold y no fue alertado (independiente de is_new)
                         if not self._db.is_alerted(prop.unique_id):
-                            # No enviamos alerta individual ? solo el resumen al final
+                            # Notificar high-scorer individual + contar para el resumen
                             self._db.mark_alerted(prop.unique_id)
+                            self._notify_high_scorer(scored, zone)
                             total_new += 1
                             new_by_zone[zone_id] = new_by_zone.get(zone_id, 0) + 1
                     if price_event and price_event.delta < 0:
@@ -476,6 +477,33 @@ class CasitaScheduler:
         """Envía una notificación por Telegram para cada scraper que ha fallado."""
         self._notifier.send_status(formatters.build_scraper_errors_message(errors))
 
+    def _notify_high_scorer(self, scored, zone) -> None:
+        """Envía una notificación Telegram para una propiedad que supera el umbral.
+
+        Construye el dict esperado por ``TelegramNotifier.notify_high_scorer``
+        (título, precio, score y link). Nunca propaga excepciones: un fallo de
+        notificación no debe interrumpir el procesamiento del scraping.
+        """
+        prop = scored.prop
+        try:
+            self._notifier.notify_high_scorer(
+                {
+                    "title": prop.title,
+                    "price": prop.price,
+                    "score": scored.total_score,
+                    "url": prop.url,
+                    "zone": getattr(zone, "name", None),
+                    "rooms": prop.rooms,
+                    "size_m2": prop.size_m2,
+                }
+            )
+        except Exception as e:
+            logger.error(
+                "[casita] Error notificando high-scorer %s: %s",
+                prop.unique_id,
+                e,
+            )
+
     def _run_gmail_check(self) -> None:
         if self._gmail_check_running:
             logger.info("[casita] Gmail check ya en curso, ignorando")
@@ -539,6 +567,7 @@ class CasitaScheduler:
                 if scored.passes_alert_threshold:  # notificar si pasa threshold y no fue alertado (independiente de is_new)
                     if not self._db.is_alerted(prop.unique_id):
                         self._db.mark_alerted(prop.unique_id)
+                        self._notify_high_scorer(scored, zone)
                         total_new += 1
                         new_by_zone[zone.id] = new_by_zone.get(zone.id, 0) + 1
                         logger.info(
@@ -700,6 +729,7 @@ class CasitaScheduler:
                 if scored.passes_alert_threshold:  # notificar si pasa threshold y no fue alertado (independiente de is_new)
                     if not self._db.is_alerted(prop.unique_id):
                         self._db.mark_alerted(prop.unique_id)
+                        self._notify_high_scorer(scored, zone)
                         total_new += 1
                         new_by_zone[zone.id] = new_by_zone.get(zone.id, 0) + 1
                         logger.info(

@@ -92,6 +92,42 @@ def _format_new_property_alert(scored: ScoredProperty) -> str:
     return "\n".join(lines)
 
 
+def _format_high_scorer_alert(prop: dict) -> str:
+    """Formatea la notificación de una propiedad que supera el umbral de score.
+
+    Espera un dict con, al menos: ``title``, ``price``, ``score`` y ``url``.
+    Campos opcionales (``zone``/``zone_id``, ``rooms``, ``size_m2``) se incluyen
+    si están presentes.
+    """
+    score = float(prop.get("score") or 0.0)
+    emoji = _score_emoji(score) or "🎯"
+    title = _escape_md(str(prop.get("title") or "Nueva vivienda"))
+    lines = [
+        f"{emoji} Propiedad destacada — {score:.1f}/{ScoreBreakdown.MAX_SCORE:.0f} pts",
+        f"🏠 {title}",
+    ]
+    zone_name = prop.get("zone") or prop.get("zone_id")
+    if zone_name:
+        lines.append(f"📍 {_escape_md(str(zone_name).replace('_', ' '))}")
+    price = prop.get("price")
+    if price:
+        lines.append(f"💰 {_format_price(int(price))}")
+
+    details = []
+    if prop.get("rooms"):
+        details.append(f"🛏 {prop['rooms']} hab.")
+    if prop.get("size_m2"):
+        details.append(f"📐 {float(prop['size_m2']):.0f} m²")
+    if details:
+        lines.append("  ".join(details))
+
+    url = prop.get("url")
+    if url:
+        lines.append("")
+        lines.append(f"🔗 {url}")
+    return "\n".join(lines)
+
+
 def _format_price_drop_alert(
     event: PriceEvent, title: str, url: str, zone_name: str
 ) -> str:
@@ -223,6 +259,22 @@ class TelegramNotifier:
                 "[telegram] Alerta enviada: %s — %.1f pts",
                 scored.prop.unique_id,
                 scored.total_score,
+            )
+        return success
+
+    def notify_high_scorer(self, property_dict: dict) -> bool:
+        """Notifica una propiedad que ha superado el umbral de score.
+
+        ``property_dict`` debe contener al menos ``title``, ``price``, ``score``
+        y ``url``. Devuelve True si el mensaje se envió a algún chat.
+        """
+        text = _format_high_scorer_alert(property_dict)
+        success = self._send(text)
+        if success:
+            logger.info(
+                "[telegram] High-scorer notificado: %s — %.1f pts",
+                property_dict.get("url", "?"),
+                float(property_dict.get("score") or 0.0),
             )
         return success
 
