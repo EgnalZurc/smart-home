@@ -47,6 +47,7 @@ on:
           - valheim-admin
           - pc-agent
           - metrics-service
+          - energy-monitor
       force_deploy:
         description: 'Enable deploy even without detected changes'
         required: false
@@ -72,6 +73,7 @@ jobs:
       vaultwarden: ${{ steps.changes.outputs.vaultwarden }}
       valheim-admin: ${{ steps.changes.outputs.valheim-admin }}
       metrics-service: ${{ steps.changes.outputs.metrics-service }}
+      energy-monitor: ${{ steps.changes.outputs.energy-monitor }}
       pc-agent: ${{ steps.changes.outputs.pc-agent }}
       async-http-client: ${{ steps.changes.outputs.async-http-client }}
       smart-home-common: ${{ steps.changes.outputs.smart-home-common }}
@@ -113,6 +115,9 @@ jobs:
             metrics-service:
               - 'services/metrics-service/**'
               - 'libs/smart_home_common/**'
+            energy-monitor:
+              - 'services/energy-monitor/**'
+              - 'libs/smart_home_common/**'
             pc-agent:
               - 'tools/pc-agent/**'
             async-http-client:
@@ -139,6 +144,7 @@ jobs:
           ASYNC_HTTP_CLIENT=false
           SMART_HOME_COMMON=false
           METRICS_SERVICE=false
+          ENERGY_MONITOR=false
           
           case "$SERVICE" in
             all)
@@ -149,6 +155,7 @@ jobs:
               ASYNC_HTTP_CLIENT=true
               SMART_HOME_COMMON=true
               METRICS_SERVICE=true
+              ENERGY_MONITOR=true
               ;;
             dashboard)         echo "🎯 Processing: dashboard";         DASHBOARD=true ;;
             ac-service)        echo "🎯 Processing: ac-service";        AC_SERVICE=true ;;
@@ -160,6 +167,7 @@ jobs:
             valheim-admin)     echo "🎯 Processing: valheim-admin";     VALHEIM_ADMIN=true ;;
             pc-agent)          echo "🎯 Processing: pc-agent";          PC_AGENT=true ;;
             metrics-service)   echo "🎯 Processing: metrics-service";   METRICS_SERVICE=true ;;
+            energy-monitor)    echo "🎯 Processing: energy-monitor";    ENERGY_MONITOR=true ;;
             *)
               echo "🔍 Auto-detecting changed services"
               DASHBOARD=${{ steps.filter.outputs.dashboard }}
@@ -176,6 +184,7 @@ jobs:
               ASYNC_HTTP_CLIENT=${{ steps.filter.outputs.async-http-client }}
               SMART_HOME_COMMON=${{ steps.filter.outputs.smart-home-common }}
               METRICS_SERVICE=${{ steps.filter.outputs.metrics-service }}
+              ENERGY_MONITOR=${{ steps.filter.outputs.energy-monitor }}
               ;;
           esac
           
@@ -192,6 +201,7 @@ jobs:
           echo "async-http-client=$ASYNC_HTTP_CLIENT" >> $GITHUB_OUTPUT
           echo "smart-home-common=$SMART_HOME_COMMON" >> $GITHUB_OUTPUT
           echo "metrics-service=$METRICS_SERVICE" >> $GITHUB_OUTPUT
+          echo "energy-monitor=$ENERGY_MONITOR" >> $GITHUB_OUTPUT
           echo "nginx=$NGINX" >> $GITHUB_OUTPUT
           echo "compose=$COMPOSE" >> $GITHUB_OUTPUT
           
@@ -201,6 +211,7 @@ jobs:
              [[ "$VACACIONES" == "true" ]] || [[ "$CASITA" == "true" ]] || \
              [[ "$VAULTWARDEN" == "true" ]] || [[ "$VALHEIM_ADMIN" == "true" ]] || \
              [[ "$METRICS_SERVICE" == "true" ]] || \
+             [[ "$ENERGY_MONITOR" == "true" ]] || \
              [[ "$NGINX" == "true" ]] || [[ "$COMPOSE" == "true" ]] || \
              [[ "${{ steps.filter.outputs.infrastructure }}" == "true" ]] || \
              [[ "$FORCE_DEPLOY" == "true" ]]; then
@@ -239,6 +250,8 @@ jobs:
             add_service "valheim-admin" "egnal/smart-home-valheim-admin" "." "services/valheim-admin/Dockerfile"
           [[ "${{ steps.changes.outputs.metrics-service }}" == "true" ]] && \
             add_service "metrics-service" "egnal/smart-home-metrics-service" "." "services/metrics-service/Dockerfile"
+          [[ "${{ steps.changes.outputs.energy-monitor }}" == "true" ]] && \
+            add_service "energy-monitor" "egnal/smart-home-energy-monitor" "." "services/energy-monitor/Dockerfile"
           
           SERVICES="$SERVICES]"
           echo "services=$SERVICES" >> $GITHUB_OUTPUT
@@ -260,6 +273,7 @@ jobs:
           echo "| Vaultwarden | ${{ steps.changes.outputs.vaultwarden }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Valheim Admin | ${{ steps.changes.outputs.valheim-admin }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Metrics Service | ${{ steps.changes.outputs.metrics-service }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Energy Monitor | ${{ steps.changes.outputs.energy-monitor }} |" >> $GITHUB_STEP_SUMMARY
           echo "| nginx | ${{ steps.changes.outputs.nginx }} |" >> $GITHUB_STEP_SUMMARY
           echo "| compose | ${{ steps.changes.outputs.compose }} |" >> $GITHUB_STEP_SUMMARY
 
@@ -607,6 +621,47 @@ jobs:
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Lint & Test - Energy Monitor
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint-and-test-energy-monitor:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.energy-monitor == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install tools
+        run: pip install -r requirements-dev.txt
+
+      - name: Install Hadolint
+        run: |
+          wget -qO /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          chmod +x /usr/local/bin/hadolint
+
+      - name: Ruff - Code Quality
+        run: |
+          ruff check services/energy-monitor/src --output-format=github
+          ruff format services/energy-monitor/src --check --diff
+
+      - name: Bandit - Security Check
+        run: bandit -r services/energy-monitor/src -ll -ii --format txt
+
+      - name: Hadolint - Dockerfile Check
+        run: hadolint services/energy-monitor/Dockerfile
+
+      - name: Run Tests with Coverage
+        run: |
+          if [[ -d "services/energy-monitor/tests" ]] && find services/energy-monitor/tests -name "test_*.py" | grep -q .; then
+            pip install -r services/energy-monitor/requirements.txt --quiet 2>/dev/null || true
+            pip install -e libs/smart_home_common --quiet 2>/dev/null || true
+            cd services/energy-monitor && PYTHONPATH=src python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
+          else
+            echo "⏭️ No tests found"
+          fi
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Lint & Test - PC Agent (no Dockerfile, runs natively on Windows)
   # ─────────────────────────────────────────────────────────────────────────────
   lint-and-test-pc-agent:
@@ -714,6 +769,7 @@ jobs:
       - lint-and-test-vaultwarden
       - lint-and-test-valheim-admin
       - lint-and-test-metrics-service
+      - lint-and-test-energy-monitor
       - lint-and-test-pc-agent
       - lint-and-test-async-http-client
       - lint-and-test-smart-home-common
@@ -756,6 +812,7 @@ jobs:
           check_job "Vaultwarden" "${{ needs.lint-and-test-vaultwarden.result }}" "${{ needs.prepare.outputs.vaultwarden }}"
           check_job "Valheim Admin" "${{ needs.lint-and-test-valheim-admin.result }}" "${{ needs.prepare.outputs.valheim-admin }}"
           check_job "Metrics Service" "${{ needs.lint-and-test-metrics-service.result }}" "${{ needs.prepare.outputs.metrics-service }}"
+          check_job "Energy Monitor" "${{ needs.lint-and-test-energy-monitor.result }}" "${{ needs.prepare.outputs.energy-monitor }}"
           check_job "PC Agent" "${{ needs.lint-and-test-pc-agent.result }}" "${{ needs.prepare.outputs.pc-agent }}"
           check_job "Async HTTP Client" "${{ needs.lint-and-test-async-http-client.result }}" "${{ needs.prepare.outputs.async-http-client }}"
           check_job "Smart Home Common" "${{ needs.lint-and-test-smart-home-common.result }}" "${{ needs.prepare.outputs.smart-home-common }}"
@@ -837,6 +894,10 @@ jobs:
             if [ "${{ matrix.service.name }}" = "metrics-service" ]; then
               mkdir -p data/metrics-service
               chown 1000:1000 data/metrics-service
+            fi
+            if [ "${{ matrix.service.name }}" = "energy-monitor" ]; then
+              mkdir -p data/energy-monitor
+              chown 1000:1000 data/energy-monitor
             fi
             docker compose pull ${{ matrix.service.name }}
             docker compose up -d --force-recreate ${{ matrix.service.name }}
@@ -1129,6 +1190,7 @@ jobs:
           check_health "Baby Gifts" "/api/health/baby-gifts"
           check_health "Casita" "/api/health/casita"
           check_health "Metrics Service" "/api/health/metrics"
+          check_health "Energy Monitor" "/api/health/energy"
           
           echo "" >> $GITHUB_STEP_SUMMARY
           
