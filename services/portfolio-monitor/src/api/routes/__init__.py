@@ -16,6 +16,7 @@ from orchestrator import get_orchestrator  # noqa: F401 — patched by tests
 # ─── Sub-routers ─────────────────────────────────────────────────────────────
 from .alerts import router as _alerts_router
 from .control import router as _control_router
+from .dividends import router as _dividends_router
 from .health import router as _health_router
 
 # ─── Re-export: health checks (patched at callsite by tests) ────────────────
@@ -47,7 +48,6 @@ from .helpers import (  # noqa: F401
 from .notifications import router as _notifications_router
 from .rebalance import router as _rebalance_router
 from .summary import router as _summary_router
-from .dividends import router as _dividends_router
 
 # ─── Aggregate router ───────────────────────────────────────────────────────
 router = APIRouter()

@@ -116,9 +116,9 @@ async def get_active_alerts():
 
     # Upcoming dividends: surface any dividend estimated within the next 7 days
     # as an informational alert so they appear in the unified alerts feed.
-    from monitors.etf_monitor import calculate_dividend_info
-
     import asyncio
+
+    from monitors.etf_monitor import calculate_dividend_info
 
     portfolio = config.get_etf_portfolio()
     prices: dict[str, float] = {}
