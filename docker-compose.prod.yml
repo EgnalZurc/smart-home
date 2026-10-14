@@ -361,6 +361,44 @@ services:
       retries: 3
       start_period: 30s
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Energy Monitor - Shelly EM power/energy time-series collector
+  # Infrastructure service: NOT in CONTROLLABLE_CONTAINERS, NOT exposed through
+  # nginx. Reached only via the backend proxy /api/energy/*. Polls Shelly EM
+  # devices on the LAN (ENERGY_DEVICES) for instantaneous power + cumulative kWh.
+  # See docs/designs/energy-monitor-design.md.
+  # NOTE: the deploy step must `mkdir -p` + `chown 1000:1000 data/energy-monitor`
+  # BEFORE `docker compose up` so the non-root container can create its SQLite DB.
+  # ─────────────────────────────────────────────────────────────────────────────
+  energy-monitor:
+    image: egnal/smart-home-energy-monitor:latest
+    container_name: energy-monitor
+    restart: on-failure:5
+    mem_limit: 64m
+    memswap_limit: 64m
+    expose:
+      - 8012
+    volumes:
+      - ./data/energy-monitor:/app/data
+    environment:
+      - TZ=Europe/Madrid
+      - ENERGY_DEVICES=${ENERGY_DEVICES:-[]}
+    # Telegram alerts: TelegramNotifier.from_env() reads TELEGRAM_BOT_TOKEN /
+    # TELEGRAM_CHAT_IDS from .env (same pattern as metrics-service). If unset,
+    # alerts still fire + persist but send nothing.
+    env_file:
+      - .env
+    depends_on:
+      - smart-home-backend
+    networks:
+      - smart-home
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8012/health', timeout=3)"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
 networks:
   smart-home:
     driver: bridge

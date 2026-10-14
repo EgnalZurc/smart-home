@@ -1,0 +1,61 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# energy-monitor — example settings
+#
+# The service reads its configuration from ENVIRONMENT VARIABLES (see src/config.py
+# and docs/designs/energy-monitor-design.md §6). This file documents every tunable
+# and its default value for reference / local experimentation; copy it to
+# settings.toml and adapt, or export the equivalent ENERGY_* env vars.
+#
+# In production these are set via docker-compose.prod.yml + .env, NOT this file.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+[service]
+# ENERGY_PORT — HTTP port the FastAPI app listens on.
+port = 8012
+
+[collector]
+# ENERGY_POLL_INTERVAL_S — how often to poll each Shelly device (power is volatile).
+poll_interval_s = 10
+# ENERGY_ROLLUP_INTERVAL_S — 1-min power rollup to SQLite.
+rollup_interval_s = 60
+# ENERGY_ENERGY_SNAPSHOT_INTERVAL_S — hourly snapshot of the kWh counter.
+energy_snapshot_interval_s = 3600
+# ENERGY_RING_BUFFER_MAXLEN — 360 * 10 s = 1 h of hi-res power per channel.
+ring_buffer_maxlen = 360
+# ENERGY_HTTP_TIMEOUT_S — per-request timeout talking to a Shelly device.
+http_timeout_s = 4.0
+
+[storage]
+# ENERGY_DB_PATH — SQLite database path (bind-mounted in production).
+db_path = "/app/data/energy.db"
+# ENERGY_POWER_RETENTION_DAYS — fine-grained 1-min power history.
+power_retention_days = 90
+# ENERGY_ENERGY_RETENTION_DAYS — hourly energy counter (3 years).
+energy_retention_days = 1095
+# ENERGY_ALERT_RETENTION_DAYS — alert audit trail.
+alert_retention_days = 365
+
+[tariff]
+# ENERGY_TARIFF_MODE — "flat" | "tariff2.0td".
+mode = "flat"
+# ENERGY_PRICE_EUR_KWH — flat price used for cost estimates.
+price_eur_kwh = 0.15
+
+[alerts]
+# ENERGY_ALERTS_ENABLED — master switch for the alert engine.
+enabled = true
+
+# ENERGY_DEVICES — Shelly device inventory as a JSON string (env var only).
+# Each entry: {"id","ip","gen" (1|2),"channels":{"ch0":"label", ...}}.
+# Device passwords (if set on the Shelly) go in .env as
+# ENERGY_DEVICE_<id>_PASSWORD and are never logged. Example:
+#
+#   ENERGY_DEVICES='[{"id":"main","ip":"192.168.1.50","gen":1,
+#                     "channels":{"ch0":"General","ch1":"Aire Acondicionado"}}]'
+[[devices]]
+id = "main"
+ip = "192.168.1.50"
+gen = 1
+[devices.channels]
+ch0 = "General"
+ch1 = "Aire Acondicionado"
