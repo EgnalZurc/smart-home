@@ -1,17 +1,36 @@
 """
-Scraper para pisos.com.
-Estructura HTML (verificada agosto 2026):
-  - Cada anuncio: <div class="ad-preview ...">
-  - Precio: <span class="ad-preview__price">
-  - Titulo: <a class="ad-preview__title">
-  - Subtitulo/zona: <p class="ad-preview__subtitle">
-  - Caracteristicas: <p class="ad-preview__char">  (ej: "3 habs.", "120 m2")
-  - Descripcion: <p class="ad-preview__description">
+Scraper for pisos.com real estate portal.
 
-Workaround L2/L3 (garaje y jardin):
-  Las URLs de busqueda incluyen filtro /jardin/ y /garaje/ en la ruta.
-  Si la URL usada contiene estos segmentos, todos los resultados
-  estan garantizados por el portal → se marcan has_garden=True, has_garage=True.
+This module implements the scraping logic for Pisos.com, one of Spain's
+major real estate listing platforms. It extracts property listings from
+search result pages and normalizes them into Property objects.
+
+HTML Structure (verified August 2026):
+    - Listing container: div.ad-preview
+    - Price: span.ad-preview__price
+    - Title: a.ad-preview__title
+    - Subtitle/zone: p.ad-preview__subtitle
+    - Features: p.ad-preview__char (e.g., "3 habs.", "120 m2")
+    - Description: p.ad-preview__description
+
+Workaround for L2/L3 Rubric (garden/garage):
+    Pisos.com search URLs include /jardin/ and /garaje/ path segments
+    as filters. If the URL contains these segments, all results are
+    guaranteed by the portal to have that feature → has_garden=True or
+    has_garage=True is set directly. Otherwise, values are inferred from
+    description text.
+
+Example:
+    >>> from pisos_scraper import scrape_zone
+    >>> from zones import Zone
+    >>> zone = Zone(
+    ...     id="horta-nord",
+    ...     name="L'Horta Nord",
+    ...     pisos_search_urls=["https://www.pisos.com/venta/pisos-..."]
+    ... )
+    >>> properties = scrape_zone(zone)
+    >>> len(properties)
+    38
 """
 
 from __future__ import annotations
@@ -21,6 +40,7 @@ import re
 from datetime import datetime
 
 import httpx
+from config import BASE_URLS, SCRAPER_CONFIG
 from models import Portal, Property
 from scraper_base import (
     get_html,
@@ -42,21 +62,60 @@ from scraper_base import (
 from zones import Zone
 
 logger = logging.getLogger(__name__)
-_BASE_URL = "https://www.pisos.com"
+_BASE_URL = BASE_URLS["pisos"]
 
 
 def _url_guarantees_garden(url: str) -> bool:
-    """True si la URL ya filtra por jardin en el portal."""
+    """
+    Check if the search URL includes a garden filter.
+
+    When Pisos.com URLs contain /jardin/ or jardin=1, all results
+    are pre-filtered by the portal to have a garden.
+
+    Args:
+        url: Search URL to check.
+
+    Returns:
+        True if URL guarantees garden presence, False otherwise.
+    """
     return "/jardin/" in url.lower() or "jardin=1" in url.lower()
 
 
 def _url_guarantees_garage(url: str) -> bool:
-    """True si la URL ya filtra por garaje en el portal."""
+    """
+    Check if the search URL includes a garage filter.
+
+    When Pisos.com URLs contain /garaje/ or garaje=1, all results
+    are pre-filtered by the portal to have a garage.
+
+    Args:
+        url: Search URL to check.
+
+    Returns:
+        True if URL guarantees garage presence, False otherwise.
+    """
     return "/garaje/" in url.lower() or "garaje=1" in url.lower()
 
 
 def _extract_listings(soup, base_url: str, zone: Zone, now: datetime) -> list[Property]:
-    """Extrae anuncios del HTML de una pagina de resultados de pisos.com."""
+    """
+    Extract property listings from a Pisos.com search results page.
+
+    Parses div.ad-preview containers and converts them to Property objects.
+    Applies URL-based guarantees for garden/garage when available.
+
+    Args:
+        soup: BeautifulSoup object of the search results page.
+        base_url: Original search URL (for checking filter guarantees).
+        zone: Zone configuration for the current search.
+        now: Timestamp for first_seen/last_seen fields.
+
+    Returns:
+        List of Property objects. May be empty if no listings found.
+
+    Note:
+        Selector verified August 2026: div.ad-preview
+    """
     # Selector verificado agosto 2026: div.ad-preview
     containers = soup.select("div.ad-preview")
     if not containers:
@@ -167,10 +226,26 @@ def _extract_listings(soup, base_url: str, zone: Zone, now: datetime) -> list[Pr
 
 def scrape_zone(zone: Zone, client: httpx.Client | None = None) -> list[Property]:
     """
-    Scrape de todas las URLs configuradas en la zona para pisos.com.
-    Pagina hasta MAX_PAGES por URL.
+    Scrape Pisos.com listings for a zone.
+
+    Iterates through all configured search URLs for the zone, paginating
+    up to max_pages (from config) per URL. Deduplicates results by portal_id.
+
+    Args:
+        zone: Zone configuration with pisos_search_urls list.
+        client: Optional httpx.Client to reuse. If None, creates and
+            closes a new client.
+
+    Returns:
+        List of unique Property objects found across all search URLs.
+        Empty list if zone has no configured URLs or all requests fail.
+
+    Example:
+        >>> zone = Zone(id="test", pisos_search_urls=["https://..."])
+        >>> properties = scrape_zone(zone)
+        >>> print(f"Found {len(properties)} listings")
     """
-    MAX_PAGES = 3
+    max_pages = SCRAPER_CONFIG["max_pages"]
     own_client = client is None
     if own_client:
         client = make_client()
@@ -181,11 +256,11 @@ def scrape_zone(zone: Zone, client: httpx.Client | None = None) -> list[Property
 
     try:
         for base_url in zone.pisos_search_urls:
-            for page in range(1, MAX_PAGES + 1):
+            for page in range(1, max_pages + 1):
                 url = base_url if page == 1 else f"{base_url}pagina-{page}/"
                 logger.info("[pisos] Scraping %s", url)
 
-                soup = get_html(url, client, delay=2.5)
+                soup = get_html(url, client)
                 if not soup:
                     logger.warning("[pisos] Sin respuesta para %s", url)
                     break
