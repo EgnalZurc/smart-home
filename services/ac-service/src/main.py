@@ -43,7 +43,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from outdoor import build_outdoor_fetcher
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from smart_home_common.clients.melcloud import MelCloudClient
 from smart_home_common.clients.zigbee import Zigbee2MQTTClient
 from smart_home_common.mqtt.handler import MqttHandler
@@ -292,13 +292,55 @@ class ConfigUpdate(BaseModel):
 
 
 class ControlModeRequest(BaseModel):
-    mode: str  # "auto", "manual", "off"
+    mode: str
+
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, v: str) -> str:
+        allowed = {"auto", "manual", "off"}
+        if v.lower() not in allowed:
+            raise ValueError(f"mode must be one of {allowed}")
+        return v.lower()
+
+
+class ACSetpointRequest(BaseModel):
+    """Request model for AC setpoint temperature."""
+
+    temperature: float = Field(ge=16.0, le=31.0)  # MELCloud limits
+
+
+class ACModeRequest(BaseModel):
+    """Request model for AC mode changes."""
+
+    mode: str
+
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, v: str) -> str:
+        allowed = {"heat", "cool", "auto", "dry", "fan"}
+        if v.lower() not in allowed:
+            raise ValueError(f"mode must be one of {allowed}")
+        return v.lower()
+
+
+class ACPowerRequest(BaseModel):
+    """Request model for AC power changes."""
+
+    power: bool
 
 
 class ManualParamsRequest(BaseModel):
     mode: str = "cool"
-    fan_speed: int = 0
-    temperature: float = 23.0
+    fan_speed: int = Field(default=0, ge=0, le=3)
+    temperature: float = Field(default=23.0, ge=16.0, le=31.0)
+
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, v: str) -> str:
+        allowed = {"cool", "heat"}
+        if v.lower() not in allowed:
+            raise ValueError(f"mode must be one of {allowed}")
+        return v.lower()
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -482,8 +524,7 @@ def update_config(update: ConfigUpdate):
 @app.post("/api/ac/control", tags=["AC Control"])
 def set_control_mode(req: ControlModeRequest):
     """Set control mode (auto/manual/off)."""
-    if req.mode not in ("auto", "manual", "off"):
-        raise HTTPException(400, "mode must be 'auto', 'manual', or 'off'")
+    # Pydantic validates mode and normalizes to lowercase
     if req.mode == "manual":
         state = ac_controller.current_state
         ac_controller.set_manual_params(
@@ -498,16 +539,7 @@ def set_control_mode(req: ControlModeRequest):
 @app.post("/api/ac/manual", tags=["AC Control"])
 def set_manual_params(req: ManualParamsRequest):
     """Set manual control parameters."""
-    min_temp = ac_controller.config.min_setpoint
-    max_temp = ac_controller.config.max_setpoint
-    if req.temperature < min_temp or req.temperature > max_temp:
-        raise HTTPException(
-            400, f"Temperature must be between {min_temp} and {max_temp}"
-        )
-    if req.fan_speed < 0 or req.fan_speed > 3:
-        raise HTTPException(400, "Fan speed must be between 0 and 3")
-    if req.mode not in ("cool", "heat"):
-        raise HTTPException(400, "Mode must be 'cool' or 'heat'")
+    # Pydantic validates temperature (16-31), fan_speed (0-3), and mode (cool/heat)
     ac_controller.set_manual_params(
         temperature=req.temperature, fan_speed=req.fan_speed, mode=req.mode
     )

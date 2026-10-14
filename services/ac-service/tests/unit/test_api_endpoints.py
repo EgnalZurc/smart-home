@@ -260,10 +260,10 @@ class TestControlEndpoints:
         assert data["control_mode"] == "off"
 
     def test_set_control_mode_invalid(self, client, mock_components):
-        """POST /api/ac/control with invalid mode should return 400."""
+        """POST /api/ac/control with invalid mode should return 422."""
         response = client.post("/api/ac/control", json={"mode": "invalid"})
 
-        assert response.status_code == 400
+        assert response.status_code == 422
 
 
 class TestManualParamsEndpoints:
@@ -282,43 +282,43 @@ class TestManualParamsEndpoints:
         assert data["status"] == "ok"
 
     def test_set_manual_params_invalid_temperature(self, client, mock_components):
-        """POST /api/ac/manual with invalid temp should return 400."""
+        """POST /api/ac/manual with invalid temp should return 422."""
         response = client.post(
             "/api/ac/manual",
             json={
                 "mode": "cool",
                 "fan_speed": 0,
-                "temperature": 15.0,  # Below min_setpoint
+                "temperature": 15.0,  # Below min (16.0)
             },
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_set_manual_params_invalid_fan_speed(self, client, mock_components):
-        """POST /api/ac/manual with invalid fan speed should return 400."""
+        """POST /api/ac/manual with invalid fan speed should return 422."""
         response = client.post(
             "/api/ac/manual",
             json={
                 "mode": "cool",
-                "fan_speed": 5,  # Invalid
+                "fan_speed": 5,  # Above max (3)
                 "temperature": 23.0,
             },
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_set_manual_params_invalid_mode(self, client, mock_components):
-        """POST /api/ac/manual with invalid mode should return 400."""
+        """POST /api/ac/manual with invalid mode should return 422."""
         response = client.post(
             "/api/ac/manual",
             json={
-                "mode": "turbo",  # Invalid
+                "mode": "turbo",  # Invalid - not in {cool, heat}
                 "fan_speed": 0,
                 "temperature": 23.0,
             },
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 422
 
 
 class TestOutdoorEndpoint:
@@ -672,3 +672,159 @@ class TestSubscriptionManagerNone:
         assert response.status_code == 200
         data = response.json()
         assert "error" in data
+
+
+
+class TestPydanticValidation:
+    """Tests for Pydantic model validation (M-5)."""
+
+    # ── Control mode validation ───────────────────────────────────────────────
+
+    def test_control_mode_normalized_to_lowercase(self, client, mock_components):
+        """POST /api/ac/control should normalize mode to lowercase."""
+        response = client.post("/api/ac/control", json={"mode": "AUTO"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["control_mode"] == "auto"
+
+    def test_control_mode_missing_field(self, client, mock_components):
+        """POST /api/ac/control without mode should return 422."""
+        response = client.post("/api/ac/control", json={})
+
+        assert response.status_code == 422
+
+    # ── Manual params temperature validation ──────────────────────────────────
+
+    def test_manual_params_temperature_below_melcloud_min(
+        self, client, mock_components
+    ):
+        """POST /api/ac/manual with temp < 16 should return 422."""
+        response = client.post(
+            "/api/ac/manual",
+            json={"mode": "cool", "fan_speed": 0, "temperature": 15.9},
+        )
+
+        assert response.status_code == 422
+        data = response.json()
+        assert "temperature" in str(data["detail"]).lower()
+
+    def test_manual_params_temperature_above_melcloud_max(
+        self, client, mock_components
+    ):
+        """POST /api/ac/manual with temp > 31 should return 422."""
+        response = client.post(
+            "/api/ac/manual",
+            json={"mode": "cool", "fan_speed": 0, "temperature": 31.1},
+        )
+
+        assert response.status_code == 422
+        data = response.json()
+        assert "temperature" in str(data["detail"]).lower()
+
+    def test_manual_params_temperature_at_min_boundary(self, client, mock_components):
+        """POST /api/ac/manual with temp = 16 should succeed."""
+        mock_components["ac_controller"].melcloud.set_temperature.return_value = True
+
+        response = client.post(
+            "/api/ac/manual",
+            json={"mode": "cool", "fan_speed": 0, "temperature": 16.0},
+        )
+
+        assert response.status_code == 200
+
+    def test_manual_params_temperature_at_max_boundary(self, client, mock_components):
+        """POST /api/ac/manual with temp = 31 should succeed."""
+        mock_components["ac_controller"].melcloud.set_temperature.return_value = True
+
+        response = client.post(
+            "/api/ac/manual",
+            json={"mode": "cool", "fan_speed": 0, "temperature": 31.0},
+        )
+
+        assert response.status_code == 200
+
+    # ── Manual params fan_speed validation ────────────────────────────────────
+
+    def test_manual_params_fan_speed_negative(self, client, mock_components):
+        """POST /api/ac/manual with fan_speed < 0 should return 422."""
+        response = client.post(
+            "/api/ac/manual",
+            json={"mode": "cool", "fan_speed": -1, "temperature": 23.0},
+        )
+
+        assert response.status_code == 422
+
+    def test_manual_params_fan_speed_above_max(self, client, mock_components):
+        """POST /api/ac/manual with fan_speed > 3 should return 422."""
+        response = client.post(
+            "/api/ac/manual",
+            json={"mode": "cool", "fan_speed": 4, "temperature": 23.0},
+        )
+
+        assert response.status_code == 422
+
+    def test_manual_params_fan_speed_at_boundaries(self, client, mock_components):
+        """POST /api/ac/manual with fan_speed 0 and 3 should succeed."""
+        mock_components["ac_controller"].melcloud.set_temperature.return_value = True
+
+        # Test lower boundary
+        response = client.post(
+            "/api/ac/manual",
+            json={"mode": "cool", "fan_speed": 0, "temperature": 23.0},
+        )
+        assert response.status_code == 200
+
+        # Test upper boundary
+        response = client.post(
+            "/api/ac/manual",
+            json={"mode": "cool", "fan_speed": 3, "temperature": 23.0},
+        )
+        assert response.status_code == 200
+
+    # ── Manual params mode validation ─────────────────────────────────────────
+
+    def test_manual_params_mode_normalized_to_lowercase(self, client, mock_components):
+        """POST /api/ac/manual should normalize mode to lowercase."""
+        mock_components["ac_controller"].melcloud.set_temperature.return_value = True
+
+        response = client.post(
+            "/api/ac/manual",
+            json={"mode": "COOL", "fan_speed": 0, "temperature": 23.0},
+        )
+
+        assert response.status_code == 200
+
+    def test_manual_params_mode_heat_valid(self, client, mock_components):
+        """POST /api/ac/manual with mode=heat should succeed."""
+        mock_components["ac_controller"].melcloud.set_temperature.return_value = True
+
+        response = client.post(
+            "/api/ac/manual",
+            json={"mode": "heat", "fan_speed": 0, "temperature": 23.0},
+        )
+
+        assert response.status_code == 200
+
+    def test_manual_params_mode_auto_invalid(self, client, mock_components):
+        """POST /api/ac/manual with mode=auto should return 422 (not in {cool,heat})."""
+        response = client.post(
+            "/api/ac/manual",
+            json={"mode": "auto", "fan_speed": 0, "temperature": 23.0},
+        )
+
+        assert response.status_code == 422
+
+    # ── Multiple validation errors ────────────────────────────────────────────
+
+    def test_manual_params_multiple_errors(self, client, mock_components):
+        """POST /api/ac/manual with multiple invalid fields should return 422."""
+        response = client.post(
+            "/api/ac/manual",
+            json={"mode": "invalid", "fan_speed": 10, "temperature": 50.0},
+        )
+
+        assert response.status_code == 422
+        data = response.json()
+        # Pydantic returns all validation errors
+        assert len(data["detail"]) >= 2
