@@ -13,6 +13,10 @@ reads and writes only their own data, keyed by the authenticated username, so
 no admin check is needed.
 """
 
+from __future__ import annotations
+
+import logging
+
 import auth_users
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -20,6 +24,8 @@ from pydantic import BaseModel, Field
 from api.auth_helpers import require_authenticated
 
 router = APIRouter(prefix="/api/user", tags=["User"])
+
+logger = logging.getLogger(__name__)
 
 
 class Preferences(BaseModel):
