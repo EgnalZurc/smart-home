@@ -60,3 +60,13 @@ PRICE_EUR_KWH = float(os.environ.get("ENERGY_PRICE_EUR_KWH", "0.15"))
 # libs/notifications.TelegramNotifier.from_env() (TELEGRAM_BOT_TOKEN /
 # TELEGRAM_CHAT_IDS); if unset, alerts still fire + persist, just send nothing.
 ALERTS_ENABLED = os.environ.get("ENERGY_ALERTS_ENABLED", "true").lower() == "true"
+
+# Consumption thresholds. A value <= 0 disables that rule. Checked by the alert
+# engine (Task 6.4) against the whole-home total; crossing a threshold fires an
+# alert, dropping back below it resolves it.
+#   * instantaneous power spike (W), evaluated on the latest 1-min max sample.
+#   * daily energy budget (kWh), evaluated on the running day-to-date total.
+#   * monthly energy budget (kWh), evaluated on the month-to-date total.
+POWER_ALERT_W = float(os.environ.get("ENERGY_POWER_ALERT_W", "3500"))
+DAILY_KWH_ALERT = float(os.environ.get("ENERGY_DAILY_KWH_ALERT", "20"))
+MONTHLY_KWH_ALERT = float(os.environ.get("ENERGY_MONTHLY_KWH_ALERT", "400"))
