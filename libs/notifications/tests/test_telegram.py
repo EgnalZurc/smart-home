@@ -398,4 +398,7 @@ class TestTelegramNotifierExceptionHandling:
 
         assert result.success is False
         assert result.failed_count == 1
-        assert "Network error" in result.message
+        # Only the exception type is surfaced, never the raw message, which may
+        # contain the request URL with the bot token embedded.
+        assert "Exception" in result.message
+        assert "Network error" not in result.message

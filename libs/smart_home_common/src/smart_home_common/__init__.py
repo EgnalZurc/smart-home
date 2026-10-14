@@ -13,6 +13,7 @@ from .sqlite_helpers import (
     open_connection,
     sqlite_connection,
 )
+from .telegram import TelegramNotifier, TelegramResult
 
 __version__ = "0.1.0"
 
@@ -23,6 +24,8 @@ __all__ = [
     "SqliteHelper",
     "SqliteRateLimiter",
     "TTLCache",
+    "TelegramNotifier",
+    "TelegramResult",
     "ensure_singleton",
     "open_connection",
     "sqlite_connection",
