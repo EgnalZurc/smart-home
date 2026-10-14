@@ -111,6 +111,7 @@ async def get_all_health() -> dict[str, Any]:
         get_metrics_health(),
         get_energy_health(),
         get_presence_health(),
+        get_calendar_health(),
         return_exceptions=True,
     )
 
@@ -128,6 +129,7 @@ async def get_all_health() -> dict[str, Any]:
         "metrics",
         "energy",
         "presence",
+        "calendar",
     ]
 
     response = {}
@@ -633,3 +635,43 @@ async def get_presence_health() -> dict[str, Any]:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("presence", _check)
+
+
+@router.get("/calendar")
+async def get_calendar_health() -> dict[str, Any]:
+    """Health check for the calendar-service (Google Calendar integration).
+
+    Exercises the service's own DB-aware /health, which reports:
+    - online: whether calendar-service is running
+    - db_ok: whether its SQLite store answers a query
+    - google_ok: whether the Google Calendar API connection is healthy
+    - last_sync_age_s: seconds since the last calendar sync
+
+    Public (like all /api/health/*) so the dashboard status view and CI verify
+    step can reach it without a session; the data endpoints under /api/calendar/*
+    remain SUPER-gated via the proxy router.
+    """
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                r = await client.get("http://calendar-service:8014/health")
+                if r.status_code == 200:
+                    data = r.json()
+                    return {
+                        "online": data.get("online", False),
+                        "db_ok": data.get("db_ok"),
+                        "google_auth_ok": data.get("google_auth_ok"),
+                        "last_sync_ok": data.get("last_sync_ok"),
+                        "last_sync_age_s": data.get("last_sync_age_s"),
+                        "reminder_tick_age_s": data.get("reminder_tick_age_s"),
+                    }
+                return {"online": False, "error": f"HTTP {r.status_code}"}
+        except httpx.ConnectError:
+            return {"online": False, "error": "Cannot connect to calendar-service"}
+        except httpx.TimeoutException:
+            return {"online": False, "error": "Timeout"}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
+    return await _cached_health_check("calendar", _check)
