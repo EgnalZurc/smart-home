@@ -9,6 +9,7 @@ ring buffer / store are populated manually per test.
 from __future__ import annotations
 
 import time
+from collections import defaultdict
 
 import httpx
 import main
@@ -214,3 +215,117 @@ async def test_put_thresholds_unknown_key_returns_400(client):
             json={"updates": {"ghost": {"value": 1}}},
         )
     assert resp.status_code == 400
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Input validation tests (M-7)
+# ═══════════════════════════════════════════════════════════════════════════════
+async def test_series_rejects_invalid_label(client):
+    """Invalid container/label names should be rejected (M-7)."""
+    async with client as c:
+        # SQL injection attempt
+        resp = await c.get(
+            "/api/metrics/series",
+            params={"metric": "host.cpu.percent", "label": "'; DROP TABLE--"},
+        )
+    assert resp.status_code == 400
+    assert "Invalid label" in resp.json()["detail"]
+
+
+async def test_series_rejects_too_long_label(client):
+    """Label exceeding 64 chars should be rejected."""
+    async with client as c:
+        resp = await c.get(
+            "/api/metrics/series",
+            params={"metric": "host.cpu.percent", "label": "a" * 65},
+        )
+    assert resp.status_code == 400
+
+
+async def test_series_accepts_valid_label(client):
+    """Valid container names should pass validation."""
+    main.collector.ring.add("host.cpu.percent", "my-container_1", 42.0, ts=1000)
+    async with client as c:
+        resp = await c.get(
+            "/api/metrics/series",
+            params={"metric": "host.cpu.percent", "label": "my-container_1"},
+        )
+    assert resp.status_code == 200
+
+
+async def test_series_rejects_invalid_metric(client):
+    """Invalid metric names should be rejected."""
+    async with client as c:
+        resp = await c.get(
+            "/api/metrics/series",
+            params={"metric": "metric<script>alert(1)</script>"},
+        )
+    assert resp.status_code == 400
+    assert "Invalid metric" in resp.json()["detail"]
+
+
+async def test_series_rejects_too_long_metric(client):
+    """Metric exceeding 128 chars should be rejected."""
+    async with client as c:
+        resp = await c.get(
+            "/api/metrics/series",
+            params={"metric": "m" * 129},
+        )
+    assert resp.status_code == 400
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Rate limiting tests (M-8)
+# ═══════════════════════════════════════════════════════════════════════════════
+async def test_rate_limit_allows_under_threshold(client, monkeypatch):
+    """Requests under the rate limit should succeed (M-8)."""
+    # Clear rate limit state
+    main._rate_limit.clear()
+    async with client as c:
+        for _ in range(5):
+            resp = await c.get("/api/metrics/latest")
+            assert resp.status_code == 200
+
+
+async def test_rate_limit_blocks_over_threshold(client, monkeypatch):
+    """Requests exceeding rate limit should get 429 (M-8)."""
+    # Use X-Forwarded-For to have a known, consistent IP for the test
+    main._rate_limit.clear()
+    now = time.time()
+    main._rate_limit["192.168.1.100"] = [now - i for i in range(60)]
+
+    async with client as c:
+        resp = await c.get(
+            "/api/metrics/latest",
+            headers={"X-Forwarded-For": "192.168.1.100"},
+        )
+    assert resp.status_code == 429
+    assert "Rate limit" in resp.json()["detail"]
+
+
+async def test_rate_limit_skips_health_endpoints(client, monkeypatch):
+    """Health endpoints should bypass rate limiting."""
+    main._rate_limit.clear()
+    now = time.time()
+    main._rate_limit["unknown"] = [now - i for i in range(100)]  # Over limit
+
+    async with client as c:
+        resp = await c.get("/health")
+        assert resp.status_code == 200
+        resp = await c.get("/api/health/metrics")
+        assert resp.status_code == 200
+
+
+async def test_rate_limit_respects_x_forwarded_for(client, monkeypatch):
+    """Rate limiting should use X-Forwarded-For header when present."""
+    main._rate_limit.clear()
+    now = time.time()
+    # Fill bucket for the forwarded IP
+    main._rate_limit["10.0.0.1"] = [now - i for i in range(60)]
+
+    async with client as c:
+        resp = await c.get(
+            "/api/metrics/latest",
+            headers={"X-Forwarded-For": "10.0.0.1, 172.18.0.1"},
+        )
+    assert resp.status_code == 429
