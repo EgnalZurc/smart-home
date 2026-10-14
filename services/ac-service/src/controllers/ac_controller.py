@@ -112,6 +112,7 @@ class ACController:
         self._running = False
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
+        self._melcloud_lock = threading.Lock()  # Serialize MELCloud API calls
 
         # Internal state machine variables
         self._current_sm_state: ControllerState = ControllerState.OFF
@@ -499,13 +500,15 @@ class ACController:
         needs_send = self._needs_melcloud_update(outputs)
 
         if needs_send:
-            success = self.melcloud.set_temperature(
-                self.config.device_id,
-                outputs.setpoint,
-                power=outputs.power,
-                mode=outputs.mode,
-                fan_speed=outputs.fan_speed,
-            )
+            # Serialize MELCloud API calls to avoid concurrent access issues
+            with self._melcloud_lock:
+                success = self.melcloud.set_temperature(
+                    self.config.device_id,
+                    outputs.setpoint,
+                    power=outputs.power,
+                    mode=outputs.mode,
+                    fan_speed=outputs.fan_speed,
+                )
 
             if success:
                 self._consecutive_melcloud_failures = 0
