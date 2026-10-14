@@ -38,13 +38,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Rate limiter for manual trigger endpoints (10 req/min per IP) ────────────
+# ── Rate limiters ────────────────────────────────────────────────────────────
+# Global API rate limiter: 120 req/min per IP (higher limit for internal service)
+_global_rate_limiter = InMemoryRateLimiter(max_requests=120, window_seconds=60)
+
+# Stricter limiter for manual trigger endpoints (10 req/min per IP)
 _manual_trigger_limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60)
+
+
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP from request, respecting X-Forwarded-For if present."""
+    # Trust X-Forwarded-For from nginx reverse proxy
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        # Take the first IP in the chain (original client)
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 def _check_manual_trigger_rate_limit(request: Request) -> None:
     """Check rate limit for manual trigger endpoints. Raises 429 if exceeded."""
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = _get_client_ip(request)
     if not _manual_trigger_limiter.is_allowed(client_ip):
         raise HTTPException(
             status_code=429,
@@ -220,6 +234,34 @@ app = FastAPI(
     redoc_url=None,
     lifespan=lifespan,
 )
+
+
+# ── Global rate limiting middleware ───────────────────────────────────────────
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Apply global rate limiting to all API endpoints."""
+    path = request.url.path
+
+    # Skip rate limiting for health check (needed by Docker/monitoring)
+    if path == "/health":
+        return await call_next(request)
+
+    # Skip rate limiting for static files
+    if path.startswith("/static/"):
+        return await call_next(request)
+
+    # Apply global rate limit to API endpoints
+    if path.startswith("/api/"):
+        client_ip = _get_client_ip(request)
+        if not _global_rate_limiter.is_allowed(client_ip):
+            return JSONResponse(
+                status_code=429,
+                content={"error": "Too many requests. Try again later."},
+            )
+
+    return await call_next(request)
 
 
 # ── Pydantic Models ───────────────────────────────────────────────────────────
