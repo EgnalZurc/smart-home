@@ -47,6 +47,7 @@ from .helpers import (  # noqa: F401
 from .notifications import router as _notifications_router
 from .rebalance import router as _rebalance_router
 from .summary import router as _summary_router
+from .dividends import router as _dividends_router
 
 # ─── Aggregate router ───────────────────────────────────────────────────────
 router = APIRouter()
@@ -56,3 +57,4 @@ router.include_router(_alerts_router)
 router.include_router(_notifications_router)
 router.include_router(_health_router)
 router.include_router(_rebalance_router)
+router.include_router(_dividends_router)
