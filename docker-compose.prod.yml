@@ -400,14 +400,47 @@ services:
       start_period: 30s
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Calendar Service - Google Calendar sync, dashboard agenda + Telegram reminders
-  # Reached via the backend proxy /api/calendar/* (SUPER-gated); the browser
-  # never talks to :8014 directly. Caches events in SQLite + stores the OAuth
-  # refresh token (token.json) in the bind-mounted data dir.
-  # See docs/designs/calendar-service-design.md.
+  # Presence Service - multi-signal household presence detection
+  # Fuses router/ARP + BLE (via MQTT) + Zigbee motion (via mosquitto) into a
+  # per-person home/away/sleeping state, publishes presence/* to MQTT and drives
+  # Telegram arrival/departure notifications. Infrastructure-style service with a
+  # future config SPA: NOT exposed through nginx; reached only via the backend
+  # proxy /api/presence/*. See docs/designs/presence-service-design.md.
+  # NOTE: the deploy step must `mkdir -p` + `chown 1000:1000 data/presence-service`
+  # BEFORE `docker compose up` so the non-root container can create its SQLite DB.
+  # ─────────────────────────────────────────────────────────────────────────────
+  presence-service:
+    image: egnal/smart-home-presence-service:latest
+    container_name: presence-service
+    restart: on-failure:5
+    mem_limit: 96m
+    memswap_limit: 96m
+    expose:
+      - 8013
+    volumes:
+      - ./data/presence-service:/app/data
+    environment:
+      - TZ=Europe/Madrid
+      - PRESENCE_MQTT_BROKER=mosquitto
+      - PRESENCE_ROUTER_MODE=${PRESENCE_ROUTER_MODE:-arpsweep}
+      - PRESENCE_ROUTER_HOST=${PRESENCE_ROUTER_HOST:-192.168.1.1}
+      - PRESENCE_PEOPLE_SEED=${PRESENCE_PEOPLE_SEED:-}
+    # Telegram arrival/departure notifications: TelegramNotifier.from_env() reads
+    # TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_IDS from .env (same pattern as
+    # metrics-service / energy-monitor). If unset, transitions still persist +
+    # publish but send nothing.
+    env_file:
+      - .env
+    depends_on:
+      - smart-home-backend
+      - mosquitto
+    networks:
+      - smart-home
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Calendar Service — Google Calendar integration with Telegram reminders
   # NOTE: the deploy step must `mkdir -p` + `chown 1000:1000 data/calendar-service`
-  # BEFORE `docker compose up` so the non-root container can create its SQLite DB
-  # and write token.json (lesson carried from metrics-service).
+  # BEFORE `docker compose up` so the non-root container can create its SQLite DB.
   # ─────────────────────────────────────────────────────────────────────────────
   calendar-service:
     image: egnal/smart-home-calendar-service:latest
@@ -421,13 +454,10 @@ services:
       - ./data/calendar-service:/app/data
     environment:
       - TZ=Europe/Madrid
-      - CALENDAR_TZ=Europe/Madrid
-      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
-      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
-      - CALENDAR_SEED=${CALENDAR_SEED:-}
-    # Shared Telegram notifier: TelegramNotifier.from_env() reads
-    # TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_IDS from .env (same pattern as
-    # metrics-service). If unset, reminders are recorded but nothing is sent.
+      - CALENDAR_SYNC_INTERVAL=${CALENDAR_SYNC_INTERVAL:-300}
+    # Google OAuth credentials and Telegram for reminders: GOOGLE_CLIENT_ID,
+    # GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, TELEGRAM_BOT_TOKEN,
+    # TELEGRAM_CHAT_IDS from .env.
     env_file:
       - .env
     depends_on:
@@ -435,7 +465,7 @@ services:
     networks:
       - smart-home
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8014/health', timeout=3)"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8013/health', timeout=3)"]
       interval: 60s
       timeout: 5s
       retries: 3

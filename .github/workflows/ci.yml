@@ -48,6 +48,7 @@ on:
           - pc-agent
           - metrics-service
           - energy-monitor
+          - presence-service
           - calendar-service
       force_deploy:
         description: 'Enable deploy even without detected changes'
@@ -75,6 +76,7 @@ jobs:
       valheim-admin: ${{ steps.changes.outputs.valheim-admin }}
       metrics-service: ${{ steps.changes.outputs.metrics-service }}
       energy-monitor: ${{ steps.changes.outputs.energy-monitor }}
+      presence-service: ${{ steps.changes.outputs.presence-service }}
       calendar-service: ${{ steps.changes.outputs.calendar-service }}
       pc-agent: ${{ steps.changes.outputs.pc-agent }}
       async-http-client: ${{ steps.changes.outputs.async-http-client }}
@@ -120,9 +122,13 @@ jobs:
             energy-monitor:
               - 'services/energy-monitor/**'
               - 'libs/smart_home_common/**'
+            presence-service:
+              - 'services/presence-service/**'
+              - 'libs/smart_home_common/**'
             calendar-service:
               - 'services/calendar-service/**'
               - 'libs/smart_home_common/**'
+              - 'libs/notifications/**'
             pc-agent:
               - 'tools/pc-agent/**'
             async-http-client:
@@ -150,6 +156,7 @@ jobs:
           SMART_HOME_COMMON=false
           METRICS_SERVICE=false
           ENERGY_MONITOR=false
+          PRESENCE_SERVICE=false
           CALENDAR_SERVICE=false
           
           case "$SERVICE" in
@@ -162,6 +169,7 @@ jobs:
               SMART_HOME_COMMON=true
               METRICS_SERVICE=true
               ENERGY_MONITOR=true
+              PRESENCE_SERVICE=true
               CALENDAR_SERVICE=true
               ;;
             dashboard)         echo "🎯 Processing: dashboard";         DASHBOARD=true ;;
@@ -175,6 +183,7 @@ jobs:
             pc-agent)          echo "🎯 Processing: pc-agent";          PC_AGENT=true ;;
             metrics-service)   echo "🎯 Processing: metrics-service";   METRICS_SERVICE=true ;;
             energy-monitor)    echo "🎯 Processing: energy-monitor";    ENERGY_MONITOR=true ;;
+            presence-service)  echo "🎯 Processing: presence-service";  PRESENCE_SERVICE=true ;;
             calendar-service)  echo "🎯 Processing: calendar-service";  CALENDAR_SERVICE=true ;;
             *)
               echo "🔍 Auto-detecting changed services"
@@ -193,6 +202,7 @@ jobs:
               SMART_HOME_COMMON=${{ steps.filter.outputs.smart-home-common }}
               METRICS_SERVICE=${{ steps.filter.outputs.metrics-service }}
               ENERGY_MONITOR=${{ steps.filter.outputs.energy-monitor }}
+              PRESENCE_SERVICE=${{ steps.filter.outputs.presence-service }}
               CALENDAR_SERVICE=${{ steps.filter.outputs.calendar-service }}
               ;;
           esac
@@ -211,6 +221,7 @@ jobs:
           echo "smart-home-common=$SMART_HOME_COMMON" >> $GITHUB_OUTPUT
           echo "metrics-service=$METRICS_SERVICE" >> $GITHUB_OUTPUT
           echo "energy-monitor=$ENERGY_MONITOR" >> $GITHUB_OUTPUT
+          echo "presence-service=$PRESENCE_SERVICE" >> $GITHUB_OUTPUT
           echo "calendar-service=$CALENDAR_SERVICE" >> $GITHUB_OUTPUT
           echo "nginx=$NGINX" >> $GITHUB_OUTPUT
           echo "compose=$COMPOSE" >> $GITHUB_OUTPUT
@@ -222,6 +233,7 @@ jobs:
              [[ "$VAULTWARDEN" == "true" ]] || [[ "$VALHEIM_ADMIN" == "true" ]] || \
              [[ "$METRICS_SERVICE" == "true" ]] || \
              [[ "$ENERGY_MONITOR" == "true" ]] || \
+             [[ "$PRESENCE_SERVICE" == "true" ]] || \
              [[ "$CALENDAR_SERVICE" == "true" ]] || \
              [[ "$NGINX" == "true" ]] || [[ "$COMPOSE" == "true" ]] || \
              [[ "${{ steps.filter.outputs.infrastructure }}" == "true" ]] || \
@@ -263,6 +275,8 @@ jobs:
             add_service "metrics-service" "egnal/smart-home-metrics-service" "." "services/metrics-service/Dockerfile"
           [[ "${{ steps.changes.outputs.energy-monitor }}" == "true" ]] && \
             add_service "energy-monitor" "egnal/smart-home-energy-monitor" "." "services/energy-monitor/Dockerfile"
+          [[ "${{ steps.changes.outputs.presence-service }}" == "true" ]] && \
+            add_service "presence-service" "egnal/smart-home-presence-service" "." "services/presence-service/Dockerfile"
           [[ "${{ steps.changes.outputs.calendar-service }}" == "true" ]] && \
             add_service "calendar-service" "egnal/smart-home-calendar-service" "." "services/calendar-service/Dockerfile"
           
@@ -287,6 +301,7 @@ jobs:
           echo "| Valheim Admin | ${{ steps.changes.outputs.valheim-admin }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Metrics Service | ${{ steps.changes.outputs.metrics-service }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Energy Monitor | ${{ steps.changes.outputs.energy-monitor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Presence Service | ${{ steps.changes.outputs.presence-service }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Calendar Service | ${{ steps.changes.outputs.calendar-service }} |" >> $GITHUB_STEP_SUMMARY
           echo "| nginx | ${{ steps.changes.outputs.nginx }} |" >> $GITHUB_STEP_SUMMARY
           echo "| compose | ${{ steps.changes.outputs.compose }} |" >> $GITHUB_STEP_SUMMARY
@@ -676,6 +691,47 @@ jobs:
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Lint & Test - Presence Service
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint-and-test-presence-service:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.presence-service == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install tools
+        run: pip install -r requirements-dev.txt
+
+      - name: Install Hadolint
+        run: |
+          wget -qO /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          chmod +x /usr/local/bin/hadolint
+
+      - name: Ruff - Code Quality
+        run: |
+          ruff check services/presence-service/src --output-format=github
+          ruff format services/presence-service/src --check --diff
+
+      - name: Bandit - Security Check
+        run: bandit -r services/presence-service/src -ll -ii --format txt
+
+      - name: Hadolint - Dockerfile Check
+        run: hadolint services/presence-service/Dockerfile
+
+      - name: Run Tests with Coverage
+        run: |
+          if [[ -d "services/presence-service/tests" ]] && find services/presence-service/tests -name "test_*.py" | grep -q .; then
+            pip install -r services/presence-service/requirements.txt --quiet 2>/dev/null || true
+            pip install -e libs/smart_home_common --quiet 2>/dev/null || true
+            cd services/presence-service && PYTHONPATH=src python -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
+          else
+            echo "⏭️ No tests found"
+          fi
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Lint & Test - Calendar Service
   # ─────────────────────────────────────────────────────────────────────────────
   lint-and-test-calendar-service:
@@ -825,6 +881,7 @@ jobs:
       - lint-and-test-valheim-admin
       - lint-and-test-metrics-service
       - lint-and-test-energy-monitor
+      - lint-and-test-presence-service
       - lint-and-test-calendar-service
       - lint-and-test-pc-agent
       - lint-and-test-async-http-client
@@ -869,6 +926,7 @@ jobs:
           check_job "Valheim Admin" "${{ needs.lint-and-test-valheim-admin.result }}" "${{ needs.prepare.outputs.valheim-admin }}"
           check_job "Metrics Service" "${{ needs.lint-and-test-metrics-service.result }}" "${{ needs.prepare.outputs.metrics-service }}"
           check_job "Energy Monitor" "${{ needs.lint-and-test-energy-monitor.result }}" "${{ needs.prepare.outputs.energy-monitor }}"
+          check_job "Presence Service" "${{ needs.lint-and-test-presence-service.result }}" "${{ needs.prepare.outputs.presence-service }}"
           check_job "Calendar Service" "${{ needs.lint-and-test-calendar-service.result }}" "${{ needs.prepare.outputs.calendar-service }}"
           check_job "PC Agent" "${{ needs.lint-and-test-pc-agent.result }}" "${{ needs.prepare.outputs.pc-agent }}"
           check_job "Async HTTP Client" "${{ needs.lint-and-test-async-http-client.result }}" "${{ needs.prepare.outputs.async-http-client }}"
@@ -956,9 +1014,9 @@ jobs:
               mkdir -p data/energy-monitor
               chown 1000:1000 data/energy-monitor
             fi
-            if [ "${{ matrix.service.name }}" = "calendar-service" ]; then
-              mkdir -p data/calendar-service
-              chown 1000:1000 data/calendar-service
+            if [ "${{ matrix.service.name }}" = "presence-service" ]; then
+              mkdir -p data/presence-service
+              chown 1000:1000 data/presence-service
             fi
             docker compose pull ${{ matrix.service.name }}
             docker compose up -d --force-recreate ${{ matrix.service.name }}
@@ -1252,7 +1310,7 @@ jobs:
           check_health "Casita" "/api/health/casita"
           check_health "Metrics Service" "/api/health/metrics"
           check_health "Energy Monitor" "/api/health/energy"
-          check_health "Calendar Service" "/api/health/calendar"
+          check_health "Presence Service" "/api/health/presence"
           
           echo "" >> $GITHUB_STEP_SUMMARY
           

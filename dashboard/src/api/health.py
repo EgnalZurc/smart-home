@@ -110,6 +110,7 @@ async def get_all_health() -> dict[str, Any]:
         get_valheim_health(),
         get_metrics_health(),
         get_energy_health(),
+        get_presence_health(),
         get_calendar_health(),
         return_exceptions=True,
     )
@@ -127,6 +128,7 @@ async def get_all_health() -> dict[str, Any]:
         "valheim",
         "metrics",
         "energy",
+        "presence",
         "calendar",
     ]
 
@@ -590,7 +592,49 @@ async def get_energy_health() -> dict[str, Any]:
     return await _cached_health_check("energy", _check)
 
 
-# ── Calendar Service ──────────────────────────────────────────────────────────
+# ── Presence Service (infrastructure) ─────────────────────────────────────────
+
+
+@router.get("/presence")
+async def get_presence_health() -> dict[str, Any]:
+    """Health check for the presence-service (multi-signal presence detection).
+
+    Exercises the service's own DB-aware /health, which reports:
+    - online: whether presence-service is running
+    - db_ok: whether its SQLite store answers a query
+    - router_online: whether the router poll succeeded (None until the collector
+      task lands)
+    - mqtt_online: whether the broker connection is up (None until the MQTT
+      handler lands)
+    - last_tick_age_s: seconds since the last engine tick
+
+    Public (like all /api/health/*) so the dashboard status view and CI verify
+    step can reach it without a session; the data endpoints under /api/presence/*
+    remain SUPER-gated via the proxy router.
+    """
+
+    async def _check() -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                r = await client.get("http://presence-service:8013/health")
+                if r.status_code == 200:
+                    data = r.json()
+                    return {
+                        "online": data.get("online", False),
+                        "db_ok": data.get("db_ok"),
+                        "router_online": data.get("router_online"),
+                        "mqtt_online": data.get("mqtt_online"),
+                        "last_tick_age_s": data.get("last_tick_age_s"),
+                    }
+                return {"online": False, "error": f"HTTP {r.status_code}"}
+        except httpx.ConnectError:
+            return {"online": False, "error": "Cannot connect to presence-service"}
+        except httpx.TimeoutException:
+            return {"online": False, "error": "Timeout"}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
+    return await _cached_health_check("presence", _check)
 
 
 @router.get("/calendar")
@@ -600,10 +644,8 @@ async def get_calendar_health() -> dict[str, Any]:
     Exercises the service's own DB-aware /health, which reports:
     - online: whether calendar-service is running
     - db_ok: whether its SQLite store answers a query
-    - google_auth_ok: whether an OAuth refresh token is present/valid (a revoked
-      token turns this red so the user knows to re-run setup_oauth.py)
-    - last_sync_ok / last_sync_age_s: whether the Google sync loop is running
-    - reminder_tick_age_s: seconds since the last reminder tick
+    - google_ok: whether the Google Calendar API connection is healthy
+    - last_sync_age_s: seconds since the last calendar sync
 
     Public (like all /api/health/*) so the dashboard status view and CI verify
     step can reach it without a session; the data endpoints under /api/calendar/*
@@ -619,10 +661,8 @@ async def get_calendar_health() -> dict[str, Any]:
                     return {
                         "online": data.get("online", False),
                         "db_ok": data.get("db_ok"),
-                        "google_auth_ok": data.get("google_auth_ok"),
-                        "last_sync_ok": data.get("last_sync_ok"),
+                        "google_ok": data.get("google_ok"),
                         "last_sync_age_s": data.get("last_sync_age_s"),
-                        "reminder_tick_age_s": data.get("reminder_tick_age_s"),
                     }
                 return {"online": False, "error": f"HTTP {r.status_code}"}
         except httpx.ConnectError:
