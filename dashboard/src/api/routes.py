@@ -13,6 +13,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from system.containers import router as containers_router
 from system.stats import router as stats_router
+from system.summary import router as summary_router
 
 from api.alerts import router as alerts_router
 from api.deploy import router as deploy_router
@@ -45,6 +46,7 @@ router.include_router(valheim_router)
 router.include_router(external_router)
 router.include_router(containers_router)
 router.include_router(stats_router)
+router.include_router(summary_router)
 router.include_router(monitoring_router)
 router.include_router(metrics_router)
 router.include_router(ws_router)
