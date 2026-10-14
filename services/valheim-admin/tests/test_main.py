@@ -689,6 +689,74 @@ class TestDockerfileStructure:
         assert "uvicorn" in dockerfile_content
 
 
+class TestSanitizeShellArg:
+    """Tests for shell argument sanitization utility."""
+
+    def test_sanitize_simple_string(self):
+        """Simple alphanumeric strings pass through quoted."""
+        from src.main import _sanitize_shell_arg
+
+        result = _sanitize_shell_arg("hello")
+        assert result == "'hello'"
+
+    def test_sanitize_empty_string(self):
+        """Empty strings are quoted."""
+        from src.main import _sanitize_shell_arg
+
+        result = _sanitize_shell_arg("")
+        assert result == "''"
+
+    def test_sanitize_string_with_spaces(self):
+        """Strings with spaces are properly quoted."""
+        from src.main import _sanitize_shell_arg
+
+        result = _sanitize_shell_arg("hello world")
+        assert result == "'hello world'"
+
+    def test_sanitize_string_with_special_chars(self):
+        """Special shell characters are escaped."""
+        from src.main import _sanitize_shell_arg
+
+        # semicolon - command separator
+        result = _sanitize_shell_arg("test;rm -rf /")
+        assert ";" in result
+        assert result.startswith("'")
+
+        # dollar sign - variable expansion
+        result = _sanitize_shell_arg("$HOME")
+        assert "$" in result
+
+        # backticks - command substitution
+        result = _sanitize_shell_arg("`whoami`")
+        assert "`" in result
+
+    def test_sanitize_string_with_quotes(self):
+        """Strings containing quotes are properly escaped."""
+        from src.main import _sanitize_shell_arg
+
+        result = _sanitize_shell_arg("it's a test")
+        # shlex.quote handles embedded single quotes
+        assert "it" in result and "s a test" in result
+
+    def test_sanitize_injection_attempts(self):
+        """Common injection patterns are neutralized."""
+        from src.main import _sanitize_shell_arg
+
+        injection_patterns = [
+            "$(whoami)",
+            "`id`",
+            "| cat /etc/passwd",
+            "&& rm -rf /",
+            "; echo pwned",
+            "' || true #",
+            "../../etc/passwd",
+        ]
+        for pattern in injection_patterns:
+            result = _sanitize_shell_arg(pattern)
+            # Result should be a quoted string, safe for shell use
+            assert result.startswith("'") or result.startswith('"')
+
+
 class TestServerNameValidation:
     """Tests for server_name validation in update_config."""
 
@@ -812,3 +880,79 @@ class TestConfigBoundsValidation:
 
         assert clamp_backups(150) == 100
         assert clamp_backups(999) == 100
+
+
+
+class TestSanitizeShellArg:
+    """Tests for shell argument sanitization utility."""
+
+    def test_sanitize_simple_string(self):
+        """Simple alphanumeric strings remain unchanged (no quotes needed)."""
+        from src.main import _sanitize_shell_arg
+
+        # shlex.quote only adds quotes when necessary
+        result = _sanitize_shell_arg("hello")
+        assert result == "hello"
+
+    def test_sanitize_empty_string(self):
+        """Empty strings are quoted."""
+        from src.main import _sanitize_shell_arg
+
+        result = _sanitize_shell_arg("")
+        assert result == "''"
+
+    def test_sanitize_string_with_spaces(self):
+        """Strings with spaces are properly quoted."""
+        from src.main import _sanitize_shell_arg
+
+        result = _sanitize_shell_arg("hello world")
+        assert result == "'hello world'"
+
+    def test_sanitize_string_with_special_chars(self):
+        """Special shell characters are escaped."""
+        from src.main import _sanitize_shell_arg
+
+        # semicolon - command separator
+        result = _sanitize_shell_arg("test;rm -rf /")
+        assert ";" in result
+        assert result.startswith("'")
+
+        # dollar sign - variable expansion
+        result = _sanitize_shell_arg("$HOME")
+        assert result.startswith("'")
+        assert "$HOME" in result
+
+        # backticks - command substitution
+        result = _sanitize_shell_arg("`whoami`")
+        assert result.startswith("'")
+        assert "`whoami`" in result
+
+    def test_sanitize_string_with_quotes(self):
+        """Strings containing single quotes are properly escaped."""
+        from src.main import _sanitize_shell_arg
+
+        result = _sanitize_shell_arg("it's a test")
+        # shlex.quote escapes embedded single quotes: 'it'"'"'s a test'
+        assert "it" in result and "s a test" in result
+
+    def test_sanitize_injection_attempts(self):
+        """Common injection patterns are neutralized."""
+        from src.main import _sanitize_shell_arg
+
+        # Only test patterns that contain shell metacharacters
+        # (shlex.quote won't quote plain alphanumeric/dots/slashes)
+        injection_patterns = [
+            ("$(whoami)", True),  # command substitution - needs quoting
+            ("`id`", True),  # backtick substitution - needs quoting
+            ("| cat /etc/passwd", True),  # pipe - needs quoting
+            ("&& rm -rf /", True),  # logical AND - needs quoting
+            ("; echo pwned", True),  # semicolon - needs quoting
+            ("' || true #", True),  # quote and logical OR - needs quoting
+        ]
+        for pattern, should_be_quoted in injection_patterns:
+            result = _sanitize_shell_arg(pattern)
+            if should_be_quoted:
+                # Result should be quoted to prevent shell interpretation
+                assert result.startswith("'") or '"' in result, (
+                    f"Pattern {pattern!r} should be quoted, got {result!r}"
+                )
