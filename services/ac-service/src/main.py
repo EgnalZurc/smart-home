@@ -6,6 +6,9 @@ Serves:
   GET  /api/ac/sensors             → per-sensor readings
   GET  /api/ac/sensors/history     → sensor reading history
   GET  /api/ac/history             → controller action history
+  GET  /api/ac/event-log           → control command event log history
+  GET  /api/ac/learning            → usage patterns & recommendations
+  GET  /api/ac/thermal-curves      → heating/cooling curve analysis
   GET  /api/ac/config              → controller config
   POST /api/ac/config              → update config
   POST /api/ac/control             → set auto/manual/off
@@ -39,9 +42,11 @@ from pathlib import Path
 
 from ac_temp_scheduler import AcTempScheduler
 from controllers.ac_controller import ACController, ControlConfig
+from event_log import ACEventLog
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from learning import analyze_history
 from outdoor import build_outdoor_fetcher
 from pydantic import BaseModel, Field, field_validator
 from smart_home_common.clients.melcloud import MelCloudClient
@@ -50,6 +55,7 @@ from smart_home_common.mqtt.handler import MqttHandler
 from smart_home_common.mqtt.subscription import SubscriptionConfig, SubscriptionManager
 from smart_home_common.utils.error_tracker import ErrorTracker
 from spa import serve_html
+from thermal_analysis import ThermalBuffer, analyze
 
 logging.basicConfig(
     level=logging.INFO,
@@ -135,6 +141,12 @@ ac_controller: ACController | None = None
 subscription_manager: SubscriptionManager | None = None
 error_tracker: ErrorTracker | None = None
 ac_temp_scheduler: AcTempScheduler | None = None
+event_log: ACEventLog | None = None
+
+# In-memory thermal sample buffer feeding /api/ac/thermal-curves. Created once
+# at import so the endpoint can be queried even before the lifespan wires it
+# into the controller (it simply returns empty curves until samples arrive).
+thermal_buffer: ThermalBuffer = ThermalBuffer()
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -144,8 +156,10 @@ ac_temp_scheduler: AcTempScheduler | None = None
 async def lifespan(app: FastAPI):
     global mqtt_handler, melcloud_client, ac_controller
     global subscription_manager, error_tracker, ac_temp_scheduler
+    global event_log
 
     error_tracker = ErrorTracker()
+    event_log = ACEventLog()
     logger.info("=== AC Service starting ===")
 
     # 0. Discover sensors from Zigbee2MQTT
@@ -244,6 +258,14 @@ async def lifespan(app: FastAPI):
     )
     subscription_manager.start()
 
+    # Wire thermal analysis: the controller appends one sample per tick,
+    # enriched with the outdoor temperature from the subscription cache.
+    def current_outdoor_temp() -> float | None:
+        cached = subscription_manager.get_cached("outdoor", default={})
+        return cached.get("temperature") if cached else None
+
+    ac_controller.set_thermal_buffer(thermal_buffer, current_outdoor_temp)
+
     # 5. Scheduler
     ac_temp_scheduler = AcTempScheduler(mqtt_handler, ac_controller)
     ac_temp_scheduler.start()
@@ -341,6 +363,25 @@ class ManualParamsRequest(BaseModel):
         if v.lower() not in allowed:
             raise ValueError(f"mode must be one of {allowed}")
         return v.lower()
+
+
+# ── Command event logging helper ──────────────────────────────────────────────
+
+
+def _log_command(
+    command: str,
+    params: dict | None,
+    result: bool,
+    error_msg: str | None = None,
+) -> None:
+    """Record a control command to the event log, swallowing any error.
+
+    Logging must never break the actual command, so failures here are only
+    logged and never raised to the caller.
+    """
+    if event_log is None:
+        return
+    event_log.log_command(command, params, result, error_msg)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -483,6 +524,48 @@ def get_history(limit: int = 100):
     return {"history": ac_controller.get_history(limit)}
 
 
+@app.get("/api/ac/event-log", tags=["AC Control"])
+def get_event_log(hours: int = 24):
+    """Get the history of control commands sent to the AC.
+
+    Returns every logged command (mode changes, manual params, config
+    updates) from the last ``hours`` hours, newest first.
+    """
+    hours = max(1, min(hours, 720))  # Cap between 1 hour and 30 days
+    if event_log is None:
+        return {"events": [], "hours": hours}
+    return {"events": event_log.get_history(hours), "hours": hours}
+
+
+@app.get("/api/ac/learning", tags=["AC Control"])
+def get_learning(window: int = 1000):
+    """Return usage patterns, correlations and recommendations.
+
+    Performs a basic statistical analysis over the controller action history
+    (no machine learning): frequent on-hours, preferred setpoints, the
+    temperature-vs-setpoint correlation and short human-readable hints.
+
+    Args:
+        window: number of most-recent history records to analyse (1-1000).
+    """
+    window = max(1, min(window, 1000))  # Cap between 1 and 1000
+    if ac_controller is None:
+        return analyze_history([])
+    records = ac_controller.get_history(window)
+    return analyze_history(records)
+
+
+@app.get("/api/ac/thermal-curves", tags=["AC Control"])
+def get_thermal_curves():
+    """Heating/cooling curve analysis from accumulated thermal samples.
+
+    Returns heating/cooling rates (°C/min), average time to reach the target
+    setpoint, and an efficiency breakdown bucketed by outdoor temperature.
+    Returns empty/None metrics until enough samples have accumulated.
+    """
+    return analyze(thermal_buffer.snapshot())
+
+
 @app.get("/api/ac/config", tags=["AC Control"])
 def get_config():
     """Get controller configuration."""
@@ -506,6 +589,7 @@ def update_config(update: ConfigUpdate):
     """Update controller configuration."""
     changes = update.model_dump(exclude_none=True)
     if not changes:
+        _log_command("config", {}, False, "No changes")
         raise HTTPException(400, "No changes")
     if "target_temperature" in changes:
         temp = changes["target_temperature"]
@@ -513,11 +597,14 @@ def update_config(update: ConfigUpdate):
             temp < ac_controller.config.min_setpoint
             or temp > ac_controller.config.max_setpoint
         ):
-            raise HTTPException(
-                400,
-                f"Temperature must be between {ac_controller.config.min_setpoint} and {ac_controller.config.max_setpoint}",
+            msg = (
+                f"Temperature must be between {ac_controller.config.min_setpoint} "
+                f"and {ac_controller.config.max_setpoint}"
             )
+            _log_command("config", changes, False, msg)
+            raise HTTPException(400, msg)
     ac_controller.update_config(**changes)
+    _log_command("config", changes, True)
     return {"status": "updated", "changes": changes}
 
 
@@ -533,6 +620,7 @@ def set_control_mode(req: ControlModeRequest):
             mode=state.ac_mode,
         )
     ac_controller.set_control_mode(req.mode)
+    _log_command("control", {"mode": req.mode}, True)
     return {"status": "ok", "control_mode": req.mode}
 
 
@@ -552,6 +640,12 @@ def set_manual_params(req: ManualParamsRequest):
             mode=req.mode,
             fan_speed=req.fan_speed,
         )
+        _log_command(
+            "manual",
+            params,
+            success,
+            None if success else "MELCloud set_temperature failed",
+        )
         return {
             "status": "ok" if success else "error",
             "applied": {
@@ -560,6 +654,7 @@ def set_manual_params(req: ManualParamsRequest):
                 "temperature": req.temperature,
             },
         }
+    _log_command("manual", params, True)
     return {"status": "ok", "message": "Parameters saved"}
 
 
@@ -609,6 +704,12 @@ def update_manual_param(param: str, value: str):
         power=True,
         mode=mode,
         fan_speed=fan_speed,
+    )
+    _log_command(
+        "manual_param",
+        {"param": param, "value": converted_value},
+        success,
+        None if success else "MELCloud set_temperature failed",
     )
     if success and subscription_manager is not None:
         subscription_manager.force_update("melcloud")

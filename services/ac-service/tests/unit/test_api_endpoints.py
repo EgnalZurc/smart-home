@@ -121,18 +121,23 @@ def mock_components():
     mock_error_tracker = MagicMock()
     mock_error_tracker.get_active.return_value = []
 
+    mock_event_log = MagicMock()
+    mock_event_log.get_history.return_value = []
+
     # Inject mocks
     original_mqtt = main.mqtt_handler
     original_melcloud = main.melcloud_client
     original_controller = main.ac_controller
     original_sub = main.subscription_manager
     original_error = main.error_tracker
+    original_event_log = main.event_log
 
     main.mqtt_handler = mock_mqtt_handler
     main.melcloud_client = mock_melcloud
     main.ac_controller = mock_controller
     main.subscription_manager = mock_sub_manager
     main.error_tracker = mock_error_tracker
+    main.event_log = mock_event_log
 
     yield {
         "mqtt_handler": mock_mqtt_handler,
@@ -140,6 +145,7 @@ def mock_components():
         "ac_controller": mock_controller,
         "subscription_manager": mock_sub_manager,
         "error_tracker": mock_error_tracker,
+        "event_log": mock_event_log,
     }
 
     # Restore originals
@@ -148,6 +154,7 @@ def mock_components():
     main.ac_controller = original_controller
     main.subscription_manager = original_sub
     main.error_tracker = original_error
+    main.event_log = original_event_log
 
 
 class TestHealthEndpoints:
@@ -260,10 +267,10 @@ class TestControlEndpoints:
         assert data["control_mode"] == "off"
 
     def test_set_control_mode_invalid(self, client, mock_components):
-        """POST /api/ac/control with invalid mode should return 422."""
+        """POST /api/ac/control with invalid mode should return 400."""
         response = client.post("/api/ac/control", json={"mode": "invalid"})
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
 
 class TestManualParamsEndpoints:
@@ -282,43 +289,43 @@ class TestManualParamsEndpoints:
         assert data["status"] == "ok"
 
     def test_set_manual_params_invalid_temperature(self, client, mock_components):
-        """POST /api/ac/manual with invalid temp should return 422."""
+        """POST /api/ac/manual with invalid temp should return 400."""
         response = client.post(
             "/api/ac/manual",
             json={
                 "mode": "cool",
                 "fan_speed": 0,
-                "temperature": 15.0,  # Below min (16.0)
+                "temperature": 15.0,  # Below min_setpoint
             },
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     def test_set_manual_params_invalid_fan_speed(self, client, mock_components):
-        """POST /api/ac/manual with invalid fan speed should return 422."""
+        """POST /api/ac/manual with invalid fan speed should return 400."""
         response = client.post(
             "/api/ac/manual",
             json={
                 "mode": "cool",
-                "fan_speed": 5,  # Above max (3)
+                "fan_speed": 5,  # Invalid
                 "temperature": 23.0,
             },
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     def test_set_manual_params_invalid_mode(self, client, mock_components):
-        """POST /api/ac/manual with invalid mode should return 422."""
+        """POST /api/ac/manual with invalid mode should return 400."""
         response = client.post(
             "/api/ac/manual",
             json={
-                "mode": "turbo",  # Invalid - not in {cool, heat}
+                "mode": "turbo",  # Invalid
                 "fan_speed": 0,
                 "temperature": 23.0,
             },
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
 
 class TestOutdoorEndpoint:
@@ -380,6 +387,216 @@ class TestHistoryEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert "history" in data
+
+
+class TestEventLogEndpoint:
+    """Tests for the /api/ac/event-log endpoint."""
+
+    def test_get_event_log(self, client, mock_components):
+        """GET /api/ac/event-log should return logged command events."""
+        mock_components["event_log"].get_history.return_value = [
+            {
+                "timestamp": 1000.0,
+                "command_type": "control",
+                "params": {"mode": "auto"},
+                "success": True,
+                "error_msg": None,
+            }
+        ]
+
+        response = client.get("/api/ac/event-log")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["hours"] == 24
+        assert len(data["events"]) == 1
+        assert data["events"][0]["command_type"] == "control"
+        mock_components["event_log"].get_history.assert_called_once_with(24)
+
+    def test_get_event_log_custom_hours(self, client, mock_components):
+        """GET /api/ac/event-log?hours=N should pass the window through."""
+        mock_components["event_log"].get_history.return_value = []
+
+        response = client.get("/api/ac/event-log?hours=48")
+
+        assert response.status_code == 200
+        assert response.json()["hours"] == 48
+        mock_components["event_log"].get_history.assert_called_once_with(48)
+
+    def test_get_event_log_clamps_hours(self, client, mock_components):
+        """hours is clamped between 1 and 720."""
+        mock_components["event_log"].get_history.return_value = []
+
+        client.get("/api/ac/event-log?hours=0")
+        mock_components["event_log"].get_history.assert_called_with(1)
+
+        client.get("/api/ac/event-log?hours=9999")
+        mock_components["event_log"].get_history.assert_called_with(720)
+
+    def test_get_event_log_when_none(self, client):
+        """GET /api/ac/event-log should return empty when event_log is None."""
+        import main
+
+        original = main.event_log
+        main.event_log = None
+
+        response = client.get("/api/ac/event-log")
+
+        main.event_log = original
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["events"] == []
+
+
+class TestCommandLogging:
+    """Tests that control commands are recorded to the event log."""
+
+    def test_control_logs_success(self, client, mock_components):
+        """A successful control command is logged with success=True."""
+        client.post("/api/ac/control", json={"mode": "auto"})
+
+        mock_components["event_log"].log_command.assert_called_once()
+        args = mock_components["event_log"].log_command.call_args.args
+        assert args[0] == "control"
+        assert args[1] == {"mode": "auto"}
+        assert args[2] is True
+
+    def test_control_logs_invalid_mode(self, client, mock_components):
+        """A rejected control command is logged with success=False."""
+        client.post("/api/ac/control", json={"mode": "invalid"})
+
+        args = mock_components["event_log"].log_command.call_args.args
+        assert args[0] == "control"
+        assert args[2] is False
+
+    def test_manual_logs_command(self, client, mock_components):
+        """A manual command is logged."""
+        mock_components["ac_controller"].melcloud.set_temperature.return_value = True
+
+        client.post(
+            "/api/ac/manual",
+            json={"mode": "cool", "fan_speed": 2, "temperature": 22.0},
+        )
+
+        logged = [
+            c.args[0] for c in mock_components["event_log"].log_command.call_args_list
+        ]
+        assert "manual" in logged
+
+    def test_manual_logs_validation_failure(self, client, mock_components):
+        """A rejected manual command is logged with success=False."""
+        client.post(
+            "/api/ac/manual",
+            json={"mode": "cool", "fan_speed": 0, "temperature": 15.0},
+        )
+
+        call = mock_components["event_log"].log_command.call_args
+        assert call.args[0] == "manual"
+        assert call.args[2] is False
+
+    def test_config_logs_command(self, client, mock_components):
+        """A config update is logged."""
+        client.post("/api/ac/config", json={"target_temperature": 24.0})
+
+        call = mock_components["event_log"].log_command.call_args
+        assert call.args[0] == "config"
+        assert call.args[2] is True
+
+    def test_manual_param_logs_command(self, client, mock_components):
+        """A manual/param update is logged."""
+        mock_components["ac_controller"].state.control_mode = "manual"
+        mock_components["ac_controller"].melcloud.set_temperature.return_value = True
+
+        client.post("/api/ac/manual/param?param=fan_speed&value=2")
+
+        call = mock_components["event_log"].log_command.call_args
+        assert call.args[0] == "manual_param"
+
+
+class TestLearningEndpoint:
+    """Tests for the learning endpoint."""
+
+    def _make_records(self, hour: int, count: int):
+        from datetime import datetime, timezone
+
+        ts = datetime(2026, 1, 1, hour, 0, 0, tzinfo=timezone.utc).timestamp()
+        return [
+            {
+                "timestamp": ts,
+                "average_temp": 27.0,
+                "state": "cooling_max",
+                "setpoint": 24.0,
+                "active_sensors": 3,
+            }
+            for _ in range(count)
+        ]
+
+    def test_get_learning_empty_history(self, client, mock_components):
+        """GET /api/ac/learning with no history reports not enough data."""
+        mock_components["ac_controller"].get_history.return_value = []
+
+        response = client.get("/api/ac/learning")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["enough_data"] is False
+        assert data["sample_size"] == 0
+        assert data["recommendations"] == []
+        assert "patterns" in data
+        assert "correlations" in data
+
+    def test_get_learning_with_patterns(self, client, mock_components):
+        """GET /api/ac/learning derives patterns and recommendations."""
+        mock_components["ac_controller"].get_history.return_value = (
+            self._make_records(18, 5)
+        )
+
+        response = client.get("/api/ac/learning")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["enough_data"] is True
+        assert data["sample_size"] == 5
+        hours = data["patterns"]["frequent_hours"]
+        assert hours[0]["hour"] == 18
+        types = {rec["type"] for rec in data["recommendations"]}
+        assert "frequent_hour" in types
+        assert "preferred_setpoint" in types
+
+    def test_get_learning_window_param_is_capped(self, client, mock_components):
+        """The window query param is clamped to 1-1000."""
+        mock_components["ac_controller"].get_history.return_value = []
+
+        response = client.get("/api/ac/learning?window=99999")
+
+        assert response.status_code == 200
+        # get_history must be called with the capped window (1000).
+        mock_components["ac_controller"].get_history.assert_called_with(1000)
+
+    def test_get_learning_window_param_minimum(self, client, mock_components):
+        """A window below 1 is clamped up to 1."""
+        mock_components["ac_controller"].get_history.return_value = []
+
+        response = client.get("/api/ac/learning?window=0")
+
+        assert response.status_code == 200
+        mock_components["ac_controller"].get_history.assert_called_with(1)
+
+    def test_get_learning_when_controller_none(self, client):
+        """GET /api/ac/learning returns empty analysis when controller is None."""
+        import main
+
+        original = main.ac_controller
+        main.ac_controller = None
+        try:
+            response = client.get("/api/ac/learning")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["enough_data"] is False
+            assert data["sample_size"] == 0
+        finally:
+            main.ac_controller = original
 
 
 class TestSubscriptionStatsEndpoint:
@@ -675,6 +892,63 @@ class TestSubscriptionManagerNone:
 
 
 
+class TestThermalCurvesEndpoint:
+    """Tests for /api/ac/thermal-curves endpoint."""
+
+    def test_thermal_curves_empty(self, client):
+        """GET /api/ac/thermal-curves returns empty metrics with no samples."""
+        import main
+
+        main.thermal_buffer.clear()
+
+        response = client.get("/api/ac/thermal-curves")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["heating_rate"] is None
+        assert data["cooling_rate"] is None
+        assert data["avg_time_to_target"] == {
+            "heating": None,
+            "cooling": None,
+            "overall": None,
+        }
+        assert data["efficiency_by_outdoor_temp"] == {}
+        assert data["sample_count"] == 0
+        assert data["segment_count"] == 0
+
+    def test_thermal_curves_with_cooling_samples(self, client):
+        """GET /api/ac/thermal-curves computes a cooling rate from samples."""
+        import main
+        from thermal_analysis import ThermalSample
+
+        main.thermal_buffer.clear()
+        for i, temp in enumerate([28.0, 27.0, 26.0, 25.0, 24.0]):
+            main.thermal_buffer.add(
+                ThermalSample(
+                    timestamp=float(i * 60),
+                    average_temp=temp,
+                    setpoint=24.0,
+                    state="modulating",
+                    mode="cool",
+                    outdoor_temp=30.0,
+                )
+            )
+
+        response = client.get("/api/ac/thermal-curves")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cooling_rate"] == pytest.approx(-1.0)
+        assert data["heating_rate"] is None
+        assert data["segment_count"] == 1
+        assert data["sample_count"] == 5
+        assert "30-35" in data["efficiency_by_outdoor_temp"]
+
+        # Clean up shared module-level buffer so later tests see a clean slate.
+        main.thermal_buffer.clear()
+
+
+
 class TestPydanticValidation:
     """Tests for Pydantic model validation (M-5)."""
 
@@ -754,6 +1028,8 @@ class TestPydanticValidation:
         )
 
         assert response.status_code == 422
+        data = response.json()
+        assert "fan_speed" in str(data["detail"]).lower()
 
     def test_manual_params_fan_speed_above_max(self, client, mock_components):
         """POST /api/ac/manual with fan_speed > 3 should return 422."""
@@ -763,23 +1039,18 @@ class TestPydanticValidation:
         )
 
         assert response.status_code == 422
+        data = response.json()
+        assert "fan_speed" in str(data["detail"]).lower()
 
-    def test_manual_params_fan_speed_at_boundaries(self, client, mock_components):
-        """POST /api/ac/manual with fan_speed 0 and 3 should succeed."""
+    def test_manual_params_fan_speed_at_max_boundary(self, client, mock_components):
+        """POST /api/ac/manual with fan_speed = 3 should succeed."""
         mock_components["ac_controller"].melcloud.set_temperature.return_value = True
 
-        # Test lower boundary
-        response = client.post(
-            "/api/ac/manual",
-            json={"mode": "cool", "fan_speed": 0, "temperature": 23.0},
-        )
-        assert response.status_code == 200
-
-        # Test upper boundary
         response = client.post(
             "/api/ac/manual",
             json={"mode": "cool", "fan_speed": 3, "temperature": 23.0},
         )
+
         assert response.status_code == 200
 
     # ── Manual params mode validation ─────────────────────────────────────────

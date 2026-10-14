@@ -122,6 +122,12 @@ class ACController:
         self._last_outputs: StateMachineOutputs | None = None
         self._last_modulating_setpoint: float = 24.0
 
+        # Thermal analysis (optional, injected via set_thermal_buffer()).
+        # When present, one ThermalSample is appended per tick so the
+        # /api/ac/thermal-curves endpoint can derive heating/cooling curves.
+        self._thermal_buffer = None
+        self._outdoor_temp_provider = None
+
         # Energy tracking
         self._energy_state = {
             "last_state": "off",
@@ -227,6 +233,18 @@ class ACController:
     def set_error_tracker(self, tracker) -> None:
         """Inject error tracker (F0.30)."""
         self._error_tracker = tracker
+
+    def set_thermal_buffer(self, buffer, outdoor_temp_provider=None) -> None:
+        """Inject a ThermalBuffer and optional outdoor-temperature provider.
+
+        When set, the controller appends one ThermalSample per tick so the
+        thermal-curves analysis can run. ``outdoor_temp_provider`` is a
+        zero-arg callable returning the current outdoor temperature in °C
+        (or None when unknown); it is called defensively so a failing
+        provider never breaks the control loop.
+        """
+        self._thermal_buffer = buffer
+        self._outdoor_temp_provider = outdoor_temp_provider
 
     def restore_state(self) -> bool:
         """Restores controller state from disk.
@@ -606,6 +624,41 @@ class ACController:
             # Limit history
             if len(self.history) > 1000:
                 self.history = self.history[-500:]
+
+        # Record thermal sample (outside the lock: the outdoor provider may do
+        # I/O and the buffer has its own lock).
+        self._record_thermal_sample(outputs, avg_temp)
+
+    def _record_thermal_sample(
+        self, outputs: StateMachineOutputs, avg_temp: float | None
+    ) -> None:
+        """Append one ThermalSample to the injected buffer, if any."""
+        buffer = self._thermal_buffer
+        if buffer is None:
+            return
+
+        outdoor_temp = None
+        provider = self._outdoor_temp_provider
+        if provider is not None:
+            try:
+                outdoor_temp = provider()
+            except Exception:
+                logger.debug("Outdoor temp provider failed for thermal sample")
+
+        # Imported lazily so the controller has no hard dependency on the
+        # thermal_analysis module when the buffer is not wired in.
+        from thermal_analysis import ThermalSample
+
+        buffer.add(
+            ThermalSample(
+                timestamp=time.time(),
+                average_temp=round(avg_temp, 2) if avg_temp else None,
+                setpoint=outputs.setpoint,
+                state=outputs.state.value,
+                mode=outputs.mode,
+                outdoor_temp=outdoor_temp,
+            )
+        )
 
     def update_ac_real_cache(self, melcloud_data: dict):
         """Updates AC real state cache from subscription manager data.
