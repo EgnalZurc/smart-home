@@ -152,6 +152,35 @@ class SavingsAnalysis:
 
 
 @dataclass
+class DeFiAnalysis:
+    """Analysis result for a single DeFi yield position.
+
+    DeFi positions use a MANUALLY entered APY (no external API integration):
+    the user records the protocol, the deposited asset amount and the yield
+    rate advertised by the platform, and the monitor projects the expected
+    yield from those static inputs.
+    """
+
+    position_id: str
+    protocol: str
+    asset: str
+
+    # Position data (all manually entered)
+    amount: float = 0.0
+    apy_pct: float = 0.0
+    platform_url: str = ""
+
+    # Calculated values (derived from amount + apy_pct)
+    estimated_value: float = 0.0
+    daily_yield: float = 0.0
+    monthly_yield: float = 0.0
+    yearly_yield: float = 0.0
+
+    # Level (always OK — DeFi has no live price signals)
+    level: AlertLevel = AlertLevel.OK
+
+
+@dataclass
 class ScheduledAlert:
     """A scheduled alert for future action."""
 
@@ -193,6 +222,11 @@ class PortfolioSummary:
     savings_yearly_interest: float = 0.0
     savings_analysis: list[SavingsAnalysis] = field(default_factory=list)
 
+    # DeFi totals (manual-APY yield positions)
+    defi_total_value: float = 0.0
+    defi_yearly_yield: float = 0.0
+    defi_analysis: list[DeFiAnalysis] = field(default_factory=list)
+
     # Scheduled alerts
     upcoming_alerts: list[ScheduledAlert] = field(default_factory=list)
 
@@ -204,6 +238,7 @@ class PortfolioSummary:
     etf_last_update: datetime | None = None
     crypto_last_update: datetime | None = None
     savings_last_update: datetime | None = None
+    defi_last_update: datetime | None = None
 
 
 @dataclass

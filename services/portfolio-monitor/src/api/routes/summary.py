@@ -58,6 +58,14 @@ async def get_summary():
                 else None,
                 "analysis": [_serialize_analysis(a) for a in summary.savings_analysis],
             },
+            "defi": {
+                "total_value": _safe_float(summary.defi_total_value),
+                "yearly_yield": _safe_float(summary.defi_yearly_yield),
+                "last_update": summary.defi_last_update.isoformat()
+                if summary.defi_last_update
+                else None,
+                "analysis": [_serialize_analysis(a) for a in summary.defi_analysis],
+            },
             "upcoming_alerts": [_serialize_alert(a) for a in summary.upcoming_alerts],
         }
     )
@@ -127,5 +135,25 @@ async def get_savings_summary():
             if summary.savings_last_update
             else None,
             "analysis": [_serialize_analysis(a) for a in summary.savings_analysis],
+        }
+    )
+
+
+@router.get("/defi")
+async def get_defi_summary():
+    """Get DeFi yield positions (manual-APY, no external APIs)."""
+    import api.routes as routes
+
+    orch = routes.get_orchestrator()
+    summary = orch.get_summary()
+
+    return _safe_json(
+        {
+            "total_value": _safe_float(summary.defi_total_value),
+            "yearly_yield": _safe_float(summary.defi_yearly_yield),
+            "last_update": summary.defi_last_update.isoformat()
+            if summary.defi_last_update
+            else None,
+            "analysis": [_serialize_analysis(a) for a in summary.defi_analysis],
         }
     )

@@ -125,6 +125,7 @@ class Orchestrator:
             return
 
         from monitors.crypto_monitor import CryptoMonitor
+        from monitors.defi_monitor import DeFiMonitor
         from monitors.etf_monitor import ETFMonitor
         from monitors.savings_monitor import SavingsMonitor
 
@@ -132,6 +133,7 @@ class Orchestrator:
             "etf": ETFMonitor(),
             "crypto": CryptoMonitor(),
             "savings": SavingsMonitor(),
+            "defi": DeFiMonitor(),
         }
         logger.info(
             f"Initialized {len(self._monitors)} monitors: {list(self._monitors.keys())}"
@@ -180,6 +182,11 @@ class Orchestrator:
                 self._summary.savings_yearly_interest = result.get("yearly_interest", 0)
                 self._summary.savings_analysis = result.get("analysis", [])
                 self._summary.savings_last_update = result.get("last_update")
+            elif name == "defi":
+                self._summary.defi_total_value = result.get("total_value", 0)
+                self._summary.defi_yearly_yield = result.get("yearly_yield", 0)
+                self._summary.defi_analysis = result.get("analysis", [])
+                self._summary.defi_last_update = result.get("last_update")
 
             await self._save_state_async()
             logger.info(f"Monitor {name} completed successfully")
