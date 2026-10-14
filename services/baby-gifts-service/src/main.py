@@ -506,7 +506,19 @@ def guest_reserve(
     gift_id: str,
     client_ip: str = Depends(require_rate_limit),
 ):
-    """Reserve a gift as a guest."""
+    """Reserve a gift as a guest.
+
+    Args:
+        token: Invitation token from URL path.
+        gift_id: ID of the gift to reserve.
+        client_ip: Resolved client IP (injected by rate limit dependency).
+
+    Returns:
+        dict: Status and reserved gift details.
+
+    Raises:
+        HTTPException: 401 if token invalid, 400 if already reserved, 429 if rate limited.
+    """
     guest = validate_invitation(token)
     if not guest:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
@@ -526,7 +538,19 @@ def guest_unreserve(
     gift_id: str,
     client_ip: str = Depends(require_rate_limit),
 ):
-    """Cancel own reservation as a guest."""
+    """Cancel own reservation as a guest.
+
+    Args:
+        token: Invitation token from URL path.
+        gift_id: ID of the gift to unreserve.
+        client_ip: Resolved client IP (injected by rate limit dependency).
+
+    Returns:
+        dict: Status and updated gift details.
+
+    Raises:
+        HTTPException: 401 if token invalid, 400 if not own reservation, 429 if rate limited.
+    """
     guest = validate_invitation(token)
     if not guest:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
