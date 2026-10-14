@@ -11,11 +11,150 @@ Eclipse Mosquitto is the MQTT broker for Zigbee sensor communication.
 └─────────────────┘         └─────────────────┘         └─────────────────┘
 ```
 
-## Security
+## Security Overview
 
 - **Authentication**: Password-based (`passwd` file)
 - **Authorization**: ACL-based topic permissions (`acl.conf`)
 - **Network**: Exposed only to Docker network (not to host)
+- **Anonymous**: Disabled (`allow_anonymous false`)
+
+## Authentication
+
+### Password File (`passwd`)
+
+Mosquitto uses a password file with hashed credentials. The file is NOT in git (secrets).
+
+**Location**: `/mosquitto/config/passwd` (container) → `./data/mosquitto/config/passwd` (host)
+
+**Managing users**:
+```bash
+# Add/update user (inside container)
+docker exec -it mosquitto mosquitto_passwd /mosquitto/config/passwd username
+
+# Delete user
+docker exec -it mosquitto mosquitto_passwd -D /mosquitto/config/passwd username
+
+# Create new file with first user (destroys existing!)
+docker exec -it mosquitto mosquitto_passwd -c /mosquitto/config/passwd username
+```
+
+**File format** (hashed, not plaintext):
+```
+zigbee2mqtt:$7$101$abc123...hashed...
+ac-service:$7$101$def456...hashed...
+```
+
+### Current Users
+
+| User | Purpose | Created By |
+|------|---------|------------|
+| `zigbee2mqtt` | Zigbee2MQTT bridge | Initial setup |
+| `ac-service` | AC automation service | Initial setup |
+
+## Authorization (ACL)
+
+### Topic Permissions Model
+
+ACL rules in `acl.conf` control what each user can read/write:
+
+```
+user <username>
+topic <permission> <topic-pattern>
+```
+
+**Permissions**:
+- `read` - Subscribe only
+- `write` - Publish only  
+- `readwrite` - Both subscribe and publish
+
+**Wildcards**:
+- `+` - Single level (e.g., `zigbee2mqtt/+` matches `zigbee2mqtt/sensor1`)
+- `#` - Multi-level (e.g., `zigbee2mqtt/#` matches `zigbee2mqtt/bridge/state`)
+
+### Current ACL Configuration
+
+```
+# Zigbee2MQTT - full control of its namespace
+user zigbee2mqtt
+topic readwrite zigbee2mqtt/#
+
+# AC Service - read-only sensor data
+user ac-service
+topic read zigbee2mqtt/+
+topic read zigbee2mqtt/bridge/#
+```
+
+**Principle of least privilege**:
+- `zigbee2mqtt` has full access to publish sensor data and handle bridge commands
+- `ac-service` can only READ sensor data, cannot publish (no device control)
+
+### Adding a New Service
+
+1. Create user in passwd file:
+   ```bash
+   docker exec -it mosquitto mosquitto_passwd /mosquitto/config/passwd new-service
+   ```
+
+2. Add ACL rules to `acl.conf`:
+   ```
+   # New service - describe what it needs
+   user new-service
+   topic read zigbee2mqtt/sensor-name
+   ```
+
+3. Add password to `.env` on Pi:
+   ```bash
+   echo "MQTT_NEW_SERVICE_PASSWORD=<password>" >> ~/smart-home-prod/.env
+   ```
+
+4. Restart mosquitto:
+   ```bash
+   docker compose restart mosquitto
+   ```
+
+## Security Best Practices
+
+### Network Isolation
+
+Mosquitto is NOT exposed to the host network. Only Docker containers on the `smart-home` network can connect:
+
+```yaml
+# docker-compose.prod.yml
+mosquitto:
+  networks:
+    - smart-home
+  # NO ports: section = not exposed to host
+```
+
+### Certificate Authentication (Alternative)
+
+For higher security environments, Mosquitto supports TLS client certificates:
+
+```
+# mosquitto.conf (not currently used)
+listener 8883
+cafile /mosquitto/certs/ca.crt
+certfile /mosquitto/certs/server.crt
+keyfile /mosquitto/certs/server.key
+require_certificate true
+```
+
+**Why we use password auth instead**:
+- Simpler certificate management for a home network
+- All traffic is internal to Docker network
+- External access is via Tailscale (already encrypted)
+
+### Monitoring for Unauthorized Access
+
+Check for authentication failures:
+```bash
+docker logs mosquitto 2>&1 | grep -i "denied\|failed\|error"
+```
+
+Check connected clients:
+```bash
+docker exec mosquitto mosquitto_sub -u ac-service -P <password> -t '$SYS/broker/clients/connected' -C 1
+```
 
 ## Files
 
