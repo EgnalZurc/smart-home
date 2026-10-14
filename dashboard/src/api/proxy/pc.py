@@ -43,7 +43,18 @@ async def _proxy_get(
     *,
     default_on_error: Any = None,
 ) -> Any:
-    """Perform authenticated GET request to pc-agent."""
+    """Perform authenticated GET request to pc-agent.
+
+    Args:
+        path: API path on pc-agent (e.g. "/health").
+        default_on_error: Value to return on failure instead of raising.
+
+    Returns:
+        JSON response from pc-agent, or default_on_error on failure.
+
+    Raises:
+        HTTPException: 503 if pc-agent is unreachable, or upstream status code.
+    """
     url = f"{PC_AGENT_URL.rstrip('/')}{path}"
     try:
         async with httpx.AsyncClient(timeout=PC_AGENT_TIMEOUT) as client:
@@ -60,11 +71,21 @@ async def _proxy_get(
         logger.warning("Proxy GET %s failed: %s", url, e)
         if default_on_error is not None:
             return default_on_error
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail="PC agent unreachable")
 
 
 async def _proxy_post(path: str) -> Any:
-    """Perform authenticated POST request to pc-agent."""
+    """Perform authenticated POST request to pc-agent.
+
+    Args:
+        path: API path on pc-agent (e.g. "/system/mode/gaming").
+
+    Returns:
+        JSON response from pc-agent.
+
+    Raises:
+        HTTPException: 503 if pc-agent is unreachable, or upstream status code.
+    """
     url = f"{PC_AGENT_URL.rstrip('/')}{path}"
     try:
         async with httpx.AsyncClient(timeout=PC_AGENT_TIMEOUT) as client:
@@ -77,7 +98,7 @@ async def _proxy_post(path: str) -> Any:
         raise
     except Exception as e:
         logger.warning("Proxy POST %s failed: %s", url, e)
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail="PC agent unreachable")
 
 
 @router.get("/status")
