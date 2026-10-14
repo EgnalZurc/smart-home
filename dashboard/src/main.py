@@ -10,7 +10,7 @@ from pathlib import Path
 import auth as auth_core
 import auth_devices
 import auth_users
-from api import auth_routes, routes, trust_routes
+from api import alert_reads_db, auth_routes, routes, trust_routes
 from api.auth import admin as auth_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,6 +62,7 @@ async def lifespan(app: FastAPI):
     auth_users.TRUST_SECRET = AUTH_SECRET
     auth_devices.AUTH_DB_PATH = AUTH_DB_PATH
     profiles_db.AUTH_DB_PATH = AUTH_DB_PATH
+    alert_reads_db.AUTH_DB_PATH = AUTH_DB_PATH
     auth_routes.SMTP_USER = AUTH_SMTP_USER
     auth_routes.SMTP_PASSWORD = AUTH_SMTP_PASS
     auth_routes.ADMIN_EMAIL = AUTH_ADMIN_EMAIL

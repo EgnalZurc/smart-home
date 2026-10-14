@@ -68,6 +68,13 @@ Single Swagger UI at `/swagger` documents ALL platform APIs.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/alerts/unified` | Aggregated alerts from all sources (memory, metrics, ac, portfolio, casita) |
+| POST | `/api/alerts/mark-read` | Mark an alert as read for the current user (body: `{"alert_key": "..."}`) |
+| GET | `/api/alerts/read-status` | List the alert keys the current user has marked as read |
+
+Read state is tracked per user in the `alert_reads` SQLite table (shared
+`AUTH_DB_PATH` database). Marking an alert read is idempotent — re-marking the
+same `alert_key` just refreshes its timestamp. All three endpoints require an
+authenticated session (any profile level).
 
 ### Monitoring
 | Method | Endpoint | Description |
