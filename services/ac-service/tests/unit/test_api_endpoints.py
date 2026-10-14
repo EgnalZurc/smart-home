@@ -121,18 +121,23 @@ def mock_components():
     mock_error_tracker = MagicMock()
     mock_error_tracker.get_active.return_value = []
 
+    mock_event_log = MagicMock()
+    mock_event_log.get_history.return_value = []
+
     # Inject mocks
     original_mqtt = main.mqtt_handler
     original_melcloud = main.melcloud_client
     original_controller = main.ac_controller
     original_sub = main.subscription_manager
     original_error = main.error_tracker
+    original_event_log = main.event_log
 
     main.mqtt_handler = mock_mqtt_handler
     main.melcloud_client = mock_melcloud
     main.ac_controller = mock_controller
     main.subscription_manager = mock_sub_manager
     main.error_tracker = mock_error_tracker
+    main.event_log = mock_event_log
 
     yield {
         "mqtt_handler": mock_mqtt_handler,
@@ -140,6 +145,7 @@ def mock_components():
         "ac_controller": mock_controller,
         "subscription_manager": mock_sub_manager,
         "error_tracker": mock_error_tracker,
+        "event_log": mock_event_log,
     }
 
     # Restore originals
@@ -148,6 +154,7 @@ def mock_components():
     main.ac_controller = original_controller
     main.subscription_manager = original_sub
     main.error_tracker = original_error
+    main.event_log = original_event_log
 
 
 class TestHealthEndpoints:
@@ -380,6 +387,131 @@ class TestHistoryEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert "history" in data
+
+
+class TestEventLogEndpoint:
+    """Tests for the /api/ac/event-log endpoint."""
+
+    def test_get_event_log(self, client, mock_components):
+        """GET /api/ac/event-log should return logged command events."""
+        mock_components["event_log"].get_history.return_value = [
+            {
+                "timestamp": 1000.0,
+                "command_type": "control",
+                "params": {"mode": "auto"},
+                "success": True,
+                "error_msg": None,
+            }
+        ]
+
+        response = client.get("/api/ac/event-log")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["hours"] == 24
+        assert len(data["events"]) == 1
+        assert data["events"][0]["command_type"] == "control"
+        mock_components["event_log"].get_history.assert_called_once_with(24)
+
+    def test_get_event_log_custom_hours(self, client, mock_components):
+        """GET /api/ac/event-log?hours=N should pass the window through."""
+        mock_components["event_log"].get_history.return_value = []
+
+        response = client.get("/api/ac/event-log?hours=48")
+
+        assert response.status_code == 200
+        assert response.json()["hours"] == 48
+        mock_components["event_log"].get_history.assert_called_once_with(48)
+
+    def test_get_event_log_clamps_hours(self, client, mock_components):
+        """hours is clamped between 1 and 720."""
+        mock_components["event_log"].get_history.return_value = []
+
+        client.get("/api/ac/event-log?hours=0")
+        mock_components["event_log"].get_history.assert_called_with(1)
+
+        client.get("/api/ac/event-log?hours=9999")
+        mock_components["event_log"].get_history.assert_called_with(720)
+
+    def test_get_event_log_when_none(self, client):
+        """GET /api/ac/event-log should return empty when event_log is None."""
+        import main
+
+        original = main.event_log
+        main.event_log = None
+
+        response = client.get("/api/ac/event-log")
+
+        main.event_log = original
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["events"] == []
+
+
+class TestCommandLogging:
+    """Tests that control commands are recorded to the event log."""
+
+    def test_control_logs_success(self, client, mock_components):
+        """A successful control command is logged with success=True."""
+        client.post("/api/ac/control", json={"mode": "auto"})
+
+        mock_components["event_log"].log_command.assert_called_once()
+        args = mock_components["event_log"].log_command.call_args.args
+        assert args[0] == "control"
+        assert args[1] == {"mode": "auto"}
+        assert args[2] is True
+
+    def test_control_logs_invalid_mode(self, client, mock_components):
+        """A rejected control command is logged with success=False."""
+        client.post("/api/ac/control", json={"mode": "invalid"})
+
+        args = mock_components["event_log"].log_command.call_args.args
+        assert args[0] == "control"
+        assert args[2] is False
+
+    def test_manual_logs_command(self, client, mock_components):
+        """A manual command is logged."""
+        mock_components["ac_controller"].melcloud.set_temperature.return_value = True
+
+        client.post(
+            "/api/ac/manual",
+            json={"mode": "cool", "fan_speed": 2, "temperature": 22.0},
+        )
+
+        logged = [
+            c.args[0] for c in mock_components["event_log"].log_command.call_args_list
+        ]
+        assert "manual" in logged
+
+    def test_manual_logs_validation_failure(self, client, mock_components):
+        """A rejected manual command is logged with success=False."""
+        client.post(
+            "/api/ac/manual",
+            json={"mode": "cool", "fan_speed": 0, "temperature": 15.0},
+        )
+
+        call = mock_components["event_log"].log_command.call_args
+        assert call.args[0] == "manual"
+        assert call.args[2] is False
+
+    def test_config_logs_command(self, client, mock_components):
+        """A config update is logged."""
+        client.post("/api/ac/config", json={"target_temperature": 24.0})
+
+        call = mock_components["event_log"].log_command.call_args
+        assert call.args[0] == "config"
+        assert call.args[2] is True
+
+    def test_manual_param_logs_command(self, client, mock_components):
+        """A manual/param update is logged."""
+        mock_components["ac_controller"].state.control_mode = "manual"
+        mock_components["ac_controller"].melcloud.set_temperature.return_value = True
+
+        client.post("/api/ac/manual/param?param=fan_speed&value=2")
+
+        call = mock_components["event_log"].log_command.call_args
+        assert call.args[0] == "manual_param"
 
 
 class TestLearningEndpoint:

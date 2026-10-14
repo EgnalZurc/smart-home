@@ -6,6 +6,7 @@ Serves:
   GET  /api/ac/sensors             → per-sensor readings
   GET  /api/ac/sensors/history     → sensor reading history
   GET  /api/ac/history             → controller action history
+  GET  /api/ac/event-log           → control command event log history
   GET  /api/ac/learning            → usage patterns & recommendations
   GET  /api/ac/config              → controller config
   POST /api/ac/config              → update config
@@ -40,6 +41,7 @@ from pathlib import Path
 
 from ac_temp_scheduler import AcTempScheduler
 from controllers.ac_controller import ACController, ControlConfig
+from event_log import ACEventLog
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -137,6 +139,7 @@ ac_controller: ACController | None = None
 subscription_manager: SubscriptionManager | None = None
 error_tracker: ErrorTracker | None = None
 ac_temp_scheduler: AcTempScheduler | None = None
+event_log: ACEventLog | None = None
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -146,8 +149,10 @@ ac_temp_scheduler: AcTempScheduler | None = None
 async def lifespan(app: FastAPI):
     global mqtt_handler, melcloud_client, ac_controller
     global subscription_manager, error_tracker, ac_temp_scheduler
+    global event_log
 
     error_tracker = ErrorTracker()
+    event_log = ACEventLog()
     logger.info("=== AC Service starting ===")
 
     # 0. Discover sensors from Zigbee2MQTT
@@ -303,6 +308,25 @@ class ManualParamsRequest(BaseModel):
     temperature: float = 23.0
 
 
+# ── Command event logging helper ──────────────────────────────────────────────
+
+
+def _log_command(
+    command: str,
+    params: dict | None,
+    result: bool,
+    error_msg: str | None = None,
+) -> None:
+    """Record a control command to the event log, swallowing any error.
+
+    Logging must never break the actual command, so failures here are only
+    logged and never raised to the caller.
+    """
+    if event_log is None:
+        return
+    event_log.log_command(command, params, result, error_msg)
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
 
 
@@ -443,6 +467,19 @@ def get_history(limit: int = 100):
     return {"history": ac_controller.get_history(limit)}
 
 
+@app.get("/api/ac/event-log", tags=["AC Control"])
+def get_event_log(hours: int = 24):
+    """Get the history of control commands sent to the AC.
+
+    Returns every logged command (mode changes, manual params, config
+    updates) from the last ``hours`` hours, newest first.
+    """
+    hours = max(1, min(hours, 720))  # Cap between 1 hour and 30 days
+    if event_log is None:
+        return {"events": [], "hours": hours}
+    return {"events": event_log.get_history(hours), "hours": hours}
+
+
 @app.get("/api/ac/learning", tags=["AC Control"])
 def get_learning(window: int = 1000):
     """Return usage patterns, correlations and recommendations.
@@ -484,6 +521,7 @@ def update_config(update: ConfigUpdate):
     """Update controller configuration."""
     changes = update.model_dump(exclude_none=True)
     if not changes:
+        _log_command("config", {}, False, "No changes")
         raise HTTPException(400, "No changes")
     if "target_temperature" in changes:
         temp = changes["target_temperature"]
@@ -491,11 +529,14 @@ def update_config(update: ConfigUpdate):
             temp < ac_controller.config.min_setpoint
             or temp > ac_controller.config.max_setpoint
         ):
-            raise HTTPException(
-                400,
-                f"Temperature must be between {ac_controller.config.min_setpoint} and {ac_controller.config.max_setpoint}",
+            msg = (
+                f"Temperature must be between {ac_controller.config.min_setpoint} "
+                f"and {ac_controller.config.max_setpoint}"
             )
+            _log_command("config", changes, False, msg)
+            raise HTTPException(400, msg)
     ac_controller.update_config(**changes)
+    _log_command("config", changes, True)
     return {"status": "updated", "changes": changes}
 
 
@@ -503,6 +544,7 @@ def update_config(update: ConfigUpdate):
 def set_control_mode(req: ControlModeRequest):
     """Set control mode (auto/manual/off)."""
     if req.mode not in ("auto", "manual", "off"):
+        _log_command("control", {"mode": req.mode}, False, "invalid mode")
         raise HTTPException(400, "mode must be 'auto', 'manual', or 'off'")
     if req.mode == "manual":
         state = ac_controller.current_state
@@ -512,21 +554,29 @@ def set_control_mode(req: ControlModeRequest):
             mode=state.ac_mode,
         )
     ac_controller.set_control_mode(req.mode)
+    _log_command("control", {"mode": req.mode}, True)
     return {"status": "ok", "control_mode": req.mode}
 
 
 @app.post("/api/ac/manual", tags=["AC Control"])
 def set_manual_params(req: ManualParamsRequest):
     """Set manual control parameters."""
+    params = {
+        "mode": req.mode,
+        "fan_speed": req.fan_speed,
+        "temperature": req.temperature,
+    }
     min_temp = ac_controller.config.min_setpoint
     max_temp = ac_controller.config.max_setpoint
     if req.temperature < min_temp or req.temperature > max_temp:
-        raise HTTPException(
-            400, f"Temperature must be between {min_temp} and {max_temp}"
-        )
+        msg = f"Temperature must be between {min_temp} and {max_temp}"
+        _log_command("manual", params, False, msg)
+        raise HTTPException(400, msg)
     if req.fan_speed < 0 or req.fan_speed > 3:
+        _log_command("manual", params, False, "fan_speed out of range")
         raise HTTPException(400, "Fan speed must be between 0 and 3")
     if req.mode not in ("cool", "heat"):
+        _log_command("manual", params, False, "invalid mode")
         raise HTTPException(400, "Mode must be 'cool' or 'heat'")
     ac_controller.set_manual_params(
         temperature=req.temperature, fan_speed=req.fan_speed, mode=req.mode
@@ -540,6 +590,12 @@ def set_manual_params(req: ManualParamsRequest):
             mode=req.mode,
             fan_speed=req.fan_speed,
         )
+        _log_command(
+            "manual",
+            params,
+            success,
+            None if success else "MELCloud set_temperature failed",
+        )
         return {
             "status": "ok" if success else "error",
             "applied": {
@@ -548,6 +604,7 @@ def set_manual_params(req: ManualParamsRequest):
                 "temperature": req.temperature,
             },
         }
+    _log_command("manual", params, True)
     return {"status": "ok", "message": "Parameters saved"}
 
 
@@ -597,6 +654,12 @@ def update_manual_param(param: str, value: str):
         power=True,
         mode=mode,
         fan_speed=fan_speed,
+    )
+    _log_command(
+        "manual_param",
+        {"param": param, "value": converted_value},
+        success,
+        None if success else "MELCloud set_temperature failed",
     )
     if success and subscription_manager is not None:
         subscription_manager.force_update("melcloud")
