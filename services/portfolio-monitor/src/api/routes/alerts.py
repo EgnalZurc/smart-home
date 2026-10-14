@@ -10,6 +10,7 @@ WARN/DANGER market alerts for the unified alerts system.
 call time so tests patching ``api.routes.get_orchestrator`` take effect here.
 """
 
+import logging
 import re
 from datetime import datetime, timezone
 
@@ -17,6 +18,8 @@ from fastapi import APIRouter, HTTPException
 from models import AlertLevel
 
 from .helpers import _safe_json, _serialize_alert
+
+logger = logging.getLogger(__name__)
 
 # Valid alert_id: alphanumeric, underscore, hyphen only
 _VALID_ALERT_ID = re.compile(r"^[a-zA-Z0-9_-]+$")
@@ -174,6 +177,7 @@ async def complete_alert(alert_id: str):
 
     # Validate alert_id format
     if not _validate_alert_id(alert_id):
+        logger.warning(f"Invalid alert_id format rejected: {alert_id!r}")
         raise HTTPException(
             status_code=400,
             detail="Invalid alert_id format",
@@ -183,6 +187,7 @@ async def complete_alert(alert_id: str):
     all_alerts = get_all_alerts()
     alert = next((a for a in all_alerts if a.alert_id == alert_id), None)
     if not alert:
+        logger.warning(f"Alert not found: {alert_id}")
         raise HTTPException(
             status_code=404,
             detail="Alert not found",
@@ -192,6 +197,7 @@ async def complete_alert(alert_id: str):
     success = mark_alert_completed(alert_id)
 
     if not success:
+        logger.info(f"Cannot complete alert {alert_id}: date hasn't arrived yet")
         raise HTTPException(
             status_code=400,
             detail="Cannot complete alert — date hasn't arrived yet",
@@ -201,4 +207,5 @@ async def complete_alert(alert_id: str):
     orch = routes.get_orchestrator()
     orch._load_upcoming_alerts()
 
+    logger.info(f"Alert completed: {alert_id}")
     return {"status": "completed", "alert_id": alert_id}
