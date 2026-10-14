@@ -300,3 +300,135 @@ class TestResourceLimits:
         data = response.json()
         assert data["status"] == "error"
         assert "max" in data["message"].lower()
+
+
+
+class TestRateLimiting:
+    """Tests for rate limiting on write endpoints."""
+
+    def test_rate_limit_allows_normal_usage(self, client):
+        """Normal usage should not be rate limited."""
+        # 5 requests should all succeed
+        for _ in range(5):
+            response = client.post(
+                "/api/vacaciones/config",
+                json={"nucleos": [], "personas": []},
+            )
+            assert response.status_code == 200
+
+    def test_rate_limit_blocks_after_threshold(self, client):
+        """Requests beyond threshold should return 429."""
+        import main
+
+        original_limit = main.MAX_REQUESTS_PER_MINUTE
+        main.MAX_REQUESTS_PER_MINUTE = 3
+        main._rate_limit.clear()
+
+        try:
+            # First 3 should succeed
+            for _ in range(3):
+                response = client.post(
+                    "/api/vacaciones/config",
+                    json={"nucleos": [], "personas": []},
+                )
+                assert response.status_code == 200
+
+            # 4th should be rate limited
+            response = client.post(
+                "/api/vacaciones/config",
+                json={"nucleos": [], "personas": []},
+            )
+            assert response.status_code == 429
+            assert "rate limit" in response.json()["detail"].lower()
+        finally:
+            main.MAX_REQUESTS_PER_MINUTE = original_limit
+            main._rate_limit.clear()
+
+    def test_rate_limit_applies_to_year_endpoints(self, client):
+        """Rate limiting should apply to year management endpoints."""
+        import main
+
+        original_limit = main.MAX_REQUESTS_PER_MINUTE
+        main.MAX_REQUESTS_PER_MINUTE = 2
+        main._rate_limit.clear()
+
+        try:
+            # Use up rate limit
+            for _ in range(2):
+                client.post(
+                    "/api/vacaciones/config",
+                    json={"nucleos": [], "personas": []},
+                )
+
+            # Year endpoint should also be limited
+            response = client.post("/api/vacaciones/year")
+            assert response.status_code == 429
+        finally:
+            main.MAX_REQUESTS_PER_MINUTE = original_limit
+            main._rate_limit.clear()
+
+    def test_rate_limit_respects_x_forwarded_for(self, client):
+        """Rate limiting should use X-Forwarded-For header."""
+        import main
+
+        original_limit = main.MAX_REQUESTS_PER_MINUTE
+        main.MAX_REQUESTS_PER_MINUTE = 2
+        main._rate_limit.clear()
+
+        try:
+            # Requests from IP 1.2.3.4 (via header)
+            for _ in range(2):
+                response = client.post(
+                    "/api/vacaciones/config",
+                    json={"nucleos": [], "personas": []},
+                    headers={"X-Forwarded-For": "1.2.3.4"},
+                )
+                assert response.status_code == 200
+
+            # 3rd from same IP should be limited
+            response = client.post(
+                "/api/vacaciones/config",
+                json={"nucleos": [], "personas": []},
+                headers={"X-Forwarded-For": "1.2.3.4"},
+            )
+            assert response.status_code == 429
+
+            # But different IP should succeed
+            response = client.post(
+                "/api/vacaciones/config",
+                json={"nucleos": [], "personas": []},
+                headers={"X-Forwarded-For": "5.6.7.8"},
+            )
+            assert response.status_code == 200
+        finally:
+            main.MAX_REQUESTS_PER_MINUTE = original_limit
+            main._rate_limit.clear()
+
+    def test_get_endpoints_not_rate_limited(self, client):
+        """GET endpoints should not be rate limited."""
+        import main
+
+        original_limit = main.MAX_REQUESTS_PER_MINUTE
+        main.MAX_REQUESTS_PER_MINUTE = 2
+        main._rate_limit.clear()
+
+        try:
+            # Exhaust rate limit
+            for _ in range(3):
+                client.post(
+                    "/api/vacaciones/config",
+                    json={"nucleos": [], "personas": []},
+                )
+
+            # GET should still work
+            response = client.get("/api/vacaciones")
+            assert response.status_code == 200
+
+            response = client.get("/api/vacaciones/config")
+            assert response.status_code == 200
+
+            response = client.get("/health")
+            assert response.status_code == 200
+        finally:
+            main.MAX_REQUESTS_PER_MINUTE = original_limit
+            main._rate_limit.clear()
