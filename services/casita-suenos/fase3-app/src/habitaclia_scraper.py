@@ -1,20 +1,35 @@
 """
-Scraper para habitaclia.com.
-Estructura HTML (verificada agosto 2026):
-  - Listado: article.list-item-container
-  - URL detalle: data-href o a[href*='comprar-casa']
-  - Precio: span.list-item-price o texto en el articulo
-  - Caracteristicas: p.list-item-feature  (ej: "55m2 - 2 habitaciones - 1 bano")
-  - Descripcion: p.list-item-description
+Scraper for habitaclia.com real estate portal.
 
-Workaround L2/L3:
-  Habitaclia no tiene filtro de jardin/garaje en la URL de listado.
-  Las URLs se construyen con parametros de filtro st= que incluyen
-  equipamiento: st contiene codigos para caracteristicas.
-  Alternativamente, si la URL incluye "jardin" o "garaje" en los parametros
-  ya es garantia de que el portal ha filtrado.
-  Si no hay garantia por URL, has_garden/has_garage quedan como inferencia
-  de descripcion. El scorer usa L2/L3 como soft-limiters (ver scorer.py).
+This module implements the scraping logic for Habitaclia, one of Spain's
+major real estate listing platforms. It extracts property listings from
+search result pages and normalizes them into Property objects.
+
+HTML Structure (verified August 2026):
+    - Listing container: article.list-item-container
+    - Detail URL: data-href attribute or a[href*='comprar-casa']
+    - Price: span.list-item-price or text within article
+    - Features: p.list-item-feature (e.g., "55m2 - 2 habitaciones - 1 baño")
+    - Description: p.list-item-description
+
+Workaround for L2/L3 Rubric (garden/garage):
+    Habitaclia doesn't have garden/garage filters in the listing URL path.
+    URLs use st= parameters with equipment codes. If the URL includes
+    specific filter codes, garden/garage presence is guaranteed by the
+    portal. Otherwise, has_garden/has_garage are inferred from description
+    text. The scorer uses L2/L3 as soft-limiters (see scorer.py).
+
+Example:
+    >>> from habitaclia_scraper import scrape_zone
+    >>> from zones import Zone
+    >>> zone = Zone(
+    ...     id="horta-nord",
+    ...     name="L'Horta Nord",
+    ...     habitaclia_search_urls=["https://www.habitaclia.com/comprar/..."]
+    ... )
+    >>> properties = scrape_zone(zone)
+    >>> len(properties)
+    42
 """
 
 from __future__ import annotations
@@ -25,6 +40,7 @@ from datetime import datetime
 
 import httpx
 from bs4 import BeautifulSoup
+from config import BASE_URLS, SCRAPER_CONFIG
 from models import Portal, Property
 from scraper_base import (
     get_html,
@@ -46,15 +62,32 @@ from scraper_base import (
 from zones import Zone
 
 logger = logging.getLogger(__name__)
-_BASE_URL = "https://www.habitaclia.com"
+_BASE_URL = BASE_URLS["habitaclia"]
 
 
 def _parse_listing_page(
     soup: BeautifulSoup, zone: Zone, now: datetime, url_used: str = ""
 ) -> list[Property]:
     """
-    Parsea una pagina de resultados de Habitaclia.
-    Selector verificado agosto 2026: article.list-item-container
+    Parse a Habitaclia search results page into Property objects.
+
+    Extracts all listing cards from the HTML and converts them to normalized
+    Property objects. Handles various HTML structures and gracefully skips
+    unparseable listings.
+
+    Args:
+        soup: BeautifulSoup object of the search results page.
+        zone: Zone configuration for the current search.
+        now: Timestamp to use for first_seen/last_seen fields.
+        url_used: The URL that was fetched (for logging/debugging).
+
+    Returns:
+        List of Property objects extracted from the page. May be empty
+        if no valid listings found.
+
+    Note:
+        Primary selector verified August 2026: article.list-item-container
+        Falls back to article[data-href] if primary selector fails.
     """
     # Selector principal verificado
     articles = soup.select("article.list-item-container")
@@ -108,9 +141,7 @@ def _parse_listing_page(
             if not price:
                 text = article.get_text(" ")
                 # Buscar solo precios con ".000 EUR" (precios totales reales)
-                import re as _re
-
-                m2 = _re.search(r"([\d][\d\.]+\.000)\s*€(?!\s*/\s*m)", text)
+                m2 = re.search(r"([\d][\d\.]+\.000)\s*€(?!\s*/\s*m)", text)
                 if m2:
                     price = parse_price(m2.group(0))
             if not price:
@@ -126,8 +157,8 @@ def _parse_listing_page(
             feature_el = article.select_one("p.list-item-feature")
             feature_text = feature_el.get_text(" ", strip=True) if feature_el else ""
 
-            rooms_m = re.search(r"(\d+)\s*hab", feature_text, _re.IGNORECASE)
-            size_m = re.search(r"(\d+)\s*m[²2]", feature_text, _re.IGNORECASE)
+            rooms_m = re.search(r"(\d+)\s*hab", feature_text, re.IGNORECASE)
+            size_m = re.search(r"(\d+)\s*m[²2]", feature_text, re.IGNORECASE)
             rooms_raw = rooms_m.group(0) if rooms_m else None
             size_raw = size_m.group(0) if size_m else None
 
@@ -188,12 +219,31 @@ def _parse_listing_page(
 
 
 def scrape_zone(zone: Zone, client: httpx.Client | None = None) -> list[Property]:
-    """Scrape de habitaclia.com para una zona usando habitaclia_search_urls."""
+    """
+    Scrape Habitaclia listings for a zone.
+
+    Iterates through all configured search URLs for the zone, paginating
+    up to MAX_PAGES per URL. Deduplicates results by portal_id.
+
+    Args:
+        zone: Zone configuration with habitaclia_search_urls list.
+        client: Optional httpx.Client to reuse. If None, creates and
+            closes a new client.
+
+    Returns:
+        List of unique Property objects found across all search URLs.
+        Empty list if zone has no configured URLs or all requests fail.
+
+    Example:
+        >>> zone = Zone(id="test", habitaclia_search_urls=["https://..."])
+        >>> properties = scrape_zone(zone)
+        >>> print(f"Found {len(properties)} listings")
+    """
     if not zone.habitaclia_search_urls:
         logger.info("[habitaclia] Zona %s sin URLs configuradas, skipping.", zone.id)
         return []
 
-    MAX_PAGES = 3
+    max_pages = SCRAPER_CONFIG["max_pages"]
     own_client = client is None
     if own_client:
         client = make_client()
@@ -204,7 +254,7 @@ def scrape_zone(zone: Zone, client: httpx.Client | None = None) -> list[Property
 
     try:
         for base_url in zone.habitaclia_search_urls:
-            for page in range(1, MAX_PAGES + 1):
+            for page in range(1, max_pages + 1):
                 if page == 1:
                     url = base_url
                 else:
@@ -213,7 +263,7 @@ def scrape_zone(zone: Zone, client: httpx.Client | None = None) -> list[Property
                     url = f"{base_url}{separator}pagina={page}"
 
                 logger.info("[habitaclia] Scraping %s", url)
-                soup = get_html(url, client, delay=2.5)
+                soup = get_html(url, client)
                 if not soup:
                     logger.warning("[habitaclia] Sin respuesta para %s", url)
                     break
