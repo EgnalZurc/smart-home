@@ -1436,7 +1436,7 @@ async function dismissCasitaAlert(event) {
         const r = await fetch('/api/casita/dismiss', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ property_id: propertyId }),
+            body: JSON.stringify({ uid: propertyId }),
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         unifiedAlerts = unifiedAlerts.filter(a => a.key !== key);
