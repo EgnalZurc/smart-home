@@ -11,7 +11,10 @@ Each health check returns:
 The /all endpoint aggregates all health checks in parallel for efficiency.
 """
 
+from __future__ import annotations
+
 import asyncio
+import logging
 import os
 import time
 from collections.abc import Awaitable, Callable
@@ -21,6 +24,8 @@ import httpx
 from fastapi import APIRouter
 
 router = APIRouter(prefix="/api/health", tags=["Health"])
+
+logger = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 

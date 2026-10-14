@@ -48,3 +48,21 @@ To update to the latest vaultwarden version:
 2. Push any change to `services/vaultwarden/` to trigger a rebuild
 
 Or manually trigger a deploy which will pull the latest base image.
+
+## Health Check
+
+The container includes a health check that verifies the service is fully operational:
+
+```yaml
+healthcheck:
+  test: ["CMD", "curl", "-sf", "http://localhost:80/passwords/alive"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 30s
+```
+
+The `/passwords/alive` endpoint returns a JSON timestamp when the API is ready, ensuring:
+- Web server (Rocket) is responding
+- API layer is functional (not just port open)
+- Subpath routing is working correctly

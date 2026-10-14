@@ -133,7 +133,7 @@ def _db_ok() -> bool:
         collector.store.count()
         return True
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("db health check failed: %s", exc)
+        logger.warning("[HealthCheck] Database query failed: %s", exc)
         return False
 
 
