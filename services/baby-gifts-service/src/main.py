@@ -153,7 +153,14 @@ def _get_auth_user(request: Request) -> str | None:
 
 
 def _truncate_token(token: str) -> str:
-    """Truncate token for safe logging (show last 6 chars only)."""
+    """Truncate token for safe logging (show last 6 chars only).
+
+    Args:
+        token: Full token string.
+
+    Returns:
+        str: Truncated token with '...' prefix, or full token if <= 6 chars.
+    """
     if len(token) > 6:
         return f"...{token[-6:]}"
     return token
@@ -164,13 +171,21 @@ def _truncate_token(token: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/health")
 def health():
-    """Health check — used by nginx and the dashboard."""
+    """Health check endpoint for nginx and the dashboard.
+
+    Returns:
+        dict: Status with 'online' bool and 'service' name.
+    """
     return {"online": is_healthy(), "service": "baby-gifts"}
 
 
 @app.get("/api/health/baby-gifts")
 def health_alias():
-    """Health check alias — matches path expected by the dashboard."""
+    """Health check alias matching path expected by the dashboard.
+
+    Returns:
+        dict: Status with 'online' bool.
+    """
     return {"online": is_healthy()}
 
 
@@ -179,10 +194,16 @@ def health_alias():
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/smart-home/baby-gifts")
 async def serve_admin(request: Request):
-    """Serves the admin/user SPA (protected by nginx auth_request).
+    """Serve the admin/user SPA (protected by nginx auth_request).
 
     If user is an admin (SUPER profile), they get full management capabilities.
     If user is a regular authenticated user, they can view and reserve gifts.
+
+    Args:
+        request: FastAPI request object.
+
+    Returns:
+        HTMLResponse: Rendered baby-gifts.html with user context.
     """
     username = _get_auth_user(request)
     if username:
@@ -195,10 +216,20 @@ async def serve_admin(request: Request):
 
 @app.get("/guest/baby-gifts/{token}")
 async def serve_guest(token: str, request: Request):
-    """Serves the guest SPA (public, token-validated).
+    """Serve the guest SPA (public, token-validated).
 
     NOTE: No rate limiting here - we only validate token once on page load.
     Rate limiting is done on API calls instead.
+
+    Args:
+        token: Invitation token from URL path.
+        request: FastAPI request object.
+
+    Returns:
+        HTMLResponse: Rendered baby-gifts.html with guest token.
+
+    Raises:
+        HTTPException: 404 if token is invalid or expired.
     """
     guest = validate_invitation(token)
     if not guest:
@@ -216,7 +247,14 @@ async def serve_guest(token: str, request: Request):
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/baby-gifts")
 def get_all_gifts(request: Request):
-    """Get all gifts with full reservation details (admin only)."""
+    """Get all gifts with full reservation details (admin only).
+
+    Args:
+        request: FastAPI request object.
+
+    Returns:
+        dict: Gifts list, FAMILIA status, and username.
+    """
     username = _get_auth_user(request)
     user_is_familia = is_familia_user(username) if username else False
     data = get_gifts_data(include_admin=True)
@@ -229,14 +267,32 @@ def get_all_gifts(request: Request):
 
 @app.post("/api/baby-gifts")
 def create_gift(gift: GiftCreate):
-    """Add a new gift (admin only)."""
+    """Add a new gift to the registry (admin only).
+
+    Args:
+        gift: Gift creation payload.
+
+    Returns:
+        dict: Status and newly created gift.
+    """
     new_gift = add_gift(gift.model_dump())
     return {"status": "ok", "gift": new_gift}
 
 
 @app.put("/api/baby-gifts/{gift_id}")
 def modify_gift(gift_id: str, gift: GiftUpdate):
-    """Update a gift (admin only)."""
+    """Update an existing gift (admin only).
+
+    Args:
+        gift_id: ID of the gift to update.
+        gift: Fields to update (only non-None values applied).
+
+    Returns:
+        dict: Status and updated gift.
+
+    Raises:
+        HTTPException: 400 if no changes or validation error, 404 if not found.
+    """
     updates = {k: v for k, v in gift.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No hay cambios")
@@ -256,7 +312,17 @@ def modify_gift(gift_id: str, gift: GiftUpdate):
 
 @app.delete("/api/baby-gifts/{gift_id}")
 def remove_gift(gift_id: str):
-    """Delete a gift (admin only)."""
+    """Delete a gift from the registry (admin only).
+
+    Args:
+        gift_id: ID of the gift to delete.
+
+    Returns:
+        dict: Status confirmation.
+
+    Raises:
+        HTTPException: 404 if gift not found.
+    """
     if delete_gift(gift_id):
         return {"status": "ok"}
     raise HTTPException(status_code=404, detail="Regalo no encontrado")
@@ -264,7 +330,17 @@ def remove_gift(gift_id: str):
 
 @app.post("/api/baby-gifts/{gift_id}/unreserve")
 def admin_unreserve(gift_id: str):
-    """Admin can unreserve any gift."""
+    """Unreserve any gift (admin only, bypasses ownership check).
+
+    Args:
+        gift_id: ID of the gift to unreserve.
+
+    Returns:
+        dict: Status and updated gift.
+
+    Raises:
+        HTTPException: 400 if gift not reserved or other error.
+    """
     result = unreserve_gift(gift_id, token="", is_admin=True)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
@@ -276,7 +352,11 @@ def admin_unreserve(gift_id: str):
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/baby-gifts/invitations")
 def get_invitations():
-    """List all invitations (admin only)."""
+    """List all invitations with reservation counts (admin only).
+
+    Returns:
+        dict: List of invitations with computed stats.
+    """
     invitations = list_invitations()
 
     # Count reservations per guest and compute gift stats
@@ -305,7 +385,17 @@ def get_invitations():
 
 @app.post("/api/baby-gifts/invitations")
 def create_new_invitation(data: InvitationCreate):
-    """Create a new invitation (admin only)."""
+    """Create a new invitation with 6-month expiry (admin only).
+
+    Args:
+        data: Invitation creation payload with guest name.
+
+    Returns:
+        dict: Status and invitation details including token.
+
+    Raises:
+        HTTPException: 400 if name is empty.
+    """
     if not data.name.strip():
         raise HTTPException(status_code=400, detail="El nombre es obligatorio")
     result = create_invitation(data.name.strip())
@@ -314,7 +404,17 @@ def create_new_invitation(data: InvitationCreate):
 
 @app.delete("/api/baby-gifts/invitations/{token}")
 def remove_invitation(token: str):
-    """Delete an invitation (admin only)."""
+    """Delete an invitation completely (admin only).
+
+    Args:
+        token: Invitation token to delete.
+
+    Returns:
+        dict: Status confirmation.
+
+    Raises:
+        HTTPException: 404 if invitation not found.
+    """
     result = delete_invitation(token)
     if result["status"] == "error":
         raise HTTPException(status_code=404, detail=result["message"])
@@ -323,7 +423,19 @@ def remove_invitation(token: str):
 
 @app.post("/api/baby-gifts/invitations/{token}/revoke")
 def revoke_inv(token: str):
-    """Revoke an invitation without deleting it (admin only)."""
+    """Revoke an invitation without deleting it (admin only).
+
+    Revoked invitations remain in the database but cannot be used.
+
+    Args:
+        token: Invitation token to revoke.
+
+    Returns:
+        dict: Status confirmation.
+
+    Raises:
+        HTTPException: 404 if invitation not found.
+    """
     result = revoke_invitation(token)
     if result["status"] == "error":
         raise HTTPException(status_code=404, detail=result["message"])
@@ -340,6 +452,15 @@ def get_gifts_for_user(request: Request):
     Shows what's reserved but not by whom (except own).
     FAMILIA users (egnal, virchu) can see hidden gifts.
     Gifts are sorted: visible first by price descending, then hidden by price descending.
+
+    Args:
+        request: FastAPI request object.
+
+    Returns:
+        dict: User name, FAMILIA status, and filtered gifts list.
+
+    Raises:
+        HTTPException: 401 if user not authenticated.
     """
     username = _get_auth_user(request)
     if not username:
@@ -392,7 +513,18 @@ def get_gifts_for_user(request: Request):
 
 @app.post("/api/baby-gifts/user/reserve/{gift_id}")
 def user_reserve(gift_id: str, request: Request):
-    """Reserve a gift as an authenticated user."""
+    """Reserve a gift as an authenticated user.
+
+    Args:
+        gift_id: ID of the gift to reserve.
+        request: FastAPI request object.
+
+    Returns:
+        dict: Status and reserved gift details.
+
+    Raises:
+        HTTPException: 401 if not authenticated, 400 if already reserved.
+    """
     username = _get_auth_user(request)
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
@@ -410,7 +542,18 @@ def user_reserve(gift_id: str, request: Request):
 
 @app.post("/api/baby-gifts/user/unreserve/{gift_id}")
 def user_unreserve(gift_id: str, request: Request):
-    """Cancel own reservation as an authenticated user."""
+    """Cancel own reservation as an authenticated user.
+
+    Args:
+        gift_id: ID of the gift to unreserve.
+        request: FastAPI request object.
+
+    Returns:
+        dict: Status and updated gift details.
+
+    Raises:
+        HTTPException: 401 if not authenticated, 400 if not own reservation.
+    """
     username = _get_auth_user(request)
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
@@ -430,7 +573,18 @@ def user_unreserve(gift_id: str, request: Request):
 
 @app.post("/api/baby-gifts/user/toggle-visibility/{gift_id}")
 def user_toggle_visibility(gift_id: str, request: Request):
-    """Toggle gift visibility (FAMILIA users only: egnal, virchu)."""
+    """Toggle gift visibility (FAMILIA users only: egnal, virchu).
+
+    Args:
+        gift_id: ID of the gift to toggle.
+        request: FastAPI request object.
+
+    Returns:
+        dict: Status, updated gift, and new hidden state.
+
+    Raises:
+        HTTPException: 401 if not authenticated, 403 if not FAMILIA, 404 if not found.
+    """
     username = _get_auth_user(request)
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
@@ -458,11 +612,21 @@ def get_gifts_for_guest(
     token: str,
     client_ip: str = Depends(require_rate_limit),
 ):
-    """Get gifts for a guest.
+    """Get gifts for a guest via invitation token.
 
     Shows what's reserved but not by whom (except own).
     Hidden gifts are not shown to guests.
     Gifts are sorted by price descending.
+
+    Args:
+        token: Invitation token from URL path.
+        client_ip: Resolved client IP (injected by rate limit dependency).
+
+    Returns:
+        dict: Guest name and filtered gifts list.
+
+    Raises:
+        HTTPException: 401 if token invalid/expired, 429 if rate limited.
     """
     guest = validate_invitation(token)
     if not guest:
@@ -506,7 +670,19 @@ def guest_reserve(
     gift_id: str,
     client_ip: str = Depends(require_rate_limit),
 ):
-    """Reserve a gift as a guest."""
+    """Reserve a gift as a guest.
+
+    Args:
+        token: Invitation token from URL path.
+        gift_id: ID of the gift to reserve.
+        client_ip: Resolved client IP (injected by rate limit dependency).
+
+    Returns:
+        dict: Status and reserved gift details.
+
+    Raises:
+        HTTPException: 401 if token invalid, 400 if already reserved, 429 if rate limited.
+    """
     guest = validate_invitation(token)
     if not guest:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
@@ -526,7 +702,19 @@ def guest_unreserve(
     gift_id: str,
     client_ip: str = Depends(require_rate_limit),
 ):
-    """Cancel own reservation as a guest."""
+    """Cancel own reservation as a guest.
+
+    Args:
+        token: Invitation token from URL path.
+        gift_id: ID of the gift to unreserve.
+        client_ip: Resolved client IP (injected by rate limit dependency).
+
+    Returns:
+        dict: Status and updated gift details.
+
+    Raises:
+        HTTPException: 401 if token invalid, 400 if not own reservation, 429 if rate limited.
+    """
     guest = validate_invitation(token)
     if not guest:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
