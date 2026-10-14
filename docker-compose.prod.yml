@@ -436,6 +436,34 @@ services:
       - mosquitto
     networks:
       - smart-home
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Calendar Service — Google Calendar integration with Telegram reminders
+  # NOTE: the deploy step must `mkdir -p` + `chown 1000:1000 data/calendar-service`
+  # BEFORE `docker compose up` so the non-root container can create its SQLite DB.
+  # ─────────────────────────────────────────────────────────────────────────────
+  calendar-service:
+    image: egnal/smart-home-calendar-service:latest
+    container_name: calendar-service
+    restart: on-failure:5
+    mem_limit: 96m
+    memswap_limit: 96m
+    expose:
+      - 8014
+    volumes:
+      - ./data/calendar-service:/app/data
+    environment:
+      - TZ=Europe/Madrid
+      - CALENDAR_SYNC_INTERVAL=${CALENDAR_SYNC_INTERVAL:-300}
+    # Google OAuth credentials and Telegram for reminders: GOOGLE_CLIENT_ID,
+    # GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, TELEGRAM_BOT_TOKEN,
+    # TELEGRAM_CHAT_IDS from .env.
+    env_file:
+      - .env
+    depends_on:
+      - smart-home-backend
+    networks:
+      - smart-home
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8013/health', timeout=3)"]
       interval: 60s

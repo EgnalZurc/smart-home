@@ -1,0 +1,59 @@
+# calendar-service — example settings
+#
+# This file documents every tunable the service reads from the environment
+# (see src/config.py). In production these are set via docker-compose
+# `environment:` / the shared `.env`; secrets (Google client secret, the OAuth
+# refresh token) live ONLY in `.env` / the data dir and are never committed.
+#
+# Copy the relevant keys into your `.env` (as UPPERCASE env vars) — this TOML is
+# a readable reference, not loaded at runtime.
+
+[service]
+# Port the FastAPI app listens on (next free port per design §10).
+CALENDAR_PORT = 8014
+LOG_LEVEL = "INFO"
+
+[storage]
+# SQLite cache of events + reminder ledger (bind-mounted data dir).
+CALENDAR_DB_PATH = "/app/data/calendar.db"
+# OAuth refresh token (secret, mode 600, never logged/returned).
+CALENDAR_TOKEN_PATH = "/app/data/token.json"
+
+[google_oauth]
+# OAuth 2.0 Client ID of type Desktop/Installed app. SECRETS — set in .env only.
+GOOGLE_OAUTH_CLIENT_ID = "your-client-id.apps.googleusercontent.com"
+GOOGLE_OAUTH_CLIENT_SECRET = "set-in-dotenv-only"
+
+[sync]
+# One sync every N seconds (design default 600s; tunable 300-900).
+CALENDAR_SYNC_INTERVAL_S = 600
+# How far ahead to cache events, in days.
+CALENDAR_SYNC_HORIZON_DAYS = 30
+
+[reminders]
+# Reminder tick cadence, in seconds.
+CALENDAR_REMINDER_TICK_S = 60
+# Default offsets seeded as global rules on first run: 30min, 1h, 1day.
+CALENDAR_DEFAULT_OFFSETS = "1800,3600,86400"
+# Master switch for sending Telegram reminders.
+CALENDAR_NOTIFY_ENABLED = true
+
+[retention]
+# Drop events whose end is older than this many days (short "today so far" tail).
+CALENDAR_EVENT_RETENTION_DAYS = 7
+# Keep the reminders_sent dedup ledger / audit trail this long.
+CALENDAR_REMINDER_RETENTION_DAYS = 90
+
+[timezone]
+# Local timezone for "today" windows and all-day event boundaries.
+CALENDAR_TZ = "Europe/Madrid"
+
+[seed]
+# Optional JSON seed of calendars on first run (empty → manage via API).
+# CALENDAR_SEED = '[{"id":"familia@group.calendar.google.com","label":"Familia","person_id":"ana","enabled":true}]'
+
+[telegram]
+# Shared notifier (smart_home_common.telegram.TelegramNotifier.from_env()).
+# SECRETS — set in .env only. Unset → notifier is a no-op.
+TELEGRAM_BOT_TOKEN = "set-in-dotenv-only"
+TELEGRAM_CHAT_IDS = "123456789,987654321"
