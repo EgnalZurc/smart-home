@@ -5,13 +5,12 @@ These tests verify the proxy endpoints work correctly.
 """
 
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 import httpx
+import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-
 
 # ── Health Endpoints ──────────────────────────────────────────────────────────
 
@@ -688,3 +687,249 @@ class TestDockerfileStructure:
     def test_runs_uvicorn(self, dockerfile_content):
         """Dockerfile should run uvicorn."""
         assert "uvicorn" in dockerfile_content
+
+
+# ── server_name Validation ────────────────────────────────────────────────────
+
+
+class TestServerNameValidation:
+    """Tests for the validate_server_name helper."""
+
+    def test_validate_accepts_valid_names(self):
+        """Alphanumeric names with spaces should pass unchanged."""
+        from src.main import validate_server_name
+
+        for name in ("My Server", "Server1", "A B C", "x" * 64):
+            assert validate_server_name(name) == name
+
+    def test_validate_rejects_empty(self):
+        """Empty names should raise 400."""
+        from src.main import validate_server_name
+
+        with pytest.raises(HTTPException) as exc:
+            validate_server_name("")
+        assert exc.value.status_code == 400
+
+    def test_validate_rejects_too_long(self):
+        """Names longer than 64 chars should raise 400."""
+        from src.main import validate_server_name
+
+        with pytest.raises(HTTPException) as exc:
+            validate_server_name("x" * 65)
+        assert exc.value.status_code == 400
+
+    @pytest.mark.parametrize(
+        "bad_name",
+        [
+            "Server\nName",
+            "Server\x00Name",
+            "Server;rm -rf /",
+            "Server$(whoami)",
+            "Servér",
+            "Server<script>",
+            "Server&echo",
+        ],
+    )
+    def test_validate_rejects_invalid_chars(self, bad_name):
+        """Special characters should raise 400."""
+        from src.main import validate_server_name
+
+        with pytest.raises(HTTPException) as exc:
+            validate_server_name(bad_name)
+        assert exc.value.status_code == 400
+
+    def test_update_config_rejects_bad_server_name(self):
+        """POST /api/config with an invalid server_name should return 400."""
+        from src.main import app, pc_agent
+
+        with patch.object(pc_agent, "post", new_callable=AsyncMock) as mock_post:
+            client = TestClient(app)
+            response = client.post(
+                "/api/config",
+                data={
+                    "server_name": "Evil\nServer",
+                    "world_name": "ValidWorld",
+                    "server_pass": "pass",
+                    "server_public": "false",
+                    "crossplay": "true",
+                    "save_interval": "900",
+                    "backups": "3",
+                },
+            )
+
+            assert response.status_code == 400
+            mock_post.assert_not_called()
+
+
+# ── server_pass Validation ────────────────────────────────────────────────────
+
+
+class TestServerPassValidation:
+    """Tests for the validate_server_pass helper."""
+
+    def test_validate_accepts_valid_passwords(self):
+        """Normal passwords should pass unchanged."""
+        from src.main import validate_server_pass
+
+        for password in ("secret123", "MyP@ssw0rd!", "", "x" * 128):
+            assert validate_server_pass(password) == password
+
+    def test_validate_allows_empty(self):
+        """Empty password is allowed (public server)."""
+        from src.main import validate_server_pass
+
+        assert validate_server_pass("") == ""
+
+    def test_validate_rejects_too_long(self):
+        """Passwords longer than 128 chars should raise 400."""
+        from src.main import validate_server_pass
+
+        with pytest.raises(HTTPException) as exc:
+            validate_server_pass("x" * 129)
+        assert exc.value.status_code == 400
+
+    def test_validate_rejects_newline(self):
+        """Passwords with newlines should raise 400."""
+        from src.main import validate_server_pass
+
+        with pytest.raises(HTTPException) as exc:
+            validate_server_pass("pass\nword")
+        assert exc.value.status_code == 400
+
+    def test_validate_rejects_null_byte(self):
+        """Passwords with null bytes should raise 400."""
+        from src.main import validate_server_pass
+
+        with pytest.raises(HTTPException) as exc:
+            validate_server_pass("pass\x00word")
+        assert exc.value.status_code == 400
+
+    def test_update_config_rejects_bad_server_pass(self):
+        """POST /api/config with an invalid server_pass should return 400."""
+        from src.main import app, pc_agent
+
+        with patch.object(pc_agent, "post", new_callable=AsyncMock) as mock_post:
+            client = TestClient(app)
+            response = client.post(
+                "/api/config",
+                data={
+                    "server_name": "Valid Server",
+                    "world_name": "ValidWorld",
+                    "server_pass": "pass\nword",
+                    "server_public": "false",
+                    "crossplay": "true",
+                    "save_interval": "900",
+                    "backups": "3",
+                },
+            )
+
+            assert response.status_code == 400
+            mock_post.assert_not_called()
+
+
+# ── save_interval and backups bounds ──────────────────────────────────────────
+
+
+class TestConfigBoundsValidation:
+    """Tests for save_interval and backups clamping."""
+
+    def test_clamp_save_interval_within_bounds(self):
+        """Values within bounds should pass unchanged."""
+        from src.main import clamp_save_interval
+
+        assert clamp_save_interval(1800) == 1800
+        assert clamp_save_interval(300) == 300
+        assert clamp_save_interval(86400) == 86400
+
+    def test_clamp_save_interval_below_min(self):
+        """Values below min should be clamped to 300."""
+        from src.main import clamp_save_interval
+
+        assert clamp_save_interval(100) == 300
+        assert clamp_save_interval(0) == 300
+        assert clamp_save_interval(-1000) == 300
+
+    def test_clamp_save_interval_above_max(self):
+        """Values above max should be clamped to 86400."""
+        from src.main import clamp_save_interval
+
+        assert clamp_save_interval(100000) == 86400
+        assert clamp_save_interval(999999) == 86400
+
+    def test_clamp_backups_within_bounds(self):
+        """Values within bounds should pass unchanged."""
+        from src.main import clamp_backups
+
+        assert clamp_backups(4) == 4
+        assert clamp_backups(1) == 1
+        assert clamp_backups(100) == 100
+
+    def test_clamp_backups_below_min(self):
+        """Values below min should be clamped to 1."""
+        from src.main import clamp_backups
+
+        assert clamp_backups(0) == 1
+        assert clamp_backups(-5) == 1
+
+    def test_clamp_backups_above_max(self):
+        """Values above max should be clamped to 100."""
+        from src.main import clamp_backups
+
+        assert clamp_backups(101) == 100
+        assert clamp_backups(1000) == 100
+
+    def test_update_config_clamps_save_interval(self):
+        """POST /api/config should clamp save_interval to valid bounds."""
+        from src.main import app, pc_agent
+
+        with patch.object(
+            pc_agent,
+            "post",
+            new_callable=AsyncMock,
+            return_value={"status": "updated"},
+        ) as mock_post:
+            client = TestClient(app)
+            response = client.post(
+                "/api/config",
+                data={
+                    "server_name": "Test Server",
+                    "world_name": "TestWorld",
+                    "server_pass": "pass",
+                    "server_public": "false",
+                    "crossplay": "true",
+                    "save_interval": "100",  # Below min, should be clamped to 300
+                    "backups": "3",
+                },
+            )
+
+            assert response.status_code == 200
+            call_args = mock_post.call_args
+            assert call_args[0][1]["save_interval"] == 300
+
+    def test_update_config_clamps_backups(self):
+        """POST /api/config should clamp backups to valid bounds."""
+        from src.main import app, pc_agent
+
+        with patch.object(
+            pc_agent,
+            "post",
+            new_callable=AsyncMock,
+            return_value={"status": "updated"},
+        ) as mock_post:
+            client = TestClient(app)
+            response = client.post(
+                "/api/config",
+                data={
+                    "server_name": "Test Server",
+                    "world_name": "TestWorld",
+                    "server_pass": "pass",
+                    "server_public": "false",
+                    "crossplay": "true",
+                    "save_interval": "1800",
+                    "backups": "500",  # Above max, should be clamped to 100
+                },
+            )
+
+            assert response.status_code == 200
+            call_args = mock_post.call_args
+            assert call_args[0][1]["backups"] == 100

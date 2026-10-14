@@ -199,8 +199,10 @@ function Invoke-Ci {
     # PYTHONPATH=src -- exactly as their ci.yml jobs do. Keeping this in
     # lockstep with ci.yml is the whole point of the helper: a green
     # `.\dev.ps1 ci <svc>` must mean a green CI job.
-    $pythonPath = if ($Service -in @('portfolio-monitor', 'baby-gifts', 'valheim-admin')) {
+    $pythonPath = if ($Service -in @('portfolio-monitor', 'baby-gifts')) {
         'src:../../libs'
+    } elseif ($Service -eq 'valheim-admin') {
+        'src:../../libs:../../libs/smart_home_common/src'
     } else { 'src' }
 
     # Build a bash -c pipeline that mirrors ci.yml steps for this service.
