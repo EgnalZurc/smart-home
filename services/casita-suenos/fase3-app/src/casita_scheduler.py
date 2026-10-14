@@ -301,10 +301,12 @@ class CasitaScheduler:
             filter_by=filter_by,
             portal_filter=portal_filter,
         )
-        # Enriquecer cada item con distance_madrid_min de la zona
+        # Enriquecer cada item con distance_madrid_min de la zona y
+        # la tendencia de precio (previous_price, price_change, ...).
         for p in result["items"]:
             zone = ZONES.get(p.get("zone_id", ""))
             p["distance_madrid_min"] = zone.distance_madrid_min if zone else None
+            p.update(self._db.get_price_trend(p.get("uid", "")))
         return result
 
     def get_dismissed(self) -> list[dict]:

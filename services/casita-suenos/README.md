@@ -135,3 +135,35 @@ Ejemplo de respuesta:
   "scheduler_stale": false
 }
 ```
+
+### Tendencia de precio (`GET /api/casita/radar` y `GET /api/casita/alerts`)
+
+Cada propiedad devuelta por el radar y cada alerta de casita se enriquecen con
+información de la tendencia de precio, calculada a partir del último cambio
+registrado en la tabla `price_history`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `previous_price` | int \| null | Precio anterior al último cambio. `null` si la propiedad no tiene historial de precios |
+| `price_change` | int \| null | Diferencia en euros respecto al precio anterior (`nuevo − anterior`; negativo = bajada). `null` sin historial |
+| `price_change_pct` | float \| null | Porcentaje de cambio respecto al precio anterior, redondeado a 2 decimales. `null` sin historial |
+| `trend` | string \| null | `"down"` (bajada), `"up"` (subida), `"stable"` (sin variación) o `null` si no hay historial |
+
+Ejemplo de propiedad con bajada de precio en la respuesta de `/api/casita/radar`:
+
+```json
+{
+  "uid": "idealista:12345",
+  "title": "Casa en Zamora meseta",
+  "price": 160000,
+  "previous_price": 180000,
+  "price_change": -20000,
+  "price_change_pct": -11.11,
+  "trend": "down"
+}
+```
+
+En `/api/casita/alerts` los mismos cuatro campos se añaden a cada objeto de
+alerta normalizado (junto a `source`, `severity`, `id`, `title`, `detail`,
+`timestamp` y `link`). Una propiedad sin cambios de precio registrados devuelve
+los cuatro campos a `null`.
