@@ -5,13 +5,12 @@ These tests verify the proxy endpoints work correctly.
 """
 
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 import httpx
+import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-
 
 # ── Health Endpoints ──────────────────────────────────────────────────────────
 
@@ -688,3 +687,128 @@ class TestDockerfileStructure:
     def test_runs_uvicorn(self, dockerfile_content):
         """Dockerfile should run uvicorn."""
         assert "uvicorn" in dockerfile_content
+
+
+class TestServerNameValidation:
+    """Tests for server_name validation in update_config."""
+
+    def test_valid_server_name_passes(self):
+        """A valid server_name (letters, digits, spaces) passes validation."""
+        from src.main import validate_server_name
+
+        assert validate_server_name("My Valheim Server 1") == "My Valheim Server 1"
+        assert validate_server_name("TestServer") == "TestServer"
+        assert validate_server_name("A") == "A"
+
+    def test_server_name_rejects_empty(self):
+        """Empty server_name raises HTTPException 400."""
+        from src.main import validate_server_name
+
+        with pytest.raises(HTTPException) as exc_info:
+            validate_server_name("")
+        assert exc_info.value.status_code == 400
+
+    def test_server_name_rejects_special_chars(self):
+        """server_name with special characters raises HTTPException 400."""
+        from src.main import validate_server_name
+
+        invalid_names = ["Server<script>", "Test;echo", "Name|cat", "Server\nNew"]
+        for name in invalid_names:
+            with pytest.raises(HTTPException) as exc_info:
+                validate_server_name(name)
+            assert exc_info.value.status_code == 400
+
+    def test_server_name_rejects_too_long(self):
+        """server_name over 64 chars raises HTTPException 400."""
+        from src.main import validate_server_name
+
+        long_name = "A" * 65
+        with pytest.raises(HTTPException) as exc_info:
+            validate_server_name(long_name)
+        assert exc_info.value.status_code == 400
+
+
+class TestServerPassValidation:
+    """Tests for server_pass validation in update_config."""
+
+    def test_valid_server_pass_passes(self):
+        """Valid passwords pass validation."""
+        from src.main import validate_server_pass
+
+        assert validate_server_pass("mypassword123") == "mypassword123"
+        assert validate_server_pass("P@ssw0rd!#$%") == "P@ssw0rd!#$%"
+        assert validate_server_pass("") == ""  # Empty password allowed
+
+    def test_server_pass_rejects_too_long(self):
+        """Password over 128 chars raises HTTPException 400."""
+        from src.main import validate_server_pass
+
+        long_pass = "A" * 129
+        with pytest.raises(HTTPException) as exc_info:
+            validate_server_pass(long_pass)
+        assert exc_info.value.status_code == 400
+
+    def test_server_pass_rejects_newlines(self):
+        """Password with newlines raises HTTPException 400."""
+        from src.main import validate_server_pass
+
+        with pytest.raises(HTTPException) as exc_info:
+            validate_server_pass("pass\nword")
+        assert exc_info.value.status_code == 400
+
+    def test_server_pass_rejects_null_bytes(self):
+        """Password with null bytes raises HTTPException 400."""
+        from src.main import validate_server_pass
+
+        with pytest.raises(HTTPException) as exc_info:
+            validate_server_pass("pass\0word")
+        assert exc_info.value.status_code == 400
+
+
+class TestConfigBoundsValidation:
+    """Tests for save_interval and backups clamping."""
+
+    def test_clamp_save_interval_within_bounds(self):
+        """Values within bounds are unchanged."""
+        from src.main import clamp_save_interval
+
+        assert clamp_save_interval(1800) == 1800
+        assert clamp_save_interval(300) == 300
+        assert clamp_save_interval(86400) == 86400
+
+    def test_clamp_save_interval_below_min(self):
+        """Values below minimum are clamped to minimum (300s = 5min)."""
+        from src.main import clamp_save_interval
+
+        assert clamp_save_interval(0) == 300
+        assert clamp_save_interval(100) == 300
+        assert clamp_save_interval(-1) == 300
+
+    def test_clamp_save_interval_above_max(self):
+        """Values above maximum are clamped to maximum (86400s = 24h)."""
+        from src.main import clamp_save_interval
+
+        assert clamp_save_interval(100000) == 86400
+        assert clamp_save_interval(999999) == 86400
+
+    def test_clamp_backups_within_bounds(self):
+        """Values within bounds are unchanged."""
+        from src.main import clamp_backups
+
+        assert clamp_backups(4) == 4
+        assert clamp_backups(1) == 1
+        assert clamp_backups(100) == 100
+
+    def test_clamp_backups_below_min(self):
+        """Values below minimum are clamped to minimum (1)."""
+        from src.main import clamp_backups
+
+        assert clamp_backups(0) == 1
+        assert clamp_backups(-5) == 1
+
+    def test_clamp_backups_above_max(self):
+        """Values above maximum are clamped to maximum (100)."""
+        from src.main import clamp_backups
+
+        assert clamp_backups(150) == 100
+        assert clamp_backups(999) == 100

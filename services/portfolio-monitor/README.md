@@ -38,6 +38,29 @@ Environment variables:
 - `SMTP_USER`, `SMTP_PASSWORD`: Email notifications
 - `COINGECKO_API_KEY`: CoinGecko API key (optional, for higher rate limits)
 
+## Security Best Practices
+
+### API Keys and Credentials
+
+This service uses **lazy credential loading** to minimize security exposure:
+
+1. **API keys** (e.g., `COINGECKO_API_KEY`) are read from environment variables at
+   request time, not at module load. This:
+   - Reduces the window where credentials exist in memory
+   - Avoids accidentally logging credentials during import/startup
+   - Allows credential rotation without service restart
+
+2. **SMTP credentials** are loaded lazily via properties. The password is fetched
+   from the environment only when needed to send an email.
+
+### Recommendations for Operators
+
+- **Never hardcode credentials** in code, Dockerfiles, or docker-compose files
+- Use Docker secrets or environment variables injected at runtime
+- Rotate credentials periodically (the lazy loading pattern supports this)
+- Monitor for credential leaks in logs — credentials should never appear in output
+- Use App Passwords (not account passwords) for Gmail SMTP
+
 ## API Endpoints
 
 - `GET /api/portfolio/summary` - Full portfolio summary

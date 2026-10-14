@@ -32,9 +32,6 @@ _TIMEOUT = 10
 _RETRIES = 4
 _BACKOFF = 2.0
 
-# CoinGecko API key (Demo plan: 30 calls/min, 10k/month)
-_CG_API_KEY = os.environ.get("COINGECKO_API_KEY", "")
-
 _MARKETS_URL = (
     "https://api.coingecko.com/api/v3/coins/markets"
     "?vs_currency=eur&ids={ids}&price_change_percentage=14d,30d"
@@ -47,12 +44,25 @@ _FG_URL = "https://api.alternative.me/fng/?limit=1"
 # ─────────────────────────────────────────────────────────────────────────────
 # HTTP Client with retry (uses shared library)
 # ─────────────────────────────────────────────────────────────────────────────
-_cg_headers = {"x-cg-demo-api-key": _CG_API_KEY} if _CG_API_KEY else {}
 _retry_config = RetryConfig(
     timeout=_TIMEOUT, max_retries=_RETRIES, initial_backoff=_BACKOFF
 )
 
-_cg_client = RetryClient(default_headers=_cg_headers, config=_retry_config)
+
+def _get_cg_headers() -> dict[str, str]:
+    """
+    Get CoinGecko API headers with lazy credential loading.
+
+    Security: API key is read from environment at call time, not at module load.
+    This reduces the window where credentials are held in memory and avoids
+    accidentally logging credentials during import.
+    """
+    key = os.environ.get("COINGECKO_API_KEY", "")
+    return {"x-cg-demo-api-key": key} if key else {}
+
+
+# Clients without hardcoded credentials - headers added per-request
+_cg_client = RetryClient(config=_retry_config)
 _generic_client = RetryClient(config=_retry_config)
 
 
@@ -88,7 +98,9 @@ def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
 
     ids = ",".join(dict.fromkeys(coingecko_ids))
     try:
-        rows = _cg_client.get(_MARKETS_URL.format(ids=ids)).json()
+        rows = _cg_client.get(
+            _MARKETS_URL.format(ids=ids), headers=_get_cg_headers()
+        ).json()
         result = {
             row["id"]: {
                 "eur": row.get("current_price", 0),
@@ -120,7 +132,9 @@ def fetch_ohlc(coingecko_id: str, days: int = 30) -> list[list[float]]:
         return cached
 
     try:
-        result = _cg_client.get(_OHLC_URL.format(id=coingecko_id, days=days)).json()
+        result = _cg_client.get(
+            _OHLC_URL.format(id=coingecko_id, days=days), headers=_get_cg_headers()
+        ).json()
         # Cache successful response
         _ohlc_cache.set(cache_key, result)
         return result
@@ -214,7 +228,7 @@ def fetch_exchange_trust_score(exchange: str) -> int | None:
 
     url = f"https://api.coingecko.com/api/v3/exchanges/{exchange_id}"
     try:
-        data = _cg_client.get(url).json()
+        data = _cg_client.get(url, headers=_get_cg_headers()).json()
         trust_score = data.get("trust_score")
         # Cache successful response
         if trust_score is not None:
