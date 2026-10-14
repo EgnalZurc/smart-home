@@ -20,8 +20,20 @@ import sys
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
+from typing import Any
 
-from config import DB_PATH, LOG_LEVEL, PORT, SERVICE_NAME
+from config import (
+    DB_PATH,
+    LOG_LEVEL,
+    MAX_CONTAINER_NAME_LEN,
+    MAX_METRIC_NAME_LEN,
+    MAX_REQUESTS_PER_MINUTE,
+    PORT,
+    RATE_LIMIT_WINDOW_S,
+    SERVICE_NAME,
+    SUMMARY_WINDOWS,
+    TIME_OFFSET_MULTIPLIERS,
+)
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -29,32 +41,60 @@ from pydantic import BaseModel
 # ═══════════════════════════════════════════════════════════════════════════════
 # Input validation (M-7)
 # ═══════════════════════════════════════════════════════════════════════════════
-_VALID_CONTAINER_NAME = re.compile(r"^[a-zA-Z0-9_-]+$")
-_VALID_METRIC_NAME = re.compile(r"^[a-zA-Z0-9_.-]+$")
+_VALID_CONTAINER_NAME: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_-]+$")
+_VALID_METRIC_NAME: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_.-]+$")
 
 
 def _validate_container_name(name: str) -> bool:
-    """Validate container name: alphanumeric, underscore, hyphen; max 64 chars."""
-    return bool(name and len(name) <= 64 and _VALID_CONTAINER_NAME.match(name))
+    """Validate container name: alphanumeric, underscore, hyphen.
+
+    Args:
+        name: The container name to validate.
+
+    Returns:
+        True if valid (non-empty, max length, matches pattern), False otherwise.
+    """
+    return bool(
+        name
+        and len(name) <= MAX_CONTAINER_NAME_LEN
+        and _VALID_CONTAINER_NAME.match(name)
+    )
 
 
 def _validate_metric_name(name: str) -> bool:
-    """Validate metric name: alphanumeric, underscore, hyphen, dot; max 128 chars."""
-    return bool(name and len(name) <= 128 and _VALID_METRIC_NAME.match(name))
+    """Validate metric name: alphanumeric, underscore, hyphen, dot.
+
+    Args:
+        name: The metric name to validate.
+
+    Returns:
+        True if valid (non-empty, max length, matches pattern), False otherwise.
+    """
+    return bool(
+        name and len(name) <= MAX_METRIC_NAME_LEN and _VALID_METRIC_NAME.match(name)
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Rate limiting (M-8) — simple in-memory, per-IP
 # ═══════════════════════════════════════════════════════════════════════════════
 _rate_limit: dict[str, list[float]] = defaultdict(list)
-MAX_REQUESTS_PER_MINUTE = 60
 
 
 def _check_rate_limit(client_ip: str) -> bool:
-    """Return True if request is allowed, False if rate-limited."""
+    """Check if a request from the given IP is allowed under rate limits.
+
+    Args:
+        client_ip: The client IP address to check.
+
+    Returns:
+        True if the request is allowed, False if rate limit exceeded.
+    """
     now = time.time()
-    # Prune timestamps older than 60 seconds
-    _rate_limit[client_ip] = [t for t in _rate_limit[client_ip] if now - t < 60]
+    # Prune timestamps older than the rate limit window
+    _rate_limit[client_ip] = [
+        t for t in _rate_limit[client_ip] if now - t < RATE_LIMIT_WINDOW_S
+    ]
     if len(_rate_limit[client_ip]) >= MAX_REQUESTS_PER_MINUTE:
         return False
     _rate_limit[client_ip].append(now)
@@ -62,7 +102,14 @@ def _check_rate_limit(client_ip: str) -> bool:
 
 
 def _get_client_ip(request: Request) -> str:
-    """Extract client IP from request, respecting X-Forwarded-For if present."""
+    """Extract client IP from request, respecting X-Forwarded-For if present.
+
+    Args:
+        request: The FastAPI request object.
+
+    Returns:
+        The client IP address as a string, or "unknown" if not determinable.
+    """
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         # Take the first IP in the chain (original client)
@@ -89,7 +136,14 @@ collector = Collector()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Start/stop the collector background tasks with the app."""
+    """Start/stop the collector background tasks with the app.
+
+    Args:
+        app: The FastAPI application instance.
+
+    Yields:
+        Control to the application after starting the collector.
+    """
     logger.info("Starting %s...", SERVICE_NAME)
     await collector.start()
     yield
@@ -108,8 +162,16 @@ app = FastAPI(
 
 
 @app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    """Apply rate limiting to all endpoints except health checks."""
+async def rate_limit_middleware(request: Request, call_next) -> JSONResponse:
+    """Apply rate limiting to all endpoints except health checks.
+
+    Args:
+        request: The incoming request.
+        call_next: The next middleware/handler in the chain.
+
+    Returns:
+        The response from the next handler, or a 429 response if rate-limited.
+    """
     # Skip rate limiting for health endpoints (needed for monitoring/CI)
     if request.url.path in ("/health", "/api/health/metrics"):
         return await call_next(request)
@@ -127,8 +189,16 @@ async def rate_limit_middleware(request: Request, call_next):
 # ═══════════════════════════════════════════════════════════════════════════════
 # Health
 # ═══════════════════════════════════════════════════════════════════════════════
+# Type alias for health payload structure
+HealthPayload = dict[str, bool | str | float | None]
+
+
 def _db_ok() -> bool:
-    """Return True if the SQLite store answers a trivial query."""
+    """Check if the SQLite store answers a trivial query.
+
+    Returns:
+        True if the database is accessible and responds to queries.
+    """
     try:
         collector.store.count()
         return True
@@ -137,8 +207,13 @@ def _db_ok() -> bool:
         return False
 
 
-def _health_payload() -> dict:
-    """Build the health dict exercising DB + collector liveness."""
+def _health_payload() -> HealthPayload:
+    """Build the health dict exercising DB + collector liveness.
+
+    Returns:
+        Dict containing online status, service name, db status,
+        collector tick age, and database path.
+    """
     return {
         "online": True,
         "service": SERVICE_NAME,
@@ -149,27 +224,42 @@ def _health_payload() -> dict:
 
 
 @app.get("/health")
-async def health() -> dict:
-    """Health check — exercises the DB and reports collector liveness."""
+async def health() -> HealthPayload:
+    """Health check — exercises the DB and reports collector liveness.
+
+    Returns:
+        Health status payload with online, service, db_ok, and tick age.
+    """
     return _health_payload()
 
 
 @app.get("/api/health/metrics")
-async def health_alias() -> dict:
-    """Health check alias — matches the path expected by the dashboard/CI."""
+async def health_alias() -> HealthPayload:
+    """Health check alias — matches the path expected by the dashboard/CI.
+
+    Returns:
+        Health status payload (same as /health).
+    """
     return _health_payload()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Metrics read API
 # ═══════════════════════════════════════════════════════════════════════════════
+# Type aliases for API responses
+LatestResponse = dict[str, int | dict[str, dict[str, Any]]]
+SeriesResponse = dict[str, str | list[dict[str, int | float]]]
+SummaryResponse = dict[str, str | list[dict[str, Any]]]
+
+
 @app.get("/api/metrics/latest")
-async def get_latest() -> dict:
-    """Return the newest sample for every known series (from the ring buffer)."""
+async def get_latest() -> LatestResponse:
+    """Return the newest sample for every known series (from the ring buffer).
+
+    Returns:
+        Dict with timestamp and series map of latest values.
+    """
     return {"ts": int(time.time()), "series": collector.ring.latest()}
-
-
-_WINDOW_SECONDS = {"1h": 3600, "24h": 86400, "7d": 604800, "30d": 2592000}
 
 
 def _parse_since(since: str | None) -> int | None:
@@ -177,6 +267,15 @@ def _parse_since(since: str | None) -> int | None:
 
     Accepts an absolute unix timestamp (e.g. ``1760368800``) or a relative
     offset like ``-1h`` / ``-30m`` / ``-7d``.
+
+    Args:
+        since: The since value to parse, or None.
+
+    Returns:
+        Unix timestamp as int, or None if input was None.
+
+    Raises:
+        HTTPException: If the since value is invalid.
     """
     if since is None:
         return None
@@ -187,7 +286,7 @@ def _parse_since(since: str | None) -> int | None:
             amount = int(since[1:-1])
         except ValueError as exc:
             raise HTTPException(400, f"Invalid since offset: {since}") from exc
-        mult = {"s": 1, "m": 60, "h": 3600, "d": 86400}.get(unit)
+        mult = TIME_OFFSET_MULTIPLIERS.get(unit)
         if mult is None:
             raise HTTPException(400, f"Invalid since unit: {since}")
         return int(time.time()) - amount * mult
@@ -204,29 +303,45 @@ async def get_series(
     since: str | None = Query(None, description="Unix ts or relative, e.g. -1h"),
     until: str | None = Query(None, description="Unix ts upper bound"),
     resolution: str = Query("hi", pattern="^(hi|rollup)$"),
-) -> dict:
+) -> SeriesResponse:
     """Return one time-ranged series.
 
     ``resolution=hi`` reads the in-memory ring buffer (30 s points, last 2 h);
     ``resolution=rollup`` reads SQLite (5-min avg/max, 30-day history).
+
+    Args:
+        metric: Metric name to query.
+        label: Series label (container/service key), empty for host metrics.
+        since: Unix timestamp or relative offset (e.g. -1h) for lower bound.
+        until: Unix timestamp or relative offset for upper bound.
+        resolution: "hi" for ring buffer, "rollup" for SQLite.
+
+    Returns:
+        Dict containing metric, label, resolution, and list of points.
+
+    Raises:
+        HTTPException: If label or metric validation fails.
     """
     # Validate label if provided (may be container name)
     if label and not _validate_container_name(label):
         raise HTTPException(
             400,
-            "Invalid label: must be alphanumeric, underscore, or hyphen (max 64 chars)",
+            f"Invalid label: must be alphanumeric, underscore, or hyphen "
+            f"(max {MAX_CONTAINER_NAME_LEN} chars)",
         )
 
     # Validate metric name
     if not _validate_metric_name(metric):
         raise HTTPException(
             400,
-            "Invalid metric: must be alphanumeric, underscore, hyphen, or dot (max 128 chars)",
+            f"Invalid metric: must be alphanumeric, underscore, hyphen, or dot "
+            f"(max {MAX_METRIC_NAME_LEN} chars)",
         )
 
     since_ts = _parse_since(since)
     until_ts = _parse_since(until)
 
+    points: list[dict[str, int | float]]
     if resolution == "hi":
         pts = collector.ring.series(metric, label, since=since_ts, until=until_ts)
         points = [{"ts": ts, "value": v} for (ts, v) in pts]
@@ -244,9 +359,16 @@ async def get_series(
 @app.get("/api/metrics/summary")
 async def get_summary(
     window: str = Query("24h", pattern="^(1h|24h|7d|30d)$"),
-) -> dict:
-    """Return min/avg/max per metric over a window (rollup-backed)."""
-    seconds = _WINDOW_SECONDS[window]
+) -> SummaryResponse:
+    """Return min/avg/max per metric over a window (rollup-backed).
+
+    Args:
+        window: Time window preset (1h, 24h, 7d, or 30d).
+
+    Returns:
+        Dict containing window and list of metric summaries.
+    """
+    seconds = SUMMARY_WINDOWS[window]
     since_ts = int(time.time()) - seconds
     rows = collector.store.summary(since_ts)
     return {"window": window, "metrics": rows}
@@ -255,9 +377,19 @@ async def get_summary(
 # ═══════════════════════════════════════════════════════════════════════════════
 # Alerts API (Wave 3.3)
 # ═══════════════════════════════════════════════════════════════════════════════
+# Type aliases for alerts API responses
+AlertsResponse = dict[str, int | list[dict[str, Any]]]
+AlertsHistoryResponse = dict[str, int | list[dict[str, Any]]]
+ThresholdsResponse = dict[str, list[dict[str, Any]]]
+
+
 @app.get("/api/metrics/alerts")
-async def get_alerts() -> dict:
-    """Return the currently-firing alerts (anti-flap active set)."""
+async def get_alerts() -> AlertsResponse:
+    """Return the currently-firing alerts (anti-flap active set).
+
+    Returns:
+        Dict with timestamp and list of active alerts.
+    """
     return {
         "ts": int(time.time()),
         "active": collector.alert_engine.active_alerts(),
@@ -267,15 +399,26 @@ async def get_alerts() -> dict:
 @app.get("/api/metrics/alerts/history")
 async def get_alerts_history(
     days: int = Query(7, ge=1, le=90, description="Look-back window in days"),
-) -> dict:
-    """Return the alert audit trail (fired/resolved events) for the last N days."""
+) -> AlertsHistoryResponse:
+    """Return the alert audit trail (fired/resolved events) for the last N days.
+
+    Args:
+        days: Number of days to look back (1-90).
+
+    Returns:
+        Dict containing days, count, and list of alert events.
+    """
     events = collector.alert_engine.store.history(days=days)
     return {"days": days, "count": len(events), "events": events}
 
 
 @app.get("/api/metrics/thresholds")
-async def get_thresholds() -> dict:
-    """Return the current alert threshold rule set."""
+async def get_thresholds() -> ThresholdsResponse:
+    """Return the current alert threshold rule set.
+
+    Returns:
+        Dict containing the list of threshold rules.
+    """
     return {"thresholds": collector.alert_engine.get_thresholds()}
 
 
@@ -285,14 +428,27 @@ class ThresholdUpdate(BaseModel):
     Maps rule key → fields to override, e.g.::
 
         {"updates": {"host_temp": {"value": 70, "critical_value": 78}}}
+
+    Attributes:
+        updates: Dict mapping rule keys to fields to override.
     """
 
-    updates: dict[str, dict]
+    updates: dict[str, dict[str, float | int | bool | None]]
 
 
 @app.put("/api/metrics/thresholds")
-async def put_thresholds(payload: ThresholdUpdate) -> dict:
-    """Patch alert thresholds at runtime (SUPER-gated at the proxy)."""
+async def put_thresholds(payload: ThresholdUpdate) -> ThresholdsResponse:
+    """Patch alert thresholds at runtime (SUPER-gated at the proxy).
+
+    Args:
+        payload: ThresholdUpdate containing the updates to apply.
+
+    Returns:
+        Dict containing the updated thresholds.
+
+    Raises:
+        HTTPException: If a rule key is unknown or a value is invalid.
+    """
     try:
         updated = collector.alert_engine.set_thresholds(payload.updates)
     except (KeyError, ValueError) as exc:
