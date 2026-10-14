@@ -208,6 +208,83 @@ docker run -p 8002:8002 \
 The image is a multi-stage Python 3.12-slim build running as the non-root `appuser`
 and exposing port `8002`.
 
+## Security
+
+### MQTT Authentication
+
+The service connects to the MQTT broker for sensor data. **In production, MQTT
+authentication is required** to prevent unauthorized access to sensor readings and
+potential injection of false data.
+
+| Variable | Required in Production | Description |
+|----------|------------------------|-------------|
+| `MQTT_USER` | **Yes** | MQTT broker username |
+| `MQTT_PASSWORD` | **Yes** | MQTT broker password |
+
+If these variables are not set, the service logs a warning at startup and connects
+without authentication. This is acceptable for local development but **must not be
+used in production**.
+
+Configure credentials in your `docker-compose.prod.yml` environment block or use
+Docker secrets (see below).
+
+### MELCloud Credentials
+
+The service requires MELCloud credentials to control the AC unit. These credentials
+grant full control over your AC system.
+
+**Production recommendations:**
+
+1. **Do not store credentials in plain `.env` files** committed to version control.
+2. Use **Docker secrets** or an external secret manager (e.g., HashiCorp Vault,
+   AWS Secrets Manager) to inject credentials at runtime.
+3. MELCloud does not support API keys or OAuth — only email/password authentication.
+   Consider creating a dedicated MELCloud account for home automation rather than
+   using your personal account.
+
+**Using Docker secrets (recommended):**
+
+```yaml
+# docker-compose.prod.yml
+services:
+  ac-service:
+    secrets:
+      - melcloud_email
+      - melcloud_password
+      - mqtt_user
+      - mqtt_password
+    environment:
+      MELCLOUD_EMAIL_FILE: /run/secrets/melcloud_email
+      MELCLOUD_PASSWORD_FILE: /run/secrets/melcloud_password
+      MQTT_USER_FILE: /run/secrets/mqtt_user
+      MQTT_PASSWORD_FILE: /run/secrets/mqtt_password
+
+secrets:
+  melcloud_email:
+    file: ./secrets/melcloud_email.txt
+  melcloud_password:
+    file: ./secrets/melcloud_password.txt
+  mqtt_user:
+    file: ./secrets/mqtt_user.txt
+  mqtt_password:
+    file: ./secrets/mqtt_password.txt
+```
+
+> **Note:** The service does not currently support `*_FILE` environment variables
+> for reading secrets from files. This is a planned enhancement. For now, pass
+> credentials directly via environment variables sourced from a secrets manager
+> or use Docker Compose's `env_file` with a non-committed secrets file.
+
+### Credential Rotation
+
+- **MQTT**: Rotate credentials in the broker configuration and update the service's
+  environment variables. Restart the service to apply.
+- **MELCloud**: Change the password in the MELCloud app/website, then update the
+  service's `MELCLOUD_PASSWORD`. Restart to re-authenticate.
+
+There is no automatic credential rotation — plan for periodic manual rotation as
+part of your security hygiene.
+
 ## Hardware
 
 - **AC Unit**: Mitsubishi (controlled via MELCloud)

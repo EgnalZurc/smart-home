@@ -74,6 +74,11 @@ MQTT_BROKER = os.environ.get("MQTT_BROKER", "mosquitto")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
 MQTT_USER = os.environ.get("MQTT_USER")
 MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD")
+if not MQTT_USER or not MQTT_PASSWORD:
+    logger.warning(
+        "MQTT credentials not set - connecting without auth. "
+        "Set MQTT_USER and MQTT_PASSWORD in production."
+    )
 MQTT_CONNECT_RETRIES = int(os.environ.get("MQTT_CONNECT_RETRIES", "30"))
 MQTT_RETRY_DELAY = int(os.environ.get("MQTT_RETRY_DELAY", "2"))
 MQTT_KEEPALIVE = int(os.environ.get("MQTT_KEEPALIVE", "60"))
