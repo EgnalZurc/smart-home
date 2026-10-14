@@ -20,13 +20,14 @@ Port: 8003
 import logging
 import time
 from pathlib import Path
-from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from vacaciones_controller import (
+    MAX_NUCLEOS,
+    MAX_PERSONAS,
     add_year,
     delete_year,
     get_config,
@@ -53,14 +54,46 @@ app = FastAPI(
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
 
+class NucleoInput(BaseModel):
+    """Input model for a family nucleus."""
+
+    id: str = Field(max_length=64, pattern=r"^[a-z0-9_]+$")
+    nombre: str = Field(max_length=100)
+    color: str = Field(default="#6366f1", max_length=20)
+    hijo_id: str = Field(default="", max_length=64)
+
+
+class PersonaInput(BaseModel):
+    """Input model for a person."""
+
+    id: str = Field(max_length=64, pattern=r"^[a-z0-9_]+$")
+    nombre: str = Field(max_length=100)
+    inicial: str = Field(default="", max_length=5)
+    nucleo_id: str = Field(default="", max_length=64)
+
+
 class VacacionesConfigRequest(BaseModel):
-    nucleos: list[dict[str, Any]] = []
-    personas: list[dict[str, Any]] = []
+    """Request model for saving configuration."""
+
+    nucleos: list[NucleoInput] = Field(default_factory=list, max_length=MAX_NUCLEOS)
+    personas: list[PersonaInput] = Field(default_factory=list, max_length=MAX_PERSONAS)
+
+
+class ComidaInput(BaseModel):
+    """Input model for a meal entry."""
+
+    momento: str = Field(max_length=32)
+    nucleo_id: str | None = Field(default=None, max_length=64)
+    personas: list[str] = Field(default_factory=list, max_length=MAX_PERSONAS)
+    personas_por_nucleo: dict[str, list[str]] = Field(default_factory=dict)
+    notas: str = Field(default="", max_length=500)
 
 
 class VacacionesYearRequest(BaseModel):
-    comidas: list[dict[str, Any]] = []
-    notas: str = ""
+    """Request model for saving a year's planning."""
+
+    comidas: list[ComidaInput] = Field(default_factory=list, max_length=10)
+    notas: str = Field(default="", max_length=1000)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -114,7 +147,9 @@ def get_vacaciones_config():
 @app.post("/api/vacaciones/config")
 def post_vacaciones_config(data: VacacionesConfigRequest):
     """Save vacaciones configuration."""
-    return save_config(data.nucleos, data.personas)
+    nucleos = [n.model_dump() for n in data.nucleos]
+    personas = [p.model_dump() for p in data.personas]
+    return save_config(nucleos, personas)
 
 
 @app.post("/api/vacaciones/year")
@@ -126,7 +161,8 @@ def add_vacaciones_year():
 @app.post("/api/vacaciones/year/{year}")
 def post_vacaciones_year(year: int, data: VacacionesYearRequest):
     """Save a year's planning."""
-    return save_year(year, data.comidas, data.notas)
+    comidas = [c.model_dump() for c in data.comidas]
+    return save_year(year, comidas, data.notas)
 
 
 @app.delete("/api/vacaciones/year/{year}")

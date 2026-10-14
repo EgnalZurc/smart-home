@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 
 DATA_FILE = Path(_os.environ.get("VACACIONES_DATA_FILE", "/app/data/vacaciones.json"))
 
+# Resource limits — prevent unbounded growth
+MAX_NUCLEOS = 20
+MAX_PERSONAS = 50
+MAX_YEARS = 20
+
 
 @dataclass
 class Persona:
@@ -258,6 +263,16 @@ def get_config() -> dict[str, Any]:
 
 
 def save_config(nucleos: list[dict], personas: list[dict]) -> dict[str, Any]:
+    if len(nucleos) > MAX_NUCLEOS:
+        return {
+            "status": "error",
+            "message": f"Too many nucleos (max {MAX_NUCLEOS})",
+        }
+    if len(personas) > MAX_PERSONAS:
+        return {
+            "status": "error",
+            "message": f"Too many personas (max {MAX_PERSONAS})",
+        }
     data = _load_data()
     data.nucleos = [NucleoFamiliar(**n) for n in nucleos]
     new_personas = []
@@ -323,6 +338,8 @@ def delete_year(year: int) -> dict[str, Any]:
 def add_year() -> dict[str, Any]:
     """Add a new year (next after highest existing)."""
     data = _load_data()
+    if len(data.years) >= MAX_YEARS:
+        return {"status": "error", "message": f"Too many years (max {MAX_YEARS})"}
     max_year = max(y.year for y in data.years) if data.years else 2025
     new_year = max_year + 1
     new_year_plan = YearPlan(

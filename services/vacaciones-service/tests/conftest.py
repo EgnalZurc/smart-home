@@ -18,12 +18,12 @@ os.environ["VACACIONES_DATA_FILE"] = str(Path(tempfile.mkdtemp()) / "vacaciones.
 def tmp_data_file(tmp_path):
     """Provide a temporary data file for tests."""
     import vacaciones_controller
-    
+
     original = vacaciones_controller.DATA_FILE
     vacaciones_controller.DATA_FILE = tmp_path / "vacaciones.json"
-    
+
     yield tmp_path / "vacaciones.json"
-    
+
     vacaciones_controller.DATA_FILE = original
 
 
@@ -32,7 +32,7 @@ def client(tmp_data_file):
     """Create a test client with isolated data file."""
     from fastapi.testclient import TestClient
     from main import app
-    
+
     return TestClient(app)
 
 
@@ -43,15 +43,11 @@ def sample_nucleo():
         "id": "padres_angel",
         "nombre": "Padres de Angel",
         "color": "#6366f1",
-        "hijo_id": "angel"
+        "hijo_id": "angel",
     }
 
 
 @pytest.fixture
 def sample_persona():
     """Sample persona data."""
-    return {
-        "id": "angel",
-        "nombre": "Angel",
-        "inicial": "A"
-    }
+    return {"id": "angel", "nombre": "Angel", "inicial": "A"}
