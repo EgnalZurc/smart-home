@@ -7,12 +7,24 @@ Portfolio monitoring service with ETF, crypto staking, and savings tracking.
 - **ETF Monitor**: Yahoo Finance data, technical analysis (MA50/MA200), signals
 - **Crypto Monitor**: CoinGecko data, staking APY tracking, Fear & Greed index
 - **Savings Monitor**: Bank account tracking with interest projections
+- **Rebalance Monitor**: Target-allocation drift detection with suggested trades
 - **Email Notifications**: Alert emails for significant changes
 - **Scheduled Alerts**: Recurring reminders (contributions, distributions)
 
 ## Configuration
 
 Copy `settings.example.toml` to `data/settings.toml` and configure your positions.
+
+### Rebalance targets
+
+Each ETF (`[[etf.funds]]`) and crypto (`[[crypto.positions]]`) entry accepts an
+optional `target_allocation_pct` — the desired weight of that position in the
+combined portfolio (ETF + crypto). Targets across all positions should sum to
+~100. A position left at `0` (the default) is excluded from rebalance analysis.
+
+The `[rebalance]` section sets `threshold_pct` (default `5.0`): a position is
+flagged `needs_rebalance` once the absolute deviation between its current and
+target allocation exceeds this many percentage points.
 
 Environment variables:
 - `MONITOR_LANG`: Language (es/en), default: es
@@ -25,8 +37,9 @@ Environment variables:
 - `GET /api/portfolio/etf` - ETF positions
 - `GET /api/portfolio/crypto` - Crypto staking positions
 - `GET /api/portfolio/savings` - Savings accounts
+- `GET /api/portfolio/rebalance` - **Rebalance analysis**: per-position allocation drift vs target + suggested trades
 - `GET /api/portfolio/alerts` - Scheduled alerts (upcoming reminders)
-- `GET /api/portfolio/alerts/active` - **Active market alerts** for unified dashboard (WARN/DANGER signals)
+- `GET /api/portfolio/alerts/active` - **Active market alerts** for unified dashboard (WARN/DANGER signals + rebalance drift)
 - `GET /api/portfolio/health/external` - External service health checks
 - `POST /api/portfolio/refresh` - Trigger manual refresh (rate limited)
 

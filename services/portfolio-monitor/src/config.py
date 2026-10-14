@@ -106,6 +106,7 @@ def _build_fund_entry(raw: dict[str, Any]) -> dict[str, Any]:
         "phase2_contrib": raw.get("aportacion_fase2", 0.0),
         "start_date": start_date or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "color": raw.get("color", "#3A7BD5"),
+        "target_allocation_pct": raw.get("target_allocation_pct", 0.0),
     }
 
 
@@ -182,6 +183,18 @@ def _build_crypto_thresholds(settings: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _build_rebalance_config(settings: dict[str, Any]) -> dict[str, Any]:
+    """Build rebalance config: the deviation threshold that flags drift.
+
+    ``threshold_pct`` is in percentage points of allocation drift (default 5),
+    so a target of 40% flags once the actual weight leaves the 35–45% band.
+    """
+    rb = _get(settings, "rebalance", {})
+    return {
+        "threshold_pct": rb.get("threshold_pct", 5.0),
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Module-level config values.
 #
@@ -200,6 +213,7 @@ CRYPTO_POSITIONS: list[dict[str, Any]] = _get(_S, "crypto.positions", [])
 CRYPTO_THRESHOLDS: dict[str, Any] = _build_crypto_thresholds(_S)
 SAVINGS_ACCOUNTS: list[dict[str, Any]] = _get(_S, "savings.accounts", [])
 SCHEDULED_ALERTS: list[dict[str, Any]] = _get(_S, "alerts.scheduled", [])
+REBALANCE_CONFIG: dict[str, Any] = _build_rebalance_config(_S)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -240,6 +254,10 @@ def get_scheduled_alerts() -> list[dict[str, Any]]:
     return SCHEDULED_ALERTS
 
 
+def get_rebalance_config() -> dict[str, Any]:
+    return REBALANCE_CONFIG
+
+
 def get_schedule() -> dict[str, str]:
     return SCHEDULE
 
@@ -258,6 +276,7 @@ def reload_config() -> dict[str, Any]:
     global ETF_PORTFOLIO, ETF_FUND_IDS, ETF_PLAN, ETF_THRESHOLDS
     global CRYPTO_POSITIONS, CRYPTO_THRESHOLDS
     global SAVINGS_ACCOUNTS, SCHEDULED_ALERTS
+    global REBALANCE_CONFIG
 
     _S = _load_settings()
 
@@ -273,5 +292,6 @@ def reload_config() -> dict[str, Any]:
     CRYPTO_THRESHOLDS = _build_crypto_thresholds(_S)
     SAVINGS_ACCOUNTS = _get(_S, "savings.accounts", [])
     SCHEDULED_ALERTS = _get(_S, "alerts.scheduled", [])
+    REBALANCE_CONFIG = _build_rebalance_config(_S)
 
     return _S
