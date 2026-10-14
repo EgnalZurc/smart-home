@@ -1,7 +1,5 @@
 """Unit tests for FastAPI endpoints."""
 
-import pytest
-
 
 class TestHealthEndpoints:
     """Tests for health check endpoints."""
@@ -9,7 +7,7 @@ class TestHealthEndpoints:
     def test_health_returns_online(self, client):
         """Health endpoint should return online status."""
         response = client.get("/health")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["online"] is True
@@ -18,7 +16,7 @@ class TestHealthEndpoints:
     def test_health_alias_returns_online(self, client):
         """Health alias endpoint should return online status."""
         response = client.get("/api/health/vacaciones")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["online"] is True
@@ -30,10 +28,10 @@ class TestDataEndpoints:
     def test_get_vacaciones_returns_data(self, client):
         """GET /api/vacaciones should return all data."""
         response = client.get("/api/vacaciones")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert "nucleos" in data
         assert "personas" in data
         assert "years" in data
@@ -43,17 +41,17 @@ class TestDataEndpoints:
         """GET /api/vacaciones should include momentos configuration."""
         response = client.get("/api/vacaciones")
         data = response.json()
-        
+
         assert len(data["momentos"]) > 0
         assert all("id" in m for m in data["momentos"])
 
     def test_get_config_returns_config(self, client):
         """GET /api/vacaciones/config should return nucleos and personas."""
         response = client.get("/api/vacaciones/config")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert "nucleos" in data
         assert "personas" in data
 
@@ -64,13 +62,12 @@ class TestConfigEndpoints:
     def test_post_config_saves_nucleos(self, client, sample_nucleo):
         """POST /api/vacaciones/config should save nucleos."""
         response = client.post(
-            "/api/vacaciones/config",
-            json={"nucleos": [sample_nucleo], "personas": []}
+            "/api/vacaciones/config", json={"nucleos": [sample_nucleo], "personas": []}
         )
-        
+
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
-        
+
         # Verify
         config = client.get("/api/vacaciones/config").json()
         assert len(config["nucleos"]) == 1
@@ -79,12 +76,11 @@ class TestConfigEndpoints:
     def test_post_config_saves_personas(self, client, sample_persona):
         """POST /api/vacaciones/config should save personas."""
         response = client.post(
-            "/api/vacaciones/config",
-            json={"nucleos": [], "personas": [sample_persona]}
+            "/api/vacaciones/config", json={"nucleos": [], "personas": [sample_persona]}
         )
-        
+
         assert response.status_code == 200
-        
+
         config = client.get("/api/vacaciones/config").json()
         assert len(config["personas"]) == 1
         assert config["personas"][0]["nombre"] == sample_persona["nombre"]
@@ -95,15 +91,14 @@ class TestConfigEndpoints:
             {"id": "p1", "nombre": "Angel"},
             {"id": "p2", "nombre": "Virginia"},
         ]
-        
+
         client.post(
-            "/api/vacaciones/config",
-            json={"nucleos": [], "personas": personas}
+            "/api/vacaciones/config", json={"nucleos": [], "personas": personas}
         )
-        
+
         config = client.get("/api/vacaciones/config").json()
         iniciales = [p["inicial"] for p in config["personas"]]
-        
+
         assert "A" in iniciales
         assert "V" in iniciales
 
@@ -114,7 +109,7 @@ class TestYearEndpoints:
     def test_add_year_creates_new(self, client):
         """POST /api/vacaciones/year should create a new year."""
         response = client.post("/api/vacaciones/year")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
@@ -128,17 +123,16 @@ class TestYearEndpoints:
                 "nucleo_id": "n1",
                 "personas": ["p1"],
                 "personas_por_nucleo": {},
-                "notas": "Test"
+                "notas": "Test",
             }
         ]
-        
+
         response = client.post(
-            "/api/vacaciones/year/2026",
-            json={"comidas": comidas, "notas": "Year note"}
+            "/api/vacaciones/year/2026", json={"comidas": comidas, "notas": "Year note"}
         )
-        
+
         assert response.status_code == 200
-        
+
         # Verify
         data = client.get("/api/vacaciones").json()
         year_2026 = next(y for y in data["years"] if y["year"] == 2026)
@@ -149,12 +143,12 @@ class TestYearEndpoints:
         # First add a year
         add_resp = client.post("/api/vacaciones/year")
         new_year = add_resp.json()["year"]
-        
+
         # Then delete it
         response = client.delete(f"/api/vacaciones/year/{new_year}")
-        
+
         assert response.status_code == 200
-        
+
         # Verify it's gone
         data = client.get("/api/vacaciones").json()
         years = [y["year"] for y in data["years"]]
@@ -164,16 +158,16 @@ class TestYearEndpoints:
         """DELETE /api/vacaciones/year/{year} should fail for non-highest year."""
         # Add a year first so we have > 1
         client.post("/api/vacaciones/year")
-        
+
         # Try to delete the lower year
         response = client.delete("/api/vacaciones/year/2026")
-        
+
         assert response.status_code == 400
 
     def test_delete_only_year_fails(self, client):
         """DELETE /api/vacaciones/year/{year} should fail for the only year."""
         response = client.delete("/api/vacaciones/year/2026")
-        
+
         assert response.status_code == 400
 
 
@@ -204,7 +198,7 @@ class TestDefaultData:
         """Default year should exist on first access."""
         response = client.get("/api/vacaciones")
         data = response.json()
-        
+
         assert len(data["years"]) >= 1
         assert data["years"][0]["year"] == 2026
 
@@ -212,10 +206,97 @@ class TestDefaultData:
         """Default year should have comidas for all momentos."""
         response = client.get("/api/vacaciones")
         data = response.json()
-        
+
         year_2026 = next(y for y in data["years"] if y["year"] == 2026)
         momentos_ids = [m["id"] for m in data["momentos"]]
         comidas_momentos = [c["momento"] for c in year_2026["comidas"]]
-        
+
         for momento_id in momentos_ids:
             assert momento_id in comidas_momentos
+
+
+class TestInputValidation:
+    """Tests for Pydantic input validation."""
+
+    def test_nucleo_id_pattern_rejects_invalid(self, client):
+        """Nucleo ID must match pattern [a-z0-9_]+."""
+        response = client.post(
+            "/api/vacaciones/config",
+            json={
+                "nucleos": [{"id": "Invalid-ID!", "nombre": "Test"}],
+                "personas": [],
+            },
+        )
+        assert response.status_code == 422
+
+    def test_nucleo_nombre_max_length(self, client):
+        """Nucleo nombre max length is 100."""
+        response = client.post(
+            "/api/vacaciones/config",
+            json={
+                "nucleos": [{"id": "valid_id", "nombre": "x" * 101}],
+                "personas": [],
+            },
+        )
+        assert response.status_code == 422
+
+    def test_persona_id_pattern_rejects_invalid(self, client):
+        """Persona ID must match pattern [a-z0-9_]+."""
+        response = client.post(
+            "/api/vacaciones/config",
+            json={
+                "nucleos": [],
+                "personas": [{"id": "BAD ID", "nombre": "Test"}],
+            },
+        )
+        assert response.status_code == 422
+
+    def test_config_valid_data_accepted(self, client):
+        """Valid config data should be accepted."""
+        response = client.post(
+            "/api/vacaciones/config",
+            json={
+                "nucleos": [
+                    {"id": "nucleo_1", "nombre": "Test Nucleo", "color": "#ff0000"}
+                ],
+                "personas": [{"id": "persona_1", "nombre": "Test Person"}],
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+
+
+class TestResourceLimits:
+    """Tests for resource limits."""
+
+    def test_too_many_nucleos_rejected(self, client):
+        """More than MAX_NUCLEOS should be rejected."""
+        nucleos = [{"id": f"n_{i}", "nombre": f"Nucleo {i}"} for i in range(21)]
+        response = client.post(
+            "/api/vacaciones/config",
+            json={"nucleos": nucleos, "personas": []},
+        )
+        # Pydantic max_length on list rejects at 422
+        assert response.status_code == 422
+
+    def test_too_many_personas_rejected(self, client):
+        """More than MAX_PERSONAS should be rejected."""
+        personas = [{"id": f"p_{i}", "nombre": f"Persona {i}"} for i in range(51)]
+        response = client.post(
+            "/api/vacaciones/config",
+            json={"nucleos": [], "personas": personas},
+        )
+        assert response.status_code == 422
+
+    def test_max_years_limit(self, client):
+        """Adding years beyond MAX_YEARS should fail."""
+        # Add 19 more years (default has 1)
+        for _ in range(19):
+            resp = client.post("/api/vacaciones/year")
+            assert resp.json()["status"] == "ok"
+
+        # The 21st year should fail
+        response = client.post("/api/vacaciones/year")
+        data = response.json()
+        assert data["status"] == "error"
+        assert "max" in data["message"].lower()
