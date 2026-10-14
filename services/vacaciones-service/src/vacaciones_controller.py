@@ -1,12 +1,34 @@
 """Vacaciones (Christmas Planning) API controller.
 
-Business Objects:
-- NucleoFamiliar: Family group / reunion place (e.g., "Padres de Angel")
-- Persona: Individual person who attends family gatherings (with unique inicial)
-- Year: Annual planning with meals (cena 24, comida 25, cena 31, comida 1, desayuno 6, comida 6)
+This module provides the data layer for the Vacaciones service, handling
+persistence of family gathering plans to a JSON file.
 
-Key dates: 24, 25, 31, 1 (important days)
-Day 6 is a wildcard to balance the year between family nuclei.
+Business Objects:
+    NucleoFamiliar: Family group / reunion place (e.g., "Padres de Angel").
+    Persona: Individual person who attends family gatherings (with unique
+        inicial for compact UI display).
+    YearPlan: Annual planning with meals for Christmas period dates.
+    Comida: A single meal event (breakfast, lunch, or dinner).
+
+Key Dates:
+    - Dec 24: Christmas Eve dinner
+    - Dec 25: Christmas Day lunch
+    - Dec 31: New Year's Eve dinner
+    - Jan 1: New Year's Day lunch
+    - Jan 6: Epiphany breakfast and lunch (wildcard to balance the year)
+
+Typical usage:
+    The controller is imported by main.py and provides these operations::
+
+        from vacaciones_controller import (
+            get_vacaciones_data,
+            get_config,
+            save_config,
+            save_year,
+            add_year,
+            delete_year,
+            is_healthy,
+        )
 """
 
 import json
@@ -29,27 +51,74 @@ MAX_YEARS = 20
 
 @dataclass
 class Persona:
+    """A person who attends family gatherings.
+
+    Each person has a unique inicial (abbreviation) generated from their
+    name for compact display in the UI calendar grid.
+
+    Attributes:
+        id: Unique identifier for the person.
+        nombre: Full name of the person.
+        inicial: Short abbreviation (1-3 chars) for compact display.
+    """
+
     id: str
     nombre: str
     inicial: str = ""
 
     def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary with all persona fields.
+        """
         return asdict(self)
 
 
 @dataclass
 class NucleoFamiliar:
+    """A family nucleus or gathering location.
+
+    Represents a family unit that hosts gatherings, such as "Casa de los
+    abuelos" or "Padres de Angel".
+
+    Attributes:
+        id: Unique identifier for the nucleus.
+        nombre: Human-readable name of the nucleus.
+        color: Hex color code for UI display (default: indigo #6366f1).
+        hijo_id: Optional ID of the primary child/host person.
+    """
+
     id: str
     nombre: str
     color: str = "#6366f1"
     hijo_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary with all nucleus fields.
+        """
         return asdict(self)
 
 
 @dataclass
 class Comida:
+    """A meal event during the Christmas gathering period.
+
+    Represents a single meal (breakfast, lunch, or dinner) on a specific
+    day, tracking which nucleus hosts and which persons attend.
+
+    Attributes:
+        momento: Meal identifier (e.g., "cena_24", "comida_25").
+        nucleo_id: ID of the hosting nucleus, or None if unassigned.
+        personas: List of person IDs attending (legacy format).
+        personas_por_nucleo: Mapping of nucleus ID to list of person IDs
+            from that nucleus attending this meal.
+        notas: Optional notes about this specific meal.
+    """
+
     momento: str
     nucleo_id: str | None = None
     personas: list[str] = field(default_factory=list)
@@ -57,6 +126,11 @@ class Comida:
     notas: str = ""
 
     def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary with all meal fields.
+        """
         return {
             "momento": self.momento,
             "nucleo_id": self.nucleo_id,
@@ -68,11 +142,26 @@ class Comida:
 
 @dataclass
 class YearPlan:
+    """A year's worth of Christmas gathering plans.
+
+    Contains all meal assignments for a single year's Christmas period.
+
+    Attributes:
+        year: The year (e.g., 2026).
+        comidas: List of meal entries for this year.
+        notas: General notes for this year's planning.
+    """
+
     year: int
     comidas: list[Comida] = field(default_factory=list)
     notas: str = ""
 
     def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary with year, comidas list, and notas.
+        """
         return {
             "year": self.year,
             "comidas": [c.to_dict() for c in self.comidas],
@@ -82,11 +171,26 @@ class YearPlan:
 
 @dataclass
 class VacacionesData:
+    """Complete vacaciones dataset.
+
+    The root data structure containing all configuration and year plans.
+
+    Attributes:
+        nucleos: List of family nuclei.
+        personas: List of persons.
+        years: List of year plans.
+    """
+
     nucleos: list[NucleoFamiliar] = field(default_factory=list)
     personas: list[Persona] = field(default_factory=list)
     years: list[YearPlan] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary with nucleos, personas, and years lists.
+        """
         return {
             "nucleos": [n.to_dict() for n in self.nucleos],
             "personas": [p.to_dict() for p in self.personas],
@@ -147,6 +251,28 @@ MOMENTOS = [
 
 
 def _generate_inicial(nombre: str, existing_iniciales: list[str]) -> str:
+    """Generate a unique initial abbreviation for a person's name.
+
+    Tries progressively longer prefixes of the name until finding one
+    that doesn't conflict with existing iniciales. If all prefixes
+    conflict, appends a numeric suffix.
+
+    Args:
+        nombre: The person's full name.
+        existing_iniciales: List of already-used iniciales to avoid.
+
+    Returns:
+        A unique inicial string (uppercase). Empty string if nombre is
+        empty or whitespace-only.
+
+    Examples:
+        >>> _generate_inicial("Angel", [])
+        'A'
+        >>> _generate_inicial("Ana", ["A"])
+        'AN'
+        >>> _generate_inicial("Angel", ["ANGEL"])
+        'ANGEL2'
+    """
     nombre_clean = nombre.strip().upper()
     if not nombre_clean:
         return ""
@@ -161,11 +287,29 @@ def _generate_inicial(nombre: str, existing_iniciales: list[str]) -> str:
     return f"{base}{counter}"
 
 
-def _ensure_data_dir():
+def _ensure_data_dir() -> None:
+    """Ensure the data directory exists.
+
+    Creates the parent directory of DATA_FILE if it doesn't exist,
+    including any necessary intermediate directories.
+    """
     DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _load_data() -> VacacionesData:
+    """Load vacaciones data from the JSON file.
+
+    Reads and deserializes the data file into VacacionesData. If the
+    file doesn't exist, is corrupt, or unreadable, returns sane defaults
+    with a single year (2026) initialized with empty meals.
+
+    Returns:
+        VacacionesData instance with the loaded or default data.
+
+    Note:
+        Errors are logged but not raised — the service stays usable
+        with defaults rather than failing completely.
+    """
     _ensure_data_dir()
     if DATA_FILE.exists():
         try:
@@ -213,14 +357,20 @@ def _load_data() -> VacacionesData:
     )
 
 
-def _save_data(data: VacacionesData):
-    """Persist data atomically.
+def _save_data(data: VacacionesData) -> None:
+    """Persist vacaciones data atomically to JSON.
 
-    Writes to a temporary file in the same directory, flushes it to disk, and
-    then atomically renames it over the target with os.replace(). A crash at any
-    point leaves either the old complete file or the new complete file on disk —
-    never a half-written one. The temp file must live on the same filesystem as
-    the target for the rename to be atomic, hence dir=DATA_FILE.parent.
+    Writes to a temporary file in the same directory, flushes it to
+    disk, and atomically renames it over the target with os.replace().
+    A crash at any point leaves either the old complete file or the new
+    complete file on disk — never a half-written one.
+
+    Args:
+        data: The VacacionesData instance to persist.
+
+    Note:
+        The temp file must live on the same filesystem as the target for
+        the rename to be atomic, hence dir=DATA_FILE.parent.
     """
     _ensure_data_dir()
     dir_path = DATA_FILE.parent
@@ -250,11 +400,22 @@ def _save_data(data: VacacionesData):
 
 
 def get_vacaciones_data() -> dict[str, Any]:
+    """Get all vacaciones data including momentos reference.
+
+    Returns:
+        Dictionary with 'nucleos', 'personas', 'years' lists and
+        'momentos' reference data.
+    """
     data = _load_data()
     return {**data.to_dict(), "momentos": MOMENTOS}
 
 
 def get_config() -> dict[str, Any]:
+    """Get vacaciones configuration (nucleos and personas only).
+
+    Returns:
+        Dictionary with 'nucleos' and 'personas' lists.
+    """
     data = _load_data()
     return {
         "nucleos": [n.to_dict() for n in data.nucleos],
@@ -263,6 +424,23 @@ def get_config() -> dict[str, Any]:
 
 
 def save_config(nucleos: list[dict], personas: list[dict]) -> dict[str, Any]:
+    """Save vacaciones configuration.
+
+    Replaces all nucleos and personas with the provided lists. Auto-
+    generates unique iniciales for persons if not provided or if there
+    are conflicts.
+
+    Args:
+        nucleos: List of nucleus dictionaries with id, nombre, color,
+            hijo_id fields.
+        personas: List of persona dictionaries with id, nombre, inicial,
+            nucleo_id fields.
+
+    Returns:
+        Dictionary with 'status' key:
+        - {'status': 'ok'} on success
+        - {'status': 'error', 'message': '...'} if limits exceeded
+    """
     if len(nucleos) > MAX_NUCLEOS:
         return {
             "status": "error",
@@ -276,7 +454,7 @@ def save_config(nucleos: list[dict], personas: list[dict]) -> dict[str, Any]:
     data = _load_data()
     data.nucleos = [NucleoFamiliar(**n) for n in nucleos]
     new_personas = []
-    used_iniciales = []
+    used_iniciales: list[str] = []
     for p in personas:
         nombre = p.get("nombre", "").strip()
         if not nombre:
@@ -298,6 +476,20 @@ def save_config(nucleos: list[dict], personas: list[dict]) -> dict[str, Any]:
 
 
 def save_year(year: int, comidas: list[dict], notas: str = "") -> dict[str, Any]:
+    """Save a year's meal planning.
+
+    Updates an existing year plan or creates a new one if the year
+    doesn't exist.
+
+    Args:
+        year: The year to save (e.g., 2026).
+        comidas: List of meal dictionaries with momento, nucleo_id,
+            personas, personas_por_nucleo, notas fields.
+        notas: General notes for this year.
+
+    Returns:
+        Dictionary with 'status': 'ok' on success.
+    """
     data = _load_data()
     year_plan = None
     for y in data.years:
@@ -323,7 +515,20 @@ def save_year(year: int, comidas: list[dict], notas: str = "") -> dict[str, Any]
 
 
 def delete_year(year: int) -> dict[str, Any]:
-    """Delete a year. Only allowed if >1 years and is the highest year."""
+    """Delete a year from the planning.
+
+    Only allowed if there is more than one year and the year being
+    deleted is the highest (most recent). This prevents accidental
+    deletion of historical data.
+
+    Args:
+        year: The year to delete.
+
+    Returns:
+        Dictionary with 'status' key:
+        - {'status': 'ok'} on success
+        - {'status': 'error', 'message': '...'} if deletion not allowed
+    """
     data = _load_data()
     if len(data.years) <= 1:
         return {"status": "error", "message": "Cannot delete the only year"}
@@ -336,7 +541,16 @@ def delete_year(year: int) -> dict[str, Any]:
 
 
 def add_year() -> dict[str, Any]:
-    """Add a new year (next after highest existing)."""
+    """Add a new year to the planning.
+
+    Creates a new year plan for the year after the highest existing
+    year, initialized with empty meals for all standard momentos.
+
+    Returns:
+        Dictionary with 'status' and 'year' keys:
+        - {'status': 'ok', 'year': NNNN} on success
+        - {'status': 'error', 'message': '...'} if max years reached
+    """
     data = _load_data()
     if len(data.years) >= MAX_YEARS:
         return {"status": "error", "message": f"Too many years (max {MAX_YEARS})"}
@@ -352,7 +566,13 @@ def add_year() -> dict[str, Any]:
 
 
 def is_healthy() -> bool:
-    """Verify data directory is accessible."""
+    """Check if the service is healthy.
+
+    Verifies that the data directory exists and is accessible.
+
+    Returns:
+        True if the data directory is accessible, False otherwise.
+    """
     try:
         return DATA_FILE.parent.exists() and DATA_FILE.parent.is_dir()
     except OSError:
