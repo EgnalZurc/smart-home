@@ -1,12 +1,18 @@
 """Unit tests for api/alerts.py (unified alerts aggregator)."""
 
+import gc
+import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 from httpx import Response
 
+from api import alert_reads_db
 from api.alerts import (
+    _alert_identifier,
+    _alert_key,
     _extract_alerts,
     _fetch_memory,
     _fetch_remote,
@@ -17,6 +23,22 @@ from api.alerts import (
 
 # ServiceProxy uses httpx under the hood; patch the shared client.
 HTTPX_PATCH = "libs.service_proxy.proxy.httpx.AsyncClient"
+
+
+@pytest.fixture
+def temp_alert_db(monkeypatch):
+    """Point ``alert_reads_db`` at a fresh per-test SQLite database.
+
+    Mirrors the fixture in ``test_alert_reads.py`` so unified-alert tests can
+    exercise the real read-tracking store rather than mocking it.
+    """
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db_path = Path(tmp) / "test_alert_reads.db"
+        monkeypatch.setattr(alert_reads_db, "AUTH_DB_PATH", str(db_path))
+        try:
+            yield db_path
+        finally:
+            gc.collect()
 
 
 def make_mock_response(data, status_code=200):
@@ -173,12 +195,12 @@ class TestFetchMemory:
 # ---------------------------------------------------------------------------
 class TestUnifiedAlerts:
     @pytest.mark.asyncio
-    async def test_aggregates_and_sorts(self):
+    async def test_aggregates_and_sorts(self, temp_alert_db):
         request = make_mock_request()
 
-        memory_alerts = [{"source": "memory", "severity": "info"}]
-        ac_alerts = [{"source": "ac", "severity": "critical"}]
-        portfolio_alerts = [{"source": "portfolio", "severity": "warning"}]
+        memory_alerts = [{"source": "memory", "severity": "info", "id": "m1"}]
+        ac_alerts = [{"source": "ac", "severity": "critical", "id": "a1"}]
+        portfolio_alerts = [{"source": "portfolio", "severity": "warning", "id": "p1"}]
 
         async def fake_memory(days):
             return memory_alerts
@@ -197,13 +219,17 @@ class TestUnifiedAlerts:
             result = await get_unified_alerts(request, days=1)
 
         assert result["count"] == 3
+        assert result["unread_count"] == 3
         assert "timestamp" in result
         # critical first, then warning, then info
         severities = [a["severity"] for a in result["alerts"]]
         assert severities == ["critical", "warning", "info"]
+        # every alert is tagged with a key and read flag
+        assert all("key" in a and a["read"] is False for a in result["alerts"])
+        assert result["alerts"][0]["key"] == "ac:a1"
 
     @pytest.mark.asyncio
-    async def test_one_failing_source_does_not_break_others(self):
+    async def test_one_failing_source_does_not_break_others(self, temp_alert_db):
         request = make_mock_request()
 
         async def fake_memory(days):
@@ -212,7 +238,7 @@ class TestUnifiedAlerts:
         async def fake_remote(name, proxy, path):
             # 'casita' fails -> empty, 'ac' succeeds
             if name == "ac":
-                return [{"source": "ac", "severity": "warning"}]
+                return [{"source": "ac", "severity": "warning", "id": "a1"}]
             return []
 
         with (
@@ -226,7 +252,7 @@ class TestUnifiedAlerts:
         assert result["alerts"][0]["source"] == "ac"
 
     @pytest.mark.asyncio
-    async def test_empty_when_all_sources_empty(self):
+    async def test_empty_when_all_sources_empty(self, temp_alert_db):
         request = make_mock_request()
 
         async def fake_memory(days):
@@ -243,10 +269,101 @@ class TestUnifiedAlerts:
             result = await get_unified_alerts(request, days=1)
 
         assert result["count"] == 0
+        assert result["unread_count"] == 0
         assert result["alerts"] == []
 
     @pytest.mark.asyncio
-    async def test_requires_authentication(self):
+    async def test_read_alerts_are_flagged(self, temp_alert_db):
+        """Alerts the user already marked read come back with read=True."""
+        request = make_mock_request()
+
+        async def fake_memory(days):
+            return []
+
+        async def fake_remote(name, proxy, path):
+            if name == "ac":
+                return [
+                    {"source": "ac", "severity": "info", "id": "a1"},
+                    {"source": "ac", "severity": "info", "id": "a2"},
+                ]
+            return []
+
+        # Mark one of the two alerts as read for the calling user.
+        alert_reads_db.mark_alert_read("tester", "ac:a1")
+
+        with (
+            patch("api.alerts.require_authenticated", return_value="tester"),
+            patch("api.alerts._fetch_memory", new=fake_memory),
+            patch("api.alerts._fetch_remote", new=fake_remote),
+        ):
+            result = await get_unified_alerts(request, days=1)
+
+        assert result["count"] == 2
+        assert result["unread_count"] == 1
+        by_key = {a["key"]: a["read"] for a in result["alerts"]}
+        assert by_key == {"ac:a1": True, "ac:a2": False}
+
+    @pytest.mark.asyncio
+    async def test_read_state_is_scoped_per_user(self, temp_alert_db):
+        """One user's read mark must not affect another user's view."""
+        request = make_mock_request()
+
+        async def fake_memory(days):
+            return []
+
+        async def fake_remote(name, proxy, path):
+            if name == "ac":
+                return [{"source": "ac", "severity": "info", "id": "a1"}]
+            return []
+
+        alert_reads_db.mark_alert_read("alice", "ac:a1")
+
+        with (
+            patch("api.alerts.require_authenticated", return_value="bob"),
+            patch("api.alerts._fetch_memory", new=fake_memory),
+            patch("api.alerts._fetch_remote", new=fake_remote),
+        ):
+            result = await get_unified_alerts(request, days=1)
+
+        assert result["unread_count"] == 1
+        assert result["alerts"][0]["read"] is False
+
+    @pytest.mark.asyncio
+    async def test_unread_only_filters_read_alerts(self, temp_alert_db):
+        """unread_only=true drops read alerts but keeps the full unread_count."""
+        request = make_mock_request()
+
+        async def fake_memory(days):
+            return []
+
+        async def fake_remote(name, proxy, path):
+            if name == "ac":
+                return [
+                    {"source": "ac", "severity": "info", "id": "a1"},
+                    {"source": "ac", "severity": "info", "id": "a2"},
+                    {"source": "ac", "severity": "info", "id": "a3"},
+                ]
+            return []
+
+        alert_reads_db.mark_alert_read("tester", "ac:a1")
+
+        with (
+            patch("api.alerts.require_authenticated", return_value="tester"),
+            patch("api.alerts._fetch_memory", new=fake_memory),
+            patch("api.alerts._fetch_remote", new=fake_remote),
+        ):
+            result = await get_unified_alerts(request, days=1, unread_only=True)
+
+        # Only the two unread alerts are returned...
+        assert result["count"] == 2
+        returned_keys = {a["key"] for a in result["alerts"]}
+        assert returned_keys == {"ac:a2", "ac:a3"}
+        assert all(a["read"] is False for a in result["alerts"])
+        # ...but unread_count reflects the full aggregate (still 2 here).
+        assert result["unread_count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_requires_authentication(self, temp_alert_db):
         request = make_mock_request()
 
         with patch(
@@ -256,6 +373,43 @@ class TestUnifiedAlerts:
             with pytest.raises(HTTPException) as exc:
                 await get_unified_alerts(request, days=1)
             assert exc.value.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# _alert_identifier / _alert_key
+# ---------------------------------------------------------------------------
+class TestAlertKey:
+    def test_prefers_id_field(self):
+        assert _alert_identifier({"id": "182159128"}) == "182159128"
+
+    def test_prefers_alert_id_when_no_id(self):
+        assert _alert_identifier({"alert_id": 42}) == "42"
+
+    def test_prefers_container_for_memory_alerts(self):
+        assert _alert_identifier({"container": "casita-suenos"}) == "casita-suenos"
+
+    def test_hashes_title_url_when_no_id(self):
+        ident = _alert_identifier({"title": "New flat", "url": "http://x/1"})
+        # Deterministic, short hex digest.
+        assert len(ident) == 12
+        assert ident == _alert_identifier({"title": "New flat", "url": "http://x/1"})
+
+    def test_different_titles_hash_differently(self):
+        a = _alert_identifier({"title": "flat A"})
+        b = _alert_identifier({"title": "flat B"})
+        assert a != b
+
+    def test_hashes_full_payload_as_last_resort(self):
+        ident = _alert_identifier({"severity": "info"})
+        assert len(ident) == 12
+
+    def test_key_combines_source_and_identifier(self):
+        assert _alert_key({"source": "casita", "id": "fotocasa_182159128"}) == (
+            "casita:fotocasa_182159128"
+        )
+
+    def test_key_defaults_source_to_unknown(self):
+        assert _alert_key({"id": "x"}).startswith("unknown:")
 
 
 # ---------------------------------------------------------------------------
