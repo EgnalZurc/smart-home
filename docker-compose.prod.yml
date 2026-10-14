@@ -291,6 +291,12 @@ services:
       - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
     networks:
       - smart-home
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:80/passwords/alive"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Valheim Admin - Web management UI for Valheim server
