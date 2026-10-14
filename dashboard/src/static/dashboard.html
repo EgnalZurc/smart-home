@@ -367,11 +367,16 @@
         .alert-row {
             padding: 12px; border-radius: 10px; margin-bottom: 8px;
             border: 1px solid rgba(51,65,85,.4);
+            cursor: pointer; transition: opacity .2s ease;
         }
         .alert-row:last-child { margin-bottom: 0; }
         .alert-row.warning { background: rgba(245,158,11,.1); border-color: rgba(245,158,11,.3); }
         .alert-row.critical { background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.3); }
         .alert-row.info { background: rgba(59,130,246,.1); border-color: rgba(59,130,246,.3); }
+        /* Read alerts: dimmed and de-emphasised (no bold title). */
+        .alert-row.read { opacity: .5; }
+        .alert-row.read .alert-container { font-weight: 400; }
+        .alert-row.read .alert-pct { font-weight: 400; }
         .alert-row-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
         .alert-container { font-size: 13px; font-weight: 600; color: #e2e8f0; }
         .alert-pct { font-size: 12px; font-weight: 700; }
@@ -1263,6 +1268,7 @@ async function fetchAndRenderMetrics() {
 let _alertInterval = null;
 let currentAlertTab = 'all';
 let unifiedAlerts = [];
+let unifiedUnreadCount = 0;
 
 // Map a tab to the alert sources it includes. 'all' means every source.
 const ALERT_TAB_SOURCES = {
@@ -1279,10 +1285,14 @@ async function fetchUnifiedAlerts() {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
         unifiedAlerts = Array.isArray(data.alerts) ? data.alerts : [];
+        unifiedUnreadCount = Number.isInteger(data.unread_count)
+            ? data.unread_count
+            : unifiedAlerts.filter(a => !a.read).length;
         return unifiedAlerts;
     } catch (e) {
         console.error('Failed to fetch unified alerts:', e);
         unifiedAlerts = [];
+        unifiedUnreadCount = 0;
         return [];
     }
 }
@@ -1297,13 +1307,13 @@ function alertsForTab(tab) {
 function updateAlertBadge() {
     const badge = document.getElementById('alert-badge');
     if (!badge) return;
-    const count = unifiedAlerts.length;
+    const count = unifiedUnreadCount;
     if (count === 0) {
         badge.style.display = 'none';
     } else {
         badge.style.display = 'flex';
         badge.textContent = count > 99 ? '99+' : count;
-        const hasCritical = unifiedAlerts.some(a => a.severity === 'critical');
+        const hasCritical = unifiedAlerts.some(a => a.severity === 'critical' && !a.read);
         badge.classList.toggle('pulse', hasCritical);
     }
 }
@@ -1339,6 +1349,8 @@ function renderAlerts() {
         const title = escapeHtml(alert.title || '');
         const detail = alert.detail ? `<div class="alert-details">${escapeHtml(alert.detail)}</div>` : '';
         const source = escapeHtml(alert.source || '');
+        const readClass = alert.read ? ' read' : '';
+        const keyAttr = alert.key ? ` data-alert-key="${escapeHtml(alert.key)}"` : '';
         const inner = `
             <div class="alert-row-header">
                 <div class="alert-title-row">
@@ -1351,9 +1363,34 @@ function renderAlerts() {
             ${ts ? `<div class="alert-time">${ts}</div>` : ''}
         `;
         return alert.link
-            ? `<a href="${encodeURI(alert.link)}" class="alert-row ${severity}" style="display:block;text-decoration:none">${inner}</a>`
-            : `<div class="alert-row ${severity}">${inner}</div>`;
+            ? `<a href="${encodeURI(alert.link)}" class="alert-row ${severity}${readClass}"${keyAttr} style="display:block;text-decoration:none">${inner}</a>`
+            : `<div class="alert-row ${severity}${readClass}"${keyAttr}>${inner}</div>`;
     }).join('');
+}
+
+// Mark an alert as read: POST to the backend, then update local state + UI
+// without re-fetching the whole list.
+async function markAlertRead(key) {
+    const alert = unifiedAlerts.find(a => a.key === key);
+    if (!alert || alert.read) return; // nothing to do if unknown or already read
+    try {
+        const r = await fetch('/api/alerts/mark-read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ alert_key: key }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+    } catch (e) {
+        console.error('Failed to mark alert as read:', e);
+        return; // leave UI unchanged on failure
+    }
+    // Update local state: flag as read and decrement the unread badge.
+    alert.read = true;
+    unifiedUnreadCount = Math.max(0, unifiedUnreadCount - 1);
+    // Dim the clicked row in place (no full re-render needed).
+    const row = document.querySelector(`.alert-row[data-alert-key="${CSS.escape(key)}"]`);
+    if (row) row.classList.add('read');
+    updateAlertBadge();
 }
 
 // Minimal HTML escaping for alert text injected via innerHTML.
@@ -1381,7 +1418,17 @@ async function fetchAndRenderAlerts() {
 function openAlertModal() {
     document.getElementById('alert-modal').classList.add('open');
     switchAlertTab('all');
-    document.getElementById('alert-body').innerHTML = '<div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>';
+    const body = document.getElementById('alert-body');
+    body.innerHTML = '<div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>';
+    // Delegated click handler: clicking anywhere in a row marks it read.
+    // Attached once; survives re-renders since #alert-body is stable.
+    if (!body.dataset.readHandler) {
+        body.addEventListener('click', (e) => {
+            const row = e.target.closest('.alert-row[data-alert-key]');
+            if (row) markAlertRead(row.dataset.alertKey);
+        });
+        body.dataset.readHandler = '1';
+    }
     fetchAndRenderAlerts();
     _alertInterval = setInterval(fetchAndRenderAlerts, 300000); // 5 min
 }
