@@ -1,0 +1,92 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# presence-service — example settings
+#
+# This is a documentation/reference file. The service reads all runtime config
+# from ENVIRONMENT VARIABLES (see src/config.py and the design doc §6); people,
+# devices, beacons and zones are stored in SQLite and managed via the config API
+# (seeded from PRESENCE_PEOPLE_SEED on first run). This TOML mirrors the env
+# tunables so a deployer can see every knob and its default in one place.
+#
+# Copy the values you want to override into the service's .env / compose
+# `environment:` block, prefixed with PRESENCE_ (e.g. router_poll_interval_s →
+# PRESENCE_ROUTER_POLL_INTERVAL_S). Secrets (router password/SSH key) go only in
+# .env, never here.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+[service]
+port = 8013
+db_path = "/app/data/presence.db"
+
+[loops]
+# Router poll cadence and engine recompute tick (seconds).
+router_poll_interval_s = 30
+engine_tick_s = 5
+
+[source_ttl]
+# Evidence freshness windows (seconds). Evidence only counts while fresh.
+router_ttl_s = 180
+ble_ttl_s = 60
+motion_occupancy_ttl_s = 600
+
+[fusion]
+# Per-source weights and the "present" threshold (confidence is the capped sum
+# of fresh sources' weights).
+weight_router = 0.6
+weight_ble = 0.5
+weight_motion = 0.2
+present_threshold = 0.5
+
+[debounce]
+# Anti-flap timeouts (seconds). Arrival is fast; departure is slow + corroborated
+# to survive WiFi sleep.
+arrival_debounce_s = 30
+departure_grace_s = 300
+sleep_inactivity_s = 2700          # 45 min
+night_window = "23:00-08:00"
+sleep_zone = "bedroom"
+
+[router]
+# One access mode: arpsweep | openwrt_ssh | fritzbox | mikrotik.
+mode = "arpsweep"
+host = "192.168.1.1"
+user = ""                          # for ssh/api modes
+# password / ssh key via .env only, never logged.
+arp_subnet = "192.168.1.0/24"      # for arpsweep mode
+
+[mqtt]
+broker = "mosquitto"
+port = 1883
+ble_topic = "presence/ble/#"       # or espresence/devices/#
+motion_topic = "zigbee2mqtt/+"
+publish_prefix = "presence"
+
+[notifications]
+enabled = true
+# Subset of arrival|departure|empty|occupied.
+events = ["arrival", "departure"]
+# TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_IDS come from .env; if unset the notifier
+# is a no-op (transitions still persist + publish).
+
+[retention]
+# Transition audit-trail retention and prune cadence.
+retention_days = 365
+prune_interval_s = 86400
+
+# ── People seed (optional, first-run only) ──────────────────────────────────
+# Provided via the PRESENCE_PEOPLE_SEED env var as a JSON array; shown here as a
+# reference of the shape. After first run, manage people via the config API.
+#
+# [[people]]
+# id = "ana"
+# name = "Ana"
+# track = true
+#   [[people.devices]]
+#   mac = "AA:BB:CC:11:22:33"
+#   label = "iPhone de Ana"
+#   [[people.beacons]]
+#   ble_id = "ad:12:34:56:78:90"
+#   label = "Reloj de Ana"
+#
+# [[zones]]
+# id = "bedroom"
+# sensors = ["motion_dormitorio"]
