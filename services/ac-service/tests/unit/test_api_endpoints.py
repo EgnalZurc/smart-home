@@ -267,10 +267,10 @@ class TestControlEndpoints:
         assert data["control_mode"] == "off"
 
     def test_set_control_mode_invalid(self, client, mock_components):
-        """POST /api/ac/control with invalid mode should return 400."""
+        """POST /api/ac/control with invalid mode should return 422."""
         response = client.post("/api/ac/control", json={"mode": "invalid"})
 
-        assert response.status_code == 400
+        assert response.status_code == 422
 
 
 class TestManualParamsEndpoints:
@@ -289,7 +289,7 @@ class TestManualParamsEndpoints:
         assert data["status"] == "ok"
 
     def test_set_manual_params_invalid_temperature(self, client, mock_components):
-        """POST /api/ac/manual with invalid temp should return 400."""
+        """POST /api/ac/manual with invalid temp should return 422."""
         response = client.post(
             "/api/ac/manual",
             json={
@@ -299,10 +299,10 @@ class TestManualParamsEndpoints:
             },
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_set_manual_params_invalid_fan_speed(self, client, mock_components):
-        """POST /api/ac/manual with invalid fan speed should return 400."""
+        """POST /api/ac/manual with invalid fan speed should return 422."""
         response = client.post(
             "/api/ac/manual",
             json={
@@ -312,10 +312,10 @@ class TestManualParamsEndpoints:
             },
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_set_manual_params_invalid_mode(self, client, mock_components):
-        """POST /api/ac/manual with invalid mode should return 400."""
+        """POST /api/ac/manual with invalid mode should return 422."""
         response = client.post(
             "/api/ac/manual",
             json={
@@ -325,7 +325,7 @@ class TestManualParamsEndpoints:
             },
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 422
 
 
 class TestOutdoorEndpoint:
@@ -463,12 +463,12 @@ class TestCommandLogging:
         assert args[2] is True
 
     def test_control_logs_invalid_mode(self, client, mock_components):
-        """A rejected control command is logged with success=False."""
-        client.post("/api/ac/control", json={"mode": "invalid"})
+        """Pydantic rejects invalid mode with 422 before reaching logging."""
+        response = client.post("/api/ac/control", json={"mode": "invalid"})
 
-        args = mock_components["event_log"].log_command.call_args.args
-        assert args[0] == "control"
-        assert args[2] is False
+        # Pydantic validation rejects before code execution, so no log call
+        assert response.status_code == 422
+        mock_components["event_log"].log_command.assert_not_called()
 
     def test_manual_logs_command(self, client, mock_components):
         """A manual command is logged."""
@@ -485,15 +485,15 @@ class TestCommandLogging:
         assert "manual" in logged
 
     def test_manual_logs_validation_failure(self, client, mock_components):
-        """A rejected manual command is logged with success=False."""
-        client.post(
+        """Pydantic rejects invalid temperature with 422 before reaching logging."""
+        response = client.post(
             "/api/ac/manual",
             json={"mode": "cool", "fan_speed": 0, "temperature": 15.0},
         )
 
-        call = mock_components["event_log"].log_command.call_args
-        assert call.args[0] == "manual"
-        assert call.args[2] is False
+        # Pydantic validation rejects before code execution, so no log call
+        assert response.status_code == 422
+        mock_components["event_log"].log_command.assert_not_called()
 
     def test_config_logs_command(self, client, mock_components):
         """A config update is logged."""
