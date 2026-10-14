@@ -399,6 +399,19 @@
             background: rgba(51,65,85,.5); border-radius: 6px;
             padding: 2px 6px; flex-shrink: 0;
         }
+        /* Dismiss (X) button on casita alert rows */
+        .alert-dismiss {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 20px; height: 20px; flex-shrink: 0;
+            margin-left: 4px; padding: 0;
+            border: none; border-radius: 6px; cursor: pointer;
+            background: transparent; color: #64748b;
+            font-size: 15px; line-height: 1;
+            transition: background .15s, color .15s;
+        }
+        .alert-dismiss:hover { background: rgba(239,68,68,.15); color: #fca5a5; }
+        .alert-dismiss:disabled { opacity: .5; cursor: default; }
+        .alert-row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
         /* Tab count badge */
         .tab-badge {
@@ -794,6 +807,8 @@ const T = {
         alert_usage: 'Uso', alert_limit: 'Límite',
         alert_tab_all: 'Todas', alert_tab_metrics: 'Métricas', alert_tab_portfolio: 'Inversiones',
         alert_tab_casita: 'Casita', alert_tab_ac: 'Clima',
+        alert_dismiss: 'Descartar', alert_dismiss_ok: 'Alerta descartada',
+        alert_dismiss_err: 'No se pudo descartar la alerta',
         mx_tab: 'Métricas', mx_ram: 'RAM', mx_cpu: 'CPU', mx_temp: 'Temp',
         mx_trends: 'Tendencias del host', mx_containers: 'Memoria por contenedor',
         mx_services: 'Latencia y disponibilidad',
@@ -835,6 +850,8 @@ const T = {
         alert_usage: 'Usage', alert_limit: 'Limit',
         alert_tab_all: 'All', alert_tab_metrics: 'Metrics', alert_tab_portfolio: 'Investments',
         alert_tab_casita: 'Casita', alert_tab_ac: 'Climate',
+        alert_dismiss: 'Dismiss', alert_dismiss_ok: 'Alert dismissed',
+        alert_dismiss_err: 'Could not dismiss alert',
         mx_tab: 'Metrics', mx_ram: 'RAM', mx_cpu: 'CPU', mx_temp: 'Temp',
         mx_trends: 'Host trends', mx_containers: 'Per-container memory',
         mx_services: 'Latency & uptime',
@@ -1351,13 +1368,22 @@ function renderAlerts() {
         const source = escapeHtml(alert.source || '');
         const readClass = alert.read ? ' read' : '';
         const keyAttr = alert.key ? ` data-alert-key="${escapeHtml(alert.key)}"` : '';
+        // Dismiss (X) button only for casita alerts carrying a "casita:<property_id>" key.
+        const key = typeof alert.key === 'string' ? alert.key : '';
+        const canDismiss = alert.source === 'casita' && key.startsWith('casita:');
+        const dismissBtn = canDismiss
+            ? `<button type="button" class="alert-dismiss" data-dismiss-key="${escapeHtml(key)}" title="${t('alert_dismiss')}" aria-label="${t('alert_dismiss')}">&times;</button>`
+            : '';
         const inner = `
             <div class="alert-row-header">
                 <div class="alert-title-row">
                     <span class="alert-severity ${severity}"></span>
                     <span class="alert-container">${title}</span>
                 </div>
-                <span class="alert-source">${source}</span>
+                <div class="alert-row-actions">
+                    <span class="alert-source">${source}</span>
+                    ${dismissBtn}
+                </div>
             </div>
             ${detail}
             ${ts ? `<div class="alert-time">${ts}</div>` : ''}
@@ -1393,6 +1419,41 @@ async function markAlertRead(key) {
     updateAlertBadge();
 }
 
+// Dismiss a casita alert: POST its property_id, then remove it from the list and refresh badges.
+async function dismissCasitaAlert(event) {
+    const btn = event.target.closest('.alert-dismiss');
+    if (!btn) return;
+    // Prevent the enclosing <a> link from navigating.
+    event.preventDefault();
+    event.stopPropagation();
+    if (btn.disabled) return;
+    const key = btn.dataset.dismissKey || '';
+    if (!key.startsWith('casita:')) return;
+    const propertyId = key.slice('casita:'.length);
+    if (!propertyId) return;
+    btn.disabled = true;
+    try {
+        const r = await fetch('/api/casita/dismiss', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ property_id: propertyId }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        unifiedAlerts = unifiedAlerts.filter(a => a.key !== key);
+        // Update unread count if the dismissed alert was unread
+        const wasUnread = !unifiedAlerts.find(a => a.key === key)?.read;
+        if (wasUnread) unifiedUnreadCount = Math.max(0, unifiedUnreadCount - 1);
+        renderAlerts();
+        updateAlertBadge();
+        updateTabBadges();
+        showToast(t('alert_dismiss_ok'), { kind: 'success' });
+    } catch (e) {
+        console.error('Failed to dismiss casita alert:', e);
+        btn.disabled = false;
+        showToast(t('alert_dismiss_err'), { kind: 'error' });
+    }
+}
+
 // Minimal HTML escaping for alert text injected via innerHTML.
 function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({
@@ -1417,9 +1478,13 @@ async function fetchAndRenderAlerts() {
 
 function openAlertModal() {
     document.getElementById('alert-modal').classList.add('open');
-    switchAlertTab('all');
     const body = document.getElementById('alert-body');
     body.innerHTML = '<div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>';
+    // Delegated click handler for dismiss button (casita alerts)
+    if (!body.dataset.dismissBound) {
+        body.addEventListener('click', dismissCasitaAlert);
+        body.dataset.dismissBound = '1';
+    }
     // Delegated click handler: clicking anywhere in a row marks it read.
     // Attached once; survives re-renders since #alert-body is stable.
     if (!body.dataset.readHandler) {
@@ -1429,6 +1494,7 @@ function openAlertModal() {
         });
         body.dataset.readHandler = '1';
     }
+    switchAlertTab('all');
     fetchAndRenderAlerts();
     _alertInterval = setInterval(fetchAndRenderAlerts, 300000); // 5 min
 }
