@@ -94,6 +94,50 @@ class TestConfigReload:
         assert isinstance(result, dict)
 
 
+class TestRebalanceConfig:
+    """Tests for the rebalance target-allocation configuration."""
+
+    def test_rebalance_config_has_default_threshold(self):
+        """REBALANCE_CONFIG exposes a sensible default threshold."""
+        from config import REBALANCE_CONFIG, get_rebalance_config
+
+        assert "threshold_pct" in REBALANCE_CONFIG
+        assert REBALANCE_CONFIG["threshold_pct"] > 0
+        assert get_rebalance_config() == REBALANCE_CONFIG
+
+    def test_fund_entry_carries_target_allocation(self):
+        """_build_fund_entry defaults target_allocation_pct to 0.0."""
+        from config import _build_fund_entry
+
+        entry = _build_fund_entry({"id": "X", "ticker": "X.L", "inicio": "2024-01-01"})
+        assert entry["target_allocation_pct"] == 0.0
+
+        entry2 = _build_fund_entry(
+            {
+                "id": "Y",
+                "ticker": "Y.L",
+                "inicio": "2024-01-01",
+                "target_allocation_pct": 25.0,
+            }
+        )
+        assert entry2["target_allocation_pct"] == 25.0
+
+    def test_reload_updates_rebalance_threshold(self, tmp_path, monkeypatch):
+        """Reloading applies a new rebalance threshold via the accessor."""
+        import config
+
+        settings = tmp_path / "settings.toml"
+        settings.write_text("[rebalance]\nthreshold_pct = 8.0\n", encoding="utf-8")
+        monkeypatch.setattr(config, "SETTINGS_PATH", settings)
+
+        try:
+            config.reload_config()
+            assert config.get_rebalance_config()["threshold_pct"] == 8.0
+        finally:
+            monkeypatch.undo()
+            config.reload_config()
+
+
 class TestScheduleConfig:
     """Tests for schedule configuration."""
 

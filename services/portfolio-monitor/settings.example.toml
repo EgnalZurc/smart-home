@@ -42,6 +42,10 @@ aportacion_mes   = 50.0
 aportacion_fase2 = 500.0
 inicio           = "2024-01-01"
 color            = "#3A7BD5"
+# Target weight of this position in the whole portfolio (ETF + crypto), in %.
+# All target_allocation_pct across every position should sum to ~100.
+# Leave unset (or 0) to exclude the position from rebalance analysis.
+target_allocation_pct = 40.0
 
 [[etf.funds]]
 id               = "IWDA"
@@ -54,6 +58,7 @@ aportacion_mes   = 100.0
 aportacion_fase2 = 1098.0
 inicio           = "2026-06-01"
 color            = "#1A7A4A"
+target_allocation_pct = 30.0
 
 # ─────────────────────────────────────────────────────────────────────────────
 # [etf.plan] — Investment plan phases and milestones
@@ -119,6 +124,8 @@ start_date             = "2026-04-20"
 next_distribution      = "2026-04-22"
 distribution_freq_days = 2
 coingecko_id           = "ethereum"
+# Target weight of this position in the whole portfolio (ETF + crypto), in %.
+target_allocation_pct  = 20.0
 
 [[crypto.positions]]
 symbol                 = "SOL"
@@ -132,6 +139,7 @@ start_date             = "2026-04-20"
 next_distribution      = "2026-04-22"
 distribution_freq_days = 2
 coingecko_id           = "solana"
+target_allocation_pct  = 10.0
 
 [[crypto.positions]]
 symbol                 = "KCS"
@@ -208,3 +216,20 @@ asset        = "stETH"
 amount       = 500.0
 apy_pct      = 3.20
 platform_url = "https://stake.lido.fi/"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# REBALANCE MONITOR
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [rebalance] — Target-allocation drift detection
+#
+# Compares each position's current weight in the combined portfolio
+# (ETF + crypto) against its configured target_allocation_pct (set per
+# [[etf.funds]] / [[crypto.positions]] block above). A position flags
+# `needs_rebalance` when the absolute deviation exceeds `threshold_pct`.
+# ─────────────────────────────────────────────────────────────────────────────
+[rebalance]
+# Deviation (in percentage points) that triggers a rebalance flag/alert.
+# Example: threshold_pct = 5 flags a 40% target that drifts below 35% or above 45%.
+threshold_pct = 5.0
