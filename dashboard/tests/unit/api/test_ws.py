@@ -5,6 +5,8 @@ Covers both layers:
   the shared broadcast loop lifecycle, dead-client pruning, message format).
 * The ``/api/ws/health`` endpoint end-to-end via Starlette's TestClient
   (initial snapshot on connect, broadcast message shape, clean disconnect).
+* **Authentication** (H-3 fix): WebSocket rejects unauthenticated connections
+  with close code 4001.
 
 ``api.health.get_all_health`` is patched throughout so no real HTTP requests
 to backend services are issued.
@@ -190,7 +192,18 @@ async def test_disconnect_unknown_client_is_safe():
 # ── Endpoint tests via TestClient ──────────────────────────────────────────────
 
 
-def test_websocket_connect_receives_initial_snapshot(client):
+@pytest.fixture
+def mock_auth():
+    """Bypass WebSocket authentication for non-auth-specific endpoint tests.
+
+    The auth behavior is thoroughly tested in the dedicated auth tests below.
+    Non-auth tests just need a valid session to exercise the data-push logic.
+    """
+    with patch.object(ws, "_validate_session", return_value="test_user"):
+        yield
+
+
+def test_websocket_connect_receives_initial_snapshot(client, mock_auth):
     with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
         with client.websocket_connect("/api/ws/health") as websocket:
             msg = websocket.receive_json()
@@ -198,7 +211,7 @@ def test_websocket_connect_receives_initial_snapshot(client):
             assert msg["data"] == SAMPLE_HEALTH
 
 
-def test_websocket_message_has_expected_shape(client):
+def test_websocket_message_has_expected_shape(client, mock_auth):
     with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
         with client.websocket_connect("/api/ws/health") as websocket:
             msg = websocket.receive_json()
@@ -209,7 +222,7 @@ def test_websocket_message_has_expected_shape(client):
             assert msg["data"]["ac"]["online"] is True
 
 
-def test_websocket_disconnect_is_handled(client):
+def test_websocket_disconnect_is_handled(client, mock_auth):
     """Closing the socket must drop the client and stop the broadcast loop."""
     with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
         with client.websocket_connect("/api/ws/health") as websocket:
@@ -221,7 +234,7 @@ def test_websocket_disconnect_is_handled(client):
         assert ws.manager._broadcast_task is None
 
 
-def test_multiple_clients_tracked_independently(client):
+def test_multiple_clients_tracked_independently(client, mock_auth):
     with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
         with client.websocket_connect("/api/ws/health") as w1:
             w1.receive_json()
@@ -233,3 +246,72 @@ def test_multiple_clients_tracked_independently(client):
             assert ws.manager.client_count == 1
             assert ws.manager._broadcast_task is not None
         assert ws.manager.client_count == 0
+
+
+
+# ── WebSocket authentication tests (H-3 fix) ───────────────────────────────────
+
+
+def test_websocket_rejects_unauthenticated_connection(client):
+    """WebSocket must reject connections without a valid session cookie."""
+    with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
+        # Patch _validate_session to return None (no valid session)
+        with patch.object(ws, "_validate_session", return_value=None):
+            # Connect without valid auth — should be rejected with code 4001
+            with pytest.raises(Exception) as exc_info:
+                with client.websocket_connect("/api/ws/health") as websocket:
+                    websocket.receive_json()
+
+            # WebSocketDisconnect is raised with our custom code
+            assert exc_info.value.code == ws.WS_CLOSE_UNAUTHORIZED
+
+
+def test_websocket_accepts_valid_session(client):
+    """WebSocket must accept connections with a valid session cookie."""
+    with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
+        # Patch _validate_session to return a username (valid session)
+        with patch.object(ws, "_validate_session", return_value="authenticated_user"):
+            with client.websocket_connect("/api/ws/health") as websocket:
+                msg = websocket.receive_json()
+                # Successfully received data means auth passed
+                assert msg["type"] == "health"
+                assert msg["data"] == SAMPLE_HEALTH
+
+
+def test_websocket_authenticated_client_tracked(client):
+    """Authenticated WebSocket client should be tracked in ConnectionManager."""
+    with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
+        with patch.object(ws, "_validate_session", return_value="test_user"):
+            with client.websocket_connect("/api/ws/health") as websocket:
+                websocket.receive_json()
+                # Client should be tracked
+                assert ws.manager.client_count == 1
+
+            # After disconnect, client should be removed
+            assert ws.manager.client_count == 0
+
+
+def test_websocket_unauthenticated_client_not_tracked(client):
+    """Rejected unauthenticated connections must not be tracked."""
+    with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
+        with patch.object(ws, "_validate_session", return_value=None):
+            try:
+                with client.websocket_connect("/api/ws/health"):
+                    pass
+            except Exception:
+                pass
+
+            # No client should remain tracked after rejection
+            assert ws.manager.client_count == 0
+            assert ws.manager._broadcast_task is None
+
+
+def test_validate_session_called_with_websocket(client):
+    """Verify _validate_session is called during handshake."""
+    with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
+        mock_validate = patch.object(ws, "_validate_session", return_value="user")
+        with mock_validate as m:
+            with client.websocket_connect("/api/ws/health") as websocket:
+                websocket.receive_json()
+            # _validate_session should have been called once with the WebSocket
+            assert m.call_count == 1
