@@ -828,9 +828,9 @@ class CasitaScheduler:
         try:
             top = self._db.get_top_scored(limit=5, min_score=_ALERT_THRESHOLD)
             self._notifier.send_weekly_summary(top)
-            stats = self._db.count_by_zone()
-            total = self._db.count_properties()
-            status_msg = f"📊 Total propiedades monitorizadas: {total}\n" + "\n".join(
+            stats = self._db.count_by_zone_radar(min_score=_ALERT_THRESHOLD)
+            radar_total = self._db.count_radar_properties(min_score=_ALERT_THRESHOLD)
+            status_msg = f"📊 Propiedades en radar: {radar_total}\n" + "\n".join(
                 f"  • {z}: {n}" for z, n in stats.items()
             )
             self._notifier.send_status(status_msg)

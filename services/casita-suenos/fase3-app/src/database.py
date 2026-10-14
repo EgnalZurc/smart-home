@@ -658,6 +658,36 @@ class Database:
         ).fetchall()
         return {r["zone_id"]: r["cnt"] for r in rows}
 
+    def count_radar_properties(self, min_score: float = 55.0) -> int:
+        """Cuenta solo las propiedades en el radar.
+
+        Una propiedad esta "en el radar" si su score pasa el threshold de
+        alerta y no ha sido descartada, igual que :meth:`get_radar_properties`.
+        A diferencia de :meth:`count_properties` (que cuenta TODAS las
+        propiedades monitorizadas), esto refleja las que realmente interesan.
+        """
+        return self._conn.execute(
+            "SELECT COUNT(*) FROM scored_properties s "
+            "JOIN properties p ON p.uid = s.property_uid "
+            "WHERE s.score_total >= ? AND s.dismissed = 0",
+            (min_score,),
+        ).fetchone()[0]
+
+    def count_by_zone_radar(self, min_score: float = 55.0) -> dict[str, int]:
+        """Cuenta por zona solo las propiedades en el radar.
+
+        Mismo filtro que :meth:`count_radar_properties` (score por encima del
+        threshold y no descartadas), agrupado por ``zone_id``.
+        """
+        rows = self._conn.execute(
+            "SELECT p.zone_id, COUNT(*) as cnt FROM scored_properties s "
+            "JOIN properties p ON p.uid = s.property_uid "
+            "WHERE s.score_total >= ? AND s.dismissed = 0 "
+            "GROUP BY p.zone_id",
+            (min_score,),
+        ).fetchall()
+        return {r["zone_id"]: r["cnt"] for r in rows}
+
     # ------------------------------------------------------------------
     # Visto y comentarios
     # ------------------------------------------------------------------

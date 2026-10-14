@@ -163,6 +163,76 @@ class TestDatabase:
         assert "zamora_meseta" in counts
         assert counts["zamora_meseta"] == 1
 
+    def test_count_radar_empty_by_default(self, db):
+        assert db.count_radar_properties(min_score=0.0) == 0
+
+    def test_count_radar_only_counts_scored_above_threshold(
+        self, db, sample_zone
+    ):
+        """count_radar_properties cuenta solo las que pasan el threshold.
+
+        Una propiedad sin score, o con score por debajo del umbral, no debe
+        contarse aunque esté en la tabla de propiedades (que es lo que hace
+        count_properties).
+        """
+        # Propiedad con score alto -> en radar
+        prop_hi = _make_property(portal_id="hi", price=150_000)
+        db.upsert_property(prop_hi)
+        db.upsert_score(_make_scored(prop_hi, sample_zone))
+
+        # Propiedad sin score -> monitorizada pero NO en radar
+        prop_unscored = _make_property(portal_id="unscored", price=200_000)
+        db.upsert_property(prop_unscored)
+
+        # count_properties cuenta ambas, count_radar solo la del radar
+        assert db.count_properties() == 2
+        assert db.count_radar_properties(min_score=0.0) == 1
+
+    def test_count_radar_respects_min_score(self, db, sample_property, sample_zone):
+        db.upsert_property(sample_property)
+        db.upsert_score(_make_scored(sample_property, sample_zone))
+
+        # Con umbral mayor que el score no se cuenta
+        assert db.count_radar_properties(min_score=1_000.0) == 0
+        # Con umbral menor sí
+        assert db.count_radar_properties(min_score=0.0) == 1
+
+    def test_count_radar_excludes_dismissed(self, db, sample_property, sample_zone):
+        db.upsert_property(sample_property)
+        db.upsert_score(_make_scored(sample_property, sample_zone))
+        assert db.count_radar_properties(min_score=0.0) == 1
+
+        db.dismiss(sample_property.unique_id)
+        assert db.count_radar_properties(min_score=0.0) == 0
+
+    def test_count_by_zone_radar_groups_only_radar(self, db, sample_zone):
+        """count_by_zone_radar agrupa solo propiedades en el radar."""
+        # Dos propiedades en la misma zona, una descartada
+        prop1 = _make_property(portal_id="z1", price=150_000)
+        prop2 = _make_property(portal_id="z2", price=200_000)
+        for p in (prop1, prop2):
+            db.upsert_property(p)
+            db.upsert_score(_make_scored(p, sample_zone))
+
+        counts = db.count_by_zone_radar(min_score=0.0)
+        assert counts == {"zamora_meseta": 2}
+
+        db.dismiss(prop1.unique_id)
+        counts = db.count_by_zone_radar(min_score=0.0)
+        assert counts == {"zamora_meseta": 1}
+
+    def test_count_by_zone_radar_ignores_unscored(self, db, sample_zone):
+        """Una propiedad sin score no aparece en el conteo por zona del radar."""
+        scored = _make_property(portal_id="scored", price=150_000)
+        db.upsert_property(scored)
+        db.upsert_score(_make_scored(scored, sample_zone))
+
+        unscored = _make_property(portal_id="noscore", price=200_000)
+        db.upsert_property(unscored)
+
+        counts = db.count_by_zone_radar(min_score=0.0)
+        assert counts == {"zamora_meseta": 1}
+
     def test_get_top_scored_empty(self, db):
         result = db.get_top_scored()
         assert result == []
