@@ -33,7 +33,7 @@ if _LIBS_PATH not in sys.path:
 
 from alerts import AlertEngine  # noqa: E402
 from collector import Collector  # noqa: E402
-from database import VALID_PERIODS, EnergyStore  # noqa: E402
+from database import VALID_PERIODS  # noqa: E402
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -148,7 +148,7 @@ async def get_history(
             status_code=422,
             detail=f"period must be one of {list(VALID_PERIODS)}",
         )
-    series = store.consumption_by_period(period, count, channel=channel)
+    series = collector.store.consumption_by_period(period, count, channel=channel)
     return {
         "period": period,
         "channel": channel,
@@ -164,7 +164,7 @@ async def get_stats() -> dict:
     Reports total, average daily, peak daily and peak instantaneous power for
     the current calendar month. Metrics are ``null`` until enough data exists.
     """
-    return store.stats()
+    return collector.store.stats()
 
 
 @app.get("/api/energy/alerts")
@@ -172,7 +172,7 @@ async def get_alerts(
     limit: int = Query(50, ge=1, le=500, description="Max events to return"),
 ) -> dict:
     """Return the most recent consumption-alert events (newest first)."""
-    events = store.recent_alerts(limit)
+    events = collector.store.recent_alerts(limit)
     return {"count": len(events), "alerts": events}
 
 
