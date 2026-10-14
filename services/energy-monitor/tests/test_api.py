@@ -120,8 +120,8 @@ async def test_history_empty_defaults_to_day(client):
 async def test_history_returns_deltas(client):
     import time as _time
 
-    main.store.write_energy(int(_time.time()) - 7200, [("ch0", 0.0)])
-    main.store.write_energy(int(_time.time()) - 3600, [("ch0", 1500.0)])
+    main.collector.store.write_energy(int(_time.time()) - 7200, [("ch0", 0.0)])
+    main.collector.store.write_energy(int(_time.time()) - 3600, [("ch0", 1500.0)])
     async with client as c:
         resp = await c.get("/api/energy/history?period=hour&count=3&channel=ch0")
     assert resp.status_code == 200
@@ -173,7 +173,7 @@ async def test_alerts_empty(client):
 
 
 async def test_alerts_returns_recorded(client):
-    main.store.record_alert("daily_budget", "warning", "fired", value=25.0)
+    main.collector.store.record_alert("daily_budget", "warning", "fired", value=25.0)
     async with client as c:
         resp = await c.get("/api/energy/alerts?limit=10")
     assert resp.status_code == 200
