@@ -29,6 +29,7 @@ from api.proxy.pc import router as pc_router
 from api.proxy.portfolio import router as portfolio_router
 from api.proxy.vacaciones import router as vacaciones_router
 from api.proxy.valheim import router as valheim_router
+from api.user_prefs import router as user_prefs_router
 from api.ws import router as ws_router
 
 # Main router that aggregates all sub-routers
@@ -52,6 +53,7 @@ router.include_router(metrics_router)
 router.include_router(ws_router)
 router.include_router(deploy_router)
 router.include_router(alerts_router)
+router.include_router(user_prefs_router)
 
 
 # Legacy redirect: valheim-admin was removed, control is now via /api/valheim/*

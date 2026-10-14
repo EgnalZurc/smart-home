@@ -23,6 +23,7 @@ The dashboard is the central hub of the platform, providing:
 - System resource monitoring (RAM, CPU, disk, temperature)
 - Container start/stop control
 - Multi-language support (English/Spanish)
+- Persistent dark/light mode toggle (per-user, synced across devices)
 
 ### Authentication
 - JWT session cookies (24h TTL)
@@ -120,6 +121,21 @@ authenticated session (any profile level).
 |--------|----------|-------------|
 | GET | `/api/monitoring/memory/alerts` | Memory usage alerts (containers >80% RAM) |
 | POST | `/api/monitoring/memory/snapshot` | Receive memory snapshot from cron |
+
+### User Preferences
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/user/preferences` | Current user's UI preferences (`{"dark_mode": bool}`) |
+| POST | `/api/user/preferences` | Persist UI preferences (body: `{"dark_mode": true/false}`) |
+
+The dashboard theme (dark mode) is stored per user in the `dark_mode` column of
+the `users` table (shared `AUTH_DB_PATH` database), so the choice follows the
+user across devices and sessions rather than living only in browser
+localStorage. New users default to dark mode. Both endpoints require an
+authenticated session (any profile level) and operate only on the calling
+user's own preferences. On page load the dashboard paints the last cached theme
+immediately (no flash), then reconciles with `GET /api/user/preferences`;
+toggling the switch in the user menu writes through via `POST`.
 
 ### Proxied Services
 See individual service READMEs for their endpoints:
