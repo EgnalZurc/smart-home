@@ -264,9 +264,9 @@ services:
     image: egnal/smart-home-vaultwarden:latest
     container_name: vaultwarden
     restart: on-failure:5
-    # Reduced from 128m based on 16% usage (21MB) - still generous
-    mem_limit: 64m
-    memswap_limit: 64m
+    # Increased from 64m based on 81% usage (51MB) - added headroom
+    mem_limit: 96m
+    memswap_limit: 96m
     expose:
       - 80
       - 3012
