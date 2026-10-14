@@ -37,6 +37,7 @@ Port: 8004
 """
 
 import logging
+from html import escape as html_escape
 from pathlib import Path
 
 from config import TRUSTED_PROXY_IPS
@@ -44,6 +45,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from gifts_controller import (
     add_gift,
+    check_invitation_rate_limit,
     check_rate_limit,
     create_invitation,
     delete_gift,
@@ -61,8 +63,33 @@ from gifts_controller import (
     validate_invitation,
 )
 from notifier import send_gift_notification
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, field_validator
 from utils import parse_price
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Input sanitization
+# ═══════════════════════════════════════════════════════════════════════════════
+def sanitize_string(value: str, max_length: int) -> str:
+    """Sanitize user-provided string: strip whitespace, limit length, escape HTML.
+
+    Args:
+        value: Raw user input string.
+        max_length: Maximum allowed length after stripping.
+
+    Returns:
+        Sanitized string safe for storage and display.
+    """
+    if not value:
+        return ""
+    # Strip leading/trailing whitespace
+    cleaned = value.strip()
+    # Truncate to max length
+    if len(cleaned) > max_length:
+        cleaned = cleaned[:max_length]
+    # Escape HTML characters to prevent XSS
+    return html_escape(cleaned)
+
 
 # Import serve_html from shared lib (path added via PYTHONPATH in Dockerfile/CI;
 # fallback inserts repo root for local development — mirrors notifier.py).
@@ -89,26 +116,66 @@ app = FastAPI(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Pydantic models
+# Pydantic models with input sanitization
 # ═══════════════════════════════════════════════════════════════════════════════
 class GiftCreate(BaseModel):
-    name: str = Field(..., max_length=200)
-    description: str = Field(default="", max_length=1000)
-    url: str = Field(default="", max_length=2000)
-    price_range: str = Field(default="", max_length=100)
+    name: str
+    description: str = ""
+    url: str = ""
+    price_range: str = ""
     priority: int = 2
+
+    @field_validator("name", "description", "price_range", mode="after")
+    @classmethod
+    def sanitize_text_fields(cls, v: str, info) -> str:
+        """Sanitize text fields: strip, truncate, escape HTML."""
+        max_lengths = {"name": 200, "description": 1000, "price_range": 100}
+        return sanitize_string(v, max_lengths.get(info.field_name, 200))
+
+    @field_validator("url", mode="after")
+    @classmethod
+    def sanitize_url(cls, v: str) -> str:
+        """Sanitize URL: strip and truncate (no HTML escape for URLs)."""
+        if not v:
+            return ""
+        cleaned = v.strip()
+        return cleaned[:2000] if len(cleaned) > 2000 else cleaned
 
 
 class GiftUpdate(BaseModel):
-    name: str | None = Field(default=None, max_length=200)
-    description: str | None = Field(default=None, max_length=1000)
-    url: str | None = Field(default=None, max_length=2000)
-    price_range: str | None = Field(default=None, max_length=100)
+    name: str | None = None
+    description: str | None = None
+    url: str | None = None
+    price_range: str | None = None
     priority: int | None = None
+
+    @field_validator("name", "description", "price_range", mode="after")
+    @classmethod
+    def sanitize_text_fields(cls, v: str | None, info) -> str | None:
+        """Sanitize text fields if provided."""
+        if v is None:
+            return None
+        max_lengths = {"name": 200, "description": 1000, "price_range": 100}
+        return sanitize_string(v, max_lengths.get(info.field_name, 200))
+
+    @field_validator("url", mode="after")
+    @classmethod
+    def sanitize_url(cls, v: str | None) -> str | None:
+        """Sanitize URL if provided."""
+        if v is None:
+            return ""
+        cleaned = v.strip()
+        return cleaned[:2000] if len(cleaned) > 2000 else cleaned
 
 
 class InvitationCreate(BaseModel):
-    name: str = Field(..., max_length=100)
+    name: str
+
+    @field_validator("name", mode="after")
+    @classmethod
+    def sanitize_name(cls, v: str) -> str:
+        """Sanitize invitation name: strip, truncate, escape HTML."""
+        return sanitize_string(v, 100)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -143,6 +210,21 @@ def require_rate_limit(request: Request) -> str:
     if not check_rate_limit(client_ip):
         raise HTTPException(
             status_code=429, detail="Demasiados intentos. Espera un momento."
+        )
+    return client_ip
+
+
+def require_invitation_rate_limit(request: Request) -> str:
+    """FastAPI dependency: enforce rate limit for invitation creation (30/min).
+
+    Resolves the client IP (honouring trusted proxies) and raises 429 when the
+    limit is exceeded. Returns the resolved client IP so handlers can reuse it.
+    """
+    client_ip = _get_client_ip(request)
+    if not check_invitation_rate_limit(client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail="Demasiadas invitaciones creadas. Espera un momento.",
         )
     return client_ip
 
@@ -384,17 +466,23 @@ def get_invitations():
 
 
 @app.post("/api/baby-gifts/invitations")
-def create_new_invitation(data: InvitationCreate):
+def create_new_invitation(
+    data: InvitationCreate,
+    client_ip: str = Depends(require_invitation_rate_limit),
+):
     """Create a new invitation with 6-month expiry (admin only).
+
+    Rate limited to 30 requests/minute per IP to prevent abuse.
 
     Args:
         data: Invitation creation payload with guest name.
+        client_ip: Resolved client IP (injected by rate limit dependency).
 
     Returns:
         dict: Status and invitation details including token.
 
     Raises:
-        HTTPException: 400 if name is empty.
+        HTTPException: 400 if name is empty, 429 if rate limited.
     """
     if not data.name.strip():
         raise HTTPException(status_code=400, detail="El nombre es obligatorio")

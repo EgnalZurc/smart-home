@@ -523,6 +523,63 @@ def check_rate_limit(ip: str) -> bool:
         conn.close()
 
 
+def check_invitation_rate_limit(ip: str) -> bool:
+    """Check rate limit for invitation creation (30 req/min per IP).
+
+    Uses a separate rate limit table/bucket to avoid interference with guest
+    endpoint rate limits.
+
+    Returns True if allowed, False if blocked.
+    """
+    conn = _get_db()
+    try:
+        # Ensure invitation_rate_limits table exists
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS invitation_rate_limits (
+                ip TEXT PRIMARY KEY,
+                attempts INTEGER DEFAULT 0,
+                window_start TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+
+        now = datetime.now()
+        row = conn.execute(
+            "SELECT attempts, window_start FROM invitation_rate_limits WHERE ip = ?",
+            (ip,),
+        ).fetchone()
+        if row:
+            window_start = datetime.fromisoformat(row["window_start"])
+            elapsed = (now - window_start).total_seconds()
+            if elapsed > config.INVITATION_RATE_LIMIT_WINDOW_SECONDS:
+                # Reset window
+                conn.execute(
+                    "UPDATE invitation_rate_limits SET attempts = 1, window_start = ? WHERE ip = ?",
+                    (now.isoformat(), ip),
+                )
+                conn.commit()
+                return True
+            if row["attempts"] >= config.INVITATION_RATE_LIMIT_ATTEMPTS:
+                return False
+            # Increment attempts
+            conn.execute(
+                "UPDATE invitation_rate_limits SET attempts = attempts + 1 WHERE ip = ?",
+                (ip,),
+            )
+            conn.commit()
+            return True
+        else:
+            # First attempt from this IP
+            conn.execute(
+                "INSERT INTO invitation_rate_limits (ip, attempts, window_start) VALUES (?, 1, ?)",
+                (ip, now.isoformat()),
+            )
+            conn.commit()
+            return True
+    finally:
+        conn.close()
+
+
 def is_healthy() -> bool:
     """Health check."""
     try:

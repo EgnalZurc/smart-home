@@ -9,9 +9,13 @@ rate limited to protect the upstream data sources.
 call time so tests patching ``api.routes.get_orchestrator`` take effect here.
 """
 
+import logging
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from .helpers import _config_limiter, _enforce_rate_limit, _refresh_limiter
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
@@ -27,9 +31,14 @@ async def refresh_all(request: Request, background_tasks: BackgroundTasks):
     orch = routes.get_orchestrator()
 
     async def run_refresh():
-        await orch.run_all_monitors()
+        try:
+            await orch.run_all_monitors()
+            logger.info("All monitors refresh completed")
+        except Exception as e:
+            logger.error(f"Error during refresh all monitors: {type(e).__name__}: {e}")
 
     background_tasks.add_task(run_refresh)
+    logger.info("Refresh all monitors triggered")
 
     return {"status": "refresh_started", "monitors": ["etf", "crypto", "savings"]}
 
@@ -42,6 +51,7 @@ async def refresh_monitor(
     import api.routes as routes
 
     if monitor_name not in ["etf", "crypto", "savings"]:
+        logger.warning(f"Unknown monitor requested: {monitor_name}")
         raise HTTPException(status_code=404, detail=f"Unknown monitor: {monitor_name}")
 
     _enforce_rate_limit(_refresh_limiter, request)
@@ -49,9 +59,16 @@ async def refresh_monitor(
     orch = routes.get_orchestrator()
 
     async def run_refresh():
-        await orch.run_monitor(monitor_name)
+        try:
+            await orch.run_monitor(monitor_name)
+            logger.info(f"Monitor {monitor_name} refresh completed")
+        except Exception as e:
+            logger.error(
+                f"Error during refresh of {monitor_name}: {type(e).__name__}: {e}"
+            )
 
     background_tasks.add_task(run_refresh)
+    logger.info(f"Refresh {monitor_name} monitor triggered")
 
     return {"status": "refresh_started", "monitor": monitor_name}
 
@@ -65,6 +82,7 @@ async def reload_config(request: Request):
 
     orch = routes.get_orchestrator()
     orch.reload_config()
+    logger.info("Configuration reloaded from disk")
     return {"status": "config_reloaded"}
 
 

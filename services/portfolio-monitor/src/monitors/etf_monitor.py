@@ -20,6 +20,16 @@ from . import BaseMonitor, register_monitor
 
 logger = logging.getLogger(__name__)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Timeout Configuration
+#
+# yfinance doesn't expose a timeout parameter directly; it uses requests
+# internally with default settings. We wrap blocking calls in asyncio.wait_for
+# to enforce a maximum duration and prevent hung connections from blocking
+# the entire monitor run.
+# ─────────────────────────────────────────────────────────────────────────────
+YFINANCE_TIMEOUT_SECONDS = 30.0
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TTL Cache for Yahoo Finance responses (shared implementation)
@@ -164,6 +174,9 @@ def fetch_etf_data(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
     Results are cached per ticker for a few minutes so repeated runs (or a
     scheduled run overlapping a dashboard refresh) reuse the same download
     instead of hitting Yahoo Finance again.
+
+    Raises:
+        RuntimeError: If Yahoo Finance returns empty data or the request fails.
     """
     cached = _history_cache.get(ticker_sym)
     if cached is not None:
@@ -177,19 +190,21 @@ def fetch_etf_data(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
             logger.warning(f"Empty history for {ticker_sym}")
             return pd.DataFrame(), {}
 
-        info = {}
+        info: dict[str, Any] = {}
         try:
             # Try fast_info first (yfinance 0.2.x), fall back to info (yfinance 1.x)
             info = getattr(ticker, "fast_info", None) or ticker.info or {}
-        except (AttributeError, KeyError, ValueError, TypeError):
-            logger.debug(f"Info not available for {ticker_sym}")
+        except (AttributeError, KeyError, ValueError, TypeError) as e:
+            logger.debug(f"Info not available for {ticker_sym}: {e}")
 
         result = (hist, info)
         _history_cache.set(ticker_sym, result)
         return result
     except Exception as e:
-        logger.error(f"Error downloading {ticker_sym}: {e}")
-        raise
+        logger.error(
+            f"Error downloading ETF data for {ticker_sym}: {type(e).__name__}: {e}"
+        )
+        raise RuntimeError(f"Failed to fetch ETF data for {ticker_sym}") from e
 
 
 def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
@@ -197,6 +212,9 @@ def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
 
     Cached per (ticker, period) since sparkline history rarely changes within
     a single monitoring window.
+
+    Returns:
+        List of [timestamp, open, high, low, close] entries, or empty list on error.
     """
     cache_key = f"{ticker_sym}:{period}"
     cached = _ohlc_cache.get(cache_key)
@@ -208,6 +226,7 @@ def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
         ticker = yf.Ticker(ticker_sym)
         hist = ticker.history(period=period)
         if hist.empty:
+            logger.warning(f"Empty OHLC history for {ticker_sym} (period={period})")
             return []
 
         # Convert to list of [timestamp, open, high, low, close]
@@ -219,7 +238,10 @@ def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
         _ohlc_cache.set(cache_key, ohlc)
         return ohlc
     except Exception as e:
-        logger.error(f"Error fetching OHLC for {ticker_sym}: {e}")
+        logger.error(
+            f"Error fetching OHLC for {ticker_sym} (period={period}): "
+            f"{type(e).__name__}: {e}"
+        )
         return []
 
 
@@ -661,7 +683,20 @@ class ETFMonitor(BaseMonitor):
             try:
                 # yfinance performs blocking network I/O; run it off the event
                 # loop so the API stays responsive while data downloads.
-                hist, info = await asyncio.to_thread(fetch_etf_data, ticker)
+                # Wrap in wait_for to enforce timeout since yfinance doesn't
+                # expose a timeout parameter.
+                try:
+                    hist, info = await asyncio.wait_for(
+                        asyncio.to_thread(fetch_etf_data, ticker),
+                        timeout=YFINANCE_TIMEOUT_SECONDS,
+                    )
+                except TimeoutError:
+                    logger.error(
+                        f"Timeout fetching ETF data for {fund_id} ({ticker}) "
+                        f"after {YFINANCE_TIMEOUT_SECONDS}s"
+                    )
+                    continue
+
                 if hist.empty:
                     continue
 
@@ -681,8 +716,17 @@ class ETFMonitor(BaseMonitor):
                 milestone = projected_milestone(fund_id)
                 year = years_since_start()
 
-                # OHLC download is blocking network I/O too → offload it.
-                ohlc = await asyncio.to_thread(fetch_ohlc_data, ticker, "1mo")
+                # OHLC download is blocking network I/O too → offload it with timeout.
+                try:
+                    ohlc = await asyncio.wait_for(
+                        asyncio.to_thread(fetch_ohlc_data, ticker, "1mo"),
+                        timeout=YFINANCE_TIMEOUT_SECONDS,
+                    )
+                except TimeoutError:
+                    logger.warning(
+                        f"Timeout fetching OHLC for {ticker}, continuing without sparkline"
+                    )
+                    ohlc = []
 
                 analysis = ETFAnalysis(
                     fund_id=fund_id,
@@ -730,7 +774,10 @@ class ETFMonitor(BaseMonitor):
                 total_invested += cost_basis
 
             except Exception as e:
-                logger.error(f"Error processing {fund_id}: {e}")
+                logger.error(
+                    f"Error processing ETF {fund_id} ({ticker}): "
+                    f"{type(e).__name__}: {e}"
+                )
                 continue
 
         self._results = results
