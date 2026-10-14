@@ -8,6 +8,7 @@ Trusted device requests are persisted for admin approval via email links.
 
 import hashlib
 import hmac
+import json
 import logging
 import secrets
 import sqlite3
@@ -73,6 +74,27 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             requested_at REAL   NOT NULL,
             status      TEXT    NOT NULL DEFAULT 'pending',
             resolved_at  REAL
+        )
+    """)
+
+    # Per-user widget (dashboard app-card) configuration.
+    #
+    # One row per (username, widget_id). ``position`` drives ordering,
+    # ``visible`` toggles whether the widget is rendered, ``size`` is a free-form
+    # size hint (e.g. "sm"/"md"/"lg") and ``custom_settings`` is an opaque JSON
+    # blob so widgets can store their own options without a schema change. The
+    # row is keyed by username (not the immutable user id) to match the rest of
+    # this module's preference helpers (``get_user_preferences`` et al.), which
+    # all key by the authenticated username.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_widget_config (
+            username        TEXT    NOT NULL,
+            widget_id       TEXT    NOT NULL,
+            visible         INTEGER NOT NULL DEFAULT 1,
+            position        INTEGER NOT NULL DEFAULT 0,
+            size            TEXT    NOT NULL DEFAULT 'md',
+            custom_settings TEXT    NOT NULL DEFAULT '{}',
+            PRIMARY KEY (username, widget_id)
         )
     """)
 
@@ -221,6 +243,124 @@ def set_user_preferences(username: str, dark_mode: bool) -> None:
         if cur.rowcount == 0:
             raise ValueError(f"User not found: {username}")
         conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Per-user widget configuration
+# ---------------------------------------------------------------------------
+# Widgets are the dashboard app-cards (keyed by their app ``key``). Each user
+# can hide widgets, reorder them and attach free-form settings. The config is a
+# list of rows ({widget_id, visible, order, size, custom_settings}); the client
+# sends the complete desired set and we replace the user's rows atomically, so
+# the stored state always mirrors the UI (no orphaned rows when a widget is
+# removed from the layout).
+
+#: Allowed values for the ``size`` hint. Anything else is rejected so a typo in
+#: the client cannot silently persist an unrenderable size.
+_WIDGET_SIZES = ("sm", "md", "lg")
+
+
+def get_widget_config(username: str) -> list[dict]:
+    """Return the saved widget configuration for a user.
+
+    Returns a list of ``{widget_id, visible, order, size, custom_settings}``
+    dicts ordered by ``order`` then ``widget_id``. An empty list means the user
+    has no saved layout yet (the client then falls back to its defaults).
+    """
+    with _get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT widget_id, visible, position, size, custom_settings
+            FROM user_widget_config
+            WHERE username = ?
+            ORDER BY position, widget_id
+            """,
+            (username,),
+        ).fetchall()
+
+    config: list[dict] = []
+    for row in rows:
+        try:
+            custom = json.loads(row["custom_settings"])
+        except (ValueError, TypeError):
+            custom = {}
+        config.append(
+            {
+                "widget_id": row["widget_id"],
+                "visible": bool(row["visible"]),
+                "order": row["position"],
+                "size": row["size"],
+                "custom_settings": custom,
+            }
+        )
+    return config
+
+
+def set_widget_config(username: str, widgets: list[dict]) -> None:
+    """Replace a user's widget configuration with ``widgets``.
+
+    Each item must contain ``widget_id`` and may contain ``visible`` (bool),
+    ``order`` (int), ``size`` (one of ``sm``/``md``/``lg``) and
+    ``custom_settings`` (JSON-serialisable mapping). The whole set is replaced
+    inside a single transaction so a failure never leaves a half-written layout.
+
+    Raises:
+        ValueError: if an item is missing ``widget_id`` or carries an invalid
+            ``size`` or non-serialisable ``custom_settings``.
+    """
+    # Validate everything BEFORE touching the DB so a bad item cannot leave the
+    # user with a partially cleared layout.
+    normalised: list[tuple] = []
+    seen: set[str] = set()
+    for idx, w in enumerate(widgets):
+        widget_id = w.get("widget_id")
+        if not widget_id or not isinstance(widget_id, str):
+            raise ValueError(f"Widget at index {idx} is missing a 'widget_id'")
+        if widget_id in seen:
+            raise ValueError(f"Duplicate widget_id: {widget_id!r}")
+        seen.add(widget_id)
+
+        size = w.get("size", "md")
+        if size not in _WIDGET_SIZES:
+            raise ValueError(
+                f"Invalid size {size!r} for widget {widget_id!r} "
+                f"(allowed: {', '.join(_WIDGET_SIZES)})"
+            )
+
+        # ``order`` defaults to the item's position in the submitted list so a
+        # client can simply send widgets in the desired order without computing
+        # indices explicitly.
+        order = w.get("order", idx)
+        try:
+            order = int(order)
+        except (ValueError, TypeError) as exc:
+            raise ValueError(
+                f"Invalid order {order!r} for widget {widget_id!r}"
+            ) from exc
+
+        custom = w.get("custom_settings", {})
+        try:
+            custom_json = json.dumps(custom)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"custom_settings for widget {widget_id!r} is not JSON-serialisable"
+            ) from exc
+
+        visible = 1 if w.get("visible", True) else 0
+        normalised.append((username, widget_id, visible, order, size, custom_json))
+
+    with _get_db() as conn:
+        conn.execute("DELETE FROM user_widget_config WHERE username = ?", (username,))
+        conn.executemany(
+            """
+            INSERT INTO user_widget_config
+                (username, widget_id, visible, position, size, custom_settings)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            normalised,
+        )
+        conn.commit()
+    logger.info("Saved %d widget(s) for user %r", len(normalised), username)
 
 
 def create_user(username: str, password: str, display_name: str = "") -> str:
