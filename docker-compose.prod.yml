@@ -79,6 +79,19 @@ services:
     networks:
       - smart-home
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Docker Socket Proxy - Secure access to Docker API for metrics-service
+  #
+  # WHY: metrics-service needs container stats but should NOT have full Docker
+  # control. This proxy exposes only the minimal API surface required.
+  #
+  # PERMISSIONS (least-privilege):
+  #   CONTAINERS=1, POST=1 → list containers + read stats stream
+  #   Everything else = 0  → no exec, no delete, no build, no images
+  #
+  # SECURITY: Socket mounted read-only. Only reachable inside smart-home network.
+  # See services/metrics-service/README.md for full documentation.
+  # ─────────────────────────────────────────────────────────────────────────────
   docker-socket-proxy:
     image: ghcr.io/tecnativa/docker-socket-proxy:latest
     container_name: docker-socket-proxy
@@ -87,8 +100,10 @@ services:
     mem_limit: 48m
     memswap_limit: 48m
     environment:
+      # metrics-service needs: list containers + stats endpoint
       CONTAINERS: 1
       POST: 1
+      # Everything else denied for least-privilege security
       IMAGES: 0
       INFO: 0
       NETWORKS: 0
