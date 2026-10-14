@@ -662,7 +662,9 @@ async def get_calendar_health() -> dict[str, Any]:
                         "online": data.get("online", False),
                         "db_ok": data.get("db_ok"),
                         "google_auth_ok": data.get("google_auth_ok"),
+                        "last_sync_ok": data.get("last_sync_ok"),
                         "last_sync_age_s": data.get("last_sync_age_s"),
+                        "reminder_tick_age_s": data.get("reminder_tick_age_s"),
                     }
                 return {"online": False, "error": f"HTTP {r.status_code}"}
         except httpx.ConnectError:
