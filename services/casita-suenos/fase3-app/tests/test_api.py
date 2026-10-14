@@ -82,7 +82,15 @@ def client(mock_scheduler):
 
     # For new code that uses app.state pattern
     main.app.state.scheduler = mock_scheduler
-    main.app.state.db = MagicMock()
+    mock_db = MagicMock()
+    # get_price_trend must return a JSON-serializable dict (used by /alerts)
+    mock_db.get_price_trend.return_value = {
+        "previous_price": None,
+        "price_change": None,
+        "price_change_pct": None,
+        "trend": None,
+    }
+    main.app.state.db = mock_db
 
     return TestClient(main.app)
 
@@ -236,6 +244,56 @@ class TestAlertsEndpoint:
         client = TestClient(main.app)
         response = client.get(f"{API}/alerts")
         assert response.status_code == 503
+
+    def test_alerts_include_price_trend_fields(self, client):
+        import main
+
+        main.app.state.db.get_recent_high_scorers.return_value = [
+            {
+                "uid": "idealista:777",
+                "title": "Casa con bajada de precio",
+                "price": 160000,
+                "url": "https://idealista.com/inmueble/777",
+                "score_total": 125.0,
+                "scored_at": "2026-10-14T08:00:00",
+            }
+        ]
+        main.app.state.db.get_price_trend.return_value = {
+            "previous_price": 180000,
+            "price_change": -20000,
+            "price_change_pct": -11.11,
+            "trend": "down",
+        }
+        response = client.get(f"{API}/alerts")
+        assert response.status_code == 200
+        alert = response.json()["alerts"][0]
+        assert alert["previous_price"] == 180000
+        assert alert["price_change"] == -20000
+        assert alert["price_change_pct"] == -11.11
+        assert alert["trend"] == "down"
+        # Trend is looked up by the property uid
+        main.app.state.db.get_price_trend.assert_called_with("idealista:777")
+
+    def test_alerts_trend_null_when_no_history(self, client):
+        import main
+
+        main.app.state.db.get_recent_high_scorers.return_value = [
+            {
+                "uid": "pisos:111",
+                "title": "Casa sin historial",
+                "price": 95000,
+                "url": "https://pisos.com/111",
+                "score_total": 120.0,
+                "scored_at": "2026-10-14T09:00:00",
+            }
+        ]
+        # Default mock get_price_trend returns all-None (set in fixture)
+        response = client.get(f"{API}/alerts")
+        assert response.status_code == 200
+        alert = response.json()["alerts"][0]
+        assert alert["previous_price"] is None
+        assert alert["price_change"] is None
+        assert alert["trend"] is None
 
 
 class TestZoneTrendsEndpoint:

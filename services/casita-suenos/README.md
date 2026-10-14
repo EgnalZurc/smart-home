@@ -77,6 +77,30 @@ individual por Telegram a todos los chats registrados (fallback a `TELEGRAM_CHAT
 Esto es independiente del resumen agregado de cada scraping y del resumen semanal, que
 siguen enviándose como antes.
 
+## Análisis precio/m² vs media de zona
+
+Cada propiedad del radar se enriquece con un análisis de su precio por metro cuadrado
+comparado con la **media de su zona**, para detectar de un vistazo chollos (por debajo
+de la media) y sobreprecios.
+
+El cálculo vive en `database.py`:
+
+- **`get_zone_avg_price_per_m2(zone_id)`** — media de `price / size_m2` de las
+  propiedades **activas** (no descartadas) de la zona con metros cuadrados válidos
+  (`size_m2 > 0`). Devuelve `None` si la zona no tiene datos utilizables.
+- **`get_price_per_m2_analysis(uid)`** — análisis de una propiedad concreta. Devuelve:
+
+  | Campo | Descripción |
+  |-------|-------------|
+  | `price_per_m2` | Precio/m² de esta propiedad (`None` si no hay m²) |
+  | `zone_avg_price_per_m2` | Media de la zona (`None` si no hay datos) |
+  | `below_zone_avg` | `True` si está por debajo de la media de la zona |
+  | `pct_vs_zone_avg` | % respecto a la media; negativo = más barato (ej. `-15.0` = 15 % más barato), positivo = más caro |
+
+Estos cuatro campos se añaden automáticamente a cada item de
+`GET /api/casita/radar`. La media por zona se cachea dentro de la llamada para no
+repetir la agregación por cada propiedad.
+
 ## Referencia técnica completa
 
 - **Requisitos, scoring, zonas, endpoints, operaciones:** `.kiro/steering/casita-suenos.md`
@@ -97,11 +121,10 @@ CASITA_DATA_DIR=/app/data
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Service health check (incluye `last_scheduler_tick` y `scheduler_stale`) |
+| GET | `/health` | Service health check |
 | GET | `/status` | Property listings with status |
-| GET | `/api/casita/radar` | Properties above alert threshold |
+| GET | `/api/casita/radar` | Properties above alert threshold (incl. price/m² vs zone-average analysis) |
 | GET | `/api/casita/alerts` | **High-scoring properties** for unified dashboard alerts (score ≥119 in last 24h) |
-| GET | `/api/casita/zone-trends` | **Per-zone time series** for dashboard charts (`?days=30`, clamped 1–365) |
 | GET | `/api/casita/dismissed` | Dismissed properties |
 | GET | `/api/casita/schedule` | Scraping schedule |
 | POST | `/api/casita/schedule` | Update schedule |
@@ -110,70 +133,4 @@ CASITA_DATA_DIR=/app/data
 | POST | `/api/casita/mark-viewed` | Mark as viewed |
 | POST | `/api/casita/save-comment` | Save comment |
 | POST | `/run-scraping` | Trigger manual scraping |
-
-### Health check (`GET /health`)
-
-Además del flag `online`, el endpoint expone el estado del loop del scheduler
-para detectar cuelgues (el loop se queda parado sin lanzar jobs):
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `online` | bool | `true` si el servidor HTTP responde |
-| `last_scheduler_tick` | string \| null | ISO timestamp del último tick del loop del scheduler. `null` si aún no ha ejecutado ninguno |
-| `scheduler_stale` | bool | `true` si han pasado más de 2h desde el último tick (loop colgado) |
-
-El scheduler registra `last_scheduler_tick` en cada iteración de su loop
-principal. Durante el grace period de arranque (antes del primer tick)
-`last_scheduler_tick` es `null` y `scheduler_stale` es `false` para no reportar
-un falso positivo.
-
-Ejemplo de respuesta:
-
-```json
-{
-  "online": true,
-  "last_scheduler_tick": "2026-10-14T10:00:00",
-  "scheduler_stale": false
-}
-```
-
-### Zone trends (`GET /api/casita/zone-trends`)
-
-Devuelve series temporales por zona pensadas para alimentar gráficas en el
-dashboard. Acepta el query param `days` (ventana en días, por defecto `30`,
-acotado al rango 1–365).
-
-Para cada zona con propiedades vistas por primera vez dentro de la ventana:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `zone_id` | string | Identificador de la zona |
-| `zone_name` | string | Nombre legible (desde `zones.ZONES`; fallback al `zone_id`) |
-| `data_points` | list | Un punto por día: `{date, count, avg_price, avg_score}` |
-| `total_properties` | int | Propiedades actuales en radar (puntuadas, no descartadas) |
-| `trend` | string | `growing` \| `stable` \| `declining` según el cambio de volumen entre la primera y la segunda mitad de la ventana |
-
-Cada entrada de `data_points` contiene la `date` (YYYY-MM-DD), el `count` de
-propiedades vistas por primera vez ese día, el `avg_price` y el `avg_score`
-medios de esas propiedades (`null` si no hay score). Los puntos van ordenados
-cronológicamente y las zonas por `zone_id`.
-
-Ejemplo de respuesta:
-
-```json
-{
-  "days": 30,
-  "zones": [
-    {
-      "zone_id": "zamora_meseta",
-      "zone_name": "Zamora meseta central (Arcenillas, Villaralbo, Morales del Vino)",
-      "data_points": [
-        {"date": "2026-10-10", "count": 2, "avg_price": 150000.0, "avg_score": 125.0},
-        {"date": "2026-10-13", "count": 1, "avg_price": 180000.0, "avg_score": 131.0}
-      ],
-      "total_properties": 3,
-      "trend": "declining"
-    }
-  ]
-}
-```
+| GET | `/api/casita/zone-trends` | Zone time-series for charts (`?days=30`) |

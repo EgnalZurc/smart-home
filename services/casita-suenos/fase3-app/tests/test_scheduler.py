@@ -23,6 +23,8 @@ def scheduler() -> CasitaScheduler:
     db = MagicMock()
     db.count_properties.return_value = 0
     db.count_by_zone.return_value = {}
+    db.count_radar_properties.return_value = 0
+    db.count_by_zone_radar.return_value = {}
     db.is_new.return_value = True
     db.upsert_property.return_value = None
     db.is_alerted.return_value = False
@@ -116,12 +118,35 @@ class TestWeeklySummary:
 
     def test_summary_calls_status_with_stats(self, scheduler):
         scheduler._db.get_top_scored.return_value = []
-        scheduler._db.count_properties.return_value = 42
-        scheduler._db.count_by_zone.return_value = {"zamora": 10, "salamanca": 15}
+        # count_properties es el total monitorizado (NO debe usarse ya)
+        scheduler._db.count_properties.return_value = 1042
+        scheduler._db.count_by_zone.return_value = {"zamora": 900, "salamanca": 142}
+        # count_radar_* son las que realmente pasan el threshold
+        scheduler._db.count_radar_properties.return_value = 6
+        scheduler._db.count_by_zone_radar.return_value = {"zamora": 4, "salamanca": 2}
         scheduler._run_weekly_summary()
         scheduler._notifier.send_status.assert_called_once()
         status_msg = scheduler._notifier.send_status.call_args[0][0]
-        assert "42" in status_msg
+        # Usa el conteo de radar (6), no el total monitorizado (1042)
+        assert "6" in status_msg
+        assert "1042" not in status_msg
+
+    def test_summary_message_uses_radar_wording(self, scheduler):
+        """El mensaje habla de 'Propiedades en radar', no de 'Total monitorizadas'."""
+        scheduler._db.get_top_scored.return_value = []
+        scheduler._db.count_radar_properties.return_value = 6
+        scheduler._db.count_by_zone_radar.return_value = {"zamora": 6}
+        scheduler._run_weekly_summary()
+        status_msg = scheduler._notifier.send_status.call_args[0][0]
+        assert "Propiedades en radar" in status_msg
+        assert "monitorizadas" not in status_msg
+
+    def test_summary_uses_radar_count_methods(self, scheduler):
+        """El resumen consulta los métodos de radar, no los conteos globales."""
+        scheduler._db.get_top_scored.return_value = []
+        scheduler._run_weekly_summary()
+        scheduler._db.count_radar_properties.assert_called_once()
+        scheduler._db.count_by_zone_radar.assert_called_once()
 
 
 # ── Tests de _infer_zone_from_url ─────────────────────────────────────────────
@@ -362,6 +387,12 @@ class TestSchedulerRadar:
             ],
             "total": 1,
         }
+        scheduler._db.get_price_trend.return_value = {
+            "previous_price": None,
+            "price_change": None,
+            "price_change_pct": None,
+            "trend": None,
+        }
 
         result = scheduler.get_radar(limit=10)
 
@@ -370,6 +401,36 @@ class TestSchedulerRadar:
         # Should have distance_madrid_min from zone
         assert "distance_madrid_min" in result["items"][0]
         assert result["items"][0]["distance_madrid_min"] == 150  # zamora_meseta value
+
+    def test_get_radar_enriches_with_price_trend(self):
+        """Test that get_radar adds price trend fields to each item."""
+        from casita_scheduler import CasitaScheduler
+        from unittest.mock import MagicMock
+
+        scheduler = CasitaScheduler.__new__(CasitaScheduler)
+        scheduler._db = MagicMock()
+        scheduler._db.get_radar_properties.return_value = {
+            "items": [
+                {"uid": "pisos:1", "zone_id": "zamora_meseta", "price": 160000}
+            ],
+            "total": 1,
+        }
+        scheduler._db.get_price_trend.return_value = {
+            "previous_price": 180000,
+            "price_change": -20000,
+            "price_change_pct": -11.11,
+            "trend": "down",
+        }
+
+        result = scheduler.get_radar(limit=10)
+
+        item = result["items"][0]
+        assert item["previous_price"] == 180000
+        assert item["price_change"] == -20000
+        assert item["price_change_pct"] == -11.11
+        assert item["trend"] == "down"
+        # Trend looked up by the property uid
+        scheduler._db.get_price_trend.assert_called_with("pisos:1")
 
 
 class TestSchedulerDelegation:

@@ -1,14 +1,14 @@
 """
-Capa de persistencia SQLite para Casita Sueños.
+Capa de persistencia SQLite para Casita Sue├▒os.
 
 Tablas:
-  - properties: anuncios vistos, con último precio conocido
+  - properties: anuncios vistos, con ├║ltimo precio conocido
   - price_history: historial de precios por anuncio
   - scored_properties: puntuaciones calculadas + dismissed + p11
-  - schedule_config: configuración de automatizaciones (JSON)
-  - weekly_summaries: histórico de resúmenes semanales enviados
+  - schedule_config: configuraci├│n de automatizaciones (JSON)
+  - weekly_summaries: hist├│rico de res├║menes semanales enviados
 
-Patrón del proyecto: sin ORM, SQL directo con sqlite3.
+Patr├│n del proyecto: sin ORM, SQL directo con sqlite3.
 Siguiendo state_persistence.py del backend existente: fichero en /app/data/.
 """
 
@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
 );
 """
 
-# Configuración de schedule por defecto
+# Configuraci├│n de schedule por defecto
 _DEFAULT_SCHEDULE = {
     "scraping_enabled": True,
     "scraping_days": [0, 3],  # lunes=0, jueves=3
@@ -123,7 +123,7 @@ _DEFAULT_SCHEDULE = {
 
 
 class Database:
-    """Gestiona la base de datos SQLite de Casita Sueños."""
+    """Gestiona la base de datos SQLite de Casita Sue├▒os."""
 
     def __init__(self, db_path: str) -> None:
         self._path = db_path
@@ -137,7 +137,7 @@ class Database:
         logger.info("[db] Base de datos inicializada en %s", db_path)
 
     def _migrate(self) -> None:
-        """Migraciones no destructivas para añadir columnas nuevas a tablas existentes."""
+        """Migraciones no destructivas para a├▒adir columnas nuevas a tablas existentes."""
         migrations = [
             ("scored_properties", "score_p11", "REAL NOT NULL DEFAULT 0"),
             ("scored_properties", "score_p12", "REAL NOT NULL DEFAULT 0"),
@@ -151,7 +151,7 @@ class Database:
         for table, col, definition in migrations:
             try:
                 self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
-                logger.info("[db] Migración: añadida columna %s.%s", table, col)
+                logger.info("[db] Migraci├│n: a├▒adida columna %s.%s", table, col)
             except sqlite3.OperationalError:
                 pass  # columna ya existe
         # Migraci?n: published_at en properties
@@ -180,7 +180,7 @@ class Database:
         for table, col, defn in new_cols_props:
             try:
                 self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
-                logger.info("[db] Migración R1-R18: añadida %s.%s", table, col)
+                logger.info("[db] Migraci├│n R1-R18: a├▒adida %s.%s", table, col)
             except sqlite3.OperationalError:
                 pass  # ya existe
         # Rework: nuevas columnas en scored_properties (r8-r18)
@@ -207,7 +207,7 @@ class Database:
         for table, col, defn in new_cols_score:
             try:
                 self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
-                logger.info("[db] Migración R1-R18: añadida %s.%s", table, col)
+                logger.info("[db] Migraci├│n R1-R18: a├▒adida %s.%s", table, col)
             except sqlite3.OperationalError:
                 pass  # ya existe
         # Asegurar que tabla telegram_chats existe (por si la BD era antigua)
@@ -241,7 +241,7 @@ class Database:
                     detected_at=datetime.now(),
                 )
                 logger.info(
-                    "[db] Cambio de precio en %s: %d€ → %d€ (%.1f%%)",
+                    "[db] Cambio de precio en %s: %dÔé¼ ÔåÆ %dÔé¼ (%.1f%%)",
                     uid,
                     old_price,
                     prop.price,
@@ -299,7 +299,7 @@ class Database:
                     int(getattr(prop, "has_ac_preinstalled", False)),
                 ),
             )
-            logger.debug("[db] Nueva propiedad: %s — %d€", uid, prop.price)
+            logger.debug("[db] Nueva propiedad: %s ÔÇö %dÔé¼", uid, prop.price)
 
         self._conn.commit()
         return price_event
@@ -423,7 +423,7 @@ class Database:
     # ------------------------------------------------------------------
 
     def dismiss(self, property_uid: str) -> bool:
-        """Descarta una propiedad. Devuelve True si existía."""
+        """Descarta una propiedad. Devuelve True si exist├¡a."""
         row = self._conn.execute(
             "SELECT 1 FROM scored_properties WHERE property_uid = ?",
             (property_uid,),
@@ -439,7 +439,7 @@ class Database:
         return True
 
     def undismiss(self, property_uid: str) -> bool:
-        """Recupera una propiedad descartada. Devuelve True si existía."""
+        """Recupera una propiedad descartada. Devuelve True si exist├¡a."""
         row = self._conn.execute(
             "SELECT 1 FROM scored_properties WHERE property_uid = ?",
             (property_uid,),
@@ -483,13 +483,13 @@ class Database:
         portal_filter: str | None = None,  # pisos | habitaclia | idealista | None
     ) -> dict:
         """
-        Devuelve propiedades en el radar con paginación y ordenación configurable.
+        Devuelve propiedades en el radar con paginaci├│n y ordenaci├│n configurable.
         Retorna: {items: [...], total: int, has_more: bool}
         """
         _SORT_MAP = {
             "score": "s.score_total",
             "price": "p.price",
-            "distance": "p.first_seen",  # distancia no está en BD, fallback a fecha
+            "distance": "p.first_seen",  # distancia no est├í en BD, fallback a fecha
             "portal": "p.portal",
             "zone": "p.zone_id",
             "date": "p.first_seen",
@@ -541,6 +541,22 @@ class Database:
         ).fetchall()
 
         items = [dict(r) for r in rows]
+        # Enriquecer cada item con el an├ílisis precio/m┬▓ vs media de la zona.
+        # Se cachea la media por zona para no repetir la agregaci├│n por item.
+        _zone_avg_cache: dict[str, float | None] = {}
+        for item in items:
+            zone_id = item.get("zone_id", "")
+            size_m2 = item.get("size_m2")
+            price = item.get("price")
+            if size_m2 and size_m2 > 0 and price is not None:
+                price_per_m2 = round(price / size_m2, 2)
+            else:
+                price_per_m2 = None
+            if zone_id not in _zone_avg_cache:
+                _zone_avg_cache[zone_id] = self.get_zone_avg_price_per_m2(zone_id)
+            item.update(
+                self._build_price_per_m2_dict(price_per_m2, _zone_avg_cache[zone_id])
+            )
         return {
             "items": items,
             "total": total,
@@ -554,7 +570,7 @@ class Database:
     # ------------------------------------------------------------------
 
     def save_weekly_summary(self, content: str) -> None:
-        """Guarda el contenido del último resumen semanal enviado."""
+        """Guarda el contenido del ├║ltimo resumen semanal enviado."""
         now = datetime.now().isoformat()
         self._conn.execute(
             "INSERT INTO weekly_summaries (sent_at, content) VALUES (?, ?)",
@@ -563,18 +579,18 @@ class Database:
         self._conn.commit()
 
     def get_last_weekly_summary(self) -> dict | None:
-        """Devuelve el último resumen semanal guardado."""
+        """Devuelve el ├║ltimo resumen semanal guardado."""
         row = self._conn.execute(
             "SELECT sent_at, content FROM weekly_summaries ORDER BY id DESC LIMIT 1"
         ).fetchone()
         return dict(row) if row else None
 
     # ------------------------------------------------------------------
-    # Configuración de automatizaciones
+    # Configuraci├│n de automatizaciones
     # ------------------------------------------------------------------
 
     def get_schedule_config(self) -> dict:
-        """Devuelve la configuración de schedule (con defaults si no existe)."""
+        """Devuelve la configuraci├│n de schedule (con defaults si no existe)."""
         rows = self._conn.execute("SELECT key, value FROM schedule_config").fetchall()
         config = dict(_DEFAULT_SCHEDULE)
         for row in rows:
@@ -585,7 +601,7 @@ class Database:
         return config
 
     def save_schedule_config(self, config: dict) -> None:
-        """Guarda la configuración de schedule."""
+        """Guarda la configuraci├│n de schedule."""
         for key, value in config.items():
             self._conn.execute(
                 "INSERT OR REPLACE INTO schedule_config (key, value) VALUES (?, ?)",
@@ -598,7 +614,7 @@ class Database:
     # ------------------------------------------------------------------
 
     def get_top_scored(self, limit: int = 10, min_score: float = 50.0) -> list[dict]:
-        """Devuelve las N propiedades con mayor puntuación, excluidas las descartadas."""
+        """Devuelve las N propiedades con mayor puntuaci├│n, excluidas las descartadas."""
         rows = self._conn.execute(
             """SELECT p.*, s.score_total, s.zone_id as score_zone
                FROM scored_properties s
@@ -622,7 +638,7 @@ class Database:
         alertas unificado.
 
         Nota: ``scored_at`` se almacena como texto ISO-8601, por lo que la
-        comparación lexicográfica equivale a comparación cronológica.
+        comparaci├│n lexicogr├ífica equivale a comparaci├│n cronol├│gica.
         """
         rows = self._conn.execute(
             """SELECT p.uid, p.title, p.price, p.url, p.zone_id,
@@ -649,6 +665,52 @@ class Database:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_price_trend(self, uid: str) -> dict:
+        """Devuelve la tendencia de precio de una propiedad a partir del
+        ├║ltimo cambio registrado en ``price_history``.
+
+        El historial guarda cada cambio como (old_price, new_price); el registro
+        m├ís reciente de la propiedad describe su variaci├│n de precio actual.
+
+        Returns:
+            dict con:
+              - ``previous_price``: precio anterior al ├║ltimo cambio (int) o None
+              - ``price_change``: diferencia en euros (new - old) o None
+              - ``price_change_pct``: porcentaje de cambio redondeado o None
+              - ``trend``: 'down' | 'up' | 'stable' | None (None si no hay historial)
+        """
+        row = self._conn.execute(
+            "SELECT old_price, new_price, delta_pct FROM price_history "
+            "WHERE property_uid = ? ORDER BY detected_at DESC, id DESC LIMIT 1",
+            (uid,),
+        ).fetchone()
+
+        if row is None:
+            return {
+                "previous_price": None,
+                "price_change": None,
+                "price_change_pct": None,
+                "trend": None,
+            }
+
+        old_price = row["old_price"]
+        new_price = row["new_price"]
+        price_change = new_price - old_price
+
+        if price_change < 0:
+            trend = "down"
+        elif price_change > 0:
+            trend = "up"
+        else:
+            trend = "stable"
+
+        return {
+            "previous_price": old_price,
+            "price_change": price_change,
+            "price_change_pct": round(row["delta_pct"], 2),
+            "trend": trend,
+        }
+
     def count_properties(self) -> int:
         return self._conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
 
@@ -658,43 +720,143 @@ class Database:
         ).fetchall()
         return {r["zone_id"]: r["cnt"] for r in rows}
 
-    def get_zone_trends(self, days: int = 30) -> list[dict]:
-        """Devuelve series temporales por zona para gráficas del dashboard.
+    def count_radar_properties(self, min_score: float = 55.0) -> int:
+        """Cuenta solo las propiedades en el radar.
 
-        Para cada zona con propiedades en la ventana devuelve:
-          - ``zone_id``: identificador de la zona.
-          - ``zone_name``: nombre legible de la zona (desde ``zones.ZONES``;
-            fallback al ``zone_id`` si la zona ya no está en el catálogo).
-          - ``data_points``: lista de ``{date, count, avg_price, avg_score}``
-            por día (una entrada por día con propiedades vistas por primera vez
-            ese día dentro de la ventana), ordenada cronológicamente.
-          - ``total_properties``: propiedades actuales en radar (puntuadas y no
-            descartadas) de la zona.
-          - ``trend``: ``'growing' | 'stable' | 'declining'`` según el cambio de
-            ``count`` entre la primera y la segunda mitad de la ventana.
-
-        Args:
-            days: tamaño de la ventana en días (mínimo 1). Se toman las
-                propiedades cuyo ``first_seen`` cae en los últimos ``days`` días.
-
-        Nota: ``first_seen`` se almacena como texto ISO-8601, por lo que la
-        comparación lexicográfica con el corte ISO equivale a comparación
-        cronológica, y ``substr(first_seen, 1, 10)`` extrae la fecha (YYYY-MM-DD).
+        Una propiedad esta "en el radar" si su score pasa el threshold de
+        alerta y no ha sido descartada, igual que :meth:`get_radar_properties`.
+        A diferencia de :meth:`count_properties` (que cuenta TODAS las
+        propiedades monitorizadas), esto refleja las que realmente interesan.
         """
+        return self._conn.execute(
+            "SELECT COUNT(*) FROM scored_properties s "
+            "JOIN properties p ON p.uid = s.property_uid "
+            "WHERE s.score_total >= ? AND s.dismissed = 0",
+            (min_score,),
+        ).fetchone()[0]
+
+    def count_by_zone_radar(self, min_score: float = 55.0) -> dict[str, int]:
+        """Cuenta por zona solo las propiedades en el radar.
+
+        Mismo filtro que :meth:`count_radar_properties` (score por encima del
+        threshold y no descartadas), agrupado por ``zone_id``.
+        """
+        rows = self._conn.execute(
+            "SELECT p.zone_id, COUNT(*) as cnt FROM scored_properties s "
+            "JOIN properties p ON p.uid = s.property_uid "
+            "WHERE s.score_total >= ? AND s.dismissed = 0 "
+            "GROUP BY p.zone_id",
+            (min_score,),
+        ).fetchall()
+        return {r["zone_id"]: r["cnt"] for r in rows}
+
+    # ------------------------------------------------------------------
+    # An├ílisis precio/m┬▓ vs media de zona
+    # ------------------------------------------------------------------
+
+    def get_zone_avg_price_per_m2(self, zone_id: str) -> float | None:
+        """Media de precio/m┬▓ de las propiedades activas (no descartadas) de la zona.
+
+        Solo considera propiedades con ``size_m2`` positivo (necesario para
+        calcular el precio por metro cuadrado). Devuelve ``None`` si la zona no
+        tiene ninguna propiedad con metros cuadrados v├ílidos.
+
+        Las propiedades descartadas (``scored_properties.dismissed = 1``) se
+        excluyen para que la media refleje el mercado vigente del radar.
+        """
+        row = self._conn.execute(
+            """SELECT AVG(p.price * 1.0 / p.size_m2) AS avg_ppm2
+               FROM properties p
+               LEFT JOIN scored_properties s ON s.property_uid = p.uid
+               WHERE p.zone_id = ?
+                 AND p.size_m2 IS NOT NULL
+                 AND p.size_m2 > 0
+                 AND COALESCE(s.dismissed, 0) = 0""",
+            (zone_id,),
+        ).fetchone()
+        avg = row["avg_ppm2"] if row else None
+        return round(avg, 2) if avg is not None else None
+
+    def get_price_per_m2_analysis(self, uid: str) -> dict:
+        """Analiza el precio/m┬▓ de una propiedad frente a la media de su zona.
+
+        Devuelve un dict con:
+          - ``price_per_m2``: precio/m┬▓ de esta propiedad (``None`` si no hay m┬▓)
+          - ``zone_avg_price_per_m2``: media de la zona (``None`` si no hay datos)
+          - ``below_zone_avg``: ``True`` si el precio/m┬▓ est├í por debajo de la
+            media de la zona (``None`` si falta alg├║n dato para comparar)
+          - ``pct_vs_zone_avg``: porcentaje respecto a la media; negativo = m├ís
+            barato que la media (ej. ``-15.0`` = 15% m├ís barato), positivo = m├ís
+            caro. ``None`` si falta alg├║n dato.
+
+        Si el ``uid`` no existe, todos los campos son ``None``.
+        """
+        empty = {
+            "price_per_m2": None,
+            "zone_avg_price_per_m2": None,
+            "below_zone_avg": None,
+            "pct_vs_zone_avg": None,
+        }
+
+        row = self._conn.execute(
+            "SELECT zone_id, price, size_m2 FROM properties WHERE uid = ?",
+            (uid,),
+        ).fetchone()
+        if row is None:
+            return empty
+
+        size_m2 = row["size_m2"]
+        price = row["price"]
+        if not size_m2 or size_m2 <= 0:
+            # Sin metros cuadrados no se puede calcular precio/m┬▓
+            return empty
+
+        price_per_m2 = round(price / size_m2, 2)
+        zone_avg = self.get_zone_avg_price_per_m2(row["zone_id"])
+
+        return self._build_price_per_m2_dict(price_per_m2, zone_avg)
+
+    @staticmethod
+    def _build_price_per_m2_dict(
+        price_per_m2: float | None, zone_avg: float | None
+    ) -> dict:
+        """Construye el dict de an├ílisis a partir de precio/m┬▓ y media de zona.
+
+        Reutilizable por ``get_price_per_m2_analysis`` y por el enriquecido del
+        radar, donde el precio/m┬▓ y la media de zona ya se han calculado.
+        """
+        if price_per_m2 is None or zone_avg is None or zone_avg <= 0:
+            return {
+                "price_per_m2": price_per_m2,
+                "zone_avg_price_per_m2": zone_avg,
+                "below_zone_avg": None,
+                "pct_vs_zone_avg": None,
+            }
+        pct = round((price_per_m2 - zone_avg) / zone_avg * 100, 1)
+        return {
+            "price_per_m2": price_per_m2,
+            "zone_avg_price_per_m2": zone_avg,
+            "below_zone_avg": price_per_m2 < zone_avg,
+            "pct_vs_zone_avg": pct,
+        }
+
+    # ------------------------------------------------------------------
+    # Series temporales por zona (zone trends)
+    # ------------------------------------------------------------------
+
+    def get_zone_trends(self, days: int = 30) -> list[dict]:
+        """Devuelve series temporales por zona para gráficas del dashboard."""
         days = max(int(days), 1)
         cutoff_iso = (datetime.now() - timedelta(days=days)).isoformat()
-        # Fecha de corte entre primera y segunda mitad de la ventana (YYYY-MM-DD).
         midpoint_date = (datetime.now() - timedelta(days=days / 2)).isoformat()[:10]
 
-        # Nombres de zona desde el catálogo (import local para evitar ciclos).
         try:
             from zones import ZONES
 
             zone_names = {zid: z.name for zid, z in ZONES.items()}
-        except Exception:  # pragma: no cover - catálogo siempre disponible en prod
+        except Exception:  # pragma: no cover
             zone_names = {}
 
-        # Puntos diarios por zona: count, precio medio y score medio.
         rows = self._conn.execute(
             """SELECT p.zone_id AS zone_id,
                       substr(p.first_seen, 1, 10) AS day,
@@ -709,7 +871,6 @@ class Database:
             (cutoff_iso,),
         ).fetchall()
 
-        # Propiedades actuales en radar por zona (puntuadas, no descartadas).
         radar_rows = self._conn.execute(
             """SELECT zone_id, COUNT(*) AS cnt
                FROM scored_properties
@@ -718,7 +879,6 @@ class Database:
         ).fetchall()
         radar_by_zone = {r["zone_id"]: r["cnt"] for r in radar_rows}
 
-        # Agrupar los puntos diarios por zona.
         points_by_zone: dict[str, list[dict]] = {}
         for r in rows:
             points_by_zone.setdefault(r["zone_id"], []).append(
@@ -751,19 +911,7 @@ class Database:
 
     @staticmethod
     def _compute_trend(data_points: list[dict], midpoint_date: str) -> str:
-        """Clasifica la tendencia comparando el volumen de la primera mitad de la
-        ventana con el de la segunda mitad.
-
-        El reparto se hace por FECHA (``midpoint_date``, YYYY-MM-DD), no por
-        índice de lista: los puntos con ``date < midpoint_date`` forman la
-        primera mitad y el resto la segunda. Así la clasificación refleja el
-        volumen temporal real aunque los días con datos estén repartidos de
-        forma irregular.
-
-        Devuelve ``'growing'`` si la segunda mitad acumula más propiedades
-        vistas, ``'declining'`` si menos, y ``'stable'`` si son iguales o no hay
-        datos suficientes para decidir.
-        """
+        """Clasifica la tendencia comparando primera vs segunda mitad de la ventana."""
         if len(data_points) < 2:
             return "stable"
         first_half = sum(
@@ -833,4 +981,4 @@ class Database:
 
     def close(self) -> None:
         self._conn.close()
-        logger.info("[db] Conexión cerrada")
+        logger.info("[db] Conexi├│n cerrada")

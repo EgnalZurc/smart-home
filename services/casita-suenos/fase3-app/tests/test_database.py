@@ -163,6 +163,76 @@ class TestDatabase:
         assert "zamora_meseta" in counts
         assert counts["zamora_meseta"] == 1
 
+    def test_count_radar_empty_by_default(self, db):
+        assert db.count_radar_properties(min_score=0.0) == 0
+
+    def test_count_radar_only_counts_scored_above_threshold(
+        self, db, sample_zone
+    ):
+        """count_radar_properties cuenta solo las que pasan el threshold.
+
+        Una propiedad sin score, o con score por debajo del umbral, no debe
+        contarse aunque esté en la tabla de propiedades (que es lo que hace
+        count_properties).
+        """
+        # Propiedad con score alto -> en radar
+        prop_hi = _make_property(portal_id="hi", price=150_000)
+        db.upsert_property(prop_hi)
+        db.upsert_score(_make_scored(prop_hi, sample_zone))
+
+        # Propiedad sin score -> monitorizada pero NO en radar
+        prop_unscored = _make_property(portal_id="unscored", price=200_000)
+        db.upsert_property(prop_unscored)
+
+        # count_properties cuenta ambas, count_radar solo la del radar
+        assert db.count_properties() == 2
+        assert db.count_radar_properties(min_score=0.0) == 1
+
+    def test_count_radar_respects_min_score(self, db, sample_property, sample_zone):
+        db.upsert_property(sample_property)
+        db.upsert_score(_make_scored(sample_property, sample_zone))
+
+        # Con umbral mayor que el score no se cuenta
+        assert db.count_radar_properties(min_score=1_000.0) == 0
+        # Con umbral menor sí
+        assert db.count_radar_properties(min_score=0.0) == 1
+
+    def test_count_radar_excludes_dismissed(self, db, sample_property, sample_zone):
+        db.upsert_property(sample_property)
+        db.upsert_score(_make_scored(sample_property, sample_zone))
+        assert db.count_radar_properties(min_score=0.0) == 1
+
+        db.dismiss(sample_property.unique_id)
+        assert db.count_radar_properties(min_score=0.0) == 0
+
+    def test_count_by_zone_radar_groups_only_radar(self, db, sample_zone):
+        """count_by_zone_radar agrupa solo propiedades en el radar."""
+        # Dos propiedades en la misma zona, una descartada
+        prop1 = _make_property(portal_id="z1", price=150_000)
+        prop2 = _make_property(portal_id="z2", price=200_000)
+        for p in (prop1, prop2):
+            db.upsert_property(p)
+            db.upsert_score(_make_scored(p, sample_zone))
+
+        counts = db.count_by_zone_radar(min_score=0.0)
+        assert counts == {"zamora_meseta": 2}
+
+        db.dismiss(prop1.unique_id)
+        counts = db.count_by_zone_radar(min_score=0.0)
+        assert counts == {"zamora_meseta": 1}
+
+    def test_count_by_zone_radar_ignores_unscored(self, db, sample_zone):
+        """Una propiedad sin score no aparece en el conteo por zona del radar."""
+        scored = _make_property(portal_id="scored", price=150_000)
+        db.upsert_property(scored)
+        db.upsert_score(_make_scored(scored, sample_zone))
+
+        unscored = _make_property(portal_id="noscore", price=200_000)
+        db.upsert_property(unscored)
+
+        counts = db.count_by_zone_radar(min_score=0.0)
+        assert counts == {"zamora_meseta": 1}
+
     def test_get_top_scored_empty(self, db):
         result = db.get_top_scored()
         assert result == []
@@ -170,6 +240,58 @@ class TestDatabase:
     def test_get_recent_price_drops_empty(self, db):
         result = db.get_recent_price_drops()
         assert result == []
+
+    def test_get_price_trend_no_history(self, db, sample_property):
+        """Sin historial de precios, todos los campos son None."""
+        db.upsert_property(sample_property)
+        trend = db.get_price_trend(sample_property.unique_id)
+        assert trend == {
+            "previous_price": None,
+            "price_change": None,
+            "price_change_pct": None,
+            "trend": None,
+        }
+
+    def test_get_price_trend_unknown_uid(self, db):
+        """Un uid que no existe devuelve None en todos los campos."""
+        trend = db.get_price_trend("portal:no_existe")
+        assert trend["previous_price"] is None
+        assert trend["trend"] is None
+
+    def test_get_price_trend_down(self, db, sample_property):
+        """Una bajada de precio produce trend='down' y price_change negativo."""
+        db.upsert_property(sample_property)  # 180_000
+        sample_property.price = 160_000
+        db.upsert_property(sample_property)
+        trend = db.get_price_trend(sample_property.unique_id)
+        assert trend["previous_price"] == 180_000
+        assert trend["price_change"] == -20_000
+        assert trend["price_change_pct"] == pytest.approx(-11.11, rel=0.01)
+        assert trend["trend"] == "down"
+
+    def test_get_price_trend_up(self, db, sample_property):
+        """Una subida de precio produce trend='up' y price_change positivo."""
+        db.upsert_property(sample_property)  # 180_000
+        sample_property.price = 200_000
+        db.upsert_property(sample_property)
+        trend = db.get_price_trend(sample_property.unique_id)
+        assert trend["previous_price"] == 180_000
+        assert trend["price_change"] == 20_000
+        assert trend["price_change_pct"] > 0
+        assert trend["trend"] == "up"
+
+    def test_get_price_trend_uses_latest_change(self, db, sample_property):
+        """Con varios cambios, se usa el más reciente."""
+        db.upsert_property(sample_property)  # 180_000
+        sample_property.price = 170_000
+        db.upsert_property(sample_property)
+        sample_property.price = 175_000
+        db.upsert_property(sample_property)
+        trend = db.get_price_trend(sample_property.unique_id)
+        # Último cambio: 170_000 -> 175_000
+        assert trend["previous_price"] == 170_000
+        assert trend["price_change"] == 5_000
+        assert trend["trend"] == "up"
 
     def test_close_does_not_raise(self, db):
         db.close()
@@ -365,6 +487,142 @@ class TestRadar:
 
         # Tables survived: a follow-up query still works.
         assert len(db.get_radar_properties(min_score=0.0)["items"]) == 1
+
+
+# ── Tests del análisis precio/m² vs media de zona ─────────────────────────────
+
+
+class TestPricePerM2Analysis:
+    """Tests de get_zone_avg_price_per_m2, get_price_per_m2_analysis y del
+    enriquecido del radar con los campos precio/m²."""
+
+    def _insert(self, db, prop, zone, score_total=120.0):
+        db.upsert_property(prop)
+        db.upsert_score(_make_scored(prop, zone, score_total))
+
+    # ── get_zone_avg_price_per_m2 ──────────────────────────────────────────
+
+    def test_zone_avg_none_when_no_properties(self, db):
+        assert db.get_zone_avg_price_per_m2("zamora_meseta") is None
+
+    def test_zone_avg_single_property(self, db, sample_zone):
+        # 200_000€ / 100 m² = 2000 €/m²
+        p = _make_property(portal_id="a", price=200_000, size_m2=100.0)
+        self._insert(db, p, sample_zone)
+        assert db.get_zone_avg_price_per_m2(sample_zone.id) == 2000.0
+
+    def test_zone_avg_averages_multiple_properties(self, db, sample_zone):
+        # 2000 €/m² y 3000 €/m² -> media 2500 €/m²
+        p1 = _make_property(portal_id="a", price=200_000, size_m2=100.0)
+        p2 = _make_property(portal_id="b", price=300_000, size_m2=100.0)
+        self._insert(db, p1, sample_zone)
+        self._insert(db, p2, sample_zone)
+        assert db.get_zone_avg_price_per_m2(sample_zone.id) == 2500.0
+
+    def test_zone_avg_ignores_properties_without_m2(self, db, sample_zone):
+        p1 = _make_property(portal_id="a", price=200_000, size_m2=100.0)
+        p2 = _make_property(portal_id="b", price=300_000, size_m2=None)
+        self._insert(db, p1, sample_zone)
+        self._insert(db, p2, sample_zone)
+        # Solo p1 cuenta -> 2000 €/m²
+        assert db.get_zone_avg_price_per_m2(sample_zone.id) == 2000.0
+
+    def test_zone_avg_excludes_dismissed(self, db, sample_zone):
+        p1 = _make_property(portal_id="a", price=200_000, size_m2=100.0)
+        p2 = _make_property(portal_id="b", price=400_000, size_m2=100.0)
+        self._insert(db, p1, sample_zone)
+        self._insert(db, p2, sample_zone)
+        db.dismiss(p2.unique_id)
+        # Solo p1 activa -> 2000 €/m² (p2 descartada no infla la media)
+        assert db.get_zone_avg_price_per_m2(sample_zone.id) == 2000.0
+
+    def test_zone_avg_scoped_by_zone(self, db, sample_zone):
+        p1 = _make_property(portal_id="a", price=200_000, size_m2=100.0)
+        p2 = _make_property(
+            portal_id="b", price=500_000, size_m2=100.0, zone_id="otra_zona"
+        )
+        self._insert(db, p1, sample_zone)
+        db.upsert_property(p2)  # p2 en otra zona
+        assert db.get_zone_avg_price_per_m2(sample_zone.id) == 2000.0
+
+    # ── get_price_per_m2_analysis ──────────────────────────────────────────
+
+    def test_analysis_unknown_uid_all_none(self, db):
+        result = db.get_price_per_m2_analysis("no-existe")
+        assert result == {
+            "price_per_m2": None,
+            "zone_avg_price_per_m2": None,
+            "below_zone_avg": None,
+            "pct_vs_zone_avg": None,
+        }
+
+    def test_analysis_property_without_m2(self, db, sample_zone):
+        p = _make_property(portal_id="a", price=200_000, size_m2=None)
+        self._insert(db, p, sample_zone)
+        result = db.get_price_per_m2_analysis(p.unique_id)
+        assert result["price_per_m2"] is None
+        assert result["below_zone_avg"] is None
+        assert result["pct_vs_zone_avg"] is None
+
+    def test_analysis_below_zone_average(self, db, sample_zone):
+        # cheap: 1500 €/m², otras dos a 2000 y 2500 -> media 2000 €/m²
+        cheap = _make_property(portal_id="cheap", price=150_000, size_m2=100.0)
+        mid = _make_property(portal_id="mid", price=200_000, size_m2=100.0)
+        exp = _make_property(portal_id="exp", price=250_000, size_m2=100.0)
+        for p in (cheap, mid, exp):
+            self._insert(db, p, sample_zone)
+        result = db.get_price_per_m2_analysis(cheap.unique_id)
+        assert result["price_per_m2"] == 1500.0
+        assert result["zone_avg_price_per_m2"] == 2000.0
+        assert result["below_zone_avg"] is True
+        # (1500 - 2000) / 2000 * 100 = -25.0 -> 25% más barato
+        assert result["pct_vs_zone_avg"] == -25.0
+
+    def test_analysis_above_zone_average(self, db, sample_zone):
+        cheap = _make_property(portal_id="cheap", price=150_000, size_m2=100.0)
+        mid = _make_property(portal_id="mid", price=200_000, size_m2=100.0)
+        exp = _make_property(portal_id="exp", price=250_000, size_m2=100.0)
+        for p in (cheap, mid, exp):
+            self._insert(db, p, sample_zone)
+        result = db.get_price_per_m2_analysis(exp.unique_id)
+        assert result["price_per_m2"] == 2500.0
+        assert result["zone_avg_price_per_m2"] == 2000.0
+        assert result["below_zone_avg"] is False
+        # (2500 - 2000) / 2000 * 100 = 25.0 -> 25% más caro
+        assert result["pct_vs_zone_avg"] == 25.0
+
+    # ── Enriquecido del radar ──────────────────────────────────────────────
+
+    def test_radar_includes_price_per_m2_fields(self, db, sample_zone):
+        cheap = _make_property(portal_id="cheap", price=150_000, size_m2=100.0)
+        exp = _make_property(portal_id="exp", price=250_000, size_m2=100.0)
+        for p in (cheap, exp):
+            self._insert(db, p, sample_zone)
+        items = db.get_radar_properties(min_score=0.0)["items"]
+        assert len(items) == 2
+        for item in items:
+            for field in (
+                "price_per_m2",
+                "zone_avg_price_per_m2",
+                "below_zone_avg",
+                "pct_vs_zone_avg",
+            ):
+                assert field in item, f"Campo '{field}' no encontrado en el radar"
+
+    def test_radar_price_per_m2_values_match_analysis(self, db, sample_zone):
+        cheap = _make_property(portal_id="cheap", price=150_000, size_m2=100.0)
+        exp = _make_property(portal_id="exp", price=250_000, size_m2=100.0)
+        for p in (cheap, exp):
+            self._insert(db, p, sample_zone)
+        items = {
+            i["uid"]: i for i in db.get_radar_properties(min_score=0.0)["items"]
+        }
+        cheap_item = items[cheap.unique_id]
+        # media (1500 + 2500) / 2 = 2000 €/m²
+        assert cheap_item["price_per_m2"] == 1500.0
+        assert cheap_item["zone_avg_price_per_m2"] == 2000.0
+        assert cheap_item["below_zone_avg"] is True
+        assert cheap_item["pct_vs_zone_avg"] == -25.0
 
 
 # ── Tests del resumen semanal ─────────────────────────────────────────────────
