@@ -19,9 +19,10 @@ Port: 8003
 
 import logging
 import time
+from collections import defaultdict
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -42,6 +43,32 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+
+_rate_limit: dict[str, list[float]] = defaultdict(list)
+MAX_REQUESTS_PER_MINUTE = 30  # Lower limit for computation-heavy service
+
+
+def _check_rate_limit(client_ip: str) -> bool:
+    """Check if client is within rate limit. Returns True if allowed."""
+    now = time.time()
+    _rate_limit[client_ip] = [t for t in _rate_limit[client_ip] if now - t < 60]
+    if len(_rate_limit[client_ip]) >= MAX_REQUESTS_PER_MINUTE:
+        return False
+    _rate_limit[client_ip].append(now)
+    return True
+
+
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP from request, respecting X-Forwarded-For."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+# ── FastAPI app ───────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="Vacaciones Service",
@@ -145,29 +172,41 @@ def get_vacaciones_config():
 
 
 @app.post("/api/vacaciones/config")
-def post_vacaciones_config(data: VacacionesConfigRequest):
+def post_vacaciones_config(request: Request, data: VacacionesConfigRequest):
     """Save vacaciones configuration."""
+    client_ip = _get_client_ip(request)
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
     nucleos = [n.model_dump() for n in data.nucleos]
     personas = [p.model_dump() for p in data.personas]
     return save_config(nucleos, personas)
 
 
 @app.post("/api/vacaciones/year")
-def add_vacaciones_year():
+def add_vacaciones_year(request: Request):
     """Add a new year (next after highest existing)."""
+    client_ip = _get_client_ip(request)
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
     return add_year()
 
 
 @app.post("/api/vacaciones/year/{year}")
-def post_vacaciones_year(year: int, data: VacacionesYearRequest):
+def post_vacaciones_year(year: int, request: Request, data: VacacionesYearRequest):
     """Save a year's planning."""
+    client_ip = _get_client_ip(request)
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
     comidas = [c.model_dump() for c in data.comidas]
     return save_year(year, comidas, data.notas)
 
 
 @app.delete("/api/vacaciones/year/{year}")
-def delete_vacaciones_year(year: int):
+def delete_vacaciones_year(year: int, request: Request):
     """Delete a year. Only allowed if >1 years and is highest year."""
+    client_ip = _get_client_ip(request)
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
     result = delete_year(year)
     if result.get("status") == "error":
         raise HTTPException(status_code=400, detail=result.get("message"))
