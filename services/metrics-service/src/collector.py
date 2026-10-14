@@ -53,6 +53,13 @@ def _make_notifier():
     ``LIBS_PATH``), so ``notifications`` is a top-level package. Under pytest the
     repo root is on ``sys.path`` instead, so the package is ``libs.notifications``.
     Try both so the engine is wired identically in prod and in tests.
+
+    Returns:
+        TelegramNotifier: Configured notifier instance (may be disabled if env
+            vars are missing).
+
+    Raises:
+        ImportError: If neither import path resolves (broken installation).
     """
     try:
         from notifications import TelegramNotifier
@@ -65,7 +72,22 @@ def _make_notifier():
 # Host sampler (ported from dashboard/src/system/stats.py)
 # ═══════════════════════════════════════════════════════════════════════════════
 def _read_cpu_times(path: str | None = None) -> tuple[float, float]:
-    """Read (total, idle) CPU jiffies from /proc/stat."""
+    """Read CPU jiffies from /proc/stat for CPU usage calculation.
+
+    Parses the first line of /proc/stat to extract total and idle CPU time.
+    The idle time includes both idle and iowait jiffies.
+
+    Args:
+        path: Override path to /proc/stat (for testing with fixture files).
+            Defaults to PROC_STAT from config.
+
+    Returns:
+        A tuple of (total_jiffies, idle_jiffies) as floats.
+
+    Raises:
+        FileNotFoundError: If the stat file does not exist.
+        ValueError: If the file format is unexpected.
+    """
     path = path if path is not None else PROC_STAT
     with open(path) as fh:
         line = fh.readline()
@@ -76,7 +98,22 @@ def _read_cpu_times(path: str | None = None) -> tuple[float, float]:
 
 
 def _read_meminfo(path: str | None = None) -> dict[str, int]:
-    """Parse /proc/meminfo into a {key: kB} dict."""
+    """Parse /proc/meminfo into a dictionary of memory values.
+
+    Reads all entries from /proc/meminfo and returns them as a dict mapping
+    field names (without colons) to their values in kilobytes.
+
+    Args:
+        path: Override path to /proc/meminfo (for testing with fixture files).
+            Defaults to PROC_MEMINFO from config.
+
+    Returns:
+        Dict mapping field names to values in kB, e.g.
+        {"MemTotal": 8167952, "MemFree": 234567, ...}.
+
+    Raises:
+        FileNotFoundError: If the meminfo file does not exist.
+    """
     path = path if path is not None else PROC_MEMINFO
     mem: dict[str, int] = {}
     with open(path) as fh:
@@ -88,7 +125,24 @@ def _read_meminfo(path: str | None = None) -> dict[str, int]:
 
 
 def sample_memory(path: str | None = None) -> list[Sample]:
-    """Return RAM/swap samples from /proc/meminfo."""
+    """Collect RAM and swap usage metrics from /proc/meminfo.
+
+    Calculates used memory following the same algorithm as ``free -m``:
+    used = total - free - buffers - cached (excluding shared memory).
+
+    Args:
+        path: Override path to /proc/meminfo (for testing with fixture files).
+            Defaults to PROC_MEMINFO from config.
+
+    Returns:
+        List of Sample tuples:
+        - ("host.ram.used_mb", "", <float>): Used RAM in megabytes
+        - ("host.ram.percent", "", <float>): RAM usage as percentage
+        - ("host.swap.used_mb", "", <float>): Used swap in megabytes
+
+    Raises:
+        FileNotFoundError: If /proc/meminfo is not accessible.
+    """
     mem = _read_meminfo(path)
     total_kb = mem.get("MemTotal", 0)
     free_kb = mem.get("MemFree", 0)
@@ -112,7 +166,28 @@ def sample_memory(path: str | None = None) -> list[Sample]:
 
 
 def sample_cpu(path: str | None = None, window_s: float | None = None) -> list[Sample]:
-    """Return a host CPU% sample using a short jiffy-delta window."""
+    """Collect host CPU usage percentage using a jiffy-delta measurement.
+
+    Measures CPU usage by reading /proc/stat twice with a short sleep window
+    between reads, then calculating the percentage of non-idle time.
+
+    Note:
+        This function blocks for ``window_s`` seconds (default 0.1s from config).
+        In async contexts, run via ``asyncio.to_thread()``.
+
+    Args:
+        path: Override path to /proc/stat (for testing with fixture files).
+            Defaults to PROC_STAT from config.
+        window_s: Measurement window duration in seconds.
+            Defaults to CPU_SAMPLE_WINDOW_S from config.
+
+    Returns:
+        List containing a single Sample tuple:
+        - ("host.cpu.percent", "", <float>): CPU usage as percentage (0-100)
+
+    Raises:
+        FileNotFoundError: If /proc/stat is not accessible.
+    """
     window_s = window_s if window_s is not None else CPU_SAMPLE_WINDOW_S
     t1, i1 = _read_cpu_times(path)
     time.sleep(window_s)
@@ -124,7 +199,22 @@ def sample_cpu(path: str | None = None, window_s: float | None = None) -> list[S
 
 
 def sample_disk(path: str | None = None) -> list[Sample]:
-    """Return host disk-usage% from statvfs."""
+    """Collect host disk usage percentage using statvfs.
+
+    Reads filesystem statistics for the configured disk path and calculates
+    the percentage of used space (total - available for unprivileged users).
+
+    Args:
+        path: Filesystem path to measure. Defaults to DISK_PATH from config
+            (typically "/" on the Pi).
+
+    Returns:
+        List containing a single Sample tuple:
+        - ("host.disk.percent", "", <float>): Disk usage as percentage (0-100)
+
+    Raises:
+        OSError: If the path is not accessible or not a mounted filesystem.
+    """
     path = path if path is not None else DISK_PATH
     sv = os.statvfs(path)
     total_b = sv.f_frsize * sv.f_blocks
@@ -135,7 +225,24 @@ def sample_disk(path: str | None = None) -> list[Sample]:
 
 
 def sample_temp(path: str | None = None) -> list[Sample]:
-    """Return SoC temperature in °C from the thermal zone."""
+    """Collect SoC temperature from the thermal zone file.
+
+    Reads the CPU/SoC temperature from the Linux thermal subsystem. The raw
+    value is in millidegrees Celsius and is converted to degrees.
+
+    Args:
+        path: Override path to thermal zone file (for testing).
+            Defaults to THERMAL_ZONE from config
+            (typically /sys/class/thermal/thermal_zone0/temp).
+
+    Returns:
+        List containing a single Sample tuple:
+        - ("host.temp.celsius", "", <float>): Temperature in degrees Celsius
+
+    Raises:
+        FileNotFoundError: If the thermal zone file does not exist.
+        ValueError: If the file content is not a valid integer.
+    """
     path = path if path is not None else THERMAL_ZONE
     with open(path) as fh:
         raw = int(fh.read().strip())
@@ -143,7 +250,22 @@ def sample_temp(path: str | None = None) -> list[Sample]:
 
 
 def sample_load(path: str | None = None) -> list[Sample]:
-    """Return the 1-minute load average from /proc/loadavg."""
+    """Collect the 1-minute load average from /proc/loadavg.
+
+    Reads the system load average, which represents the average number of
+    processes in the run queue over the last minute.
+
+    Args:
+        path: Override path to /proc/loadavg (for testing with fixture files).
+            Defaults to PROC_LOADAVG from config.
+
+    Returns:
+        List containing a single Sample tuple:
+        - ("host.load.1m", "", <float>): 1-minute load average
+
+    Raises:
+        FileNotFoundError: If /proc/loadavg is not accessible.
+    """
     path = path if path is not None else PROC_LOADAVG
     with open(path) as fh:
         first = fh.read().split()[0]
@@ -151,7 +273,23 @@ def sample_load(path: str | None = None) -> list[Sample]:
 
 
 def sample_host(*, with_cpu: bool = True) -> list[Sample]:
-    """Collect all host metrics, tolerating individual sampler failures."""
+    """Collect all host-level metrics, tolerating individual sampler failures.
+
+    Aggregates samples from memory, disk, temperature, and load samplers.
+    If any individual sampler fails, its error is logged and the remaining
+    samplers continue to execute.
+
+    Args:
+        with_cpu: If True, include CPU sampling (which blocks for ~0.1s).
+            Set to False for faster collection when CPU data is not needed.
+
+    Returns:
+        List of Sample tuples from all successful samplers. May be empty if
+        all samplers fail.
+
+    Side Effects:
+        Logs warnings for any sampler that raises an exception.
+    """
     samples: list[Sample] = []
     samplers = [sample_memory, sample_disk, sample_temp, sample_load]
     if with_cpu:
@@ -160,7 +298,7 @@ def sample_host(*, with_cpu: bool = True) -> list[Sample]:
         try:
             samples.extend(fn())
         except Exception as exc:
-            logger.warning("host sampler %s failed: %s", fn.__name__, exc)
+            logger.warning("[HostSampler] %s collection failed: %s", fn.__name__, exc)
     return samples
 
 
@@ -168,7 +306,19 @@ def sample_host(*, with_cpu: bool = True) -> list[Sample]:
 # Docker sampler (pull from docker-socket-proxy)
 # ═══════════════════════════════════════════════════════════════════════════════
 def _cpu_percent_from_stats(stats: dict) -> float:
-    """Compute container CPU% from a Docker stats payload (non-streaming)."""
+    """Compute container CPU percentage from a Docker stats payload.
+
+    Uses the same algorithm as ``docker stats`` to calculate CPU usage from
+    the delta between current and previous CPU readings in the stats JSON.
+
+    Args:
+        stats: Docker stats JSON payload (from /containers/{id}/stats with
+            stream=false). Must contain cpu_stats and precpu_stats keys.
+
+    Returns:
+        CPU usage as a percentage (0-100+, may exceed 100 on multi-core).
+        Returns 0.0 if the payload is malformed or deltas are zero.
+    """
     try:
         cpu = stats["cpu_stats"]
         pre = stats["precpu_stats"]
@@ -185,7 +335,21 @@ def _cpu_percent_from_stats(stats: dict) -> float:
 
 
 def parse_container_stats(name: str, stats: dict) -> list[Sample]:
-    """Translate one container's Docker stats payload into samples."""
+    """Translate a container's Docker stats payload into metric samples.
+
+    Extracts memory usage (excluding page cache, like ``docker stats``) and
+    CPU percentage from the Docker stats JSON.
+
+    Args:
+        name: Container name (used as the sample label).
+        stats: Docker stats JSON payload from /containers/{id}/stats.
+
+    Returns:
+        List of Sample tuples:
+        - ("container.mem.used_mb", <name>, <float>): Memory usage in MB
+        - ("container.mem.percent", <name>, <float>): Memory as % of limit
+        - ("container.cpu.percent", <name>, <float>): CPU usage percentage
+    """
     samples: list[Sample] = []
     mem = stats.get("memory_stats", {}) or {}
     usage = mem.get("usage")
@@ -205,10 +369,22 @@ def parse_container_stats(name: str, stats: dict) -> list[Sample]:
 async def sample_docker(
     client: httpx.AsyncClient, proxy_url: str = DOCKER_PROXY_URL
 ) -> list[Sample]:
-    """Pull per-container stats from docker-socket-proxy.
+    """Pull per-container metrics from docker-socket-proxy.
 
-    Discovers running containers dynamically (``GET /containers/json``) then
-    fetches a one-shot stats snapshot for each (``?stream=false``).
+    Discovers running containers dynamically via ``GET /containers/json``,
+    then fetches a one-shot stats snapshot for each container.
+
+    Args:
+        client: httpx.AsyncClient instance for making HTTP requests.
+        proxy_url: Base URL of the docker-socket-proxy service.
+            Defaults to DOCKER_PROXY_URL from config.
+
+    Returns:
+        List of Sample tuples for all containers (memory and CPU metrics).
+        Returns empty list if the container list cannot be retrieved.
+
+    Side Effects:
+        Logs warnings if listing containers or fetching individual stats fails.
     """
     samples: list[Sample] = []
     try:
@@ -216,7 +392,7 @@ async def sample_docker(
         resp.raise_for_status()
         containers = resp.json()
     except (httpx.HTTPError, ValueError) as exc:
-        logger.warning("docker sampler: list failed: %s", exc)
+        logger.warning("[DockerSampler] Container list failed: %s", exc)
         return samples
 
     for c in containers:
@@ -230,7 +406,9 @@ async def sample_docker(
             r.raise_for_status()
             samples.extend(parse_container_stats(name, r.json()))
         except (httpx.HTTPError, ValueError) as exc:
-            logger.warning("docker sampler: stats for %s failed: %s", name, exc)
+            logger.warning(
+                "[DockerSampler] Stats collection failed for '%s': %s", name, exc
+            )
     return samples
 
 
@@ -238,10 +416,23 @@ async def sample_docker(
 # Health sampler (pull from backend /api/health/all)
 # ═══════════════════════════════════════════════════════════════════════════════
 def parse_health(payload: dict) -> list[Sample]:
-    """Translate /api/health/all into latency + online samples.
+    """Translate /api/health/all response into latency and online samples.
 
-    CRITICAL (design §4/§7.2): samples whose health entry has ``cached == true``
+    Converts the backend health snapshot into time-series samples for each
+    monitored service. Cached entries are excluded from latency samples to
+    ensure trends reflect real request times.
+
+    CRITICAL (design §4/§7.2): Samples whose health entry has ``cached == true``
     are discarded so latency trends reflect real requests only, not cache echoes.
+
+    Args:
+        payload: JSON response from /api/health/all, mapping service keys to
+            health entries like {"online": true, "latency_ms": 42, "cached": false}.
+
+    Returns:
+        List of Sample tuples:
+        - ("service.<key>.online", <key>, 1.0|0.0): Service availability
+        - ("service.<key>.latency_ms", <key>, <float>): Response time (if not cached)
     """
     samples: list[Sample] = []
     for key, entry in payload.items():
@@ -261,13 +452,28 @@ def parse_health(payload: dict) -> list[Sample]:
 async def sample_health(
     client: httpx.AsyncClient, url: str = BACKEND_HEALTH_URL
 ) -> list[Sample]:
-    """Pull the backend health snapshot and parse it into samples."""
+    """Pull the backend health snapshot and convert to metric samples.
+
+    Fetches the aggregated health status from the dashboard backend and
+    transforms it into time-series samples for storage and alerting.
+
+    Args:
+        client: httpx.AsyncClient instance for making HTTP requests.
+        url: Health endpoint URL. Defaults to BACKEND_HEALTH_URL from config.
+
+    Returns:
+        List of Sample tuples for service availability and latency.
+        Returns empty list if the health endpoint is unreachable.
+
+    Side Effects:
+        Logs a warning if the health endpoint request fails.
+    """
     try:
         resp = await client.get(url)
         resp.raise_for_status()
         return parse_health(resp.json())
     except (httpx.HTTPError, ValueError) as exc:
-        logger.warning("health sampler failed: %s", exc)
+        logger.warning("[HealthSampler] Health snapshot fetch failed: %s", exc)
         return []
 
 
@@ -275,7 +481,20 @@ async def sample_health(
 # Collector loop
 # ═══════════════════════════════════════════════════════════════════════════════
 class Collector:
-    """Owns the ring buffer, SQLite store and the periodic asyncio tasks."""
+    """Orchestrates metric collection, storage, and background processing.
+
+    Owns the ring buffer (tier-1 hi-res storage), SQLite store (tier-2 rollups),
+    and the alert engine. Manages three background asyncio tasks:
+    - Collection loop: samples host/docker/health every COLLECT_INTERVAL_S
+    - Rollup loop: aggregates ring buffer into SQLite every ROLLUP_INTERVAL_S
+    - Prune loop: removes old data every PRUNE_INTERVAL_S
+
+    Attributes:
+        ring: RingBuffer for high-resolution recent samples.
+        store: SqliteStore for rolled-up historical data.
+        alert_engine: AlertEngine for threshold evaluation and notifications.
+        last_tick_ts: Monotonic timestamp of the last successful tick.
+    """
 
     def __init__(
         self,
@@ -283,6 +502,14 @@ class Collector:
         store: SqliteStore | None = None,
         alert_engine: AlertEngine | None = None,
     ) -> None:
+        """Initialize the collector with optional dependency injection.
+
+        Args:
+            ring: RingBuffer instance. Created with defaults if not provided.
+            store: SqliteStore instance. Created with defaults if not provided.
+            alert_engine: AlertEngine instance. Created with store's DB path
+                if not provided.
+        """
         self.ring = ring if ring is not None else RingBuffer()
         self.store = store if store is not None else SqliteStore()
         # Alert engine shares the ring buffer (reads hi-res samples) and its own
@@ -300,7 +527,21 @@ class Collector:
 
     # ── Single tick ───────────────────────────────────────────────────────────
     async def tick(self) -> list[Sample]:
-        """Run one collection cycle and append all samples to the ring buffer."""
+        """Execute one collection cycle and store all samples.
+
+        Collects host metrics (in a thread to avoid blocking), Docker stats,
+        and health data concurrently. All samples are added to the ring buffer
+        with the current timestamp.
+
+        Returns:
+            List of all Sample tuples collected in this tick.
+
+        Side Effects:
+            - Appends samples to the ring buffer
+            - Updates last_tick_ts
+            - Evaluates alert rules (if ALERTS_ENABLED)
+            - Logs exceptions from alert evaluation
+        """
         ts = int(time.time())
         samples: list[Sample] = []
 
@@ -325,16 +566,27 @@ class Collector:
             try:
                 self.alert_engine.evaluate_tick(now=ts)
             except Exception:
-                logger.exception("alert evaluation failed")
+                logger.exception("[Collector] Alert evaluation failed")
 
         return samples
 
     # ── Rollup ──────────────────────────────────────────────────────────────────
     def rollup(self, now: int | None = None) -> int:
-        """Average the last completed rollup window into SQLite.
+        """Aggregate the last completed window from ring buffer into SQLite.
 
-        Returns the number of rows written. Idempotent per bucket: calling it
-        twice for the same window re-writes (INSERT OR REPLACE) the same rows.
+        Computes average and maximum values for each metric series in the
+        previous ROLLUP_INTERVAL_S window and writes them to the SQLite store.
+
+        Args:
+            now: Unix timestamp to use as "current time". Defaults to time.time().
+                Useful for testing with controlled timestamps.
+
+        Returns:
+            Number of rows written to SQLite.
+
+        Note:
+            Idempotent per bucket: calling twice for the same window re-writes
+            (INSERT OR REPLACE) the same rows.
         """
         now = int(time.time()) if now is None else now
         bucket = (now // ROLLUP_INTERVAL_S) * ROLLUP_INTERVAL_S
@@ -350,38 +602,52 @@ class Collector:
 
     # ── Background loops ──────────────────────────────────────────────────────
     async def _collect_loop(self) -> None:
+        """Background task: run tick() every COLLECT_INTERVAL_S."""
         while True:
             try:
                 await self.tick()
             except Exception:
-                logger.exception("collector tick failed")
+                logger.exception("[Collector] Tick execution failed")
             await asyncio.sleep(COLLECT_INTERVAL_S)
 
     async def _rollup_loop(self) -> None:
+        """Background task: run rollup() every ROLLUP_INTERVAL_S."""
         while True:
             await asyncio.sleep(ROLLUP_INTERVAL_S)
             try:
                 self.rollup()
             except Exception:
-                logger.exception("rollup failed")
+                logger.exception("[Collector] Rollup execution failed")
 
     async def _prune_loop(self) -> None:
+        """Background task: prune old data every PRUNE_INTERVAL_S."""
         while True:
             await asyncio.sleep(PRUNE_INTERVAL_S)
             try:
                 await asyncio.to_thread(self.store.prune)
             except Exception:
-                logger.exception("prune failed")
+                logger.exception("[Collector] Metrics prune failed")
             try:
                 await asyncio.to_thread(
                     self.alert_engine.store.prune_history,
                     ALERT_HISTORY_RETENTION_DAYS,
                 )
             except Exception:
-                logger.exception("alert history prune failed")
+                logger.exception("[Collector] Alert history prune failed")
 
     async def start(self) -> None:
-        """Open the HTTP client and spawn the background tasks."""
+        """Initialize the HTTP client and spawn background tasks.
+
+        Opens the shared httpx client for Docker/health requests and starts
+        the collection, rollup, and prune background tasks.
+
+        Side Effects:
+            - Creates self._client
+            - Initializes Telegram notifier (if ALERTS_ENABLED)
+            - Loads persisted alert state
+            - Spawns three asyncio tasks stored in self._tasks
+            - Logs startup message
+        """
         self._client = httpx.AsyncClient(timeout=HTTP_TIMEOUT_S)
         # Wire the Telegram notifier from the live environment and rehydrate the
         # active-alert set so a restart does not re-spam already-firing alerts.
@@ -391,25 +657,34 @@ class Collector:
                 self.alert_engine.notifier = notifier
                 if not notifier.enabled:
                     logger.warning(
-                        "Alerts enabled but Telegram notifier is unconfigured "
-                        "(no TELEGRAM_BOT_TOKEN/CHAT_IDS) — alerts will fire and "
-                        "persist but no message will be sent"
+                        "[Collector] Alerts enabled but Telegram notifier is "
+                        "unconfigured (no TELEGRAM_BOT_TOKEN/CHAT_IDS) — alerts "
+                        "will fire and persist but no message will be sent"
                     )
             except Exception:
-                logger.exception("failed to initialise Telegram notifier")
+                logger.exception("[Collector] Telegram notifier initialization failed")
             try:
                 self.alert_engine.load_state()
             except Exception:
-                logger.exception("failed to load persisted alert state")
+                logger.exception("[Collector] Alert state load failed")
         self._tasks = [
             asyncio.create_task(self._collect_loop()),
             asyncio.create_task(self._rollup_loop()),
             asyncio.create_task(self._prune_loop()),
         ]
-        logger.info("Collector started (interval=%ds)", COLLECT_INTERVAL_S)
+        logger.info("[Collector] Started (interval=%ds)", COLLECT_INTERVAL_S)
 
     async def stop(self) -> None:
-        """Cancel background tasks and close the HTTP client."""
+        """Cancel background tasks and close the HTTP client.
+
+        Gracefully shuts down all background tasks and releases the HTTP
+        client resources.
+
+        Side Effects:
+            - Cancels all tasks in self._tasks
+            - Closes self._client
+            - Logs shutdown message
+        """
         for task in self._tasks:
             task.cancel()
         for task in self._tasks:
@@ -421,11 +696,18 @@ class Collector:
         if self._client is not None:
             await self._client.aclose()
             self._client = None
-        logger.info("Collector stopped")
+        logger.info("[Collector] Stopped")
 
     # ── Diagnostics ─────────────────────────────────────────────────────────────
     def last_tick_age_s(self) -> float | None:
-        """Seconds since the last successful tick, or None if never ticked."""
+        """Return seconds since the last successful tick.
+
+        Useful for health checks to detect stalled collection.
+
+        Returns:
+            Seconds since last tick (rounded to 1 decimal), or None if the
+            collector has never completed a tick.
+        """
         if self.last_tick_ts is None:
             return None
         return round(time.monotonic() - self.last_tick_ts, 1)

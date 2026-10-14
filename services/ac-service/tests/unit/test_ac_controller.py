@@ -4,6 +4,7 @@ Tests the main controller that orchestrates the state machine,
 reads sensors, and applies outputs via MELCloud.
 """
 
+import threading
 import time
 from unittest.mock import MagicMock, patch
 
@@ -888,3 +889,198 @@ class TestACControllerTrackEnergy:
         # 2.5 kW * 1 hour = 2.5 kWh
         assert controller._energy_state["kwh_session"] == pytest.approx(2.5, rel=0.01)
         assert controller._energy_state["last_state"] == "off"
+
+
+
+
+class TestACControllerMelcloudLock:
+    """Tests for MELCloud API lock (concurrent access serialization)."""
+
+    def test_melcloud_lock_exists(self):
+        """Should have a dedicated lock for MELCloud operations."""
+        mock_mqtt = MagicMock()
+        mock_melcloud = MagicMock()
+        config = ControlConfig()
+
+        controller = ACController(mock_mqtt, mock_melcloud, config)
+
+        assert hasattr(controller, "_melcloud_lock")
+        assert isinstance(controller._melcloud_lock, type(threading.Lock()))
+
+    def test_apply_outputs_uses_melcloud_lock(self):
+        """Should acquire lock when calling MELCloud API."""
+        mock_mqtt = MagicMock()
+        mock_melcloud = MagicMock()
+        mock_melcloud.set_temperature.return_value = True
+        config = ControlConfig(device_id=123)
+
+        controller = ACController(mock_mqtt, mock_melcloud, config)
+        controller._last_outputs = None
+
+        # Track lock acquisition
+        lock_acquired = []
+        original_lock = controller._melcloud_lock
+
+        class TrackingLock:
+            def __enter__(self_inner):
+                lock_acquired.append(True)
+                return original_lock.__enter__()
+
+            def __exit__(self_inner, *args):
+                return original_lock.__exit__(*args)
+
+        controller._melcloud_lock = TrackingLock()
+
+        outputs = StateMachineOutputs(
+            state=ControllerState.COOLING_MAX,
+            power=True,
+            mode="cool",
+            setpoint=19.0,
+            fan_speed=3,
+            sensor_alert=False,
+            melcloud_error=False,
+        )
+
+        controller._apply_outputs(outputs)
+
+        assert len(lock_acquired) == 1
+        mock_melcloud.set_temperature.assert_called_once()
+
+    def test_concurrent_calls_are_serialized(self):
+        """Should serialize concurrent MELCloud API calls."""
+        mock_mqtt = MagicMock()
+        mock_melcloud = MagicMock()
+        config = ControlConfig(device_id=123)
+
+        controller = ACController(mock_mqtt, mock_melcloud, config)
+
+        # Track order of operations
+        call_order = []
+        call_lock = threading.Lock()
+
+        def slow_set_temperature(*args, **kwargs):
+            with call_lock:
+                call_order.append(f"start_{threading.current_thread().name}")
+            time.sleep(0.1)  # Simulate slow API call
+            with call_lock:
+                call_order.append(f"end_{threading.current_thread().name}")
+            return True
+
+        mock_melcloud.set_temperature.side_effect = slow_set_temperature
+
+        outputs1 = StateMachineOutputs(
+            state=ControllerState.COOLING_MAX,
+            power=True,
+            mode="cool",
+            setpoint=19.0,
+            fan_speed=3,
+            sensor_alert=False,
+            melcloud_error=False,
+        )
+        outputs2 = StateMachineOutputs(
+            state=ControllerState.MODULATING,
+            power=True,
+            mode="cool",
+            setpoint=22.0,
+            fan_speed=0,
+            sensor_alert=False,
+            melcloud_error=False,
+        )
+
+        # Run two concurrent calls
+        t1 = threading.Thread(
+            target=controller._apply_outputs, args=(outputs1,), name="T1"
+        )
+        t2 = threading.Thread(
+            target=controller._apply_outputs, args=(outputs2,), name="T2"
+        )
+
+        t1.start()
+        time.sleep(0.01)  # Give T1 a head start
+        t2.start()
+
+        t1.join()
+        t2.join()
+
+        # With lock, calls should be serialized: start_T1, end_T1, start_T2, end_T2
+        # Without lock, we'd see interleaving: start_T1, start_T2, ...
+        assert len(call_order) == 4
+
+        # Verify serialization: each "start" should be followed by its "end"
+        # before the next "start"
+        t1_start_idx = call_order.index("start_T1")
+        t1_end_idx = call_order.index("end_T1")
+        t2_start_idx = call_order.index("start_T2")
+        t2_end_idx = call_order.index("end_T2")
+
+        # T1 should complete before T2 starts (or vice versa)
+        assert (t1_end_idx < t2_start_idx) or (t2_end_idx < t1_start_idx)
+
+    def test_lock_released_on_error(self):
+        """Should release lock even when MELCloud call fails."""
+        mock_mqtt = MagicMock()
+        mock_melcloud = MagicMock()
+        mock_melcloud.set_temperature.side_effect = Exception("API Error")
+        config = ControlConfig(device_id=123)
+
+        controller = ACController(mock_mqtt, mock_melcloud, config)
+        controller._last_outputs = None
+
+        outputs = StateMachineOutputs(
+            state=ControllerState.COOLING_MAX,
+            power=True,
+            mode="cool",
+            setpoint=19.0,
+            fan_speed=3,
+            sensor_alert=False,
+            melcloud_error=False,
+        )
+
+        # Call should raise, but lock should be released
+        with pytest.raises(Exception, match="API Error"):
+            controller._apply_outputs(outputs)
+
+        # Verify lock is not held (we can acquire it)
+        acquired = controller._melcloud_lock.acquire(blocking=False)
+        assert acquired, "Lock should be released after exception"
+        controller._melcloud_lock.release()
+
+    def test_lock_not_acquired_when_no_update_needed(self):
+        """Should not acquire lock when no MELCloud update is needed."""
+        mock_mqtt = MagicMock()
+        mock_melcloud = MagicMock()
+        config = ControlConfig()
+
+        controller = ACController(mock_mqtt, mock_melcloud, config)
+
+        # Set up existing outputs so no update is needed
+        outputs = StateMachineOutputs(
+            state=ControllerState.MODULATING,
+            power=True,
+            mode="cool",
+            setpoint=22.0,
+            fan_speed=0,
+            sensor_alert=False,
+            melcloud_error=False,
+        )
+        controller._last_outputs = outputs
+
+        # Track lock acquisition
+        lock_acquired = []
+
+        class TrackingLock:
+            def __enter__(self_inner):
+                lock_acquired.append(True)
+                return None
+
+            def __exit__(self_inner, *args):
+                pass
+
+        controller._melcloud_lock = TrackingLock()
+
+        # Apply same outputs (no change)
+        controller._apply_outputs(outputs)
+
+        # Lock should not be acquired since no update was needed
+        assert len(lock_acquired) == 0
+        mock_melcloud.set_temperature.assert_not_called()

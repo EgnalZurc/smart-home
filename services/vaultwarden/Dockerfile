@@ -21,8 +21,9 @@ ENV ROCKET_PROFILE=release
 ENV ROCKET_ADDRESS=0.0.0.0
 ENV ROCKET_PORT=80
 
-# Health check
-HEALTHCHECK --interval=60s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -sf http://localhost:80/passwords/ || exit 1
+# Health check - verifies API is responding, not just port open
+# /passwords/alive returns a JSON timestamp when the service is fully ready
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -sf http://localhost:80/passwords/alive || exit 1
 
 EXPOSE 80 3012
