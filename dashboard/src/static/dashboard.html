@@ -2290,6 +2290,127 @@ async function onDarkModeToggle(checked) {
     } catch {}
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Widget configuration (dashboard app-card layout: visibility + order)
+// ═══════════════════════════════════════════════════════════════════════════
+// Persisted per-user via /api/user/widget-config. We cache the layout in
+// localStorage so the correct order/visibility paints immediately on load even
+// before (or without) the server responding, then reconcile with the stored
+// config once the API answers. Toggling or reordering writes through to the
+// server so the layout follows the user across devices. localStorage is the
+// offline fallback: if the API is unreachable we keep working from the cache.
+
+const WIDGET_CFG_LS_KEY = 'widgetConfig';
+
+// In-memory layout: { [widget_id]: {visible, order, size, custom_settings} }.
+let widgetConfig = {};
+
+function readWidgetConfigCache() {
+    try {
+        const raw = localStorage.getItem(WIDGET_CFG_LS_KEY);
+        if (!raw) return {};
+        const list = JSON.parse(raw);
+        return widgetListToMap(Array.isArray(list) ? list : []);
+    } catch { return {}; }
+}
+
+function writeWidgetConfigCache() {
+    try {
+        localStorage.setItem(WIDGET_CFG_LS_KEY, JSON.stringify(widgetConfigToList()));
+    } catch {}
+}
+
+function widgetListToMap(list) {
+    const map = {};
+    list.forEach((w, idx) => {
+        if (!w || !w.widget_id) return;
+        map[w.widget_id] = {
+            visible: w.visible !== false,
+            order: Number.isInteger(w.order) ? w.order : idx,
+            size: w.size || 'md',
+            custom_settings: w.custom_settings || {},
+        };
+    });
+    return map;
+}
+
+function widgetConfigToList() {
+    return Object.entries(widgetConfig).map(([widget_id, c]) => ({
+        widget_id,
+        visible: c.visible !== false,
+        order: Number.isInteger(c.order) ? c.order : 0,
+        size: c.size || 'md',
+        custom_settings: c.custom_settings || {},
+    }));
+}
+
+// Reorder/filter APPS in place according to the current widgetConfig. Widgets
+// without a saved entry keep their catalogue order and stay visible, so a newly
+// added service shows up by default until the user hides it.
+function applyWidgetConfigToApps() {
+    if (!APPS.length) return;
+    APPS.forEach((app, idx) => {
+        const c = widgetConfig[app.key];
+        app._order = c && Number.isInteger(c.order) ? c.order : idx;
+        app._visible = !c || c.visible !== false;
+    });
+    APPS = APPS
+        .filter(a => a._visible)
+        .sort((a, b) => a._order - b._order);
+}
+
+async function loadWidgetConfig() {
+    // Fast path: seed from cache so the first render already reflects the layout.
+    widgetConfig = readWidgetConfigCache();
+    try {
+        const res = await fetch('/api/user/widget-config');
+        if (!res.ok) return;  // keep cached layout as fallback
+        const data = await res.json();
+        widgetConfig = widgetListToMap(data.widgets || []);
+        writeWidgetConfigCache();
+    } catch {
+        // Offline / server unreachable: keep the cached layout.
+    }
+}
+
+async function saveWidgetConfig() {
+    // Optimistically update the cache first so an offline save still persists
+    // locally and survives a reload.
+    writeWidgetConfigCache();
+    try {
+        await fetch('/api/user/widget-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ widgets: widgetConfigToList() }),
+        });
+    } catch {
+        // Offline: the localStorage cache above is the fallback; the next
+        // successful save will reconcile the server.
+    }
+}
+
+// Hide a widget and persist. Exposed for the UI (e.g. a per-card hide control).
+function setWidgetVisible(widgetId, visible) {
+    const existing = widgetConfig[widgetId] || { order: 0, size: 'md', custom_settings: {} };
+    widgetConfig[widgetId] = { ...existing, visible: !!visible };
+    saveWidgetConfig();
+    applyWidgetConfigToApps();
+    renderApps();
+    loadStatus();
+}
+
+// Persist a new widget order. ``orderedIds`` is the desired widget_id sequence.
+function reorderWidgets(orderedIds) {
+    orderedIds.forEach((id, idx) => {
+        const existing = widgetConfig[id] || { visible: true, size: 'md', custom_settings: {} };
+        widgetConfig[id] = { ...existing, order: idx };
+    });
+    saveWidgetConfig();
+    applyWidgetConfigToApps();
+    renderApps();
+    loadStatus();
+}
+
 // Load user
 async function loadUser() {
     try {
@@ -2321,6 +2442,7 @@ async function loadUser() {
         // External services
         externalServices = currentUserData.external_services || [];
         
+        applyWidgetConfigToApps();
         renderApps();
         loadStatus();
     } catch {}
@@ -2404,6 +2526,10 @@ function setupHealthStream() {
 (async function init() {
     applyLang();
     applyCachedTheme();
+    // Seed the widget layout (cache first, reconcile with the server) before
+    // loadUser() builds and renders APPS, so the first paint already honours
+    // the saved order/visibility instead of flashing the default layout.
+    await Promise.race([ loadWidgetConfig(), new Promise(r => setTimeout(r, 2000)) ]);
     try { await Promise.race([ loadUser(), new Promise(r => setTimeout(r, 5000)) ]); } catch {}
     loadThemePreference();
     const overlay = document.getElementById('loading-overlay');
