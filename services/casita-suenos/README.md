@@ -101,6 +101,7 @@ CASITA_DATA_DIR=/app/data
 | GET | `/status` | Property listings with status |
 | GET | `/api/casita/radar` | Properties above alert threshold |
 | GET | `/api/casita/alerts` | **High-scoring properties** for unified dashboard alerts (score ≥119 in last 24h) |
+| GET | `/api/casita/zone-trends` | **Per-zone time series** for dashboard charts (`?days=30`, clamped 1–365) |
 | GET | `/api/casita/dismissed` | Dismissed properties |
 | GET | `/api/casita/schedule` | Scraping schedule |
 | POST | `/api/casita/schedule` | Update schedule |
@@ -133,5 +134,46 @@ Ejemplo de respuesta:
   "online": true,
   "last_scheduler_tick": "2026-10-14T10:00:00",
   "scheduler_stale": false
+}
+```
+
+### Zone trends (`GET /api/casita/zone-trends`)
+
+Devuelve series temporales por zona pensadas para alimentar gráficas en el
+dashboard. Acepta el query param `days` (ventana en días, por defecto `30`,
+acotado al rango 1–365).
+
+Para cada zona con propiedades vistas por primera vez dentro de la ventana:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `zone_id` | string | Identificador de la zona |
+| `zone_name` | string | Nombre legible (desde `zones.ZONES`; fallback al `zone_id`) |
+| `data_points` | list | Un punto por día: `{date, count, avg_price, avg_score}` |
+| `total_properties` | int | Propiedades actuales en radar (puntuadas, no descartadas) |
+| `trend` | string | `growing` \| `stable` \| `declining` según el cambio de volumen entre la primera y la segunda mitad de la ventana |
+
+Cada entrada de `data_points` contiene la `date` (YYYY-MM-DD), el `count` de
+propiedades vistas por primera vez ese día, el `avg_price` y el `avg_score`
+medios de esas propiedades (`null` si no hay score). Los puntos van ordenados
+cronológicamente y las zonas por `zone_id`.
+
+Ejemplo de respuesta:
+
+```json
+{
+  "days": 30,
+  "zones": [
+    {
+      "zone_id": "zamora_meseta",
+      "zone_name": "Zamora meseta central (Arcenillas, Villaralbo, Morales del Vino)",
+      "data_points": [
+        {"date": "2026-10-10", "count": 2, "avg_price": 150000.0, "avg_score": 125.0},
+        {"date": "2026-10-13", "count": 1, "avg_price": 180000.0, "avg_score": 131.0}
+      ],
+      "total_properties": 3,
+      "trend": "declining"
+    }
+  ]
 }
 ```

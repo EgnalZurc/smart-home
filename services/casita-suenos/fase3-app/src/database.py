@@ -18,7 +18,7 @@ import contextlib
 import json
 import logging
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from models import PriceEvent, Property, ScoredProperty
@@ -657,6 +657,126 @@ class Database:
             "SELECT zone_id, COUNT(*) as cnt FROM properties GROUP BY zone_id"
         ).fetchall()
         return {r["zone_id"]: r["cnt"] for r in rows}
+
+    def get_zone_trends(self, days: int = 30) -> list[dict]:
+        """Devuelve series temporales por zona para gráficas del dashboard.
+
+        Para cada zona con propiedades en la ventana devuelve:
+          - ``zone_id``: identificador de la zona.
+          - ``zone_name``: nombre legible de la zona (desde ``zones.ZONES``;
+            fallback al ``zone_id`` si la zona ya no está en el catálogo).
+          - ``data_points``: lista de ``{date, count, avg_price, avg_score}``
+            por día (una entrada por día con propiedades vistas por primera vez
+            ese día dentro de la ventana), ordenada cronológicamente.
+          - ``total_properties``: propiedades actuales en radar (puntuadas y no
+            descartadas) de la zona.
+          - ``trend``: ``'growing' | 'stable' | 'declining'`` según el cambio de
+            ``count`` entre la primera y la segunda mitad de la ventana.
+
+        Args:
+            days: tamaño de la ventana en días (mínimo 1). Se toman las
+                propiedades cuyo ``first_seen`` cae en los últimos ``days`` días.
+
+        Nota: ``first_seen`` se almacena como texto ISO-8601, por lo que la
+        comparación lexicográfica con el corte ISO equivale a comparación
+        cronológica, y ``substr(first_seen, 1, 10)`` extrae la fecha (YYYY-MM-DD).
+        """
+        days = max(int(days), 1)
+        cutoff_iso = (datetime.now() - timedelta(days=days)).isoformat()
+        # Fecha de corte entre primera y segunda mitad de la ventana (YYYY-MM-DD).
+        midpoint_date = (datetime.now() - timedelta(days=days / 2)).isoformat()[:10]
+
+        # Nombres de zona desde el catálogo (import local para evitar ciclos).
+        try:
+            from zones import ZONES
+
+            zone_names = {zid: z.name for zid, z in ZONES.items()}
+        except Exception:  # pragma: no cover - catálogo siempre disponible en prod
+            zone_names = {}
+
+        # Puntos diarios por zona: count, precio medio y score medio.
+        rows = self._conn.execute(
+            """SELECT p.zone_id AS zone_id,
+                      substr(p.first_seen, 1, 10) AS day,
+                      COUNT(*) AS cnt,
+                      AVG(p.price) AS avg_price,
+                      AVG(s.score_total) AS avg_score
+               FROM properties p
+               LEFT JOIN scored_properties s ON s.property_uid = p.uid
+               WHERE p.first_seen >= ?
+               GROUP BY p.zone_id, day
+               ORDER BY p.zone_id, day""",
+            (cutoff_iso,),
+        ).fetchall()
+
+        # Propiedades actuales en radar por zona (puntuadas, no descartadas).
+        radar_rows = self._conn.execute(
+            """SELECT zone_id, COUNT(*) AS cnt
+               FROM scored_properties
+               WHERE dismissed = 0
+               GROUP BY zone_id""",
+        ).fetchall()
+        radar_by_zone = {r["zone_id"]: r["cnt"] for r in radar_rows}
+
+        # Agrupar los puntos diarios por zona.
+        points_by_zone: dict[str, list[dict]] = {}
+        for r in rows:
+            points_by_zone.setdefault(r["zone_id"], []).append(
+                {
+                    "date": r["day"],
+                    "count": r["cnt"],
+                    "avg_price": round(r["avg_price"], 2)
+                    if r["avg_price"] is not None
+                    else None,
+                    "avg_score": round(r["avg_score"], 2)
+                    if r["avg_score"] is not None
+                    else None,
+                }
+            )
+
+        result: list[dict] = []
+        for zone_id, data_points in points_by_zone.items():
+            result.append(
+                {
+                    "zone_id": zone_id,
+                    "zone_name": zone_names.get(zone_id, zone_id),
+                    "data_points": data_points,
+                    "total_properties": radar_by_zone.get(zone_id, 0),
+                    "trend": self._compute_trend(data_points, midpoint_date),
+                }
+            )
+
+        result.sort(key=lambda z: z["zone_id"])
+        return result
+
+    @staticmethod
+    def _compute_trend(data_points: list[dict], midpoint_date: str) -> str:
+        """Clasifica la tendencia comparando el volumen de la primera mitad de la
+        ventana con el de la segunda mitad.
+
+        El reparto se hace por FECHA (``midpoint_date``, YYYY-MM-DD), no por
+        índice de lista: los puntos con ``date < midpoint_date`` forman la
+        primera mitad y el resto la segunda. Así la clasificación refleja el
+        volumen temporal real aunque los días con datos estén repartidos de
+        forma irregular.
+
+        Devuelve ``'growing'`` si la segunda mitad acumula más propiedades
+        vistas, ``'declining'`` si menos, y ``'stable'`` si son iguales o no hay
+        datos suficientes para decidir.
+        """
+        if len(data_points) < 2:
+            return "stable"
+        first_half = sum(
+            dp["count"] for dp in data_points if dp["date"] < midpoint_date
+        )
+        second_half = sum(
+            dp["count"] for dp in data_points if dp["date"] >= midpoint_date
+        )
+        if second_half > first_half:
+            return "growing"
+        if second_half < first_half:
+            return "declining"
+        return "stable"
 
     # ------------------------------------------------------------------
     # Visto y comentarios

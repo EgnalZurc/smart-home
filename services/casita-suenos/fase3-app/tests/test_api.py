@@ -238,6 +238,84 @@ class TestAlertsEndpoint:
         assert response.status_code == 503
 
 
+class TestZoneTrendsEndpoint:
+    """Tests for /api/casita/zone-trends endpoint (dashboard charts)."""
+
+    def test_returns_zones_payload(self, client):
+        import main
+
+        main.app.state.db.get_zone_trends.return_value = [
+            {
+                "zone_id": "zamora_meseta",
+                "zone_name": "Zamora meseta central",
+                "data_points": [
+                    {
+                        "date": "2026-10-10",
+                        "count": 2,
+                        "avg_price": 150000.0,
+                        "avg_score": 125.0,
+                    }
+                ],
+                "total_properties": 2,
+                "trend": "growing",
+            }
+        ]
+        response = client.get(f"{API}/zone-trends")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["days"] == 30
+        assert len(data["zones"]) == 1
+        zone = data["zones"][0]
+        assert zone["zone_id"] == "zamora_meseta"
+        assert zone["trend"] == "growing"
+        assert zone["total_properties"] == 2
+        assert zone["data_points"][0]["avg_price"] == 150000.0
+
+    def test_empty_when_no_data(self, client):
+        import main
+
+        main.app.state.db.get_zone_trends.return_value = []
+        response = client.get(f"{API}/zone-trends")
+        assert response.status_code == 200
+        assert response.json() == {"days": 30, "zones": []}
+
+    def test_passes_days_param_to_db(self, client):
+        import main
+
+        main.app.state.db.get_zone_trends.return_value = []
+        response = client.get(f"{API}/zone-trends?days=7")
+        assert response.status_code == 200
+        assert response.json()["days"] == 7
+        main.app.state.db.get_zone_trends.assert_called_once_with(days=7)
+
+    def test_days_clamped_to_min_1(self, client):
+        import main
+
+        main.app.state.db.get_zone_trends.return_value = []
+        response = client.get(f"{API}/zone-trends?days=0")
+        assert response.status_code == 200
+        assert response.json()["days"] == 1
+        main.app.state.db.get_zone_trends.assert_called_once_with(days=1)
+
+    def test_days_clamped_to_max_365(self, client):
+        import main
+
+        main.app.state.db.get_zone_trends.return_value = []
+        response = client.get(f"{API}/zone-trends?days=9999")
+        assert response.status_code == 200
+        assert response.json()["days"] == 365
+        main.app.state.db.get_zone_trends.assert_called_once_with(days=365)
+
+    def test_503_when_db_not_ready(self):
+        import main
+
+        main.app.state.db = None
+        main.app.state.scheduler = None
+        client = TestClient(main.app)
+        response = client.get(f"{API}/zone-trends")
+        assert response.status_code == 503
+
+
 class TestRadarEndpoint:
     """Tests for /radar endpoint."""
 
