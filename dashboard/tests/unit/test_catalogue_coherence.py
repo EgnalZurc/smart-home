@@ -141,7 +141,6 @@ class TestCatalogueCoherence:
             "passwords": "/passwords",
             "babygifts": "/baby-gifts",
             "portfolio": "/portfolio",
-            "valheim": "/valheim",
         }
 
         missing = []

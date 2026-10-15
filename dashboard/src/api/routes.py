@@ -64,7 +64,7 @@ async def valheim_proxy_redirect():
         status_code=410,
         content={
             "message": "/api/valheim proxy has been removed",
-            "info": "Valheim control is available via the valheim-admin service at /valheim-admin/",
+            "info": "Valheim control is at /valheim-admin/",
         },
     )
 
