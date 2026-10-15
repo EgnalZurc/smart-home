@@ -501,6 +501,56 @@ smart-home/
 
 ---
 
+## Backup
+
+The project includes automated backup scripts for all SQLite databases used by the services.
+
+### What gets backed up
+
+- **Service databases**: auth, casita, portfolio, baby-gifts, metrics, energy, presence, calendar
+- **Vaultwarden**: database and attachments
+- All backups use `sqlite3 .backup` for safe hot backups (no locking issues with WAL mode)
+
+### Backup location and retention
+
+- **Location**: `~/backups/smart-home/<YYYY-MM-DD>/`
+- **Retention**: Last 7 days (older backups are automatically deleted)
+- **Log file**: `~/backups/smart-home/backup.log`
+
+### Manual backup
+
+Run the backup script directly on the Pi:
+
+```bash
+# Full backup
+./scripts/backup.sh
+
+# Dry-run (preview what would be backed up)
+./scripts/backup.sh --dry-run
+```
+
+### Automated daily backups
+
+Install a cron job to run backups daily at 3:00 AM:
+
+```bash
+# Install cron job
+./scripts/install-backup-cron.sh
+
+# Check status
+./scripts/install-backup-cron.sh --status
+
+# Test with dry-run
+./scripts/install-backup-cron.sh --test
+
+# Remove cron job
+./scripts/install-backup-cron.sh --uninstall
+```
+
+Cron output is logged to `~/backups/smart-home/cron.log`.
+
+---
+
 ## Next Step
 
 **Deploy on Raspberry Pi 5:**
