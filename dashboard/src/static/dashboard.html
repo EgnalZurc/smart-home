@@ -1428,6 +1428,26 @@ let _alertInterval = null;
 let currentAlertTab = 'all';
 let unifiedAlerts = [];
 let unifiedUnreadCount = 0;
+let _prevAlertKeys = new Set(); // Track previous alert keys to detect new ones
+let _alertSoundEnabled = true; // Can be toggled by user preference
+
+// Play a notification sound using Web Audio API (no external files needed)
+function playNotificationSound() {
+    if (!_alertSoundEnabled) return;
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 880; // A5 note
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.3);
+    } catch (e) { /* Audio not supported or blocked */ }
+}
 
 // Map a tab to the alert sources it includes. 'all' means every source.
 const ALERT_TAB_SOURCES = {
@@ -1447,6 +1467,15 @@ async function fetchUnifiedAlerts() {
         unifiedUnreadCount = Number.isInteger(data.unread_count)
             ? data.unread_count
             : unifiedAlerts.filter(a => !a.read).length;
+        
+        // Detect new unread alerts and play sound
+        const currentKeys = new Set(unifiedAlerts.filter(a => !a.read).map(a => a.key));
+        const hasNewAlert = [...currentKeys].some(k => !_prevAlertKeys.has(k));
+        if (hasNewAlert && _prevAlertKeys.size > 0) {
+            playNotificationSound();
+        }
+        _prevAlertKeys = currentKeys;
+        
         return unifiedAlerts;
     } catch (e) {
         console.error('Failed to fetch unified alerts:', e);
