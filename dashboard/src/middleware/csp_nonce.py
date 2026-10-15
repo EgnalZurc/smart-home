@@ -63,10 +63,16 @@ class CSPNonceMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     def _default_directives() -> dict[str, str]:
-        """Default CSP directives with nonce placeholder."""
+        """Default CSP directives with nonce placeholder.
+
+        NOTE: 'unsafe-inline' is required in script-src because the dashboard
+        uses inline event handlers (onclick, onchange, etc.). The nonce still
+        protects <script> blocks; 'unsafe-inline' only allows attribute handlers.
+        Migrating to addEventListener would allow removing 'unsafe-inline'.
+        """
         return {
             "default-src": "'self'",
-            "script-src": "'self' 'nonce-{nonce}'",
+            "script-src": "'self' 'nonce-{nonce}' 'unsafe-inline'",
             "style-src": "'self' 'nonce-{nonce}' 'unsafe-inline'",
             "img-src": "'self' data: https:",
             "font-src": "'self' data:",
