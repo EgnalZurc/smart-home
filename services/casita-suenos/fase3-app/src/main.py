@@ -69,9 +69,13 @@ def _create_rate_limiters() -> tuple:
             return global_limiter, manual_limiter
 
         # Redis client is None means connection failed during init
-        logger.warning("Redis connection not available, falling back to in-memory rate limiting")
+        logger.warning(
+            "Redis connection not available, falling back to in-memory rate limiting"
+        )
     except Exception as e:
-        logger.warning("Redis unavailable (%s), falling back to in-memory rate limiting", e)
+        logger.warning(
+            "Redis unavailable (%s), falling back to in-memory rate limiting", e
+        )
 
     return (
         InMemoryRateLimiter(max_requests=120, window_seconds=60),
