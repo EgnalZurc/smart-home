@@ -1509,12 +1509,11 @@ function renderAlerts() {
         const source = escapeHtml(alert.source || '');
         const readClass = alert.read ? ' read' : '';
         const keyAttr = alert.key ? ` data-alert-key="${escapeHtml(alert.key)}"` : '';
-        // Dismiss (X) button for casita and metrics alerts.
-        // - casita: key = "casita:<property_id>", dismiss via /api/casita/dismiss
-        // - metrics: key = "metrics:<fingerprint>", dismiss via /api/metrics/alerts/dismiss
+        // Dismiss (X) button: available for ALL alerts with a key.
+        // Sources with dedicated dismiss endpoints (casita, metrics) use those;
+        // all others fall back to mark-read which hides them from the unread feed.
         const key = typeof alert.key === 'string' ? alert.key : '';
-        const canDismiss = (alert.source === 'casita' && key.startsWith('casita:'))
-            || (alert.source === 'metrics' && key.startsWith('metrics:'));
+        const canDismiss = key.length > 0;
         const dismissBtn = canDismiss
             ? `<button type="button" class="alert-dismiss" data-dismiss-key="${escapeHtml(key)}" data-dismiss-source="${escapeHtml(alert.source)}" title="${t('alert_dismiss')}" aria-label="${t('alert_dismiss')}">&times;</button>`
             : '';
@@ -1578,6 +1577,7 @@ async function dismissCasitaAlert(event) {
     try {
         let r;
         if (source === 'casita' && key.startsWith('casita:')) {
+            // Casita has its own dismiss endpoint
             const propertyId = key.slice('casita:'.length);
             if (!propertyId) { btn.disabled = false; return; }
             r = await fetch('/api/casita/dismiss', {
@@ -1586,6 +1586,7 @@ async function dismissCasitaAlert(event) {
                 body: JSON.stringify({ uid: propertyId }),
             });
         } else if (source === 'metrics' && key.startsWith('metrics:')) {
+            // Metrics has its own dismiss endpoint
             const fingerprint = key.slice('metrics:'.length);
             if (!fingerprint) { btn.disabled = false; return; }
             r = await fetch('/api/metrics/alerts/dismiss', {
@@ -1594,8 +1595,12 @@ async function dismissCasitaAlert(event) {
                 body: JSON.stringify({ fingerprint }),
             });
         } else {
-            btn.disabled = false;
-            return;
+            // Generic fallback: mark as read (hides from unread feed)
+            r = await fetch('/api/alerts/mark-read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ alert_key: key }),
+            });
         }
 
         if (!r.ok) throw new Error('HTTP ' + r.status);
