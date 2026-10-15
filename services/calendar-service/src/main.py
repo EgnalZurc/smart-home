@@ -26,14 +26,12 @@ from zoneinfo import ZoneInfo
 from config import (
     CALENDAR_SEED,
     DEFAULT_OFFSETS,
-    EVENT_RETENTION_DAYS,
     GOOGLE_OAUTH_CLIENT_ID,
     GOOGLE_OAUTH_CLIENT_SECRET,
     LOG_LEVEL,
     NOTIFY_ENABLED,
     PORT,
     PRUNE_INTERVAL_S,
-    REMINDER_RETENTION_DAYS,
     REMINDER_TICK_S,
     SERVICE_NAME,
     SYNC_HORIZON_DAYS,
@@ -168,9 +166,9 @@ def _reminder_loop() -> None:
     while not _shutdown.is_set():
         try:
             if NOTIFY_ENABLED and telegram_notifier:
-                sent = check_and_send_reminders(store, telegram_notifier)
-                if sent > 0:
-                    logger.info("Sent %d reminders", sent)
+                result = check_and_send_reminders(store, telegram_notifier)
+                if result["sent"] > 0:
+                    logger.info("Sent %d reminders", result["sent"])
         except Exception as exc:
             logger.exception("Reminder loop error: %s", exc)
         finally:
@@ -185,8 +183,7 @@ def _prune_loop() -> None:
 
     while not _shutdown.is_set():
         try:
-            store.prune(retention_days=EVENT_RETENTION_DAYS)
-            store.prune_old_reminders(retention_days=REMINDER_RETENTION_DAYS)
+            store.prune()
             logger.debug("Prune completed")
         except Exception as exc:
             logger.exception("Prune loop error: %s", exc)
