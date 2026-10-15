@@ -490,8 +490,22 @@ class AlertEngine:
             logger.exception("Telegram alert delivery failed")
 
     # ── Read helpers for the API ────────────────────────────────────────────────
+    def _alert_title(self, alert: ActiveAlert) -> str:
+        """Generate a human-readable title for the unified alerts dashboard.
+
+        Unlike ``message`` (formatted for Telegram with emoji/bold), this is a
+        plain-text summary: "<rule name> (<target>): <value><unit>".
+        """
+        rule = self.thresholds.get(alert.rule_key)
+        target = alert.label or "host"
+        name = alert.rule_key.replace("_", " ").title()
+        unit = rule.unit if rule else ""
+        return f"{name} ({target}): {alert.value}{unit}"
+
     def active_alerts(self) -> list[dict]:
         """Return currently-firing alerts for ``GET /api/metrics/alerts``."""
+        from datetime import datetime, timezone
+
         return [
             {
                 "fingerprint": a.fingerprint,
@@ -501,6 +515,11 @@ class AlertEngine:
                 "value": a.value,
                 "message": a.message,
                 "fired_at": a.fired_at,
+                # Fields expected by the dashboard's unified alerts renderer:
+                "title": self._alert_title(a),
+                "timestamp": datetime.fromtimestamp(
+                    a.fired_at, tz=timezone.utc
+                ).isoformat(),
             }
             for a in self._active.values()
         ]
