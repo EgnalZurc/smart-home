@@ -15,6 +15,9 @@
         .modal-sm { max-width: 400px; }
         .modal-md { max-width: 440px; }
         .modal-lg { max-width: 560px; }
+        .mb-0 { margin-bottom: 0 !important; }
+        .cursor-default { cursor: default !important; }
+        .no-decoration { display: block; text-decoration: none; }
 
         /* ─────────────────────────────────────────────────────────────────
            Light theme — applied when <html data-theme="light">.
@@ -1129,7 +1132,13 @@ let currentResSource = 'pi';
 
 function _barColor(pct) { return pct < 70 ? 'green' : pct < 85 ? 'yellow' : 'red'; }
 function _tempColor(c) { return c < 60 ? 'green' : c < 75 ? 'yellow' : 'red'; }
-function _bar(pct, color) { return `<div class="res-bar-bg"><div class="res-bar ${color}" style="width:${Math.min(pct,100)}%"></div></div>`; }
+function _bar(pct, color) { return `<div class="res-bar-bg"><div class="res-bar ${color}" data-width="${Math.min(pct,100)}"></div></div>`; }
+// Apply width from data-width attribute (CSP-compliant: avoids inline style)
+function applyBarWidths(container) {
+    container.querySelectorAll('.res-bar[data-width]').forEach(bar => {
+        bar.style.width = bar.dataset.width + '%';
+    });
+}
 
 async function switchResSource(source) {
     // Metrics is SUPER-only — never switch a non-admin onto it.
@@ -1161,8 +1170,9 @@ function renderPiResources(d) {
       <div class="res-row"><div class="res-row-header"><span class="res-label">${t('res_swap')}</span><span class="res-value">${d.swap?.used_mb ?? '—'} / ${d.swap?.total_mb ?? '—'} MB · <b>${swapPct}%</b></span></div>${_bar(swapPct, _barColor(swapPct))}</div>
       <div class="res-row"><div class="res-row-header"><span class="res-label">${t('res_cpu')}</span><span class="res-value"><b>${cpuPct}%</b></span></div>${_bar(cpuPct, _barColor(cpuPct))}</div>
       <div class="res-row"><div class="res-row-header"><span class="res-label">${t('res_disk')} (/)</span><span class="res-value">${d.disk?.used_gb ?? '—'} / ${d.disk?.total_gb ?? '—'} GB · <b>${diskPct}%</b></span></div>${_bar(diskPct, _barColor(diskPct))}</div>
-      <div class="res-row" style="margin-bottom:0"><div class="res-row-header"><span class="res-label">${t('res_temp')}</span><span class="temp-pill ${_tempColor(tempC)}">${tempC} °C</span></div></div>
+      <div class="res-row mb-0"><div class="res-row-header"><span class="res-label">${t('res_temp')}</span><span class="temp-pill ${_tempColor(tempC)}">${tempC} °C</span></div></div>
     `;
+    applyBarWidths(body);
     const piTabDot = document.getElementById('pi-tab-dot');
     if (piTabDot) piTabDot.className = 'tab-dot bg-green-500';
 }
@@ -1331,7 +1341,7 @@ function _renderMxContainers(latest) {
         return `
           <div class="mx-cbar-row">
             <div class="mx-cbar-head"><span class="mx-cbar-name">${s.label}</span><span class="mx-cbar-val">${valTxt}</span></div>
-            <div class="mx-cbar-bg"><div class="mx-cbar-fill ${colorName}" style="width:${Math.min(pct, 100)}%"></div></div>
+            <div class="mx-cbar-bg"><div class="mx-cbar-fill ${colorName}" data-width="${Math.min(pct, 100)}"></div></div>
           </div>`;
     }).join('');
 }
@@ -1403,6 +1413,7 @@ async function fetchAndRenderMetrics() {
             <div class="mx-section-title">${t('mx_services')}</div>
             ${_renderMxServices(summary)}
           </div>`;
+        applyBarWidths(body);
     } catch (e) {
         if (mxDot) mxDot.className = 'tab-dot bg-red-400';
         body.innerHTML = `<p class="text-center text-red-400 text-sm py-4">${t('mx_error')}: ${e.message}</p>`;
@@ -1522,7 +1533,7 @@ function renderAlerts() {
             ${ts ? `<div class="alert-time">${ts}</div>` : ''}
         `;
         return alert.link
-            ? `<a href="${encodeURI(alert.link)}" class="alert-row ${severity}${readClass}"${keyAttr} style="display:block;text-decoration:none">${inner}</a>`
+            ? `<a href="${encodeURI(alert.link)}" class="alert-row no-decoration ${severity}${readClass}"${keyAttr}>${inner}</a>`
             : `<div class="alert-row ${severity}${readClass}"${keyAttr}>${inner}</div>`;
     }).join('');
 }
@@ -1716,7 +1727,7 @@ function renderSvcContent() {
             const inner = `<span class="svc-dot ${online ? 'bg-green-500 status-dot' : 'bg-red-400'}"></span><span class="svc-name">${t(svc.labelKey)}</span>`;
             return svc.url 
                 ? `<a href="${svc.url}" class="svc-item">${inner}</a>`
-                : `<div class="svc-item" style="cursor:default">${inner}</div>`;
+                : `<div class="svc-item cursor-default">${inner}</div>`;
         }).join('');
     }
 }
