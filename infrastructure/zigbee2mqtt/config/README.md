@@ -24,8 +24,37 @@ project_root/
 ## Setup Instructions
 
 1. Copy `configuration.example.yaml` to `/data/zigbee2mqtt/configuration.yaml`
-2. Generate a unique network key for your Zigbee network
+2. Generate a unique network key (see below)
 3. Configure your devices in the `devices` section after pairing
+
+## Generating the Network Key
+
+The `network_key` is a 128-bit encryption key that secures all Zigbee traffic in your network.
+
+### Generate a secure key
+
+```bash
+# On Linux/macOS/Pi:
+openssl rand -hex 16
+
+# Output example: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6
+```
+
+### Apply the key
+
+In `/data/zigbee2mqtt/configuration.yaml`, replace the `GENERATE` placeholder:
+
+```yaml
+advanced:
+  network_key: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6  # Your generated key
+```
+
+### ⚠️ Important warnings
+
+- **Unique per installation**: Never reuse a network key from another network or from documentation examples.
+- **Changing the key requires re-pairing ALL devices**: The key encrypts the Zigbee mesh. If you change it, existing devices cannot communicate and must be factory-reset and re-paired.
+- **Keep it secret**: Anyone with your network key can decrypt your Zigbee traffic and potentially inject malicious commands.
+- **Back it up**: Store the key securely (password manager, encrypted backup). Losing it means re-pairing everything.
 
 ## Files Description
 
