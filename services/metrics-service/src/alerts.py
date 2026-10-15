@@ -392,24 +392,74 @@ class AlertEngine:
         return sorted(labels)
 
     # ── Message formatting ────────────────────────────────────────────────────
+
+    # Human-readable descriptions for rule keys (used in alert messages).
+    # Maps rule_key -> (firing_template, resolved_template).
+    # Templates use {target}, {value}, {unit}, {threshold} placeholders.
+    RULE_DESCRIPTIONS: dict[str, tuple[str, str]] = {
+        "host_ram": (
+            "RAM del host al {value}{unit} (umbral {threshold}{unit})",
+            "RAM del host normalizada",
+        ),
+        "host_swap": (
+            "Swap del host: {value}{unit} (umbral {threshold}{unit})",
+            "Swap del host normalizado",
+        ),
+        "host_temp": (
+            "Temperatura del host: {value}{unit} (umbral {threshold}{unit})",
+            "Temperatura del host normalizada",
+        ),
+        "host_disk": (
+            "Disco del host al {value}{unit} (umbral {threshold}{unit})",
+            "Disco del host normalizado",
+        ),
+        "container_mem": (
+            "Contenedor *{target}*: memoria al {value}{unit} (umbral {threshold}{unit})",
+            "Contenedor *{target}*: memoria normalizada",
+        ),
+        "service_online": (
+            "Servicio *{target}* offline",
+            "Servicio *{target}* online de nuevo",
+        ),
+        "service_latency": (
+            "Servicio *{target}*: latencia {value}{unit} (umbral {threshold}{unit})",
+            "Servicio *{target}*: latencia normalizada",
+        ),
+    }
+
     @staticmethod
     def _emoji(severity: Severity) -> str:
         return "🔴" if severity is Severity.CRITICAL else "🟠"
 
     def _format_firing(self, rule: Threshold, label: str, result: EvalResult) -> str:
         target = label or "host"
-        name = rule.key.replace("_", " ")
-        return (
-            f"{self._emoji(result.severity)} *{result.severity.value.upper()}* — "
-            f"{name} ({target}): {result.value}{rule.unit} "
-            f"(threshold {rule.value}{rule.unit})"
-        )
+        templates = self.RULE_DESCRIPTIONS.get(rule.key)
+        if templates:
+            description = templates[0].format(
+                target=target,
+                value=result.value,
+                unit=rule.unit,
+                threshold=rule.value,
+            )
+        else:
+            # Fallback for unknown rules
+            name = rule.key.replace("_", " ")
+            description = (
+                f"{name} ({target}): {result.value}{rule.unit} "
+                f"(umbral {rule.value}{rule.unit})"
+            )
+        return f"{self._emoji(result.severity)} *{result.severity.value.upper()}* — {description}"
 
-    @staticmethod
-    def _format_resolved(alert: ActiveAlert) -> str:
+    def _format_resolved(self, alert: ActiveAlert) -> str:
         target = alert.label or "host"
-        name = alert.rule_key.replace("_", " ")
-        return f"✅ *RESOLVED* — {name} ({target})"
+        templates = self.RULE_DESCRIPTIONS.get(alert.rule_key)
+        if templates:
+            description = templates[1].format(target=target)
+        else:
+            # Fallback for unknown rules
+            name = alert.rule_key.replace("_", " ")
+            description = f"{name} ({target})"
+        return f"✅ *RESOLVED* — {description}"
 
     # ── Main tick ─────────────────────────────────────────────────────────────
     def evaluate_tick(self, now: int | None = None) -> TickOutcome:
@@ -490,16 +540,33 @@ class AlertEngine:
             logger.exception("Telegram alert delivery failed")
 
     # ── Read helpers for the API ────────────────────────────────────────────────
+
+    # Plain-text descriptions for dashboard titles (no markdown).
+    RULE_TITLES: dict[str, tuple[str, str]] = {
+        "host_ram": ("RAM del host: {value}{unit}", "host"),
+        "host_swap": ("Swap del host: {value}{unit}", "host"),
+        "host_temp": ("Temperatura: {value}{unit}", "host"),
+        "host_disk": ("Disco: {value}{unit}", "host"),
+        "container_mem": ("Contenedor {target}: {value}{unit}", "container"),
+        "service_online": ("Servicio {target} offline", "service"),
+        "service_latency": ("Latencia {target}: {value}{unit}", "service"),
+    }
+
     def _alert_title(self, alert: ActiveAlert) -> str:
         """Generate a human-readable title for the unified alerts dashboard.
 
         Unlike ``message`` (formatted for Telegram with emoji/bold), this is a
-        plain-text summary: "<rule name> (<target>): <value><unit>".
+        plain-text summary suitable for UI display.
         """
         rule = self.thresholds.get(alert.rule_key)
         target = alert.label or "host"
-        name = alert.rule_key.replace("_", " ").title()
         unit = rule.unit if rule else ""
+        title_info = self.RULE_TITLES.get(alert.rule_key)
+        if title_info:
+            template, _ = title_info
+            return template.format(target=target, value=alert.value, unit=unit)
+        # Fallback for unknown rules
+        name = alert.rule_key.replace("_", " ").title()
         return f"{name} ({target}): {alert.value}{unit}"
 
     def dismiss_alert(self, fingerprint: str) -> bool:
