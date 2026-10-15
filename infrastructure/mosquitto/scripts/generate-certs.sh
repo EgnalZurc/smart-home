@@ -1,11 +1,20 @@
 #!/bin/bash
 # Generate self-signed TLS certificates for Mosquitto MQTT broker
-# Run this script on the Pi: ./scripts/generate-certs.sh
+#
+# Usage:
+#   ./generate-certs.sh [output_directory]
+#
+# If output_directory is not specified, certificates are created in the
+# current working directory.
+#
+# Examples:
+#   cd ~/smart-home-prod/data/mosquitto/certs && /path/to/generate-certs.sh
+#   ./generate-certs.sh /path/to/certs
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CERTS_DIR="${SCRIPT_DIR}/../certs"
+# Use argument if provided, otherwise current directory
+CERTS_DIR="${1:-$(pwd)}"
 
 # Certificate parameters
 CA_DAYS=3650        # 10 years for CA
