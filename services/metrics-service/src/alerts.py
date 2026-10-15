@@ -502,6 +502,31 @@ class AlertEngine:
         unit = rule.unit if rule else ""
         return f"{name} ({target}): {alert.value}{unit}"
 
+    def dismiss_alert(self, fingerprint: str) -> bool:
+        """Manually dismiss an active alert by fingerprint.
+
+        This resolves the alert as if the condition cleared, recording a
+        'dismissed' event in the history. The alert will re-fire on the next
+        tick if the condition still breaches.
+
+        Returns True if the alert was found and dismissed, False otherwise.
+        """
+        import time
+
+        alert = self._active.get(fingerprint)
+        if alert is None:
+            return False
+
+        now = int(time.time())
+        alert.resolved_at = now
+        self.store.resolve_active(fingerprint, now)
+        self.store.record_history(alert, event="dismissed", ts=now)
+        del self._active[fingerprint]
+        self._tick_counts.pop(fingerprint, None)
+
+        logger.info("Alert %s dismissed manually", fingerprint)
+        return True
+
     def active_alerts(self) -> list[dict]:
         """Return currently-firing alerts for ``GET /api/metrics/alerts``."""
         from datetime import datetime, timezone

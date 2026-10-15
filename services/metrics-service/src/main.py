@@ -412,6 +412,34 @@ async def get_alerts_history(
     return {"days": days, "count": len(events), "events": events}
 
 
+class DismissAlertRequest(BaseModel):
+    """Request body for dismissing an alert."""
+
+    fingerprint: str
+
+
+@app.post("/api/metrics/alerts/dismiss")
+async def dismiss_alert(body: DismissAlertRequest) -> dict[str, str]:
+    """Manually dismiss an active alert by fingerprint.
+
+    The alert is resolved as if the condition cleared naturally, with a
+    'dismissed' event recorded in the history. If the underlying condition
+    still breaches, the alert will re-fire on the next collector tick.
+
+    Args:
+        body: DismissAlertRequest containing the fingerprint to dismiss.
+
+    Returns:
+        Dict with status and fingerprint.
+
+    Raises:
+        HTTPException: 404 if the fingerprint is not found in active alerts.
+    """
+    if collector.alert_engine.dismiss_alert(body.fingerprint):
+        return {"status": "dismissed", "fingerprint": body.fingerprint}
+    raise HTTPException(status_code=404, detail="Alert not found or already resolved")
+
+
 @app.get("/api/metrics/thresholds")
 async def get_thresholds() -> ThresholdsResponse:
     """Return the current alert threshold rule set.
