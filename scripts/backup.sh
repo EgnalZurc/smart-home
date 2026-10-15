@@ -22,18 +22,18 @@ readonly RETENTION_DAYS=7
 
 # Databases to backup (relative to DATA_DIR)
 declare -A DATABASES=(
-    ["auth"]="dashboard/auth.db"
+    ["auth"]="backend/auth.db"
     ["casita"]="casita-suenos/casita.db"
-    ["portfolio"]="portfolio-monitor/portfolio.db"
-    ["baby-gifts"]="baby-gifts-service/baby-gifts.db"
+    ["baby-gifts"]="baby-gifts-service/baby_gifts.db"
     ["metrics"]="metrics-service/metrics.db"
     ["energy"]="energy-monitor/energy.db"
     ["presence"]="presence-service/presence.db"
     ["calendar"]="calendar-service/calendar.db"
+    ["ac-events"]="ac-service/ac_event_log.db"
 )
 
 # Vaultwarden backup (separate path)
-readonly VAULTWARDEN_DATA="${PROD_DIR}/vaultwarden-data"
+readonly VAULTWARDEN_DATA="${DATA_DIR}/vaultwarden"
 
 # Colors for output
 readonly RED='\033[0;31m'
