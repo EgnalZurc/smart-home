@@ -12,6 +12,9 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
         .hidden { display: none !important; }
+        .modal-sm { max-width: 400px; }
+        .modal-md { max-width: 440px; }
+        .modal-lg { max-width: 560px; }
 
         /* ─────────────────────────────────────────────────────────────────
            Light theme — applied when <html data-theme="light">.
@@ -658,7 +661,7 @@
 
 <!-- Widget config modal (per-user dashboard layout) -->
 <div id="widget-modal" class="modal-overlay">
-  <div class="modal-panel" id="widget-panel" style="max-width: 440px;">
+  <div class="modal-panel modal-md" id="widget-panel">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-2">
       <span id="widget-title" class="text-sm font-semibold text-slate-200">Personalizar panel</span>
@@ -671,7 +674,7 @@
 
 <!-- Admin modal -->
 <div id="admin-modal" class="modal-overlay">
-  <div class="modal-panel" id="admin-panel" style="max-width: 560px;">
+  <div class="modal-panel modal-lg" id="admin-panel">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-4">
       <span class="text-sm font-semibold text-slate-200">Administración</span>
@@ -688,7 +691,7 @@
 
 <!-- Profile Edit Modal -->
 <div id="profile-edit-modal" class="modal-overlay">
-  <div class="modal-panel" style="max-width: 400px;">
+  <div class="modal-panel modal-sm">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-4">
       <span class="text-sm font-semibold text-slate-200">Editar Perfil</span>
@@ -718,7 +721,7 @@
 
 <!-- User Edit Modal -->
 <div id="user-edit-modal" class="modal-overlay">
-  <div class="modal-panel" style="max-width: 400px;">
+  <div class="modal-panel modal-sm">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-4">
       <span class="text-sm font-semibold text-slate-200" id="user-edit-title">Editar Usuario</span>
@@ -753,7 +756,7 @@
 
 <!-- User Create Modal -->
 <div id="user-create-modal" class="modal-overlay">
-  <div class="modal-panel" style="max-width: 400px;">
+  <div class="modal-panel modal-sm">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-4">
       <span class="text-sm font-semibold text-slate-200">Crear Usuario</span>
@@ -2781,10 +2784,8 @@ function closeWidgetModal(e) {
 async function loadUser() {
     try {
         const res = await fetch('/api/auth/me');
-        console.log('[loadUser] /api/auth/me status:', res.status);
         if (!res.ok) return;
         currentUserData = await res.json();
-        console.log('[loadUser] currentUserData:', JSON.stringify(currentUserData, null, 2));
         const username = currentUserData.username || '';
         if (!username) return;
         
@@ -2807,30 +2808,23 @@ async function loadUser() {
         // Build app list from permissions
         // photos and passwords go in external services modal, not main list
         const rawApps = currentUserData.apps || [];
-        console.log('[loadUser] rawApps:', rawApps);
         const filteredApps = rawApps.filter(p => !['zigbee', 'photos', 'passwords'].includes(p.key));
-        console.log('[loadUser] filteredApps:', filteredApps);
         const mappedApps = filteredApps.map(p => ({ key: p.key, ...APP_CATALOGUE[p.key] }));
-        console.log('[loadUser] mappedApps:', mappedApps);
         APPS = mappedApps.filter(a => a);
-        console.log('[loadUser] APPS after filter:', APPS);
 
         // Full widget set for the config panel. Keep this BEFORE
         // applyWidgetConfigToApps() mutates/filters APPS in place, otherwise
         // hidden widgets would disappear from the list and could never be
         // re-enabled from the panel.
         ALL_WIDGETS = APPS.map(a => ({ key: a.key, nameKey: a.nameKey, descKey: a.descKey }));
-        console.log('[loadUser] ALL_WIDGETS:', ALL_WIDGETS);
         
         // External services
         externalServices = currentUserData.external_services || [];
         
-        console.log('[loadUser] widgetConfig before apply:', widgetConfig);
         applyWidgetConfigToApps();
-        console.log('[loadUser] APPS after applyWidgetConfigToApps:', APPS);
         renderApps();
         loadStatus();
-    } catch (e) { console.error('[loadUser] Error:', e); }
+    } catch (e) { /* silently fail - user not logged in */ }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
