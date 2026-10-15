@@ -86,12 +86,12 @@ def _extract_alerts(data: dict, source: str) -> list[dict]:
 def _alert_identifier(alert: dict) -> str:
     """Derive a stable per-alert identifier within its source.
 
-    Prefers an explicit unique field (``id``/``alert_id``/``container``). When
-    none is present, falls back to a short hash of the alert's title and/or URL
-    so the same alert maps to the same key across polls. As a last resort the
-    full alert payload is hashed.
+    Prefers an explicit unique field (``id``/``alert_id``/``fingerprint``/
+    ``container``). When none is present, falls back to a short hash of the
+    alert's title and/or URL so the same alert maps to the same key across
+    polls. As a last resort the full alert payload is hashed.
     """
-    for field in ("id", "alert_id", "container"):
+    for field in ("id", "alert_id", "fingerprint", "container"):
         value = alert.get(field)
         if value not in (None, ""):
             return str(value)

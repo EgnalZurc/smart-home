@@ -1487,11 +1487,14 @@ function renderAlerts() {
         const source = escapeHtml(alert.source || '');
         const readClass = alert.read ? ' read' : '';
         const keyAttr = alert.key ? ` data-alert-key="${escapeHtml(alert.key)}"` : '';
-        // Dismiss (X) button only for casita alerts carrying a "casita:<property_id>" key.
+        // Dismiss (X) button for casita and metrics alerts.
+        // - casita: key = "casita:<property_id>", dismiss via /api/casita/dismiss
+        // - metrics: key = "metrics:<fingerprint>", dismiss via /api/metrics/alerts/dismiss
         const key = typeof alert.key === 'string' ? alert.key : '';
-        const canDismiss = alert.source === 'casita' && key.startsWith('casita:');
+        const canDismiss = (alert.source === 'casita' && key.startsWith('casita:'))
+            || (alert.source === 'metrics' && key.startsWith('metrics:'));
         const dismissBtn = canDismiss
-            ? `<button type="button" class="alert-dismiss" data-dismiss-key="${escapeHtml(key)}" title="${t('alert_dismiss')}" aria-label="${t('alert_dismiss')}">&times;</button>`
+            ? `<button type="button" class="alert-dismiss" data-dismiss-key="${escapeHtml(key)}" data-dismiss-source="${escapeHtml(alert.source)}" title="${t('alert_dismiss')}" aria-label="${t('alert_dismiss')}">&times;</button>`
             : '';
         const inner = `
             <div class="alert-row-header">
@@ -1547,16 +1550,32 @@ async function dismissCasitaAlert(event) {
     event.stopPropagation();
     if (btn.disabled) return;
     const key = btn.dataset.dismissKey || '';
-    if (!key.startsWith('casita:')) return;
-    const propertyId = key.slice('casita:'.length);
-    if (!propertyId) return;
+    const source = btn.dataset.dismissSource || '';
     btn.disabled = true;
+
     try {
-        const r = await fetch('/api/casita/dismiss', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: propertyId }),
-        });
+        let r;
+        if (source === 'casita' && key.startsWith('casita:')) {
+            const propertyId = key.slice('casita:'.length);
+            if (!propertyId) { btn.disabled = false; return; }
+            r = await fetch('/api/casita/dismiss', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uid: propertyId }),
+            });
+        } else if (source === 'metrics' && key.startsWith('metrics:')) {
+            const fingerprint = key.slice('metrics:'.length);
+            if (!fingerprint) { btn.disabled = false; return; }
+            r = await fetch('/api/metrics/alerts/dismiss', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fingerprint }),
+            });
+        } else {
+            btn.disabled = false;
+            return;
+        }
+
         if (!r.ok) throw new Error('HTTP ' + r.status);
         unifiedAlerts = unifiedAlerts.filter(a => a.key !== key);
         // Update unread count if the dismissed alert was unread
@@ -1567,7 +1586,7 @@ async function dismissCasitaAlert(event) {
         updateTabBadges();
         showToast(t('alert_dismiss_ok'), { kind: 'success' });
     } catch (e) {
-        console.error('Failed to dismiss casita alert:', e);
+        console.error('Failed to dismiss alert:', e);
         btn.disabled = false;
         showToast(t('alert_dismiss_err'), { kind: 'error' });
     }

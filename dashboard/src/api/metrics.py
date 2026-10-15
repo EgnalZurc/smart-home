@@ -73,6 +73,18 @@ async def get_metrics_alerts_history(
     return await _proxy.get("/api/metrics/alerts/history", params={"days": days})
 
 
+@router.post("/alerts/dismiss")
+async def dismiss_metrics_alert(request: Request):
+    """Manually dismiss an active alert by fingerprint (SUPER).
+
+    The alert is resolved as if the condition cleared. If the condition still
+    breaches, the alert will re-fire on the next collector tick.
+    """
+    require_super(request)
+    body = await request.json()
+    return await _proxy.post("/api/metrics/alerts/dismiss", json=body)
+
+
 @router.get("/thresholds")
 async def get_metrics_thresholds(request: Request):
     """Current alert threshold rule set."""
