@@ -126,7 +126,15 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 class Calendar:
     """DTO for a calendar row."""
 
-    __slots__ = ("id", "label", "person_id", "colour", "enabled", "sync_token", "last_sync")
+    __slots__ = (
+        "id",
+        "label",
+        "person_id",
+        "colour",
+        "enabled",
+        "sync_token",
+        "last_sync",
+    )
 
     def __init__(self, row: sqlite3.Row) -> None:
         self.id: str = row["id"]
@@ -189,9 +197,7 @@ class CalendarStore:
     def get_enabled_calendars(self) -> list[Calendar]:
         """Return all calendars with enabled=1."""
         with self._db.connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM calendars WHERE enabled = 1"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM calendars WHERE enabled = 1").fetchall()
         return [Calendar(r) for r in rows]
 
     def get_all_calendars(self) -> list[Calendar]:
