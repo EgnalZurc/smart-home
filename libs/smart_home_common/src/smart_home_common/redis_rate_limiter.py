@@ -67,9 +67,7 @@ class RedisRateLimiter(BaseRateLimiter):
         self._connection_warned = False
 
         if not REDIS_AVAILABLE:
-            logger.warning(
-                "redis package not installed. RedisRateLimiter will allow all requests."
-            )
+            logger.warning("redis package not installed. RedisRateLimiter will allow all requests.")
             return
 
         try:
@@ -79,8 +77,7 @@ class RedisRateLimiter(BaseRateLimiter):
             logger.debug("RedisRateLimiter connected to %s", redis_url)
         except redis.RedisError as e:
             logger.warning(
-                "Failed to connect to Redis at %s: %s. "
-                "Rate limiter will allow all requests.",
+                "Failed to connect to Redis at %s: %s. Rate limiter will allow all requests.",
                 redis_url,
                 e,
             )
