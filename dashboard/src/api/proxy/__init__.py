@@ -6,6 +6,7 @@ Each module contains routes that proxy requests to a specific service.
 from .ac import router as ac_router
 from .baby_gifts import router as baby_gifts_router
 from .base import ServiceProxy
+from .calendar import router as calendar_router
 from .casita import router as casita_router
 from .external import router as external_router
 from .pc import router as pc_router
@@ -16,6 +17,7 @@ __all__ = [
     "ServiceProxy",
     "ac_router",
     "baby_gifts_router",
+    "calendar_router",
     "casita_router",
     "external_router",
     "pc_router",
