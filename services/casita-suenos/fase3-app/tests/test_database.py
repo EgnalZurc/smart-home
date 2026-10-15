@@ -203,6 +203,38 @@ class TestDatabase:
         db.dismiss(sample_property.unique_id)
         assert db.count_radar_properties(min_score=0.0) == 0
 
+    def test_is_on_radar_true_when_scored_and_not_dismissed(
+        self, db, sample_property, sample_zone
+    ):
+        """is_on_radar returns True for scored property above threshold."""
+        db.upsert_property(sample_property)
+        db.upsert_score(_make_scored(sample_property, sample_zone))
+        # Sample score is ~114, use min_score=100 to verify logic works
+        assert db.is_on_radar(sample_property.unique_id, min_score=100.0) is True
+
+    def test_is_on_radar_false_when_dismissed(
+        self, db, sample_property, sample_zone
+    ):
+        """is_on_radar returns False after dismissing."""
+        db.upsert_property(sample_property)
+        db.upsert_score(_make_scored(sample_property, sample_zone))
+        db.dismiss(sample_property.unique_id)
+        assert db.is_on_radar(sample_property.unique_id, min_score=100.0) is False
+
+    def test_is_on_radar_false_when_below_threshold(
+        self, db, sample_property, sample_zone
+    ):
+        """is_on_radar returns False when score is below threshold."""
+        db.upsert_property(sample_property)
+        db.upsert_score(_make_scored(sample_property, sample_zone))
+        # Sample score is ~114, so min_score=200 should return False
+        assert db.is_on_radar(sample_property.unique_id, min_score=200.0) is False
+
+    def test_is_on_radar_false_when_not_scored(self, db, sample_property):
+        """is_on_radar returns False for unscored property."""
+        db.upsert_property(sample_property)
+        assert db.is_on_radar(sample_property.unique_id, min_score=0.0) is False
+
     def test_count_by_zone_radar_groups_only_radar(self, db, sample_zone):
         """count_by_zone_radar agrupa solo propiedades en el radar."""
         # Dos propiedades en la misma zona, una descartada
