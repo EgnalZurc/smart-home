@@ -9,7 +9,6 @@ ring buffer / store are populated manually per test.
 from __future__ import annotations
 
 import time
-from collections import defaultdict
 
 import httpx
 import main
@@ -329,3 +328,45 @@ async def test_rate_limit_respects_x_forwarded_for(client, monkeypatch):
             headers={"X-Forwarded-For": "10.0.0.1, 172.18.0.1"},
         )
     assert resp.status_code == 429
+
+
+async def test_cleanup_stale_rate_limits_removes_old_ips(client, monkeypatch):
+    """cleanup_stale_rate_limits should remove IPs with only old timestamps."""
+    main._rate_limit.clear()
+    now = time.time()
+    # IP with all timestamps older than window (stale)
+    main._rate_limit["stale-ip"] = [now - 120, now - 180]
+    # IP with recent timestamps (active)
+    main._rate_limit["active-ip"] = [now - 10, now - 5]
+
+    removed = main.cleanup_stale_rate_limits()
+
+    assert removed == 1
+    assert "stale-ip" not in main._rate_limit
+    assert "active-ip" in main._rate_limit
+
+
+async def test_cleanup_stale_rate_limits_removes_empty_lists(client, monkeypatch):
+    """cleanup_stale_rate_limits should remove IPs with empty timestamp lists."""
+    main._rate_limit.clear()
+    main._rate_limit["empty-ip"] = []
+    main._rate_limit["active-ip"] = [time.time()]
+
+    removed = main.cleanup_stale_rate_limits()
+
+    assert removed == 1
+    assert "empty-ip" not in main._rate_limit
+    assert "active-ip" in main._rate_limit
+
+
+async def test_cleanup_stale_rate_limits_keeps_mixed_timestamps(client, monkeypatch):
+    """IPs with at least one recent timestamp should be kept."""
+    main._rate_limit.clear()
+    now = time.time()
+    # IP with mix of old and recent timestamps
+    main._rate_limit["mixed-ip"] = [now - 120, now - 10]
+
+    removed = main.cleanup_stale_rate_limits()
+
+    assert removed == 0
+    assert "mixed-ip" in main._rate_limit

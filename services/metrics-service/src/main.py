@@ -13,6 +13,7 @@ Endpoints (served on :8011):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -29,6 +30,7 @@ from config import (
     MAX_METRIC_NAME_LEN,
     MAX_REQUESTS_PER_MINUTE,
     PORT,
+    RATE_LIMIT_CLEANUP_INTERVAL_S,
     RATE_LIMIT_WINDOW_S,
     SERVICE_NAME,
     SUMMARY_WINDOWS,
@@ -117,6 +119,40 @@ def _get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def cleanup_stale_rate_limits() -> int:
+    """Remove IPs from _rate_limit that have no recent timestamps.
+
+    An IP is considered stale if all its timestamps are older than
+    RATE_LIMIT_WINDOW_S. This prevents memory growth from IPs that make
+    a few requests and never return.
+
+    Returns:
+        Number of IPs removed.
+    """
+    now = time.time()
+    stale_ips = [
+        ip
+        for ip, timestamps in _rate_limit.items()
+        if not timestamps or all(now - t >= RATE_LIMIT_WINDOW_S for t in timestamps)
+    ]
+    for ip in stale_ips:
+        del _rate_limit[ip]
+    return len(stale_ips)
+
+
+# Background task handle for cleanup loop
+_cleanup_task: asyncio.Task[None] | None = None
+
+
+async def _rate_limit_cleanup_loop() -> None:
+    """Background task that periodically cleans up stale rate limit entries."""
+    while True:
+        await asyncio.sleep(RATE_LIMIT_CLEANUP_INTERVAL_S)
+        removed = cleanup_stale_rate_limits()
+        if removed > 0:
+            logger.debug("Rate limit cleanup: removed %d stale IPs", removed)
+
+
 # Shared libs live at /app/libs in the container; add to path for imports.
 _LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
 if _LIBS_PATH not in sys.path:
@@ -144,10 +180,18 @@ async def lifespan(app: FastAPI):
     Yields:
         Control to the application after starting the collector.
     """
+    global _cleanup_task
     logger.info("Starting %s...", SERVICE_NAME)
     await collector.start()
+    _cleanup_task = asyncio.create_task(_rate_limit_cleanup_loop())
     yield
     logger.info("Shutting down %s...", SERVICE_NAME)
+    if _cleanup_task:
+        _cleanup_task.cancel()
+        try:
+            await _cleanup_task
+        except asyncio.CancelledError:
+            pass
     await collector.stop()
 
 
