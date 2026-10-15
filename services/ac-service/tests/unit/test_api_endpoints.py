@@ -548,8 +548,8 @@ class TestLearningEndpoint:
 
     def test_get_learning_with_patterns(self, client, mock_components):
         """GET /api/ac/learning derives patterns and recommendations."""
-        mock_components["ac_controller"].get_history.return_value = (
-            self._make_records(18, 5)
+        mock_components["ac_controller"].get_history.return_value = self._make_records(
+            18, 5
         )
 
         response = client.get("/api/ac/learning")
@@ -891,7 +891,6 @@ class TestSubscriptionManagerNone:
         assert "error" in data
 
 
-
 class TestThermalCurvesEndpoint:
     """Tests for /api/ac/thermal-curves endpoint."""
 
@@ -946,7 +945,6 @@ class TestThermalCurvesEndpoint:
 
         # Clean up shared module-level buffer so later tests see a clean slate.
         main.thermal_buffer.clear()
-
 
 
 class TestPydanticValidation:

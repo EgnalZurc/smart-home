@@ -384,11 +384,11 @@ class TestACControllerEnergy:
         config = ControlConfig()
 
         controller = ACController(mock_mqtt, mock_melcloud, config)
-        controller._energy_state["kwh_session"] = 5.0
+        controller._energy_tracker._state.kwh_session = 5.0
 
         controller.reset_session_kwh()
 
-        assert controller._energy_state["kwh_session"] == 0.0
+        assert controller._energy_tracker._state.kwh_session == 0.0
 
 
 class TestACControllerNeedsMelcloudUpdate:
@@ -876,21 +876,20 @@ class TestACControllerTrackEnergy:
         config = ControlConfig(ac_power_cooling_max=2.5)
 
         controller = ACController(mock_mqtt, mock_melcloud, config)
-        controller._energy_state = {
-            "last_state": "cooling_max",
-            "last_transition": 1000.0,
-            "kwh_session": 0.0,
-        }
+        # Set up tracker state for test
+        controller._energy_tracker._state.last_state = "cooling_max"
+        controller._energy_tracker._state.last_transition = 1000.0
+        controller._energy_tracker._state.kwh_session = 0.0
 
         # Simulate 1 hour of cooling_max (2.5 kW)
         with patch("time.time", return_value=4600.0):  # 1 hour later
             controller._track_energy_transition("off")
 
         # 2.5 kW * 1 hour = 2.5 kWh
-        assert controller._energy_state["kwh_session"] == pytest.approx(2.5, rel=0.01)
-        assert controller._energy_state["last_state"] == "off"
-
-
+        assert controller._energy_tracker._state.kwh_session == pytest.approx(
+            2.5, rel=0.01
+        )
+        assert controller._energy_tracker._state.last_state == "off"
 
 
 class TestACControllerMelcloudLock:
