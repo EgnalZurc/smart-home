@@ -15,10 +15,16 @@ Usage:
         # Return 429 Too Many Requests
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 from .rate_limiter import BaseRateLimiter, RateLimitStatus
+
+if TYPE_CHECKING:
+    import redis as redis_module
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +63,7 @@ class RedisRateLimiter(BaseRateLimiter):
         super().__init__(max_requests, window_seconds)
         self._redis_url = redis_url
         self._key_prefix = key_prefix
-        self._client: "redis.Redis | None" = None
+        self._client: redis_module.Redis | None = None
         self._connection_warned = False
 
         if not REDIS_AVAILABLE:
