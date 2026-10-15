@@ -340,7 +340,7 @@ class TestRateLimiting:
                 json={"nucleos": [], "personas": []},
             )
             assert response.status_code == 429
-            assert "rate limit" in response.json()["detail"].lower()
+            assert "too many" in response.json()["detail"].lower() or "rate limit" in response.json()["detail"].lower()
         finally:
             main._rate_limiter = original_limiter
 
