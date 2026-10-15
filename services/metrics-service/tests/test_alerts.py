@@ -68,7 +68,7 @@ def test_default_thresholds_cover_design_rules():
     assert rules["host_temp"].value == 75.0
     assert rules["host_temp"].critical_value == 80.0
     assert rules["host_disk"].sustained_s == 0
-    assert rules["service_online"].count_ticks == 3
+    assert rules["service_online"].count_ticks == 5  # deploy grace period
     assert rules["service_latency"].aggregate == "p95"
 
 
@@ -130,17 +130,17 @@ def test_host_temp_critical_over_80(ring, store):
     assert outcome.fired[0].severity is Severity.CRITICAL
 
 
-# ── count_ticks (service offline for 3 consecutive ticks) ─────────────────────
-def test_service_online_needs_three_consecutive_ticks(ring, store):
+# ── count_ticks (service offline for 5 consecutive ticks — deploy grace) ──────
+def test_service_online_needs_five_consecutive_ticks(ring, store):
     eng = _engine(ring, store, StubNotifier())
-    # Tick 1 and 2: offline, no fire yet.
-    ring.add("service.ac.online", "ac", 0.0, ts=1000)
-    assert eng.evaluate_tick(now=1000).fired == []
-    ring.add("service.ac.online", "ac", 0.0, ts=1030)
-    assert eng.evaluate_tick(now=1030).fired == []
-    # Tick 3: still offline → fire critical.
-    ring.add("service.ac.online", "ac", 0.0, ts=1060)
-    outcome = eng.evaluate_tick(now=1060)
+    # Ticks 1-4: offline, no fire yet (deploy grace period).
+    for i, ts in enumerate([1000, 1030, 1060, 1090], start=1):
+        ring.add("service.ac.online", "ac", 0.0, ts=ts)
+        outcome = eng.evaluate_tick(now=ts)
+        assert outcome.fired == [], f"Should not fire on tick {i}"
+    # Tick 5: still offline → fire critical.
+    ring.add("service.ac.online", "ac", 0.0, ts=1120)
+    outcome = eng.evaluate_tick(now=1120)
     assert len(outcome.fired) == 1
     assert outcome.fired[0].severity is Severity.CRITICAL
     assert outcome.fired[0].label == "ac"
@@ -155,7 +155,7 @@ def test_service_online_counter_resets_on_recovery(ring, store):
     # Recovery resets the counter.
     ring.add("service.ac.online", "ac", 1.0, ts=1060)
     eng.evaluate_tick(now=1060)
-    # Two more offline ticks should NOT fire yet (needs 3 fresh).
+    # Two more offline ticks should NOT fire yet (needs 5 fresh consecutive).
     ring.add("service.ac.online", "ac", 0.0, ts=1090)
     eng.evaluate_tick(now=1090)
     ring.add("service.ac.online", "ac", 0.0, ts=1120)
