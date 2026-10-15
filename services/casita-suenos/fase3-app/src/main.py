@@ -42,27 +42,44 @@ logger = logging.getLogger(__name__)
 # Redis URL from env or default to compose service name
 _REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 
-# Create rate limiters - RedisRateLimiter falls back to allow on connection errors
-try:
-    from smart_home_common.redis_rate_limiter import RedisRateLimiter
 
-    _global_rate_limiter = RedisRateLimiter(
-        redis_url=_REDIS_URL,
-        max_requests=120,
-        window_seconds=60,
-        key_prefix="casita:global:",
+def _create_rate_limiters() -> tuple:
+    """Create rate limiters, preferring Redis with fallback to in-memory.
+
+    Returns a tuple of (global_limiter, manual_trigger_limiter).
+    """
+    try:
+        from smart_home_common.redis_rate_limiter import RedisRateLimiter
+
+        global_limiter = RedisRateLimiter(
+            redis_url=_REDIS_URL,
+            max_requests=120,
+            window_seconds=60,
+            key_prefix="casita:global:",
+        )
+        manual_limiter = RedisRateLimiter(
+            redis_url=_REDIS_URL,
+            max_requests=10,
+            window_seconds=60,
+            key_prefix="casita:manual:",
+        )
+        # Verify Redis is actually connected (RedisRateLimiter falls back silently)
+        if global_limiter._client is not None:
+            logger.info("Rate limiters using Redis at %s", _REDIS_URL)
+            return global_limiter, manual_limiter
+
+        # Redis client is None means connection failed during init
+        logger.warning("Redis connection not available, falling back to in-memory rate limiting")
+    except Exception as e:
+        logger.warning("Redis unavailable (%s), falling back to in-memory rate limiting", e)
+
+    return (
+        InMemoryRateLimiter(max_requests=120, window_seconds=60),
+        InMemoryRateLimiter(max_requests=10, window_seconds=60),
     )
-    _manual_trigger_limiter = RedisRateLimiter(
-        redis_url=_REDIS_URL,
-        max_requests=10,
-        window_seconds=60,
-        key_prefix="casita:manual:",
-    )
-    logger.info("Rate limiters using Redis at %s", _REDIS_URL)
-except Exception as e:
-    logger.warning("Redis unavailable (%s), falling back to in-memory rate limiting", e)
-    _global_rate_limiter = InMemoryRateLimiter(max_requests=120, window_seconds=60)
-    _manual_trigger_limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60)
+
+
+_global_rate_limiter, _manual_trigger_limiter = _create_rate_limiters()
 
 
 def _get_client_ip(request: Request) -> str:
