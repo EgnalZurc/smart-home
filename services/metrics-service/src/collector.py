@@ -33,6 +33,7 @@ from config import (
     CPU_SAMPLE_WINDOW_S,
     DISK_PATH,
     DOCKER_PROXY_URL,
+    DOCKER_STATS_CONCURRENCY,
     HTTP_TIMEOUT_S,
     PROC_LOADAVG,
     PROC_MEMINFO,
@@ -367,13 +368,45 @@ def parse_container_stats(name: str, stats: dict[str, Any]) -> list[Sample]:
     return samples
 
 
+async def _fetch_container_stats(
+    client: httpx.AsyncClient,
+    proxy_url: str,
+    cid: str,
+    name: str,
+    semaphore: asyncio.Semaphore,
+) -> list[Sample]:
+    """Fetch stats for a single container, respecting the concurrency semaphore.
+
+    Args:
+        client: httpx.AsyncClient instance for making HTTP requests.
+        proxy_url: Base URL of the docker-socket-proxy service.
+        cid: Container ID.
+        name: Container name (for labeling samples).
+        semaphore: Semaphore to limit concurrent requests.
+
+    Returns:
+        List of Sample tuples for this container, or empty list on failure.
+    """
+    async with semaphore:
+        try:
+            r = await client.get(f"{proxy_url}/containers/{cid}/stats?stream=false")
+            r.raise_for_status()
+            return parse_container_stats(name, r.json())
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning(
+                "[DockerSampler] Stats collection failed for '%s': %s", name, exc
+            )
+            return []
+
+
 async def sample_docker(
     client: httpx.AsyncClient, proxy_url: str = DOCKER_PROXY_URL
 ) -> list[Sample]:
     """Pull per-container metrics from docker-socket-proxy.
 
     Discovers running containers dynamically via ``GET /containers/json``,
-    then fetches a one-shot stats snapshot for each container.
+    then fetches stats for each container in parallel (bounded by
+    DOCKER_STATS_CONCURRENCY) to reduce total collection time.
 
     Args:
         client: httpx.AsyncClient instance for making HTTP requests.
@@ -387,29 +420,39 @@ async def sample_docker(
     Side Effects:
         Logs warnings if listing containers or fetching individual stats fails.
     """
-    samples: list[Sample] = []
     try:
         resp = await client.get(f"{proxy_url}/containers/json")
         resp.raise_for_status()
         containers = resp.json()
     except (httpx.HTTPError, ValueError) as exc:
         logger.warning("[DockerSampler] Container list failed: %s", exc)
-        return samples
+        return []
 
+    # Build list of (cid, name) pairs to fetch
+    targets: list[tuple[str, str]] = []
     for c in containers:
         cid = c.get("Id")
-        names = c.get("Names") or []
-        name = names[0].lstrip("/") if names else cid[:12] if cid else "unknown"
         if not cid:
             continue
-        try:
-            r = await client.get(f"{proxy_url}/containers/{cid}/stats?stream=false")
-            r.raise_for_status()
-            samples.extend(parse_container_stats(name, r.json()))
-        except (httpx.HTTPError, ValueError) as exc:
-            logger.warning(
-                "[DockerSampler] Stats collection failed for '%s': %s", name, exc
-            )
+        names = c.get("Names") or []
+        name = names[0].lstrip("/") if names else cid[:12]
+        targets.append((cid, name))
+
+    if not targets:
+        return []
+
+    # Fetch all container stats in parallel with bounded concurrency
+    semaphore = asyncio.Semaphore(DOCKER_STATS_CONCURRENCY)
+    tasks = [
+        _fetch_container_stats(client, proxy_url, cid, name, semaphore)
+        for cid, name in targets
+    ]
+    results = await asyncio.gather(*tasks)
+
+    # Flatten results
+    samples: list[Sample] = []
+    for result in results:
+        samples.extend(result)
     return samples
 
 

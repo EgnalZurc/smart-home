@@ -48,6 +48,13 @@ CPU_SAMPLE_WINDOW_S: float = float(os.environ.get("METRICS_CPU_SAMPLE_WINDOW_S",
 DOCKER_PROXY_URL: str = os.environ.get(
     "METRICS_DOCKER_PROXY_URL", "http://docker-socket-proxy:2375"
 )
+# Maximum concurrent Docker stats requests. Each /stats?stream=false call takes
+# ~2s (Docker waits for a CPU usage delta). With 19 containers, sequential
+# collection would take ~38s, exceeding the 30s interval. With 5 concurrent
+# requests, total time drops to ~8s (ceil(19/5) × 2s).
+DOCKER_STATS_CONCURRENCY: int = int(
+    os.environ.get("METRICS_DOCKER_STATS_CONCURRENCY", "5")
+)
 
 # ── Health sampler ───────────────────────────────────────────────────────────
 BACKEND_HEALTH_URL: str = os.environ.get(
