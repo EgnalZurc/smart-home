@@ -212,9 +212,7 @@ class TestDatabase:
         # Sample score is ~114, use min_score=100 to verify logic works
         assert db.is_on_radar(sample_property.unique_id, min_score=100.0) is True
 
-    def test_is_on_radar_false_when_dismissed(
-        self, db, sample_property, sample_zone
-    ):
+    def test_is_on_radar_false_when_dismissed(self, db, sample_property, sample_zone):
         """is_on_radar returns False after dismissing."""
         db.upsert_property(sample_property)
         db.upsert_score(_make_scored(sample_property, sample_zone))
@@ -1214,3 +1212,117 @@ class TestPropertyUidValidation:
         """UID with semicolon should raise ValueError."""
         with pytest.raises(ValueError, match="Invalid property_uid format"):
             db.dismiss("pisos:test;drop")
+
+
+# ── Tests de thread-safety (concurrent writes) ────────────────────────────────
+
+
+class TestConcurrentWrites:
+    """Tests for thread-safe database writes using threading.Lock."""
+
+    def test_concurrent_upsert_property_no_race(self, db, sample_zone):
+        """Multiple threads upserting properties should not corrupt data."""
+        import threading
+
+        errors: list[Exception] = []
+        num_threads = 10
+        props_per_thread = 20
+
+        def worker(thread_id: int) -> None:
+            try:
+                for i in range(props_per_thread):
+                    prop = _make_property(
+                        portal_id=f"thread{thread_id}_prop{i}",
+                        price=100_000 + thread_id * 1000 + i,
+                    )
+                    db.upsert_property(prop)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [
+            threading.Thread(target=worker, args=(t,)) for t in range(num_threads)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == [], f"Errors during concurrent writes: {errors}"
+        assert db.count_properties() == num_threads * props_per_thread
+
+    def test_concurrent_dismiss_undismiss_no_race(self, db, sample_zone):
+        """Concurrent dismiss/undismiss should not corrupt dismissed state."""
+        import threading
+
+        # Setup: create properties with scores
+        props = [_make_property(portal_id=f"dismiss_test_{i}") for i in range(20)]
+        for prop in props:
+            db.upsert_property(prop)
+            db.upsert_score(_make_scored(prop, sample_zone))
+
+        errors: list[Exception] = []
+
+        def dismiss_worker() -> None:
+            try:
+                for prop in props:
+                    db.dismiss(prop.unique_id)
+            except Exception as e:
+                errors.append(e)
+
+        def undismiss_worker() -> None:
+            try:
+                for prop in props:
+                    db.undismiss(prop.unique_id)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [
+            threading.Thread(target=dismiss_worker),
+            threading.Thread(target=undismiss_worker),
+            threading.Thread(target=dismiss_worker),
+            threading.Thread(target=undismiss_worker),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == [], f"Errors during concurrent dismiss/undismiss: {errors}"
+
+    def test_concurrent_mark_viewed_save_comment_no_race(self, db, sample_zone):
+        """Concurrent mark_viewed and save_comment should not corrupt data."""
+        import threading
+
+        # Setup: create property with score
+        prop = _make_property(portal_id="view_comment_test")
+        db.upsert_property(prop)
+        db.upsert_score(_make_scored(prop, sample_zone))
+
+        errors: list[Exception] = []
+        uid = prop.unique_id
+
+        def view_worker() -> None:
+            try:
+                for _ in range(50):
+                    db.mark_viewed(uid)
+            except Exception as e:
+                errors.append(e)
+
+        def comment_worker(comment_id: int) -> None:
+            try:
+                for i in range(50):
+                    db.save_comment(uid, f"Comment {comment_id}-{i}")
+            except Exception as e:
+                errors.append(e)
+
+        threads = [
+            threading.Thread(target=view_worker),
+            threading.Thread(target=comment_worker, args=(1,)),
+            threading.Thread(target=comment_worker, args=(2,)),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == [], f"Errors during concurrent view/comment: {errors}"

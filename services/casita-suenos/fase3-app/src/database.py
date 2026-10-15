@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -36,6 +37,7 @@ class Database:
 
     def __init__(self, db_path: str) -> None:
         self._path = db_path
+        self._write_lock = threading.Lock()
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
@@ -52,83 +54,85 @@ class Database:
     def upsert_property(self, prop: Property) -> PriceEvent | None:
         uid = prop.unique_id
         now = datetime.now().isoformat()
-        existing = self._conn.execute(
-            "SELECT price FROM properties WHERE uid = ?", (uid,)
-        ).fetchone()
 
-        price_event: PriceEvent | None = None
+        with self._write_lock:
+            existing = self._conn.execute(
+                "SELECT price FROM properties WHERE uid = ?", (uid,)
+            ).fetchone()
 
-        if existing:
-            old_price = existing["price"]
-            if old_price != prop.price:
-                price_event = PriceEvent(
-                    property_uid=uid,
-                    old_price=old_price,
-                    new_price=prop.price,
-                    detected_at=datetime.now(),
-                )
-                logger.info(
-                    "[db] Cambio de precio en %s: %d€ → %d€ (%.1f%%)",
-                    uid,
-                    old_price,
-                    prop.price,
-                    price_event.delta_pct,
-                )
+            price_event: PriceEvent | None = None
+
+            if existing:
+                old_price = existing["price"]
+                if old_price != prop.price:
+                    price_event = PriceEvent(
+                        property_uid=uid,
+                        old_price=old_price,
+                        new_price=prop.price,
+                        detected_at=datetime.now(),
+                    )
+                    logger.info(
+                        "[db] Cambio de precio en %s: %d€ → %d€ (%.1f%%)",
+                        uid,
+                        old_price,
+                        prop.price,
+                        price_event.delta_pct,
+                    )
+                    self._conn.execute(
+                        "INSERT INTO price_history "
+                        "(property_uid, old_price, new_price, delta_pct, detected_at) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        (uid, old_price, prop.price, price_event.delta_pct, now),
+                    )
                 self._conn.execute(
-                    "INSERT INTO price_history "
-                    "(property_uid, old_price, new_price, delta_pct, detected_at) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (uid, old_price, prop.price, price_event.delta_pct, now),
+                    "UPDATE properties SET price=?, last_seen=?, title=?, description=? "
+                    "WHERE uid=?",
+                    (prop.price, now, prop.title, prop.description, uid),
                 )
-            self._conn.execute(
-                "UPDATE properties SET price=?, last_seen=?, title=?, description=? "
-                "WHERE uid=?",
-                (prop.price, now, prop.title, prop.description, uid),
-            )
-        else:
-            self._conn.execute(
-                """INSERT INTO properties
-                   (uid, portal, portal_id, zone_id, url, title, price, rooms, size_m2,
-                    has_garage, has_garden, has_ac, piscina, habitable, description,
-                    first_seen, last_seen, source, published_at,
-                    terrain_m2, garage_type, habitability, internet, has_ac_preinstalled)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    uid,
-                    prop.portal.value,
-                    prop.portal_id,
-                    prop.zone_id,
-                    prop.url,
-                    prop.title,
-                    prop.price,
-                    prop.rooms,
-                    prop.size_m2,
-                    int(prop.has_garage),
-                    int(prop.has_garden_or_plot),
-                    int(getattr(prop, "has_ac", False)),
-                    prop.piscina.value,
-                    int(prop.habitable),
-                    prop.description,
-                    prop.first_seen.isoformat(),
-                    now,
-                    prop.source,
-                    getattr(prop, "published_at", None),
-                    getattr(prop, "terrain_m2", None),
-                    getattr(prop, "garage_type", "ninguno").value
-                    if hasattr(getattr(prop, "garage_type", None), "value")
-                    else str(getattr(prop, "garage_type", "ninguno")),
-                    getattr(prop, "habitability", "desconocido").value
-                    if hasattr(getattr(prop, "habitability", None), "value")
-                    else str(getattr(prop, "habitability", "desconocido")),
-                    getattr(prop, "internet", "ninguno").value
-                    if hasattr(getattr(prop, "internet", None), "value")
-                    else str(getattr(prop, "internet", "ninguno")),
-                    int(getattr(prop, "has_ac_preinstalled", False)),
-                ),
-            )
-            logger.debug("[db] Nueva propiedad: %s — %d€", uid, prop.price)
+            else:
+                self._conn.execute(
+                    """INSERT INTO properties
+                       (uid, portal, portal_id, zone_id, url, title, price, rooms, size_m2,
+                        has_garage, has_garden, has_ac, piscina, habitable, description,
+                        first_seen, last_seen, source, published_at,
+                        terrain_m2, garage_type, habitability, internet, has_ac_preinstalled)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        uid,
+                        prop.portal.value,
+                        prop.portal_id,
+                        prop.zone_id,
+                        prop.url,
+                        prop.title,
+                        prop.price,
+                        prop.rooms,
+                        prop.size_m2,
+                        int(prop.has_garage),
+                        int(prop.has_garden_or_plot),
+                        int(getattr(prop, "has_ac", False)),
+                        prop.piscina.value,
+                        int(prop.habitable),
+                        prop.description,
+                        prop.first_seen.isoformat(),
+                        now,
+                        prop.source,
+                        getattr(prop, "published_at", None),
+                        getattr(prop, "terrain_m2", None),
+                        getattr(prop, "garage_type", "ninguno").value
+                        if hasattr(getattr(prop, "garage_type", None), "value")
+                        else str(getattr(prop, "garage_type", "ninguno")),
+                        getattr(prop, "habitability", "desconocido").value
+                        if hasattr(getattr(prop, "habitability", None), "value")
+                        else str(getattr(prop, "habitability", "desconocido")),
+                        getattr(prop, "internet", "ninguno").value
+                        if hasattr(getattr(prop, "internet", None), "value")
+                        else str(getattr(prop, "internet", "ninguno")),
+                        int(getattr(prop, "has_ac_preinstalled", False)),
+                    ),
+                )
+                logger.debug("[db] Nueva propiedad: %s — %d€", uid, prop.price)
 
-        self._conn.commit()
+            self._conn.commit()
         return price_event
 
     def is_new(self, prop: Property) -> bool:
@@ -146,100 +150,102 @@ class Database:
         s = scored.score
         now = scored.scored_at.isoformat()
 
-        existing = self._conn.execute(
-            "SELECT alerted, dismissed, dismissed_at, COALESCE(viewed,0) as viewed, viewed_at, COALESCE(comment,'') as comment FROM scored_properties WHERE property_uid = ?",
-            (uid,),
-        ).fetchone()
+        with self._write_lock:
+            existing = self._conn.execute(
+                "SELECT alerted, dismissed, dismissed_at, COALESCE(viewed,0) as viewed, viewed_at, COALESCE(comment,'') as comment FROM scored_properties WHERE property_uid = ?",
+                (uid,),
+            ).fetchone()
 
-        alerted = existing["alerted"] if existing else 0
-        dismissed = existing["dismissed"] if existing else 0
-        dism_at = existing["dismissed_at"] if existing else None
-        viewed = existing["viewed"] if existing else 0
-        viewed_at = existing["viewed_at"] if existing else None
-        comment = existing["comment"] if existing else ""
+            alerted = existing["alerted"] if existing else 0
+            dismissed = existing["dismissed"] if existing else 0
+            dism_at = existing["dismissed_at"] if existing else None
+            viewed = existing["viewed"] if existing else 0
+            viewed_at = existing["viewed_at"] if existing else None
+            comment = existing["comment"] if existing else ""
 
-        self._conn.execute(
-            """INSERT OR REPLACE INTO scored_properties
-               (property_uid, zone_id, score_total,
-                score_p1, score_p2, score_p3, score_p4, score_p5,
-                score_p6, score_p7, score_p8, score_p9, score_p10, score_p11, score_p12, score_p13,
-                score_r1, score_r2, score_r3, score_r4, score_r5, score_r6,
-                score_r7, score_r8, score_r9, score_r10, score_r11, score_r12,
-                score_r13, score_r14, score_r15, score_r16, score_r17, score_r18,
-                scored_at, alerted, dismissed, dismissed_at, viewed, viewed_at, comment)
-               VALUES (?, ?, ?,
-                       ?, ?, ?, ?, ?,
-                       ?, ?, ?, ?, ?, ?, ?, ?,
-                       ?, ?, ?, ?, ?, ?,
-                       ?, ?, ?, ?, ?, ?,
-                       ?, ?, ?, ?, ?, ?,
-                       ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                uid,
-                scored.zone.id,
-                s.total,
-                # legado p1-p13 (0 si nuevo sistema)
-                getattr(s, "p1_rooms", getattr(s, "r1_rooms", 0.0)),
-                getattr(s, "p2_piscina", getattr(s, "r5_piscina", 0.0)),
-                getattr(s, "p3_distance", getattr(s, "r12_madrid", 0.0)),
-                getattr(s, "p4_beach", getattr(s, "r13_beach", 0.0)),
-                getattr(s, "p5_pools", getattr(s, "r14_pools", 0.0)),
-                getattr(s, "p6_supermarket", getattr(s, "r8_supermarket", 0.0)),
-                getattr(s, "p7_health", getattr(s, "r9_health", 0.0)),
-                getattr(s, "p8_hospital", getattr(s, "r10_hospital", 0.0)),
-                getattr(s, "p9_price", getattr(s, "r7_price", 0.0)),
-                getattr(s, "p10_fire", getattr(s, "r15_fire", 0.0)),
-                getattr(s, "p11_preference", 0.0),
-                getattr(s, "p12_flood", getattr(s, "r16_flood", 0.0)),
-                getattr(s, "p13_ac", getattr(s, "r6_ac", 0.0)),
-                # R1-R18
-                getattr(s, "r1_rooms", 0.0),
-                getattr(s, "r2_terrain", 0.0),
-                getattr(s, "r3_garage", 0.0),
-                getattr(s, "r4_habitability", 0.0),
-                getattr(s, "r5_piscina", 0.0),
-                getattr(s, "r6_ac", 0.0),
-                getattr(s, "r7_price", 0.0),
-                getattr(s, "r8_supermarket", 0.0),
-                getattr(s, "r9_health", 0.0),
-                getattr(s, "r10_hospital", 0.0),
-                getattr(s, "r11_internet", 0.0),
-                getattr(s, "r12_madrid", 0.0),
-                getattr(s, "r13_beach", 0.0),
-                getattr(s, "r14_pools", 0.0),
-                getattr(s, "r15_fire", 0.0),
-                getattr(s, "r16_flood", 0.0),
-                getattr(s, "r17_coast", 0.0),
-                getattr(s, "r18_beach_plot", 0.0),
-                now,
-                alerted,
-                dismissed,
-                dism_at,
-                viewed,
-                viewed_at,
-                comment,
-            ),
-        )
-        self._conn.commit()
+            self._conn.execute(
+                """INSERT OR REPLACE INTO scored_properties
+                   (property_uid, zone_id, score_total,
+                    score_p1, score_p2, score_p3, score_p4, score_p5,
+                    score_p6, score_p7, score_p8, score_p9, score_p10, score_p11, score_p12, score_p13,
+                    score_r1, score_r2, score_r3, score_r4, score_r5, score_r6,
+                    score_r7, score_r8, score_r9, score_r10, score_r11, score_r12,
+                    score_r13, score_r14, score_r15, score_r16, score_r17, score_r18,
+                    scored_at, alerted, dismissed, dismissed_at, viewed, viewed_at, comment)
+                   VALUES (?, ?, ?,
+                           ?, ?, ?, ?, ?,
+                           ?, ?, ?, ?, ?, ?, ?, ?,
+                           ?, ?, ?, ?, ?, ?,
+                           ?, ?, ?, ?, ?, ?,
+                           ?, ?, ?, ?, ?, ?,
+                           ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    uid,
+                    scored.zone.id,
+                    s.total,
+                    # legado p1-p13 (0 si nuevo sistema)
+                    getattr(s, "p1_rooms", getattr(s, "r1_rooms", 0.0)),
+                    getattr(s, "p2_piscina", getattr(s, "r5_piscina", 0.0)),
+                    getattr(s, "p3_distance", getattr(s, "r12_madrid", 0.0)),
+                    getattr(s, "p4_beach", getattr(s, "r13_beach", 0.0)),
+                    getattr(s, "p5_pools", getattr(s, "r14_pools", 0.0)),
+                    getattr(s, "p6_supermarket", getattr(s, "r8_supermarket", 0.0)),
+                    getattr(s, "p7_health", getattr(s, "r9_health", 0.0)),
+                    getattr(s, "p8_hospital", getattr(s, "r10_hospital", 0.0)),
+                    getattr(s, "p9_price", getattr(s, "r7_price", 0.0)),
+                    getattr(s, "p10_fire", getattr(s, "r15_fire", 0.0)),
+                    getattr(s, "p11_preference", 0.0),
+                    getattr(s, "p12_flood", getattr(s, "r16_flood", 0.0)),
+                    getattr(s, "p13_ac", getattr(s, "r6_ac", 0.0)),
+                    # R1-R18
+                    getattr(s, "r1_rooms", 0.0),
+                    getattr(s, "r2_terrain", 0.0),
+                    getattr(s, "r3_garage", 0.0),
+                    getattr(s, "r4_habitability", 0.0),
+                    getattr(s, "r5_piscina", 0.0),
+                    getattr(s, "r6_ac", 0.0),
+                    getattr(s, "r7_price", 0.0),
+                    getattr(s, "r8_supermarket", 0.0),
+                    getattr(s, "r9_health", 0.0),
+                    getattr(s, "r10_hospital", 0.0),
+                    getattr(s, "r11_internet", 0.0),
+                    getattr(s, "r12_madrid", 0.0),
+                    getattr(s, "r13_beach", 0.0),
+                    getattr(s, "r14_pools", 0.0),
+                    getattr(s, "r15_fire", 0.0),
+                    getattr(s, "r16_flood", 0.0),
+                    getattr(s, "r17_coast", 0.0),
+                    getattr(s, "r18_beach_plot", 0.0),
+                    now,
+                    alerted,
+                    dismissed,
+                    dism_at,
+                    viewed,
+                    viewed_at,
+                    comment,
+                ),
+            )
+            self._conn.commit()
 
     def mark_alerted(self, property_uid: str) -> None:
         # NOTE: property_uid comes from internal DB lookup after scraper discovery.
         # Validated to prevent injection if data source changes in the future.
         _validate_property_uid(property_uid)
-        self._conn.execute(
-            """INSERT OR IGNORE INTO scored_properties
-               (property_uid, zone_id, score_total,
-                score_p1, score_p2, score_p3, score_p4, score_p5,
-                score_p6, score_p7, score_p8, score_p9, score_p10, score_p11,
-                scored_at, alerted)
-               VALUES (?, '', 0, 0,0,0,0,0,0,0,0,0,0,0, ?, 0)""",
-            (property_uid, datetime.now().isoformat()),
-        )
-        self._conn.execute(
-            "UPDATE scored_properties SET alerted = 1 WHERE property_uid = ?",
-            (property_uid,),
-        )
-        self._conn.commit()
+        with self._write_lock:
+            self._conn.execute(
+                """INSERT OR IGNORE INTO scored_properties
+                   (property_uid, zone_id, score_total,
+                    score_p1, score_p2, score_p3, score_p4, score_p5,
+                    score_p6, score_p7, score_p8, score_p9, score_p10, score_p11,
+                    scored_at, alerted)
+                   VALUES (?, '', 0, 0,0,0,0,0,0,0,0,0,0,0, ?, 0)""",
+                (property_uid, datetime.now().isoformat()),
+            )
+            self._conn.execute(
+                "UPDATE scored_properties SET alerted = 1 WHERE property_uid = ?",
+                (property_uid,),
+            )
+            self._conn.commit()
 
     def is_alerted(self, property_uid: str) -> bool:
         # NOTE: property_uid comes from internal DB lookup after scraper discovery.
@@ -260,17 +266,18 @@ class Database:
         # NOTE: property_uid comes from internal DB lookup after scraper discovery.
         # Validated to prevent injection if data source changes in the future.
         _validate_property_uid(property_uid)
-        row = self._conn.execute(
-            "SELECT 1 FROM scored_properties WHERE property_uid = ?",
-            (property_uid,),
-        ).fetchone()
-        if not row:
-            return False
-        self._conn.execute(
-            "UPDATE scored_properties SET dismissed=1, dismissed_at=? WHERE property_uid=?",
-            (datetime.now().isoformat(), property_uid),
-        )
-        self._conn.commit()
+        with self._write_lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM scored_properties WHERE property_uid = ?",
+                (property_uid,),
+            ).fetchone()
+            if not row:
+                return False
+            self._conn.execute(
+                "UPDATE scored_properties SET dismissed=1, dismissed_at=? WHERE property_uid=?",
+                (datetime.now().isoformat(), property_uid),
+            )
+            self._conn.commit()
         logger.info("[db] Propiedad descartada: %s", property_uid)
         return True
 
@@ -279,17 +286,18 @@ class Database:
         # NOTE: property_uid comes from internal DB lookup after scraper discovery.
         # Validated to prevent injection if data source changes in the future.
         _validate_property_uid(property_uid)
-        row = self._conn.execute(
-            "SELECT 1 FROM scored_properties WHERE property_uid = ?",
-            (property_uid,),
-        ).fetchone()
-        if not row:
-            return False
-        self._conn.execute(
-            "UPDATE scored_properties SET dismissed=0, dismissed_at=NULL WHERE property_uid=?",
-            (property_uid,),
-        )
-        self._conn.commit()
+        with self._write_lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM scored_properties WHERE property_uid = ?",
+                (property_uid,),
+            ).fetchone()
+            if not row:
+                return False
+            self._conn.execute(
+                "UPDATE scored_properties SET dismissed=0, dismissed_at=NULL WHERE property_uid=?",
+                (property_uid,),
+            )
+            self._conn.commit()
         logger.info("[db] Propiedad recuperada: %s", property_uid)
         return True
 
@@ -411,11 +419,12 @@ class Database:
     def save_weekly_summary(self, content: str) -> None:
         """Guarda el contenido del último resumen semanal enviado."""
         now = datetime.now().isoformat()
-        self._conn.execute(
-            "INSERT INTO weekly_summaries (sent_at, content) VALUES (?, ?)",
-            (now, content),
-        )
-        self._conn.commit()
+        with self._write_lock:
+            self._conn.execute(
+                "INSERT INTO weekly_summaries (sent_at, content) VALUES (?, ?)",
+                (now, content),
+            )
+            self._conn.commit()
 
     def get_last_weekly_summary(self) -> dict | None:
         """Devuelve el último resumen semanal guardado."""
@@ -441,12 +450,13 @@ class Database:
 
     def save_schedule_config(self, config: dict) -> None:
         """Guarda la configuración de schedule."""
-        for key, value in config.items():
-            self._conn.execute(
-                "INSERT OR REPLACE INTO schedule_config (key, value) VALUES (?, ?)",
-                (key, json.dumps(value)),
-            )
-        self._conn.commit()
+        with self._write_lock:
+            for key, value in config.items():
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO schedule_config (key, value) VALUES (?, ?)",
+                    (key, json.dumps(value)),
+                )
+            self._conn.commit()
 
     # ------------------------------------------------------------------
     # Consultas generales
@@ -795,17 +805,19 @@ class Database:
         # NOTE: property_uid comes from internal DB lookup after scraper discovery.
         # Validated to prevent injection if data source changes in the future.
         _validate_property_uid(property_uid)
-        row = self._conn.execute(
-            "SELECT 1 FROM scored_properties WHERE property_uid = ?", (property_uid,)
-        ).fetchone()
-        if not row:
-            return False
-        now = datetime.now().isoformat()
-        self._conn.execute(
-            "UPDATE scored_properties SET viewed=1, viewed_at=? WHERE property_uid=?",
-            (now, property_uid),
-        )
-        self._conn.commit()
+        with self._write_lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM scored_properties WHERE property_uid = ?",
+                (property_uid,),
+            ).fetchone()
+            if not row:
+                return False
+            now = datetime.now().isoformat()
+            self._conn.execute(
+                "UPDATE scored_properties SET viewed=1, viewed_at=? WHERE property_uid=?",
+                (now, property_uid),
+            )
+            self._conn.commit()
         return True
 
     def save_comment(self, property_uid: str, comment: str) -> bool:
@@ -813,16 +825,18 @@ class Database:
         # NOTE: property_uid comes from internal DB lookup after scraper discovery.
         # Validated to prevent injection if data source changes in the future.
         _validate_property_uid(property_uid)
-        row = self._conn.execute(
-            "SELECT 1 FROM scored_properties WHERE property_uid = ?", (property_uid,)
-        ).fetchone()
-        if not row:
-            return False
-        self._conn.execute(
-            "UPDATE scored_properties SET comment=? WHERE property_uid=?",
-            (comment.strip(), property_uid),
-        )
-        self._conn.commit()
+        with self._write_lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM scored_properties WHERE property_uid = ?",
+                (property_uid,),
+            ).fetchone()
+            if not row:
+                return False
+            self._conn.execute(
+                "UPDATE scored_properties SET comment=? WHERE property_uid=?",
+                (comment.strip(), property_uid),
+            )
+            self._conn.commit()
         return True
 
     # ------------------------------------------------------------------
@@ -831,12 +845,13 @@ class Database:
     def register_telegram_chat(self, chat_id: str, username: str = "") -> None:
         """Registra o actualiza un chat_id de Telegram."""
         now = datetime.now().isoformat()
-        self._conn.execute(
-            "INSERT OR REPLACE INTO telegram_chats "
-            "(chat_id, username, registered_at) VALUES (?, ?, ?)",
-            (str(chat_id), username or "", now),
-        )
-        self._conn.commit()
+        with self._write_lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO telegram_chats "
+                "(chat_id, username, registered_at) VALUES (?, ?, ?)",
+                (str(chat_id), username or "", now),
+            )
+            self._conn.commit()
         logger.info("[db] Telegram chat registrado: %s (%s)", chat_id, username)
 
     def get_telegram_chat_ids(self) -> list[str]:
