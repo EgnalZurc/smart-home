@@ -398,32 +398,32 @@ class AlertEngine:
     # Templates use {target}, {value}, {unit}, {threshold} placeholders.
     RULE_DESCRIPTIONS: dict[str, tuple[str, str]] = {
         "host_ram": (
-            "RAM del host al {value}{unit} (umbral {threshold}{unit})",
-            "RAM del host normalizada",
+            "Uso de RAM en {value}{unit} (máx {threshold}{unit})",
+            "Uso de RAM normalizado",
         ),
         "host_swap": (
-            "Swap del host: {value}{unit} (umbral {threshold}{unit})",
-            "Swap del host normalizado",
+            "Uso de swap en {value}{unit} (máx {threshold}{unit})",
+            "Uso de swap normalizado",
         ),
         "host_temp": (
-            "Temperatura del host: {value}{unit} (umbral {threshold}{unit})",
-            "Temperatura del host normalizada",
+            "Temperatura en {value}{unit} (máx {threshold}{unit})",
+            "Temperatura normalizada",
         ),
         "host_disk": (
-            "Disco del host al {value}{unit} (umbral {threshold}{unit})",
-            "Disco del host normalizado",
+            "Disco al {value}{unit} (máx {threshold}{unit})",
+            "Espacio en disco normalizado",
         ),
         "container_mem": (
-            "Contenedor *{target}*: memoria al {value}{unit} (umbral {threshold}{unit})",
+            "Contenedor *{target}* usando {value}{unit} de memoria (máx {threshold}{unit})",
             "Contenedor *{target}*: memoria normalizada",
         ),
         "service_online": (
-            "Servicio *{target}* offline",
-            "Servicio *{target}* online de nuevo",
+            "Servicio *{target}* no responde",
+            "Servicio *{target}* vuelve a responder",
         ),
         "service_latency": (
-            "Servicio *{target}*: latencia {value}{unit} (umbral {threshold}{unit})",
-            "Servicio *{target}*: latencia normalizada",
+            "Servicio *{target}* lento: {value}{unit} (máx {threshold}{unit})",
+            "Servicio *{target}* responde con normalidad",
         ),
     }
 
@@ -543,13 +543,13 @@ class AlertEngine:
 
     # Plain-text descriptions for dashboard titles (no markdown).
     RULE_TITLES: dict[str, tuple[str, str]] = {
-        "host_ram": ("RAM del host: {value}{unit}", "host"),
-        "host_swap": ("Swap del host: {value}{unit}", "host"),
+        "host_ram": ("RAM: {value}{unit}", "host"),
+        "host_swap": ("Swap: {value}{unit}", "host"),
         "host_temp": ("Temperatura: {value}{unit}", "host"),
         "host_disk": ("Disco: {value}{unit}", "host"),
-        "container_mem": ("Contenedor {target}: {value}{unit}", "container"),
-        "service_online": ("Servicio {target} offline", "service"),
-        "service_latency": ("Latencia {target}: {value}{unit}", "service"),
+        "container_mem": ("{target}: {value}{unit} memoria", "container"),
+        "service_online": ("{target} no responde", "service"),
+        "service_latency": ("{target} lento: {value}{unit}", "service"),
     }
 
     def _alert_title(self, alert: ActiveAlert) -> str:
