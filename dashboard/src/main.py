@@ -15,6 +15,7 @@ from api.auth import admin as auth_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from middleware import CSPNonceMiddleware
 from profiles import db as profiles_db
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import RedirectResponse as StarletteRedirect
@@ -296,6 +297,9 @@ Most endpoints require authentication. Use `POST /api/auth/token` to obtain a se
 # AUTH middleware (must be added before CORS so unauthenticated requests
 # are redirected before CORS headers are processed)
 app.add_middleware(AuthMiddleware)
+
+# CSP nonce middleware — generates per-request nonces for inline scripts/styles
+app.add_middleware(CSPNonceMiddleware)
 
 # CORS - Configure allowed origins for security
 app.add_middleware(
