@@ -71,6 +71,10 @@ MAX_REQUESTS_PER_MINUTE: int = int(
 )
 # Window size in seconds for rate limit tracking.
 RATE_LIMIT_WINDOW_S: int = int(os.environ.get("METRICS_RATE_LIMIT_WINDOW_S", "60"))
+# Cleanup interval for stale rate limit entries (default: 5 minutes).
+RATE_LIMIT_CLEANUP_INTERVAL_S: int = int(
+    os.environ.get("METRICS_RATE_LIMIT_CLEANUP_INTERVAL_S", "300")
+)
 
 # ── Input validation (M-7) ───────────────────────────────────────────────────
 # Maximum length for container names in API requests.
