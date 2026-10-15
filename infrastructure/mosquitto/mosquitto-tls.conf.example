@@ -1,0 +1,102 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Mosquitto MQTT Broker - TLS Configuration Example
+# See README.md section "TLS/SSL Encryption" for setup instructions
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# This file demonstrates TLS configuration for Mosquitto. To use it:
+# 1. Generate or obtain certificates (see README.md)
+# 2. Copy this file to mosquitto.conf
+# 3. Adjust paths and settings for your environment
+# 4. Restart mosquitto
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─── TLS Listener ─────────────────────────────────────────────────────────────
+# Port 8883 is the standard MQTT over TLS port (IANA assigned)
+listener 8883
+
+# Server certificate and key
+cafile /mosquitto/certs/ca.crt
+certfile /mosquitto/certs/server.crt
+keyfile /mosquitto/certs/server.key
+
+# TLS version - require TLS 1.2 minimum (disable older insecure versions)
+tls_version tlsv1.2
+
+# ─── Client Certificate Authentication (Optional) ────────────────────────────
+# Uncomment to require client certificates (mutual TLS / mTLS)
+# This provides stronger authentication than username/password
+#
+# require_certificate true
+# use_identity_as_username true
+#
+# With use_identity_as_username, the client's certificate CN becomes the
+# username for ACL purposes - no password needed.
+
+# ─── Plain MQTT Listener (Optional) ──────────────────────────────────────────
+# Keep port 1883 for internal Docker network traffic where TLS overhead
+# is unnecessary (all traffic stays on localhost/Docker bridge)
+#
+# listener 1883 127.0.0.1
+#
+# Or bind to Docker network only:
+# listener 1883 0.0.0.0
+# Note: Combined with Docker network isolation, this is still secure
+
+# ─── Authentication ───────────────────────────────────────────────────────────
+# Same as non-TLS config - authentication is independent of encryption
+allow_anonymous false
+password_file /mosquitto/config/passwd
+acl_file /mosquitto/config/acl.conf
+
+# ─── Persistence ──────────────────────────────────────────────────────────────
+persistence true
+persistence_location /mosquitto/data/
+
+# ─── Logging ──────────────────────────────────────────────────────────────────
+log_dest stdout
+log_dest file /mosquitto/log/mosquitto.log
+log_timestamp true
+log_type error
+log_type warning
+log_type notice
+log_type subscribe
+log_type unsubscribe
+
+# ─── Resource Limits ──────────────────────────────────────────────────────────
+max_connections 50
+max_inflight_messages 20
+max_queued_messages 1000
+message_size_limit 10240
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Certificate Generation Quick Reference
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Option A: Self-signed (internal use, testing)
+# ---------------------------------------------
+# # Generate CA
+# openssl genrsa -out ca.key 2048
+# openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 \
+#   -out ca.crt -subj "/CN=Mosquitto CA"
+#
+# # Generate server certificate
+# openssl genrsa -out server.key 2048
+# openssl req -new -key server.key -out server.csr \
+#   -subj "/CN=mosquitto.local"
+# openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key \
+#   -CAcreateserial -out server.crt -days 3650 -sha256
+#
+# Option B: Let's Encrypt (public-facing)
+# ---------------------------------------
+# Use certbot with your domain. Certificates go to:
+#   /etc/letsencrypt/live/yourdomain.com/
+#
+# Map in docker-compose:
+#   volumes:
+#     - /etc/letsencrypt/live/yourdomain.com/fullchain.pem:/mosquitto/certs/server.crt:ro
+#     - /etc/letsencrypt/live/yourdomain.com/privkey.pem:/mosquitto/certs/server.key:ro
+#
+# Set up auto-renewal hook to reload mosquitto after certificate renewal.
+#
+# ═══════════════════════════════════════════════════════════════════════════════

@@ -126,23 +126,197 @@ mosquitto:
   # NO ports: section = not exposed to host
 ```
 
-### Certificate Authentication (Alternative)
+## TLS/SSL Encryption
 
-For higher security environments, Mosquitto supports TLS client certificates:
+For environments requiring encrypted MQTT traffic (external clients, compliance requirements), Mosquitto supports TLS on port 8883.
+
+### When to Use TLS
+
+| Scenario | TLS Recommended? |
+|----------|------------------|
+| All clients on Docker network | No - already isolated |
+| External access via Tailscale | No - Tailscale encrypts |
+| Direct external access (port forwarding) | **Yes** |
+| Compliance/audit requirements | **Yes** |
+| Mixed internal + external clients | Yes for external listener |
+
+**Current setup**: We use password auth over the isolated Docker network, with Tailscale for any external access. TLS adds overhead without security benefit in this configuration.
+
+### TLS Setup Guide
+
+See `mosquitto-tls.conf.example` for a complete TLS configuration template.
+
+#### Step 1: Generate Certificates
+
+**Option A: Self-signed (internal/testing)**
+
+```bash
+# Create certs directory
+mkdir -p ~/smart-home-prod/data/mosquitto/certs
+cd ~/smart-home-prod/data/mosquitto/certs
+
+# Generate CA (Certificate Authority)
+openssl genrsa -out ca.key 2048
+openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 \
+  -out ca.crt -subj "/CN=Mosquitto CA"
+
+# Generate server key and CSR
+openssl genrsa -out server.key 2048
+openssl req -new -key server.key -out server.csr \
+  -subj "/CN=mosquitto"
+
+# Sign server certificate with CA
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key \
+  -CAcreateserial -out server.crt -days 3650 -sha256
+
+# Clean up CSR
+rm server.csr
+
+# Set permissions (mosquitto runs as uid 1883 in container)
+chmod 644 ca.crt server.crt
+chmod 640 server.key ca.key
+sudo chown 1883:1883 server.key
+```
+
+**Option B: Let's Encrypt (public domain)**
+
+```bash
+# Install certbot
+sudo apt install certbot
+
+# Get certificate (requires port 80 accessible)
+sudo certbot certonly --standalone -d mqtt.yourdomain.com
+
+# Certificates will be at:
+# /etc/letsencrypt/live/mqtt.yourdomain.com/fullchain.pem
+# /etc/letsencrypt/live/mqtt.yourdomain.com/privkey.pem
+```
+
+#### Step 2: Update docker-compose.prod.yml
+
+Add certificate volume mounts and expose port 8883:
+
+```yaml
+mosquitto:
+  image: eclipse-mosquitto:2.0.18
+  ports:
+    - "8883:8883"  # TLS MQTT
+  volumes:
+    - ./infrastructure/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    - ./infrastructure/mosquitto/acl.conf:/mosquitto/config/acl.conf:ro
+    - ./data/mosquitto/config/passwd:/mosquitto/config/passwd:ro
+    - ./data/mosquitto/certs:/mosquitto/certs:ro  # Add this
+    - ./data/mosquitto/data:/mosquitto/data
+    - ./data/mosquitto/log:/mosquitto/log
+```
+
+For Let's Encrypt:
+```yaml
+    - /etc/letsencrypt/live/mqtt.yourdomain.com/fullchain.pem:/mosquitto/certs/server.crt:ro
+    - /etc/letsencrypt/live/mqtt.yourdomain.com/privkey.pem:/mosquitto/certs/server.key:ro
+```
+
+#### Step 3: Update mosquitto.conf
+
+Add TLS listener configuration:
 
 ```
-# mosquitto.conf (not currently used)
+# TLS listener on standard port
 listener 8883
 cafile /mosquitto/certs/ca.crt
 certfile /mosquitto/certs/server.crt
 keyfile /mosquitto/certs/server.key
-require_certificate true
+tls_version tlsv1.2
+
+# Keep internal plain listener for Docker network
+listener 1883
 ```
 
-**Why we use password auth instead**:
-- Simpler certificate management for a home network
-- All traffic is internal to Docker network
-- External access is via Tailscale (already encrypted)
+#### Step 4: Test TLS Connection
+
+```bash
+# From a machine with the CA certificate
+mosquitto_sub -h raspberrypi.local -p 8883 \
+  --cafile ca.crt \
+  -u ac-service -P <password> \
+  -t 'zigbee2mqtt/#' -C 1
+
+# Test with openssl
+openssl s_client -connect raspberrypi.local:8883 -CAfile ca.crt
+```
+
+### Client Certificate Authentication (mTLS)
+
+For highest security, require client certificates instead of passwords:
+
+```
+# In mosquitto.conf
+require_certificate true
+use_identity_as_username true
+```
+
+With `use_identity_as_username`, the certificate's Common Name (CN) becomes the MQTT username for ACL matching.
+
+**Generate client certificate:**
+
+```bash
+# Generate client key
+openssl genrsa -out client.key 2048
+
+# Generate client CSR (CN must match ACL username)
+openssl req -new -key client.key -out client.csr \
+  -subj "/CN=ac-service"
+
+# Sign with CA
+openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key \
+  -CAcreateserial -out client.crt -days 365 -sha256
+```
+
+**Connect with client certificate:**
+
+```bash
+mosquitto_sub -h raspberrypi.local -p 8883 \
+  --cafile ca.crt \
+  --cert client.crt \
+  --key client.key \
+  -t 'zigbee2mqtt/#'
+```
+
+### Let's Encrypt Auto-Renewal
+
+Set up a deploy hook to reload mosquitto after certificate renewal:
+
+```bash
+# /etc/letsencrypt/renewal-hooks/deploy/mosquitto-reload.sh
+#!/bin/bash
+docker exec mosquitto kill -HUP 1
+```
+
+```bash
+chmod +x /etc/letsencrypt/renewal-hooks/deploy/mosquitto-reload.sh
+```
+
+### Troubleshooting TLS
+
+**Check certificate validity:**
+```bash
+openssl x509 -in server.crt -text -noout | grep -A2 "Validity"
+```
+
+**Test TLS handshake:**
+```bash
+openssl s_client -connect raspberrypi.local:8883 -CAfile ca.crt -brief
+```
+
+**Common errors:**
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `certificate verify failed` | CA not trusted | Add CA to client's trusted store or use `--cafile` |
+| `unable to get local issuer certificate` | Missing CA cert | Provide `cafile` in config |
+| `certificate has expired` | Cert expired | Regenerate certificate |
+| `wrong version number` | Plain MQTT to TLS port | Use port 8883 with TLS, 1883 without |
+| `permission denied` reading key | Wrong file perms | `chmod 640 server.key; chown 1883:1883 server.key` |
 
 ### Monitoring for Unauthorized Access
 
@@ -161,6 +335,7 @@ docker exec mosquitto mosquitto_sub -u ac-service -P <password> -t '$SYS/broker/
 | File | Purpose |
 |------|---------|
 | `mosquitto.conf` | Main configuration |
+| `mosquitto-tls.conf.example` | TLS configuration template |
 | `acl.conf` | Topic permissions per user |
 | `passwd.example` | Template (real passwd is on Pi only) |
 
