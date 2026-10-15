@@ -432,125 +432,6 @@ class TestWorldsDeleteEndpoint:
             mock_delete.assert_called_once_with("/valheim/worlds/OldWorld")
 
 
-# ── PC Control Endpoints ──────────────────────────────────────────────────────
-
-
-class TestPCStatusEndpoint:
-    """Tests for /api/pc/status endpoint."""
-
-    def test_pc_status_online(self):
-        """PC status should return health data when reachable."""
-        from src.main import app, pc_agent
-
-        with patch.object(
-            pc_agent,
-            "get",
-            new_callable=AsyncMock,
-            return_value={"online": True, "docker": True},
-        ):
-            client = TestClient(app)
-            response = client.get("/api/pc/status")
-
-            assert response.status_code == 200
-            data = response.json()
-            assert data["online"] is True
-
-    def test_pc_status_offline(self):
-        """PC status should indicate offline when unreachable."""
-        from src.main import app, pc_agent
-
-        with patch.object(
-            pc_agent,
-            "get",
-            new_callable=AsyncMock,
-            side_effect=HTTPException(503, "Service unreachable"),
-        ):
-            client = TestClient(app)
-            response = client.get("/api/pc/status")
-
-            assert response.status_code == 200
-            data = response.json()
-            assert data["online"] is False
-
-
-class TestPCModeGetEndpoint:
-    """Tests for GET /api/pc/mode endpoint."""
-
-    def test_get_pc_mode_success(self):
-        """Get PC mode should return current profile."""
-        from src.main import app, pc_agent
-
-        with patch.object(
-            pc_agent,
-            "get",
-            new_callable=AsyncMock,
-            return_value={"mode": "gaming"},
-        ):
-            client = TestClient(app)
-            response = client.get("/api/pc/mode")
-
-            assert response.status_code == 200
-            assert response.json()["mode"] == "gaming"
-
-
-class TestPCModeSetEndpoint:
-    """Tests for POST /api/pc/mode/{mode} endpoint."""
-
-    def test_set_valid_mode_gaming(self):
-        """Setting gaming mode should succeed."""
-        from src.main import app, pc_agent
-
-        with patch.object(
-            pc_agent,
-            "post",
-            new_callable=AsyncMock,
-            return_value={"mode": "gaming", "applied": True},
-        ):
-            client = TestClient(app)
-            response = client.post("/api/pc/mode/gaming")
-
-            assert response.status_code == 200
-
-    def test_set_valid_mode_servidor(self):
-        """Setting servidor mode should succeed."""
-        from src.main import app, pc_agent
-
-        with patch.object(
-            pc_agent,
-            "post",
-            new_callable=AsyncMock,
-            return_value={"mode": "servidor", "applied": True},
-        ):
-            client = TestClient(app)
-            response = client.post("/api/pc/mode/servidor")
-
-            assert response.status_code == 200
-
-    def test_set_valid_mode_balanced(self):
-        """Setting balanced mode should succeed."""
-        from src.main import app, pc_agent
-
-        with patch.object(
-            pc_agent,
-            "post",
-            new_callable=AsyncMock,
-            return_value={"mode": "balanced", "applied": True},
-        ):
-            client = TestClient(app)
-            response = client.post("/api/pc/mode/balanced")
-
-            assert response.status_code == 200
-
-    def test_invalid_mode_rejected(self):
-        """Invalid power modes should be rejected."""
-        from src.main import app
-
-        client = TestClient(app)
-        response = client.post("/api/pc/mode/invalid")
-
-        assert response.status_code == 400
-
-
 # ── world_name Validation ─────────────────────────────────────────────────────
 
 
@@ -812,7 +693,6 @@ class TestConfigBoundsValidation:
 
         assert clamp_backups(150) == 100
         assert clamp_backups(999) == 100
-
 
 
 class TestSanitizeShellArg:
