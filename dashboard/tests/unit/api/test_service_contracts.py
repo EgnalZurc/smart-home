@@ -125,6 +125,15 @@ SERVICE_CONTRACTS = {
             "cached": bool,
         },
     },
+    "valheim": {
+        "required_fields": {"online"},
+        "optional_fields": {"latency_ms", "cached"},
+        "field_types": {
+            "online": bool,
+            "latency_ms": int,
+            "cached": bool,
+        },
+    },
 
     "metrics": {
         "required_fields": {"online"},
@@ -606,6 +615,7 @@ class TestContractCompleteness:
             "get_baby_gifts_health": "baby-gifts",
             "get_portfolio_health": "portfolio",
             "get_passwords_health": "passwords",
+            "get_valheim_health": "valheim",
             "get_metrics_health": "metrics",
             "get_energy_health": "energy",
             "get_presence_health": "presence",
