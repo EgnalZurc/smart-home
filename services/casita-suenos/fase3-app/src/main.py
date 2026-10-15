@@ -95,7 +95,15 @@ DB_PATH = os.environ.get("CASITA_DB_PATH", f"{DATA_DIR}/casita.db")
 APIFY_USAGE_PATH = os.environ.get("APIFY_USAGE_PATH", f"{DATA_DIR}/apify_usage.json")
 
 # Puerto
-STATUS_PORT = int(os.environ.get("CASITA_STATUS_PORT", "8001"))
+try:
+    STATUS_PORT = int(os.environ.get("CASITA_STATUS_PORT", "8001"))
+except ValueError:
+    logging.error(
+        "[main] CASITA_STATUS_PORT debe ser numérico, se encontró: %r. "
+        "Usando valor por defecto 8001.",
+        os.environ.get("CASITA_STATUS_PORT"),
+    )
+    STATUS_PORT = 8001
 
 # ── Validación ────────────────────────────────────────────────────────────────
 
