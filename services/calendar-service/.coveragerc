@@ -2,6 +2,7 @@
 omit =
     src/google_sync.py
     src/setup_oauth.py
+    src/main.py
 
 [report]
 exclude_lines =

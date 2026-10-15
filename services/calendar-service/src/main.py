@@ -1,44 +1,67 @@
 """calendar-service — Google Calendar sync, dashboard agenda + Telegram reminders.
 
-Scaffold (Task 8.2): FastAPI app with the health endpoint wired to the real
-DB-aware checks the design calls for, plus the read-API surface stubbed so the
-contract and routing exist. The Google sync loop, reminder tick and prune loop
-(design §4.1) land in later tasks — the lifespan currently just opens the store
-and records startup time so the health probe is meaningful from day one.
-
 Endpoints (served on :8014):
-  GET /health                      → HealthResponse (db_ok, google_auth_ok, …)
-  GET /api/health/calendar         → health alias for the dashboard catalogue/CI
-  GET /api/calendar/upcoming       → next N events (widget 1)  [scaffold stub]
-  GET /api/calendar/today          → today's agenda (widget 2) [scaffold stub]
-
-All data endpoints are SUPER-gated at the backend proxy; the browser never
-talks to :8014 directly (design §7).
+  GET /health                      → HealthResponse
+  GET /api/health/calendar         → health alias
+  GET /api/calendar/upcoming       → next N events
+  GET /api/calendar/today          → today's agenda
+  POST /api/calendar/sync          → trigger manual sync
+  GET /api/calendar/config         → get config (SUPER)
+  POST /api/calendar/config        → update config (SUPER)
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
 import sys
+import threading
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from config import (
+    CALENDAR_SEED,
+    DEFAULT_OFFSETS,
+    EVENT_RETENTION_DAYS,
+    GOOGLE_OAUTH_CLIENT_ID,
+    GOOGLE_OAUTH_CLIENT_SECRET,
     LOG_LEVEL,
+    NOTIFY_ENABLED,
     PORT,
+    PRUNE_INTERVAL_S,
+    REMINDER_RETENTION_DAYS,
+    REMINDER_TICK_S,
     SERVICE_NAME,
+    SYNC_HORIZON_DAYS,
+    SYNC_INTERVAL_S,
     TOKEN_PATH,
+    TZ,
 )
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel
 
-# Shared libs live at /app/libs in the container; add to path for imports.
 _LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
 if _LIBS_PATH not in sys.path:
     sys.path.insert(0, _LIBS_PATH)
 
 from database import CalendarStore  # noqa: E402
 from models import HealthResponse  # noqa: E402
+from reminder_engine import check_and_send_reminders  # noqa: E402
+
+try:
+    from google_sync import GoogleAuthError, GoogleCalendarClient
+except ImportError:
+    GoogleCalendarClient = None  # type: ignore[misc,assignment]
+    GoogleAuthError = Exception  # type: ignore[misc,assignment]
+
+try:
+    from smart_home_common.telegram import TelegramNotifier
+except ImportError:
+    TelegramNotifier = None  # type: ignore[misc,assignment]
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -46,34 +69,211 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Single store instance for the process lifetime.
 store = CalendarStore()
+google_client: GoogleCalendarClient | None = None
+telegram_notifier: TelegramNotifier | None = None
 
-# Module-level liveness markers. The sync loop / reminder tick (later tasks)
-# update these; until then they stay None so the health probe honestly reports
-# "no sync has run yet" rather than a fake-green value.
 _last_sync_ts: float | None = None
 _last_sync_ok: bool | None = None
 _last_reminder_tick_ts: float | None = None
+_shutdown = threading.Event()
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Background loops
+# ═══════════════════════════════════════════════════════════════════════════════
+def _sync_loop() -> None:
+    """Sync enabled calendars every SYNC_INTERVAL_S seconds."""
+    global _last_sync_ts, _last_sync_ok
+    logger.info("Sync loop started (interval=%ds)", SYNC_INTERVAL_S)
+
+    while not _shutdown.is_set():
+        try:
+            if google_client is None:
+                logger.debug("Sync skipped: Google client not initialized")
+                _last_sync_ok = False
+            else:
+                _do_sync()
+                _last_sync_ok = True
+        except Exception as exc:
+            logger.exception("Sync loop error: %s", exc)
+            _last_sync_ok = False
+        finally:
+            _last_sync_ts = time.monotonic()
+        _shutdown.wait(SYNC_INTERVAL_S)
+    logger.info("Sync loop stopped")
+
+
+def _do_sync() -> None:
+    """Perform one sync cycle for all enabled calendars."""
+    if google_client is None:
+        return
+    calendars = store.get_enabled_calendars()
+    if not calendars:
+        logger.info("No enabled calendars to sync")
+        return
+
+    now = int(time.time())
+    horizon = now + SYNC_HORIZON_DAYS * 86400
+
+    for cal in calendars:
+        try:
+            events, new_token = google_client.sync_events(
+                calendar_id=cal.id,
+                sync_token=cal.sync_token,
+                time_min=datetime.fromtimestamp(now, tz=ZoneInfo("UTC")),
+                time_max=datetime.fromtimestamp(horizon, tz=ZoneInfo("UTC")),
+            )
+            for ev in events:
+                store.upsert_event(
+                    {
+                        "uid": ev["id"],
+                        "calendar_id": cal.id,
+                        "google_id": ev["id"],
+                        "title": ev.get("summary", "(no title)"),
+                        "start_ts": _parse_event_time(ev.get("start", {})),
+                        "end_ts": _parse_event_time(ev.get("end", {})),
+                        "all_day": "date" in ev.get("start", {}),
+                        "location": ev.get("location"),
+                        "description": ev.get("description"),
+                        "person_id": None,
+                        "status": ev.get("status", "confirmed"),
+                        "etag": ev.get("etag"),
+                    }
+                )
+            if new_token:
+                store.update_sync_token(cal.id, new_token)
+            logger.info("Synced %d events from %s", len(events), cal.label)
+        except Exception as exc:
+            logger.error("Error syncing calendar %s: %s", cal.id, exc)
+
+
+def _parse_event_time(time_obj: dict) -> int:
+    """Parse Google Calendar time object to Unix timestamp."""
+    if "dateTime" in time_obj:
+        dt = datetime.fromisoformat(time_obj["dateTime"].replace("Z", "+00:00"))
+        return int(dt.timestamp())
+    elif "date" in time_obj:
+        dt = datetime.strptime(time_obj["date"], "%Y-%m-%d")
+        dt = dt.replace(tzinfo=ZoneInfo(TZ))
+        return int(dt.timestamp())
+    return 0
+
+
+def _reminder_loop() -> None:
+    """Check for due reminders every REMINDER_TICK_S seconds."""
+    global _last_reminder_tick_ts
+    logger.info("Reminder loop started (interval=%ds)", REMINDER_TICK_S)
+
+    while not _shutdown.is_set():
+        try:
+            if NOTIFY_ENABLED and telegram_notifier:
+                sent = check_and_send_reminders(store, telegram_notifier)
+                if sent > 0:
+                    logger.info("Sent %d reminders", sent)
+        except Exception as exc:
+            logger.exception("Reminder loop error: %s", exc)
+        finally:
+            _last_reminder_tick_ts = time.monotonic()
+        _shutdown.wait(REMINDER_TICK_S)
+    logger.info("Reminder loop stopped")
+
+
+def _prune_loop() -> None:
+    """Prune old data every PRUNE_INTERVAL_S seconds."""
+    logger.info("Prune loop started (interval=%ds)", PRUNE_INTERVAL_S)
+
+    while not _shutdown.is_set():
+        try:
+            store.prune(retention_days=EVENT_RETENTION_DAYS)
+            store.prune_old_reminders(retention_days=REMINDER_RETENTION_DAYS)
+            logger.debug("Prune completed")
+        except Exception as exc:
+            logger.exception("Prune loop error: %s", exc)
+        _shutdown.wait(PRUNE_INTERVAL_S)
+    logger.info("Prune loop stopped")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Lifespan
+# ═══════════════════════════════════════════════════════════════════════════════
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Open the store on startup; background loops are added in later tasks."""
+    """Initialize clients and start background loops."""
+    global google_client, telegram_notifier
+
     logger.info("Starting %s...", SERVICE_NAME)
-    # Touch the store so a broken bind-mount surfaces immediately as db_ok=false.
+
     try:
         store.count()
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("initial store check failed: %s", exc)
+    except Exception as exc:
+        logger.warning("Initial store check failed: %s", exc)
+
+    store.seed_default_rules(offsets=DEFAULT_OFFSETS)
+
+    if CALENDAR_SEED:
+        try:
+            seed_cals = json.loads(CALENDAR_SEED)
+            for cal in seed_cals:
+                store.upsert_calendar(
+                    id=cal["id"],
+                    label=cal.get("label", cal["id"]),
+                    person_id=cal.get("person_id"),
+                    enabled=cal.get("enabled", True),
+                )
+            logger.info("Seeded %d calendars", len(seed_cals))
+        except Exception as exc:
+            logger.warning("Failed to parse CALENDAR_SEED: %s", exc)
+
+    if (
+        GOOGLE_OAUTH_CLIENT_ID
+        and GOOGLE_OAUTH_CLIENT_SECRET
+        and GoogleCalendarClient is not None
+    ):
+        try:
+            google_client = GoogleCalendarClient(
+                client_id=GOOGLE_OAUTH_CLIENT_ID,
+                client_secret=GOOGLE_OAUTH_CLIENT_SECRET,
+                token_path=TOKEN_PATH,
+            )
+            if google_client.authenticate():
+                logger.info("Google Calendar client authenticated")
+            else:
+                logger.warning("Google Calendar authentication failed")
+                google_client = None
+        except GoogleAuthError as exc:
+            logger.warning("Google auth error: %s", exc)
+            google_client = None
+    else:
+        logger.info("Google OAuth credentials not configured")
+
+    if TelegramNotifier is not None:
+        try:
+            telegram_notifier = TelegramNotifier.from_env()
+            logger.info("Telegram notifier initialized")
+        except Exception as exc:
+            logger.warning("Telegram notifier not available: %s", exc)
+
+    _shutdown.clear()
+    threads = [
+        threading.Thread(target=_sync_loop, daemon=True, name="sync-loop"),
+        threading.Thread(target=_reminder_loop, daemon=True, name="reminder-loop"),
+        threading.Thread(target=_prune_loop, daemon=True, name="prune-loop"),
+    ]
+    for t in threads:
+        t.start()
+
     yield
+
     logger.info("Shutting down %s...", SERVICE_NAME)
+    _shutdown.set()
+    for t in threads:
+        t.join(timeout=5)
 
 
 app = FastAPI(
     title="Calendar Service",
-    description="Google Calendar sync, dashboard agenda and Telegram reminders",
-    version="0.1.0",
+    version="0.2.0",
     docs_url="/swagger",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -84,37 +284,25 @@ app = FastAPI(
 # Health
 # ═══════════════════════════════════════════════════════════════════════════════
 def _db_ok() -> bool:
-    """Return True if the SQLite store answers a trivial query."""
     try:
         store.count()
         return True
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("db health check failed: %s", exc)
+    except Exception as exc:
+        logger.warning("DB health check failed: %s", exc)
         return False
 
 
 def _google_auth_ok() -> bool:
-    """Return True if an OAuth refresh token is present.
-
-    Scaffold: presence of ``token.json`` is a proxy for "authorized". A later
-    task validates/refreshes the token and reports a true auth check so a
-    revoked token turns the health step red (design §2.1, §11).
-    """
-    try:
-        return os.path.exists(TOKEN_PATH)
-    except OSError:  # pragma: no cover - defensive
-        return False
+    return google_client is not None
 
 
 def _age_s(ts: float | None) -> float | None:
-    """Seconds since ``ts`` (monotonic), or None if never set."""
     if ts is None:
         return None
     return round(time.monotonic() - ts, 1)
 
 
 def _health_payload() -> HealthResponse:
-    """Build the health response exercising DB + auth + loop liveness."""
     return HealthResponse(
         online=True,
         service=SERVICE_NAME,
@@ -128,41 +316,117 @@ def _health_payload() -> HealthResponse:
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    """Health check — exercises the DB and reports auth + loop liveness."""
     return _health_payload()
 
 
 @app.get("/api/health/calendar", response_model=HealthResponse)
 async def health_alias() -> HealthResponse:
-    """Health check alias — matches the path the dashboard/CI expect."""
     return _health_payload()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Calendar read API (scaffold stubs — populated once the sync loop lands)
+# Calendar read API
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/calendar/upcoming")
 async def get_upcoming(
-    limit: int = Query(5, ge=1, le=50, description="Max events to return"),
+    limit: int = Query(5, ge=1, le=50),
 ) -> dict:
-    """Return the next ``limit`` upcoming events across enabled calendars.
-
-    Reads from the local cache (never blocks on Google). Empty until the sync
-    loop populates the store in a later task.
-    """
+    """Return the next ``limit`` upcoming events."""
     now = int(time.time())
     return {"ts": now, "events": store.upcoming(now=now, limit=limit)}
 
 
 @app.get("/api/calendar/today")
 async def get_today() -> dict:
-    """Return today's agenda (local-tz day window), ordered by start time.
+    """Return today's agenda."""
+    tz = ZoneInfo(TZ)
+    now_dt = datetime.now(tz)
+    start_of_day = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_day = start_of_day.replace(hour=23, minute=59, second=59)
+    events = store.get_events_in_window(
+        int(start_of_day.timestamp()), int(end_of_day.timestamp())
+    )
+    return {"ts": int(time.time()), "date": now_dt.date().isoformat(), "events": events}
 
-    Scaffold: returns the cached upcoming slice; the local-tz day-window filter
-    lands with the sync loop in a later task.
-    """
-    now = int(time.time())
-    return {"ts": now, "events": store.upcoming(now=now, limit=50)}
+
+@app.post("/api/calendar/sync")
+async def trigger_sync() -> dict:
+    """Trigger an immediate sync."""
+    if google_client is None:
+        raise HTTPException(status_code=503, detail="Google client not initialized")
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, _do_sync)
+    return {"status": "sync_triggered"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Config API (SUPER only — gated at dashboard proxy)
+# ═══════════════════════════════════════════════════════════════════════════════
+class CalendarConfig(BaseModel):
+    id: str
+    label: str
+    person_id: str | None = None
+    enabled: bool = True
+
+
+class RuleConfig(BaseModel):
+    scope: str = "global"
+    scope_id: str | None = None
+    offset_s: int
+
+
+class ConfigResponse(BaseModel):
+    calendars: list[dict]
+    rules: list[dict]
+    default_offsets: list[int]
+    sync_interval_s: int
+    reminder_tick_s: int
+
+
+class ConfigUpdate(BaseModel):
+    calendars: list[CalendarConfig] | None = None
+    add_rule: RuleConfig | None = None
+    delete_rule_id: int | None = None
+
+
+@app.get("/api/calendar/config", response_model=ConfigResponse)
+async def get_config() -> ConfigResponse:
+    """Get current configuration."""
+    calendars = [c.to_dict() for c in store.get_all_calendars()]
+    rules = [r.to_dict() for r in store.get_all_rules()]
+    return ConfigResponse(
+        calendars=calendars,
+        rules=rules,
+        default_offsets=DEFAULT_OFFSETS,
+        sync_interval_s=SYNC_INTERVAL_S,
+        reminder_tick_s=REMINDER_TICK_S,
+    )
+
+
+@app.post("/api/calendar/config")
+async def update_config(update: ConfigUpdate) -> dict:
+    """Update configuration."""
+    changes = []
+    if update.calendars is not None:
+        for cal in update.calendars:
+            store.upsert_calendar(
+                id=cal.id,
+                label=cal.label,
+                person_id=cal.person_id,
+                enabled=cal.enabled,
+            )
+            changes.append(f"upserted calendar {cal.id}")
+    if update.add_rule is not None:
+        store.add_rule(
+            scope=update.add_rule.scope,
+            scope_id=update.add_rule.scope_id,
+            offset_s=update.add_rule.offset_s,
+        )
+        changes.append(f"added rule {update.add_rule.offset_s}s")
+    if update.delete_rule_id is not None:
+        store.delete_rule(update.delete_rule_id)
+        changes.append(f"deleted rule {update.delete_rule_id}")
+    return {"status": "ok", "changes": changes}
 
 
 if __name__ == "__main__":  # pragma: no cover

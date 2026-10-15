@@ -61,9 +61,8 @@ async def test_health_google_auth_false_without_token(client):
 
 
 async def test_health_google_auth_true_with_token(client, tmp_path, monkeypatch):
-    token = tmp_path / "token.json"
-    token.write_text("{}", encoding="utf-8")
-    monkeypatch.setattr(main, "TOKEN_PATH", str(token))
+    # google_auth_ok is now based on google_client being not None
+    monkeypatch.setattr(main, "google_client", object())  # Mock a truthy client
     async with client as c:
         resp = await c.get("/health")
     assert resp.json()["google_auth_ok"] is True

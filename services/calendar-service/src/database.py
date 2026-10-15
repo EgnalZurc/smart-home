@@ -467,6 +467,25 @@ class CalendarStore:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_events_in_window(self, start_ts: int, end_ts: int) -> list[dict]:
+        """Return events that overlap with the given time window.
+
+        An event overlaps if it starts before window ends AND ends after window starts.
+        Used by the /today endpoint to get day's agenda.
+        """
+        with self._db.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT uid, calendar_id, google_id, title, description, location,
+                       start_ts, end_ts, all_day, person_id, status
+                FROM events
+                WHERE status = 'confirmed' AND start_ts <= ? AND end_ts >= ?
+                ORDER BY start_ts ASC
+                """,
+                (end_ts, start_ts),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     def clear_calendar_events(self, calendar_id: str) -> int:
         """Delete all events for a calendar (for full sync). Returns count deleted."""
         with self._db.connect() as conn:
