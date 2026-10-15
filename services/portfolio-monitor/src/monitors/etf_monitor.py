@@ -15,6 +15,12 @@ import yfinance as yf
 from i18n import t
 from models import AlertLevel, ETFAnalysis, Signal
 from smart_home_common.cache import TTLCache
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from . import BaseMonitor, register_monitor
 
@@ -28,7 +34,10 @@ logger = logging.getLogger(__name__)
 # to enforce a maximum duration and prevent hung connections from blocking
 # the entire monitor run.
 # ─────────────────────────────────────────────────────────────────────────────
-YFINANCE_TIMEOUT_SECONDS = 30.0
+YFINANCE_TIMEOUT_SECONDS = 5.0  # Per-call timeout (reduced for fast-fail)
+YFINANCE_MAX_RETRIES = 3
+YFINANCE_RETRY_MIN_WAIT = 1  # seconds
+YFINANCE_RETRY_MAX_WAIT = 4  # seconds
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -175,14 +184,30 @@ def fetch_etf_data(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
     scheduled run overlapping a dashboard refresh) reuse the same download
     instead of hitting Yahoo Finance again.
 
+    Uses tenacity for retry with exponential backoff on transient failures.
+
     Raises:
-        RuntimeError: If Yahoo Finance returns empty data or the request fails.
+        RuntimeError: If Yahoo Finance returns empty data or the request fails
+            after all retries are exhausted.
     """
     cached = _history_cache.get(ticker_sym)
     if cached is not None:
         logger.debug(f"Cache hit for ETF history: {ticker_sym}")
         return cached
 
+    return _fetch_etf_data_with_retry(ticker_sym)
+
+
+@retry(
+    retry=retry_if_exception_type((Exception,)),
+    stop=stop_after_attempt(YFINANCE_MAX_RETRIES),
+    wait=wait_exponential(
+        multiplier=1, min=YFINANCE_RETRY_MIN_WAIT, max=YFINANCE_RETRY_MAX_WAIT
+    ),
+    reraise=True,
+)
+def _fetch_etf_data_with_retry(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Internal fetch with retry logic. Called by fetch_etf_data after cache miss."""
     try:
         ticker = yf.Ticker(ticker_sym)
         hist = ticker.history(period="1y")
@@ -201,10 +226,11 @@ def fetch_etf_data(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
         _history_cache.set(ticker_sym, result)
         return result
     except Exception as e:
-        logger.error(
-            f"Error downloading ETF data for {ticker_sym}: {type(e).__name__}: {e}"
+        logger.warning(
+            f"Retry-able error fetching ETF data for {ticker_sym}: "
+            f"{type(e).__name__}: {e}"
         )
-        raise RuntimeError(f"Failed to fetch ETF data for {ticker_sym}") from e
+        raise
 
 
 def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
@@ -212,6 +238,8 @@ def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
 
     Cached per (ticker, period) since sparkline history rarely changes within
     a single monitoring window.
+
+    Uses tenacity for retry with exponential backoff on transient failures.
 
     Returns:
         List of [timestamp, open, high, low, close] entries, or empty list on error.
@@ -222,6 +250,21 @@ def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
         logger.debug(f"Cache hit for OHLC: {cache_key}")
         return cached
 
+    return _fetch_ohlc_data_with_retry(ticker_sym, period, cache_key)
+
+
+@retry(
+    retry=retry_if_exception_type((Exception,)),
+    stop=stop_after_attempt(YFINANCE_MAX_RETRIES),
+    wait=wait_exponential(
+        multiplier=1, min=YFINANCE_RETRY_MIN_WAIT, max=YFINANCE_RETRY_MAX_WAIT
+    ),
+    reraise=True,
+)
+def _fetch_ohlc_data_with_retry(
+    ticker_sym: str, period: str, cache_key: str
+) -> list[list[float]]:
+    """Internal OHLC fetch with retry logic. Called after cache miss."""
     try:
         ticker = yf.Ticker(ticker_sym)
         hist = ticker.history(period=period)
@@ -238,11 +281,11 @@ def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
         _ohlc_cache.set(cache_key, ohlc)
         return ohlc
     except Exception as e:
-        logger.error(
-            f"Error fetching OHLC for {ticker_sym} (period={period}): "
+        logger.warning(
+            f"Retry-able error fetching OHLC for {ticker_sym} (period={period}): "
             f"{type(e).__name__}: {e}"
         )
-        return []
+        raise
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -254,12 +297,31 @@ def fetch_dividends(ticker_sym: str) -> pd.Series:
     Cached per ticker for an hour since dividend history is near-static. On any
     error (or an ETF with no distributions) an empty Series is returned so the
     callers can treat "no data" and "no dividends" uniformly.
+
+    Uses tenacity for retry with exponential backoff on transient failures.
     """
     cached = _dividends_cache.get(ticker_sym)
     if cached is not None:
         logger.debug(f"Cache hit for dividends: {ticker_sym}")
         return cached
 
+    try:
+        return _fetch_dividends_with_retry(ticker_sym)
+    except Exception as e:
+        logger.error(f"Error fetching dividends for {ticker_sym} after retries: {e}")
+        return pd.Series(dtype="float64")
+
+
+@retry(
+    retry=retry_if_exception_type((Exception,)),
+    stop=stop_after_attempt(YFINANCE_MAX_RETRIES),
+    wait=wait_exponential(
+        multiplier=1, min=YFINANCE_RETRY_MIN_WAIT, max=YFINANCE_RETRY_MAX_WAIT
+    ),
+    reraise=True,
+)
+def _fetch_dividends_with_retry(ticker_sym: str) -> pd.Series:
+    """Internal dividends fetch with retry logic. Called after cache miss."""
     try:
         ticker = yf.Ticker(ticker_sym)
         divs = ticker.dividends
@@ -268,8 +330,8 @@ def fetch_dividends(ticker_sym: str) -> pd.Series:
         _dividends_cache.set(ticker_sym, divs)
         return divs
     except Exception as e:
-        logger.error(f"Error fetching dividends for {ticker_sym}: {e}")
-        return pd.Series(dtype="float64")
+        logger.warning(f"Retry-able error fetching dividends for {ticker_sym}: {e}")
+        raise
 
 
 def _estimate_dividend_frequency(dates: list[datetime]) -> int | None:
