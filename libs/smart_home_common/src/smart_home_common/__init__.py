@@ -7,6 +7,7 @@ from .rate_limiter import (
     RateLimitStatus,
     SqliteRateLimiter,
 )
+from .redis_rate_limiter import RedisRateLimiter
 from .singleton import ensure_singleton
 from .sqlite_helpers import (
     SqliteHelper,
@@ -21,6 +22,7 @@ __all__ = [
     "BaseRateLimiter",
     "InMemoryRateLimiter",
     "RateLimitStatus",
+    "RedisRateLimiter",
     "SqliteHelper",
     "SqliteRateLimiter",
     "TTLCache",
