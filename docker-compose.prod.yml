@@ -203,9 +203,9 @@ services:
     image: egnal/smart-home-portfolio-monitor:latest
     container_name: portfolio-monitor
     restart: on-failure:5
-    # Reduced from 256m based on 40% usage (101MB)
-    mem_limit: 160m
-    memswap_limit: 160m
+    # Increased from 160m: caches for CoinGecko data + OHLC charts need headroom
+    mem_limit: 192m
+    memswap_limit: 192m
     expose:
       - 8010
     volumes:

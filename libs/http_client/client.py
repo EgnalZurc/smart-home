@@ -1,5 +1,5 @@
 """
-HTTP client with exponential backoff retry on rate limiting.
+HTTP client with exponential backoff retry on rate limiting and timeouts.
 
 Usage:
     from libs.http_client import get_with_retry, RetryClient
@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass, field
 
 import requests
+from requests.exceptions import ConnectTimeout, ReadTimeout, Timeout
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class RetryConfig:
     max_retries: int = DEFAULT_RETRIES
     initial_backoff: float = DEFAULT_BACKOFF
     retryable_codes: tuple[int, ...] = RETRYABLE_STATUS_CODES
+    retry_on_timeout: bool = True
 
 
 @dataclass
@@ -44,8 +46,11 @@ class RetryClient:
     """
     HTTP client with built-in exponential backoff retry.
 
-    Automatically retries on rate limiting (429) and forbidden (403) responses
-    with exponential backoff between attempts.
+    Automatically retries on:
+    - Rate limiting (429) and forbidden (403) responses
+    - Connection and read timeouts (when retry_on_timeout=True)
+
+    Uses exponential backoff between attempts.
 
     Example:
         client = RetryClient(
@@ -65,7 +70,7 @@ class RetryClient:
         params: dict[str, str] | None = None,
     ) -> requests.Response:
         """
-        Perform GET request with retry on rate limiting.
+        Perform GET request with retry on rate limiting and timeouts.
 
         Args:
             url: Target URL.
@@ -76,38 +81,61 @@ class RetryClient:
             Response object.
 
         Raises:
-            requests.HTTPError: If all retries fail.
+            requests.HTTPError: If all retries fail with HTTP errors.
+            requests.Timeout: If all retries fail with timeouts.
             requests.RequestException: On other request failures.
         """
         merged_headers = {**self.default_headers, **(headers or {})}
         delay = self.config.initial_backoff
+        last_exception: Exception | None = None
 
         for attempt in range(1, self.config.max_retries + 1):
-            response = requests.get(
-                url,
-                headers=merged_headers,
-                params=params,
-                timeout=self.config.timeout,
-            )
-
-            if response.status_code in self.config.retryable_codes:
-                logger.debug(
-                    "[http] Rate limited (%d), retrying in %.0fs (attempt %d/%d)",
-                    response.status_code,
-                    delay,
-                    attempt,
-                    self.config.max_retries,
+            try:
+                response = requests.get(
+                    url,
+                    headers=merged_headers,
+                    params=params,
+                    timeout=self.config.timeout,
                 )
-                time.sleep(delay)
-                delay *= 2
-                continue
 
-            response.raise_for_status()
-            return response
+                if response.status_code in self.config.retryable_codes:
+                    if attempt < self.config.max_retries:
+                        logger.debug(
+                            "[http] Rate limited (%d), retrying in %.0fs "
+                            "(attempt %d/%d)",
+                            response.status_code,
+                            delay,
+                            attempt,
+                            self.config.max_retries,
+                        )
+                        time.sleep(delay)
+                        delay *= 2
+                        continue
+                    # Last attempt - raise the error
+                    response.raise_for_status()
 
-        # Last attempt failed - raise the error
-        response.raise_for_status()
-        return response
+                response.raise_for_status()
+                return response
+
+            except (Timeout, ConnectTimeout, ReadTimeout) as e:
+                last_exception = e
+                if self.config.retry_on_timeout and attempt < self.config.max_retries:
+                    logger.debug(
+                        "[http] Timeout on %s, retrying in %.0fs (attempt %d/%d)",
+                        url[:60],
+                        delay,
+                        attempt,
+                        self.config.max_retries,
+                    )
+                    time.sleep(delay)
+                    delay *= 2
+                    continue
+                raise
+
+        # Should not reach here, but if we do, raise the last exception
+        if last_exception:
+            raise last_exception
+        raise requests.RequestException("All retries exhausted")
 
 
 def get_with_retry(

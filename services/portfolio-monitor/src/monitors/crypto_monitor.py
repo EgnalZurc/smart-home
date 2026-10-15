@@ -72,13 +72,13 @@ _generic_client = RetryClient(config=_retry_config)
 # ─────────────────────────────────────────────────────────────────────────────
 # Cache instances with different TTLs per data type
 # Market data: 5 min (prices update ~every minute, but we don't need real-time)
-# OHLC: 15 min (historical data, rarely changes)
+# OHLC: 15 min (historical data, rarely changes) - limited to 10 entries (~2MB max)
 # Fear & Greed: 30 min (updates ~daily)
 # Exchange trust: 1 hour (rarely changes, reduces API calls)
-_market_cache = TTLCache(default_ttl_seconds=300)  # 5 min
-_ohlc_cache = TTLCache(default_ttl_seconds=900)  # 15 min
-_fg_cache = TTLCache(default_ttl_seconds=1800)  # 30 min
-_exchange_trust_cache = TTLCache(default_ttl_seconds=3600)  # 1 hour
+_market_cache = TTLCache(default_ttl_seconds=300, maxsize=50)  # 5 min, max 50 entries
+_ohlc_cache = TTLCache(default_ttl_seconds=900, maxsize=10)  # 15 min, max 10 entries
+_fg_cache = TTLCache(default_ttl_seconds=1800, maxsize=5)  # 30 min, max 5 entries
+_exchange_trust_cache = TTLCache(default_ttl_seconds=3600, maxsize=20)  # 1 hour
 
 
 def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
