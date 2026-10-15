@@ -296,6 +296,63 @@ docker exec mosquitto kill -HUP 1
 chmod +x /etc/letsencrypt/renewal-hooks/deploy/mosquitto-reload.sh
 ```
 
+## Client TLS Configuration
+
+Once TLS is enabled on Mosquitto (port 8883), MQTT clients need to be configured to use it.
+
+### ac-service
+
+ac-service supports optional TLS via environment variables:
+
+```yaml
+# In docker-compose.prod.yml or .env
+MQTT_PORT=8883
+MQTT_TLS_ENABLED=true
+MQTT_TLS_CA_CERTS=/app/data/certs/ca.crt  # Optional, uses system CA if omitted
+```
+
+If using self-signed certificates, mount the CA certificate:
+
+```yaml
+volumes:
+  - ./data/mosquitto/certs/ca.crt:/app/data/certs/ca.crt:ro
+```
+
+### zigbee2mqtt
+
+Zigbee2MQTT TLS is configured in `data/zigbee2mqtt/configuration.yaml` on the Pi:
+
+```yaml
+mqtt:
+  # Change from mqtt:// to mqtts:// and port to 8883
+  server: mqtts://mosquitto:8883
+  # For self-signed certificates, provide the CA
+  ca: /app/data/certs/ca.crt
+  # Credentials (unchanged)
+  user: zigbee2mqtt
+  password: !secret mqtt_password
+```
+
+Mount the CA certificate in docker-compose.prod.yml:
+
+```yaml
+zigbee2mqtt:
+  volumes:
+    - ./data/zigbee2mqtt:/app/data
+    - ./data/mosquitto/certs/ca.crt:/app/data/certs/ca.crt:ro  # Add this for TLS
+```
+
+**Note**: For Let's Encrypt certificates (publicly trusted CA), you can omit the `ca:` line and the certificate mount.
+
+### Backward Compatibility
+
+Both ac-service and zigbee2mqtt default to non-TLS connections:
+
+- **ac-service**: `MQTT_TLS_ENABLED=false` (default), port 1883
+- **zigbee2mqtt**: `mqtt://` scheme (default), port 1883
+
+No changes are required to existing deployments. TLS is opt-in.
+
 ### Troubleshooting TLS
 
 **Check certificate validity:**
