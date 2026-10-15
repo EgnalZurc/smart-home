@@ -154,13 +154,13 @@ After running this script, copy token.json to the calendar-service data director
 
     list_calendars(creds)
 
-    print(f"\n{'=' * 60}")
+    print("\n" + "=" * 60)
     print("Setup Complete!")
-    print(f"{'=' * 60}")
-    print(f"\nNext steps:")
+    print("=" * 60)
+    print("\nNext steps:")
     print(f"  1. Copy {args.token_output} to the calendar-service data directory")
-    print(f"  2. Set GOOGLE_TOKEN_PATH in your .env or settings.toml")
-    print(f"  3. Restart the calendar-service container")
+    print("  2. Set GOOGLE_TOKEN_PATH in your .env or settings.toml")
+    print("  3. Restart the calendar-service container")
     print()
 
 
