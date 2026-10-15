@@ -123,20 +123,22 @@ def _do_sync() -> None:
                 time_max=datetime.fromtimestamp(horizon, tz=ZoneInfo("UTC")),
             )
             for ev in events:
+                # google_sync returns event_id, summary, start/end as ISO strings
+                event_id = ev.get("event_id", "")
                 store.upsert_event(
                     {
-                        "uid": ev["id"],
+                        "uid": f"{cal.id}:{event_id}",
                         "calendar_id": cal.id,
-                        "google_id": ev["id"],
+                        "google_id": event_id,
                         "title": ev.get("summary", "(no title)"),
-                        "start_ts": _parse_event_time(ev.get("start", {})),
-                        "end_ts": _parse_event_time(ev.get("end", {})),
-                        "all_day": "date" in ev.get("start", {}),
+                        "start_ts": _parse_event_time_str(ev.get("start")),
+                        "end_ts": _parse_event_time_str(ev.get("end")),
+                        "all_day": ev.get("is_all_day", False),
                         "location": ev.get("location"),
                         "description": ev.get("description"),
                         "person_id": None,
                         "status": ev.get("status", "confirmed"),
-                        "etag": ev.get("etag"),
+                        "etag": None,  # not returned by google_sync
                     }
                 )
             if new_token:
@@ -144,6 +146,27 @@ def _do_sync() -> None:
             logger.info("Synced %d events from %s", len(events), cal.label)
         except Exception as exc:
             logger.error("Error syncing calendar %s: %s", cal.id, exc)
+
+
+def _parse_event_time_str(time_str: str | None) -> int:
+    """Parse ISO datetime or date string to Unix timestamp.
+
+    google_sync returns start/end as ISO strings (e.g. '2026-10-15T10:00:00+02:00'
+    or '2026-10-15' for all-day events).
+    """
+    if not time_str:
+        return 0
+    try:
+        # Try ISO datetime first (timed events)
+        if "T" in time_str:
+            dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+            return int(dt.timestamp())
+        # Fall back to date-only (all-day events)
+        dt = datetime.strptime(time_str, "%Y-%m-%d")
+        dt = dt.replace(tzinfo=ZoneInfo(TZ))
+        return int(dt.timestamp())
+    except (ValueError, TypeError):
+        return 0
 
 
 def _parse_event_time(time_obj: dict) -> int:
