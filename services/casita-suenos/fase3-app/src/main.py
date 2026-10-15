@@ -39,6 +39,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Rate limiters ────────────────────────────────────────────────────────────
+# TODO: Current InMemoryRateLimiter resets on container restart, allowing brief
+# bursts after deploys. For true persistence, consider:
+#   - Redis: Add redis service to compose, use smart_home_common.redis_rate_limiter
+#   - SQLite: Store request counts in casita.db (adds I/O overhead per request)
+# Current in-memory approach is acceptable for this internal service where
+# restarts are infrequent and rate limits are defensive, not critical.
+
 # Global API rate limiter: 120 req/min per IP (higher limit for internal service)
 _global_rate_limiter = InMemoryRateLimiter(max_requests=120, window_seconds=60)
 
