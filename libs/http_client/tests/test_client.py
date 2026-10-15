@@ -267,3 +267,108 @@ class TestGetWithRetry:
             )
 
         assert mock_get.call_args[1]["params"]["q"] == "search"
+
+
+class TestTimeoutRetry:
+    """Tests for timeout retry functionality."""
+
+    def test_retries_on_read_timeout(self):
+        """get() retries on ReadTimeout when retry_on_timeout=True."""
+        from libs.http_client import RetryClient
+        from libs.http_client.client import RetryConfig
+
+        client = RetryClient(config=RetryConfig(max_retries=3, initial_backoff=0.01))
+
+        success = MagicMock()
+        success.status_code = 200
+
+        with patch(
+            "requests.get",
+            side_effect=[requests.exceptions.ReadTimeout(), success],
+        ):
+            with patch("time.sleep") as mock_sleep:
+                response = client.get("https://api.example.com/data")
+
+        assert response.status_code == 200
+        mock_sleep.assert_called_once()
+
+    def test_retries_on_connect_timeout(self):
+        """get() retries on ConnectTimeout when retry_on_timeout=True."""
+        from libs.http_client import RetryClient
+        from libs.http_client.client import RetryConfig
+
+        client = RetryClient(config=RetryConfig(max_retries=3, initial_backoff=0.01))
+
+        success = MagicMock()
+        success.status_code = 200
+
+        with patch(
+            "requests.get",
+            side_effect=[requests.exceptions.ConnectTimeout(), success],
+        ):
+            with patch("time.sleep"):
+                response = client.get("https://api.example.com/data")
+
+        assert response.status_code == 200
+
+    def test_raises_timeout_after_max_retries(self):
+        """get() raises Timeout after exhausting retries."""
+        from libs.http_client import RetryClient
+        from libs.http_client.client import RetryConfig
+
+        client = RetryClient(config=RetryConfig(max_retries=2, initial_backoff=0.01))
+
+        with patch(
+            "requests.get",
+            side_effect=requests.exceptions.ReadTimeout(),
+        ):
+            with patch("time.sleep"):
+                with pytest.raises(requests.exceptions.ReadTimeout):
+                    client.get("https://api.example.com/data")
+
+    def test_no_retry_on_timeout_when_disabled(self):
+        """get() does not retry on timeout when retry_on_timeout=False."""
+        from libs.http_client import RetryClient
+        from libs.http_client.client import RetryConfig
+
+        client = RetryClient(config=RetryConfig(max_retries=3, retry_on_timeout=False))
+
+        with patch(
+            "requests.get",
+            side_effect=requests.exceptions.ReadTimeout(),
+        ):
+            with pytest.raises(requests.exceptions.ReadTimeout):
+                client.get("https://api.example.com/data")
+
+    def test_retry_on_timeout_config_default(self):
+        """retry_on_timeout defaults to True."""
+        from libs.http_client.client import RetryConfig
+
+        config = RetryConfig()
+        assert config.retry_on_timeout is True
+
+    def test_timeout_retry_exponential_backoff(self):
+        """Timeout retries use exponential backoff."""
+        from libs.http_client import RetryClient
+        from libs.http_client.client import RetryConfig
+
+        client = RetryClient(config=RetryConfig(max_retries=4, initial_backoff=1.0))
+
+        success = MagicMock()
+        success.status_code = 200
+
+        with patch(
+            "requests.get",
+            side_effect=[
+                requests.exceptions.ReadTimeout(),
+                requests.exceptions.ReadTimeout(),
+                success,
+            ],
+        ):
+            with patch("time.sleep") as mock_sleep:
+                client.get("https://api.example.com/data")
+
+        # First retry: 1.0s, second retry: 2.0s
+        assert mock_sleep.call_count == 2
+        assert mock_sleep.call_args_list[0][0][0] == 1.0
+        assert mock_sleep.call_args_list[1][0][0] == 2.0

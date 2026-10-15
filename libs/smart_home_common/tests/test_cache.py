@@ -91,3 +91,84 @@ def test_set_overwrites_existing_key():
     cache.set("k", "old")
     cache.set("k", "new")
     assert cache.get("k") == "new"
+
+
+
+def test_maxsize_evicts_oldest_when_full():
+    cache = TTLCache(default_ttl_seconds=300, maxsize=3)
+    cache.set("a", 1)
+    cache.set("b", 2)
+    cache.set("c", 3)
+    # Cache is at capacity, adding 'd' should evict 'a' (earliest expiration)
+    cache.set("d", 4)
+    assert cache.get("a") is None
+    assert cache.get("b") == 2
+    assert cache.get("c") == 3
+    assert cache.get("d") == 4
+
+
+def test_maxsize_evicts_expired_first():
+    cache = TTLCache(default_ttl_seconds=300, maxsize=3)
+    cache.set("expired", "old", ttl_seconds=0)  # Already expired
+    cache.set("fresh1", 1)
+    cache.set("fresh2", 2)
+    # Adding when at capacity should evict expired entry first
+    cache.set("new", 3)
+    assert cache.get("expired") is None
+    assert cache.get("fresh1") == 1
+    assert cache.get("fresh2") == 2
+    assert cache.get("new") == 3
+
+
+def test_maxsize_none_means_unlimited():
+    cache = TTLCache(default_ttl_seconds=300, maxsize=None)
+    for i in range(100):
+        cache.set(f"key{i}", i)
+    assert len(cache) == 100
+
+
+def test_cleanup_expired_removes_stale_entries():
+    cache = TTLCache(default_ttl_seconds=300)
+    cache.set("expired1", 1, ttl_seconds=0)
+    cache.set("expired2", 2, ttl_seconds=0)
+    cache.set("fresh", 3, ttl_seconds=300)
+
+    removed = cache.cleanup_expired()
+
+    assert removed == 2
+    assert cache.get("expired1") is None
+    assert cache.get("expired2") is None
+    assert cache.get("fresh") == 3
+
+
+def test_cleanup_expired_returns_zero_when_nothing_expired():
+    cache = TTLCache(default_ttl_seconds=300)
+    cache.set("a", 1)
+    cache.set("b", 2)
+
+    removed = cache.cleanup_expired()
+
+    assert removed == 0
+    assert len(cache) == 2
+
+
+def test_len_returns_entry_count():
+    cache = TTLCache(default_ttl_seconds=300)
+    assert len(cache) == 0
+    cache.set("a", 1)
+    assert len(cache) == 1
+    cache.set("b", 2)
+    assert len(cache) == 2
+    cache.clear()
+    assert len(cache) == 0
+
+
+def test_set_same_key_does_not_trigger_eviction():
+    cache = TTLCache(default_ttl_seconds=300, maxsize=2)
+    cache.set("a", 1)
+    cache.set("b", 2)
+    # Updating existing key should not evict anything
+    cache.set("a", 10)
+    assert cache.get("a") == 10
+    assert cache.get("b") == 2
+    assert len(cache) == 2
