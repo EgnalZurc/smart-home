@@ -234,6 +234,28 @@ def _get_auth_user(request: Request) -> str | None:
     return request.headers.get("X-Auth-User")
 
 
+def require_auth_user(request: Request) -> str:
+    """FastAPI dependency: require X-Auth-User header for admin endpoints.
+
+    Defense-in-depth: verify auth header in code, not just nginx.
+    Even though nginx auth_request protects admin endpoints, we verify
+    the header is present as an extra layer of security.
+
+    Args:
+        request: FastAPI request object.
+
+    Returns:
+        str: Authenticated username.
+
+    Raises:
+        HTTPException: 401 if X-Auth-User header is missing.
+    """
+    username = request.headers.get("X-Auth-User")
+    if not username:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return username
+
+
 def _truncate_token(token: str) -> str:
     """Truncate token for safe logging (show last 6 chars only).
 
@@ -328,17 +350,16 @@ async def serve_guest(token: str, request: Request):
 # Admin API (protected by nginx auth_request)
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/baby-gifts")
-def get_all_gifts(request: Request):
+def get_all_gifts(username: str = Depends(require_auth_user)):
     """Get all gifts with full reservation details (admin only).
 
     Args:
-        request: FastAPI request object.
+        username: Authenticated username (injected by auth dependency).
 
     Returns:
         dict: Gifts list, FAMILIA status, and username.
     """
-    username = _get_auth_user(request)
-    user_is_familia = is_familia_user(username) if username else False
+    user_is_familia = is_familia_user(username)
     data = get_gifts_data(include_admin=True)
     return {
         "gifts": data.get("gifts", []),
@@ -348,11 +369,12 @@ def get_all_gifts(request: Request):
 
 
 @app.post("/api/baby-gifts")
-def create_gift(gift: GiftCreate):
+def create_gift(gift: GiftCreate, username: str = Depends(require_auth_user)):
     """Add a new gift to the registry (admin only).
 
     Args:
         gift: Gift creation payload.
+        username: Authenticated username (injected by auth dependency).
 
     Returns:
         dict: Status and newly created gift.
@@ -362,12 +384,15 @@ def create_gift(gift: GiftCreate):
 
 
 @app.put("/api/baby-gifts/{gift_id}")
-def modify_gift(gift_id: str, gift: GiftUpdate):
+def modify_gift(
+    gift_id: str, gift: GiftUpdate, username: str = Depends(require_auth_user)
+):
     """Update an existing gift (admin only).
 
     Args:
         gift_id: ID of the gift to update.
         gift: Fields to update (only non-None values applied).
+        username: Authenticated username (injected by auth dependency).
 
     Returns:
         dict: Status and updated gift.
@@ -393,11 +418,12 @@ def modify_gift(gift_id: str, gift: GiftUpdate):
 
 
 @app.delete("/api/baby-gifts/{gift_id}")
-def remove_gift(gift_id: str):
+def remove_gift(gift_id: str, username: str = Depends(require_auth_user)):
     """Delete a gift from the registry (admin only).
 
     Args:
         gift_id: ID of the gift to delete.
+        username: Authenticated username (injected by auth dependency).
 
     Returns:
         dict: Status confirmation.
@@ -411,11 +437,12 @@ def remove_gift(gift_id: str):
 
 
 @app.post("/api/baby-gifts/{gift_id}/unreserve")
-def admin_unreserve(gift_id: str):
+def admin_unreserve(gift_id: str, username: str = Depends(require_auth_user)):
     """Unreserve any gift (admin only, bypasses ownership check).
 
     Args:
         gift_id: ID of the gift to unreserve.
+        username: Authenticated username (injected by auth dependency).
 
     Returns:
         dict: Status and updated gift.
@@ -433,8 +460,11 @@ def admin_unreserve(gift_id: str):
 # Invitation management (admin only)
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/baby-gifts/invitations")
-def get_invitations():
+def get_invitations(username: str = Depends(require_auth_user)):
     """List all invitations with reservation counts (admin only).
+
+    Args:
+        username: Authenticated username (injected by auth dependency).
 
     Returns:
         dict: List of invitations with computed stats.
@@ -468,6 +498,7 @@ def get_invitations():
 @app.post("/api/baby-gifts/invitations")
 def create_new_invitation(
     data: InvitationCreate,
+    username: str = Depends(require_auth_user),
     client_ip: str = Depends(require_invitation_rate_limit),
 ):
     """Create a new invitation with 6-month expiry (admin only).
@@ -476,13 +507,14 @@ def create_new_invitation(
 
     Args:
         data: Invitation creation payload with guest name.
+        username: Authenticated username (injected by auth dependency).
         client_ip: Resolved client IP (injected by rate limit dependency).
 
     Returns:
         dict: Status and invitation details including token.
 
     Raises:
-        HTTPException: 400 if name is empty, 429 if rate limited.
+        HTTPException: 400 if name is empty, 401 if not authenticated, 429 if rate limited.
     """
     if not data.name.strip():
         raise HTTPException(status_code=400, detail="El nombre es obligatorio")
@@ -491,17 +523,18 @@ def create_new_invitation(
 
 
 @app.delete("/api/baby-gifts/invitations/{token}")
-def remove_invitation(token: str):
+def remove_invitation(token: str, username: str = Depends(require_auth_user)):
     """Delete an invitation completely (admin only).
 
     Args:
         token: Invitation token to delete.
+        username: Authenticated username (injected by auth dependency).
 
     Returns:
         dict: Status confirmation.
 
     Raises:
-        HTTPException: 404 if invitation not found.
+        HTTPException: 401 if not authenticated, 404 if invitation not found.
     """
     result = delete_invitation(token)
     if result["status"] == "error":
@@ -510,19 +543,20 @@ def remove_invitation(token: str):
 
 
 @app.post("/api/baby-gifts/invitations/{token}/revoke")
-def revoke_inv(token: str):
+def revoke_inv(token: str, username: str = Depends(require_auth_user)):
     """Revoke an invitation without deleting it (admin only).
 
     Revoked invitations remain in the database but cannot be used.
 
     Args:
         token: Invitation token to revoke.
+        username: Authenticated username (injected by auth dependency).
 
     Returns:
         dict: Status confirmation.
 
     Raises:
-        HTTPException: 404 if invitation not found.
+        HTTPException: 401 if not authenticated, 404 if invitation not found.
     """
     result = revoke_invitation(token)
     if result["status"] == "error":
