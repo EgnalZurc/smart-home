@@ -163,14 +163,14 @@ def test_service_online_counter_resets_on_recovery(ring, store):
 
 
 # ── p95 latency rule ──────────────────────────────────────────────────────────
-def test_service_latency_p95_over_3000_fires(ring, store):
+def test_service_latency_p95_over_10000_fires(ring, store):
     eng = _engine(ring, store, StubNotifier())
     # 18 fast + 2 slow over 20 samples: nearest-rank p95 (index 18 of 0..19)
-    # lands on a slow sample, so the p95 exceeds 3000 ms and the rule fires.
+    # lands on a slow sample, so the p95 exceeds 10000 ms and the rule fires.
     for i in range(18):
         ring.add("service.ac.latency_ms", "ac", 100.0, ts=1000 + i * 30)
-    ring.add("service.ac.latency_ms", "ac", 5000.0, ts=1000 + 18 * 30)
-    ring.add("service.ac.latency_ms", "ac", 6000.0, ts=1000 + 19 * 30)
+    ring.add("service.ac.latency_ms", "ac", 12000.0, ts=1000 + 18 * 30)
+    ring.add("service.ac.latency_ms", "ac", 15000.0, ts=1000 + 19 * 30)
     outcome = eng.evaluate_tick(now=1000 + 19 * 30)
     assert len(outcome.fired) == 1
     assert outcome.fired[0].rule_key == "service_latency"
