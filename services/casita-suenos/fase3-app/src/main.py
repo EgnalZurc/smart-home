@@ -39,18 +39,51 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Rate limiters ────────────────────────────────────────────────────────────
-# TODO: Current InMemoryRateLimiter resets on container restart, allowing brief
-# bursts after deploys. For true persistence, consider:
-#   - Redis: Add redis service to compose, use smart_home_common.redis_rate_limiter
-#   - SQLite: Store request counts in casita.db (adds I/O overhead per request)
-# Current in-memory approach is acceptable for this internal service where
-# restarts are infrequent and rate limits are defensive, not critical.
+# Redis URL from env or default to compose service name
+_REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 
-# Global API rate limiter: 120 req/min per IP (higher limit for internal service)
-_global_rate_limiter = InMemoryRateLimiter(max_requests=120, window_seconds=60)
 
-# Stricter limiter for manual trigger endpoints (10 req/min per IP)
-_manual_trigger_limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60)
+def _create_rate_limiters() -> tuple:
+    """Create rate limiters, preferring Redis with fallback to in-memory.
+
+    Returns a tuple of (global_limiter, manual_trigger_limiter).
+    """
+    try:
+        from smart_home_common.redis_rate_limiter import RedisRateLimiter
+
+        global_limiter = RedisRateLimiter(
+            redis_url=_REDIS_URL,
+            max_requests=120,
+            window_seconds=60,
+            key_prefix="casita:global:",
+        )
+        manual_limiter = RedisRateLimiter(
+            redis_url=_REDIS_URL,
+            max_requests=10,
+            window_seconds=60,
+            key_prefix="casita:manual:",
+        )
+        # Verify Redis is actually connected (RedisRateLimiter falls back silently)
+        if global_limiter._client is not None:
+            logger.info("Rate limiters using Redis at %s", _REDIS_URL)
+            return global_limiter, manual_limiter
+
+        # Redis client is None means connection failed during init
+        logger.warning(
+            "Redis connection not available, falling back to in-memory rate limiting"
+        )
+    except Exception as e:
+        logger.warning(
+            "Redis unavailable (%s), falling back to in-memory rate limiting", e
+        )
+
+    return (
+        InMemoryRateLimiter(max_requests=120, window_seconds=60),
+        InMemoryRateLimiter(max_requests=10, window_seconds=60),
+    )
+
+
+_global_rate_limiter, _manual_trigger_limiter = _create_rate_limiters()
 
 
 def _get_client_ip(request: Request) -> str:
