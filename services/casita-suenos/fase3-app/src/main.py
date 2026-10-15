@@ -39,18 +39,30 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Rate limiters ────────────────────────────────────────────────────────────
-# TODO: Current InMemoryRateLimiter resets on container restart, allowing brief
-# bursts after deploys. For true persistence, consider:
-#   - Redis: Add redis service to compose, use smart_home_common.redis_rate_limiter
-#   - SQLite: Store request counts in casita.db (adds I/O overhead per request)
-# Current in-memory approach is acceptable for this internal service where
-# restarts are infrequent and rate limits are defensive, not critical.
+# Redis URL from env or default to compose service name
+_REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 
-# Global API rate limiter: 120 req/min per IP (higher limit for internal service)
-_global_rate_limiter = InMemoryRateLimiter(max_requests=120, window_seconds=60)
+# Create rate limiters - RedisRateLimiter falls back to allow on connection errors
+try:
+    from smart_home_common.redis_rate_limiter import RedisRateLimiter
 
-# Stricter limiter for manual trigger endpoints (10 req/min per IP)
-_manual_trigger_limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60)
+    _global_rate_limiter = RedisRateLimiter(
+        redis_url=_REDIS_URL,
+        max_requests=120,
+        window_seconds=60,
+        key_prefix="casita:global:",
+    )
+    _manual_trigger_limiter = RedisRateLimiter(
+        redis_url=_REDIS_URL,
+        max_requests=10,
+        window_seconds=60,
+        key_prefix="casita:manual:",
+    )
+    logger.info("Rate limiters using Redis at %s", _REDIS_URL)
+except Exception as e:
+    logger.warning("Redis unavailable (%s), falling back to in-memory rate limiting", e)
+    _global_rate_limiter = InMemoryRateLimiter(max_requests=120, window_seconds=60)
+    _manual_trigger_limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60)
 
 
 def _get_client_ip(request: Request) -> str:
