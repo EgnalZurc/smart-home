@@ -12,7 +12,7 @@ from .base import ServiceProxy
 
 router = APIRouter(prefix="/api/settings/calendar", tags=["Calendar Settings"])
 
-_proxy = ServiceProxy("http://calendar-service:8010")
+_proxy = ServiceProxy("http://calendar-service:8014")
 
 
 @router.get("/config")
