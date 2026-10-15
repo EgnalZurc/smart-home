@@ -28,7 +28,6 @@ from api.proxy.external import router as external_router
 from api.proxy.pc import router as pc_router
 from api.proxy.portfolio import router as portfolio_router
 from api.proxy.vacaciones import router as vacaciones_router
-from api.proxy.valheim import router as valheim_router
 from api.user_prefs import router as user_prefs_router
 from api.ws import router as ws_router
 
@@ -43,7 +42,6 @@ router.include_router(vacaciones_router)
 router.include_router(baby_gifts_router)
 router.include_router(portfolio_router)
 router.include_router(pc_router)
-router.include_router(valheim_router)
 router.include_router(external_router)
 router.include_router(containers_router)
 router.include_router(stats_router)
@@ -56,24 +54,17 @@ router.include_router(alerts_router)
 router.include_router(user_prefs_router)
 
 
-# Legacy redirect: valheim-admin was removed, control is now via /api/valheim/*
-@router.get("/valheim-admin", include_in_schema=False)
-@router.get("/valheim-admin/", include_in_schema=False)
-@router.get("/valheim-admin/{path:path}", include_in_schema=False)
-async def valheim_admin_redirect():
-    """Return info about the removed valheim-admin service."""
+# Legacy redirect: /api/valheim/* was removed, control is via valheim-admin service
+@router.get("/api/valheim", include_in_schema=False)
+@router.get("/api/valheim/", include_in_schema=False)
+@router.get("/api/valheim/{path:path}", include_in_schema=False)
+async def valheim_proxy_redirect():
+    """Return info about the removed valheim proxy."""
     return JSONResponse(
         status_code=410,
         content={
-            "message": "valheim-admin service has been removed",
-            "info": "Valheim control is now integrated into the dashboard via /api/valheim/*",
-            "endpoints": {
-                "status": "/api/valheim/status",
-                "start": "POST /api/valheim/server/start",
-                "stop": "POST /api/valheim/server/stop",
-                "config": "/api/valheim/config",
-                "worlds": "/api/valheim/worlds",
-            },
+            "message": "/api/valheim proxy has been removed",
+            "info": "Valheim control is available via the valheim-admin service at /valheim-admin/",
         },
     )
 
