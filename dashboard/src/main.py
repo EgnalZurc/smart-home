@@ -48,6 +48,10 @@ if not AUTH_SECRET:
     logger.error("AUTH_SECRET is required")
     raise RuntimeError("AUTH_SECRET not configured")
 
+if len(AUTH_SECRET) < 32:
+    logger.error("AUTH_SECRET must be at least 32 bytes (got %d)", len(AUTH_SECRET))
+    raise RuntimeError("AUTH_SECRET too short (minimum 32 bytes)")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
