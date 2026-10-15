@@ -1,76 +1,115 @@
-# calendar-service
+# Calendar Service
 
-Google Calendar integration for the smart-home platform: syncs the household's
-Google Calendar(s) read-only into a local SQLite cache, surfaces the day's
-agenda / upcoming events on the dashboard, and sends configurable Telegram
-reminders before events.
+Syncs Google Calendar events and sends Telegram reminders at configurable offsets.
 
-Design: [`docs/designs/calendar-service-design.md`](../../docs/designs/calendar-service-design.md).
+## Features
 
-> **Status: scaffold (Task 8.2).** This is the structural skeleton — FastAPI app,
-> health endpoint, SQLite schema and the read-API surface. The Google sync loop,
-> reminder tick, pure reminder engine and dashboard widgets land in later tasks.
+- **Google Calendar sync**: Incremental sync using sync tokens
+- **Multi-calendar support**: Track multiple calendars with person associations
+- **Flexible reminders**: Per-person, per-calendar, or global reminder rules
+- **Telegram integration**: Sends formatted reminders via the shared Telegram client
 
-## What it will do (per design)
+## Architecture
 
-- **Sync Google Calendar read-only** every 5–15 min (default 10 min), caching
-  expanded event instances locally so the dashboard and reminders never block on
-  Google and degrade gracefully when Google is unreachable.
-- **Multiple calendars** from one Google account, each labelled and optionally
-  bound to a person for reminder routing.
-- **Configurable Telegram reminders** (30 min / 1 h / 1 day before) with a hard
-  dedup guarantee so an event never reminds twice for the same offset.
-- Two **dashboard widgets**: upcoming events and today's agenda.
-
-## Storage (two tiers)
-
-- **Tier 1 — in-memory cache** of upcoming events, rebuilt from SQLite after
-  each sync (not yet implemented in the scaffold).
-- **Tier 2 — SQLite** (`/app/data/calendar.db`): `calendars`, `events`,
-  `people`, `attendee_map`, `reminder_rules`, `reminders_sent`. Uses
-  `smart_home_common.sqlite_helpers`. The
-  `UNIQUE(event_uid, offset_s, event_start)` constraint on `reminders_sent` is
-  the dedup guarantee (design §5.2).
-
-## API (port 8014)
-
-Proxied through the backend under `/api/calendar/*` (SUPER-gated); the browser
-never talks to `:8014` directly.
-
-| Endpoint | Status | Purpose |
-|----------|--------|---------|
-| `GET /health` | ✅ scaffold | `{online, service, db_ok, google_auth_ok, last_sync_ok, last_sync_age_s, reminder_tick_age_s}` |
-| `GET /api/health/calendar` | ✅ scaffold | health alias (dashboard catalogue / CI) |
-| `GET /api/calendar/upcoming?limit=` | ✅ stub | next N events (reads cache; empty until sync lands) |
-| `GET /api/calendar/today` | ✅ stub | today's agenda |
-
-The full read + config API (`/range`, `/calendars`, `/people`, `/rules`,
-`/sync`, …) is specified in design §7 and lands with the sync/reminder tasks.
-
-## OAuth (design §2)
-
-Read-only scope (`calendar.readonly`), installed-app refresh-token flow. The
-client credentials are secrets in `.env`; the refresh token lives in
-`token.json` inside the bind-mounted data dir (mode 600, never logged/returned).
-First authorization is a one-time admin step (a `setup_oauth.py` CLI, added in a
-later task), not something the container does on its own.
+```
+┌─────────────────┐      ┌─────────────────┐
+│  Google Calendar │◄────│   google_sync   │
+│       API        │     │    (OAuth2)     │
+└─────────────────┘      └────────┬────────┘
+                                  │
+                         ┌────────▼────────┐
+                         │    database     │
+                         │   (SQLite)      │
+                         └────────┬────────┘
+                                  │
+                         ┌────────▼────────┐
+                         │ reminder_engine │
+                         └────────┬────────┘
+                                  │
+                         ┌────────▼────────┐
+                         │    Telegram     │
+                         │  (via async-    │
+                         │   http-client)  │
+                         └─────────────────┘
+```
 
 ## Configuration
 
-See [`settings.example.toml`](settings.example.toml) for every tunable and
-`src/config.py` for the env-var names + defaults.
+Environment variables:
 
-## Bind-mount permissions (known trap)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | 8010 | Service port |
+| `TELEGRAM_BOT_TOKEN` | required | Telegram bot token |
+| `TELEGRAM_CHAT_ID` | required | Chat ID for reminders |
+| `GOOGLE_CLIENT_ID` | required | OAuth2 client ID |
+| `GOOGLE_CLIENT_SECRET` | required | OAuth2 client secret |
+| `CALENDAR_SEED` | `[]` | JSON array of initial calendars |
+| `SYNC_INTERVAL_S` | 1800 | Sync interval in seconds (30 min) |
+| `DEFAULT_OFFSETS_S` | `[86400,7200,1800]` | Reminder offsets (1d, 2h, 30m) |
 
-The host dir `./data/calendar-service` must exist and be owned by UID 1000
-**before** `docker compose up`, or the non-root container cannot create its
-SQLite DB nor write `token.json` (`db_ok=false`). The CI deploy step does
-`mkdir -p` + `chown 1000:1000` the dir before `docker compose up` (lesson
-carried from `metrics-service`).
+### Calendar seed format
 
-## Local development
+```json
+[
+  {
+    "id": "user@gmail.com",
+    "label": "User Calendar",
+    "person_id": "user",
+    "enabled": true
+  }
+]
+```
 
-```powershell
-# Full CI (ruff + format + bandit + hadolint + pytest, 80% coverage) in the dev container
-.\dev.ps1 ci calendar-service
+## API Endpoints
+
+### Health
+- `GET /health` - Service health with Google auth status
+
+### Configuration
+- `GET /api/calendar/config` - Get current configuration
+- `POST /api/calendar/config` - Update configuration
+
+### Events
+- `GET /api/calendar/today` - Today's events with timezone support
+- `POST /api/calendar/sync` - Trigger immediate sync
+
+## Background Tasks
+
+Three background loops run continuously:
+
+1. **Sync loop** (every 30 min): Fetches calendar updates from Google
+2. **Reminder loop** (every 60s): Checks for events needing reminders
+3. **Prune loop** (daily): Removes events older than 90 days
+
+## OAuth2 Setup
+
+Before first use, run the OAuth setup script:
+
+```bash
+docker exec -it calendar-service python /app/setup_oauth.py
+```
+
+This will:
+1. Generate an authorization URL
+2. Wait for you to authorize the app
+3. Store the refresh token in the database
+
+## Dashboard Integration
+
+The dashboard provides a settings UI at `/api/settings/calendar/*` (SUPER only):
+- View today's events
+- See current configuration
+- Trigger manual sync
+
+## Development
+
+```bash
+# Run tests
+cd services/calendar-service
+PYTHONPATH=src pytest tests/ -v
+
+# Lint
+ruff check src/ tests/
+ruff format src/ tests/
 ```
