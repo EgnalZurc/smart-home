@@ -967,6 +967,13 @@ const T = {
         mx_col_service: 'Service', mx_col_latency: 'Avg latency',
         mx_col_max: 'Max', mx_col_uptime: 'Uptime',
         mx_no_data: 'No data yet', mx_error: 'Failed to load metrics',
+        cal_title: 'Calendar', cal_tab_today: 'Today', cal_tab_config: 'Settings',
+        cal_no_events: 'No events today', cal_sync_now: 'Sync now',
+        cal_syncing: 'Syncing…', cal_sync_ok: 'Synced',
+        cal_sync_err: 'Sync error', cal_interval: 'Sync interval',
+        cal_offsets: 'Reminders', cal_calendars: 'Calendars', cal_rules: 'Rules',
+        cal_save: 'Save', cal_saving: 'Saving…', cal_saved: 'Saved',
+        cal_enabled: 'Active', cal_disabled: 'Inactive',
     },
 };
 
@@ -2616,6 +2623,146 @@ function onWidgetToggle(key, visible) {
     if (row) row.classList.toggle('hidden-widget', !visible);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Calendar Settings Modal (SUPER only)
+// ═══════════════════════════════════════════════════════════════════════════
+let calendarConfig = null;
+let calendarEvents = [];
+let currentCalTab = 'today';
+
+async function openCalendarModal() {
+    document.getElementById('calendar-modal').classList.add('open');
+    document.getElementById('calendar-title').textContent = t('cal_title');
+    document.querySelectorAll('#cal-tabs .res-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.tab === 'today');
+        tab.textContent = tab.dataset.tab === 'today' ? t('cal_tab_today') : t('cal_tab_config');
+    });
+    currentCalTab = 'today';
+    await loadCalendarData();
+    renderCalendarContent();
+}
+
+function closeCalendarModal(e) {
+    if (e && document.getElementById('calendar-panel').contains(e.target)) return;
+    document.getElementById('calendar-modal').classList.remove('open');
+}
+
+function switchCalTab(tab) {
+    currentCalTab = tab;
+    document.querySelectorAll('#cal-tabs .res-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    renderCalendarContent();
+}
+
+async function loadCalendarData() {
+    try {
+        const [configRes, todayRes] = await Promise.all([
+            fetch('/api/settings/calendar/config').then(r => r.ok ? r.json() : null).catch(() => null),
+            fetch('/api/settings/calendar/today').then(r => r.ok ? r.json() : null).catch(() => null)
+        ]);
+        calendarConfig = configRes;
+        calendarEvents = todayRes?.events || [];
+    } catch (e) { console.error('Failed to load calendar data:', e); }
+}
+
+function renderCalendarContent() {
+    const body = document.getElementById('calendar-body');
+    if (currentCalTab === 'today') {
+        renderCalendarToday(body);
+    } else {
+        renderCalendarConfig(body);
+    }
+}
+
+function renderCalendarToday(body) {
+    if (!calendarEvents.length) {
+        body.innerHTML = `
+            <div class="text-center py-6">
+                <p class="text-slate-400 text-sm mb-4">${t('cal_no_events')}</p>
+                <button class="btn-sm" onclick="triggerCalendarSync()" id="cal-sync-btn">${t('cal_sync_now')}</button>
+            </div>`;
+        return;
+    }
+    const eventsHtml = calendarEvents.map(ev => {
+        const start = new Date(ev.start_ts * 1000);
+        const end = new Date(ev.end_ts * 1000);
+        const timeStr = start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        return `
+            <div class="p-3 bg-slate-800/50 rounded-lg mb-2">
+                <div class="flex items-center justify-between">
+                    <span class="font-medium text-white text-sm">${ev.summary || '(Sin título)'}</span>
+                    <span class="text-xs text-slate-400">${timeStr}</span>
+                </div>
+                ${ev.location ? `<p class="text-xs text-slate-500 mt-1">📍 ${ev.location}</p>` : ''}
+            </div>`;
+    }).join('');
+    body.innerHTML = `
+        <div class="mb-3 flex justify-end">
+            <button class="btn-sm" onclick="triggerCalendarSync()" id="cal-sync-btn">${t('cal_sync_now')}</button>
+        </div>
+        <div class="space-y-1">${eventsHtml}</div>`;
+}
+
+function renderCalendarConfig(body) {
+    if (!calendarConfig) {
+        body.innerHTML = `<p class="text-center text-slate-500 py-4">No se pudo cargar la configuración</p>`;
+        return;
+    }
+    const cfg = calendarConfig;
+    const intervalMin = Math.round((cfg.sync_interval_s || 1800) / 60);
+    const offsetsHrs = (cfg.default_offsets_s || []).map(s => {
+        if (s >= 86400) return `${Math.round(s/86400)}d`;
+        if (s >= 3600) return `${Math.round(s/3600)}h`;
+        return `${Math.round(s/60)}m`;
+    }).join(', ');
+    
+    const calendarsHtml = (cfg.calendars || []).map(cal => `
+        <div class="flex items-center justify-between p-2 bg-slate-800/40 rounded mb-1">
+            <div>
+                <span class="text-sm text-white">${cal.label || cal.id}</span>
+                <span class="text-xs text-slate-500 ml-2">${cal.person_id || ''}</span>
+            </div>
+            <span class="text-xs ${cal.enabled ? 'text-green-400' : 'text-slate-500'}">${cal.enabled ? t('cal_enabled') : t('cal_disabled')}</span>
+        </div>
+    `).join('') || '<p class="text-slate-500 text-sm">Sin calendarios configurados</p>';
+    
+    body.innerHTML = `
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">${t('cal_interval')}</label>
+                <p class="text-sm text-white">${intervalMin} minutos</p>
+            </div>
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">${t('cal_offsets')}</label>
+                <p class="text-sm text-white">${offsetsHrs || '—'}</p>
+            </div>
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">${t('cal_calendars')}</label>
+                ${calendarsHtml}
+            </div>
+        </div>`;
+}
+
+async function triggerCalendarSync() {
+    const btn = document.getElementById('cal-sync-btn');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = t('cal_syncing');
+    try {
+        const res = await fetch('/api/settings/calendar/sync', { method: 'POST' });
+        if (res.ok) {
+            btn.textContent = t('cal_sync_ok');
+            // Reload events after sync
+            await loadCalendarData();
+            setTimeout(() => renderCalendarContent(), 1000);
+        } else {
+            btn.textContent = t('cal_sync_err');
+        }
+    } catch {
+        btn.textContent = t('cal_sync_err');
+    }
+    setTimeout(() => { btn.disabled = false; btn.textContent = t('cal_sync_now'); }, 2000);
+}
+
 function openWidgetModal() {
     renderWidgetConfigList();
     document.getElementById('widget-modal').classList.add('open');
@@ -2648,6 +2795,7 @@ async function loadUser() {
             document.getElementById('res-btn').style.display = 'flex';
             document.getElementById('alert-btn').style.display = 'flex';
             document.getElementById('admin-btn').style.display = 'flex';
+            document.getElementById('calendar-btn').style.display = 'flex';
         }
         // Widget customisation is per-user and available to everyone.
         document.getElementById('widget-btn').style.display = 'flex';

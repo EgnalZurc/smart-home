@@ -23,6 +23,7 @@ from api.monitoring import router as monitoring_router
 from api.proxy import external as _external_module
 from api.proxy.ac import router as ac_router
 from api.proxy.baby_gifts import router as baby_gifts_router
+from api.proxy.calendar import router as calendar_router
 from api.proxy.casita import router as casita_router
 from api.proxy.external import router as external_router
 from api.proxy.pc import router as pc_router
@@ -43,6 +44,7 @@ router.include_router(baby_gifts_router)
 router.include_router(portfolio_router)
 router.include_router(pc_router)
 router.include_router(external_router)
+router.include_router(calendar_router)
 router.include_router(containers_router)
 router.include_router(stats_router)
 router.include_router(summary_router)
