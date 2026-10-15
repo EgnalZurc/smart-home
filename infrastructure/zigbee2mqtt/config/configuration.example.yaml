@@ -16,6 +16,9 @@ serial:
 frontend:
   enabled: true
   port: 8081
+  # Authentication token - defense-in-depth even behind nginx reverse proxy.
+  # Generate with: openssl rand -hex 32
+  # auth_token: CHANGE_ME
 advanced:
   log_level: info
   network_key: GENERATE  # Generate a random network key - DO NOT share this key
