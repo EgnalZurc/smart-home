@@ -31,10 +31,12 @@ def tmp_data_file(tmp_path):
 def client(tmp_data_file):
     """Create a test client with isolated data file."""
     from fastapi.testclient import TestClient
-    from main import _rate_limit, app
+    from main import _rate_limiter, app
 
     # Clear rate limit state between tests to ensure isolation
-    _rate_limit.clear()
+    # Access internal _data dict to clear all keys
+    with _rate_limiter._lock:
+        _rate_limiter._data.clear()
 
     return TestClient(app)
 

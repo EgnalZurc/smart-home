@@ -319,10 +319,11 @@ class TestRateLimiting:
     def test_rate_limit_blocks_after_threshold(self, client):
         """Requests beyond threshold should return 429."""
         import main
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
 
-        original_limit = main.MAX_REQUESTS_PER_MINUTE
-        main.MAX_REQUESTS_PER_MINUTE = 3
-        main._rate_limit.clear()
+        # Replace with a low-limit rate limiter for testing
+        original_limiter = main._rate_limiter
+        main._rate_limiter = InMemoryRateLimiter(max_requests=3, window_seconds=60)
 
         try:
             # First 3 should succeed
@@ -339,18 +340,17 @@ class TestRateLimiting:
                 json={"nucleos": [], "personas": []},
             )
             assert response.status_code == 429
-            assert "rate limit" in response.json()["detail"].lower()
+            assert "too many" in response.json()["detail"].lower() or "rate limit" in response.json()["detail"].lower()
         finally:
-            main.MAX_REQUESTS_PER_MINUTE = original_limit
-            main._rate_limit.clear()
+            main._rate_limiter = original_limiter
 
     def test_rate_limit_applies_to_year_endpoints(self, client):
         """Rate limiting should apply to year management endpoints."""
         import main
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
 
-        original_limit = main.MAX_REQUESTS_PER_MINUTE
-        main.MAX_REQUESTS_PER_MINUTE = 2
-        main._rate_limit.clear()
+        original_limiter = main._rate_limiter
+        main._rate_limiter = InMemoryRateLimiter(max_requests=2, window_seconds=60)
 
         try:
             # Use up rate limit
@@ -364,16 +364,15 @@ class TestRateLimiting:
             response = client.post("/api/vacaciones/year")
             assert response.status_code == 429
         finally:
-            main.MAX_REQUESTS_PER_MINUTE = original_limit
-            main._rate_limit.clear()
+            main._rate_limiter = original_limiter
 
     def test_rate_limit_respects_x_forwarded_for(self, client):
         """Rate limiting should use X-Forwarded-For header."""
         import main
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
 
-        original_limit = main.MAX_REQUESTS_PER_MINUTE
-        main.MAX_REQUESTS_PER_MINUTE = 2
-        main._rate_limit.clear()
+        original_limiter = main._rate_limiter
+        main._rate_limiter = InMemoryRateLimiter(max_requests=2, window_seconds=60)
 
         try:
             # Requests from IP 1.2.3.4 (via header)
@@ -401,16 +400,15 @@ class TestRateLimiting:
             )
             assert response.status_code == 200
         finally:
-            main.MAX_REQUESTS_PER_MINUTE = original_limit
-            main._rate_limit.clear()
+            main._rate_limiter = original_limiter
 
     def test_get_endpoints_not_rate_limited(self, client):
         """GET endpoints should not be rate limited."""
         import main
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
 
-        original_limit = main.MAX_REQUESTS_PER_MINUTE
-        main.MAX_REQUESTS_PER_MINUTE = 2
-        main._rate_limit.clear()
+        original_limiter = main._rate_limiter
+        main._rate_limiter = InMemoryRateLimiter(max_requests=2, window_seconds=60)
 
         try:
             # Exhaust rate limit
@@ -430,5 +428,4 @@ class TestRateLimiting:
             response = client.get("/health")
             assert response.status_code == 200
         finally:
-            main.MAX_REQUESTS_PER_MINUTE = original_limit
-            main._rate_limit.clear()
+            main._rate_limiter = original_limiter

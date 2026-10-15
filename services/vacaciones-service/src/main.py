@@ -29,7 +29,6 @@ Typical usage:
 
 import logging
 import time
-from collections import defaultdict
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -37,6 +36,7 @@ from fastapi import Path as PathParam
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from smart_home_common.rate_limiter import InMemoryRateLimiter
 from vacaciones_controller import (
     MAX_NUCLEOS,
     MAX_PERSONAS,
@@ -62,28 +62,8 @@ MAX_YEAR = 2100
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 
-_rate_limit: dict[str, list[float]] = defaultdict(list)
-MAX_REQUESTS_PER_MINUTE = 30  # Lower limit for computation-heavy service
-
-
-def _check_rate_limit(client_ip: str) -> bool:
-    """Check if a client is within the rate limit.
-
-    Maintains a sliding window of request timestamps per IP address and
-    enforces a maximum number of requests per minute.
-
-    Args:
-        client_ip: The IP address of the client making the request.
-
-    Returns:
-        True if the request is allowed (within rate limit), False otherwise.
-    """
-    now = time.time()
-    _rate_limit[client_ip] = [t for t in _rate_limit[client_ip] if now - t < 60]
-    if len(_rate_limit[client_ip]) >= MAX_REQUESTS_PER_MINUTE:
-        return False
-    _rate_limit[client_ip].append(now)
-    return True
+# Rate limiter using smart_home_common for consistency across services
+_rate_limiter = InMemoryRateLimiter(max_requests=30, window_seconds=60)
 
 
 def _get_client_ip(request: Request) -> str:
@@ -103,6 +83,20 @@ def _get_client_ip(request: Request) -> str:
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+def _check_rate_limit(request: Request) -> None:
+    """Check rate limit for the request. Raises 429 if exceeded.
+
+    Args:
+        request: The FastAPI request object.
+
+    Raises:
+        HTTPException: 429 if rate limit exceeded.
+    """
+    client_ip = _get_client_ip(request)
+    if not _rate_limiter.is_allowed(client_ip):
+        raise HTTPException(status_code=429, detail="Too many requests")
 
 
 def _validate_year(year: int) -> None:
@@ -326,9 +320,7 @@ def post_vacaciones_config(request: Request, data: VacacionesConfigRequest) -> d
     Raises:
         HTTPException: 429 if rate limit exceeded.
     """
-    client_ip = _get_client_ip(request)
-    if not _check_rate_limit(client_ip):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    _check_rate_limit(request)
     nucleos = [n.model_dump() for n in data.nucleos]
     personas = [p.model_dump() for p in data.personas]
     return save_config(nucleos, personas)
@@ -350,9 +342,7 @@ def add_vacaciones_year(request: Request) -> dict:
     Raises:
         HTTPException: 429 if rate limit exceeded.
     """
-    client_ip = _get_client_ip(request)
-    if not _check_rate_limit(client_ip):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    _check_rate_limit(request)
     return add_year()
 
 
@@ -381,9 +371,7 @@ def post_vacaciones_year(
             exceeded.
     """
     _validate_year(year)
-    client_ip = _get_client_ip(request)
-    if not _check_rate_limit(client_ip):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    _check_rate_limit(request)
     comidas = [c.model_dump() for c in data.comidas]
     return save_year(year, comidas, data.notas)
 
@@ -411,9 +399,7 @@ def delete_vacaciones_year(
             allowed, 429 if rate limit exceeded.
     """
     _validate_year(year)
-    client_ip = _get_client_ip(request)
-    if not _check_rate_limit(client_ip):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    _check_rate_limit(request)
     result = delete_year(year)
     if result.get("status") == "error":
         raise HTTPException(status_code=400, detail=result.get("message"))
