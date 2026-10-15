@@ -14,9 +14,10 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from models import AlertLevel
 
+from .auth import require_auth
 from .helpers import _safe_json, _serialize_alert
 
 logger = logging.getLogger(__name__)
@@ -168,7 +169,7 @@ async def get_active_alerts():
     return _safe_json({"alerts": alerts})
 
 
-@router.post("/alerts/{alert_id}/complete")
+@router.post("/alerts/{alert_id}/complete", dependencies=[Depends(require_auth)])
 async def complete_alert(alert_id: str):
     """Mark an alert as completed. Only allowed if date has arrived."""
     from alerts import get_all_alerts, mark_alert_completed

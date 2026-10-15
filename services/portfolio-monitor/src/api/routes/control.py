@@ -11,8 +11,9 @@ call time so tests patching ``api.routes.get_orchestrator`` take effect here.
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
+from .auth import require_auth
 from .helpers import _config_limiter, _enforce_rate_limit, _refresh_limiter
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
 
-@router.post("/refresh")
+@router.post("/refresh", dependencies=[Depends(require_auth)])
 async def refresh_all(request: Request, background_tasks: BackgroundTasks):
     """Trigger a refresh of all monitors. Rate limited: 5 req/min."""
     import api.routes as routes
@@ -43,7 +44,7 @@ async def refresh_all(request: Request, background_tasks: BackgroundTasks):
     return {"status": "refresh_started", "monitors": ["etf", "crypto", "savings"]}
 
 
-@router.post("/refresh/{monitor_name}")
+@router.post("/refresh/{monitor_name}", dependencies=[Depends(require_auth)])
 async def refresh_monitor(
     monitor_name: str, request: Request, background_tasks: BackgroundTasks
 ):
@@ -73,7 +74,7 @@ async def refresh_monitor(
     return {"status": "refresh_started", "monitor": monitor_name}
 
 
-@router.post("/reload-config")
+@router.post("/reload-config", dependencies=[Depends(require_auth)])
 async def reload_config(request: Request):
     """Reload configuration from disk. Rate limited: 2 req/min."""
     import api.routes as routes
