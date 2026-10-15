@@ -1,3 +1,7 @@
+# Security: explicitly disable device pairing by default.
+# Only enable temporarily via frontend when adding new devices.
+permit_join: false
+
 homeassistant:
   enabled: false
 mqtt:
