@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="/static/tailwind.css">
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .hidden { display: none !important; }
 
         /* ─────────────────────────────────────────────────────────────────
            Light theme — applied when <html data-theme="light">.
@@ -577,7 +578,7 @@
 <body class="bg-[#0f172a] text-white min-h-screen overscroll-none">
 
 <!-- Alerts modal (unified) -->
-<div id="alert-modal" class="modal-overlay" onclick="closeAlertModal(event)">
+<div id="alert-modal" class="modal-overlay">
   <div class="modal-panel" id="alert-panel">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-4">
@@ -585,25 +586,25 @@
       <span id="alert-timestamp" class="text-[10px] text-slate-600">—</span>
     </div>
     <div class="res-tabs" id="alert-tabs">
-      <button class="res-tab active" data-tab="all" onclick="switchAlertTab('all')">
+      <button class="res-tab active" data-tab="all">
         <span id="alert-tab-all-label">Todas</span>
-        <span class="tab-badge" id="alert-badge-all" style="display:none">0</span>
+        <span class="tab-badge hidden" id="alert-badge-all">0</span>
       </button>
-      <button class="res-tab" data-tab="metrics" onclick="switchAlertTab('metrics')">
+      <button class="res-tab" data-tab="metrics">
         <span id="alert-tab-metrics-label">Métricas</span>
-        <span class="tab-badge" id="alert-badge-metrics" style="display:none">0</span>
+        <span class="tab-badge hidden" id="alert-badge-metrics">0</span>
       </button>
-      <button class="res-tab" data-tab="portfolio" onclick="switchAlertTab('portfolio')">
+      <button class="res-tab" data-tab="portfolio">
         <span id="alert-tab-portfolio-label">Inversiones</span>
-        <span class="tab-badge" id="alert-badge-portfolio" style="display:none">0</span>
+        <span class="tab-badge hidden" id="alert-badge-portfolio">0</span>
       </button>
-      <button class="res-tab" data-tab="casita" onclick="switchAlertTab('casita')">
+      <button class="res-tab" data-tab="casita">
         <span id="alert-tab-casita-label">Casita</span>
-        <span class="tab-badge" id="alert-badge-casita" style="display:none">0</span>
+        <span class="tab-badge hidden" id="alert-badge-casita">0</span>
       </button>
-      <button class="res-tab" data-tab="ac" onclick="switchAlertTab('ac')">
+      <button class="res-tab" data-tab="ac">
         <span id="alert-tab-ac-label">Clima</span>
-        <span class="tab-badge" id="alert-badge-ac" style="display:none">0</span>
+        <span class="tab-badge hidden" id="alert-badge-ac">0</span>
       </button>
     </div>
     <div id="alert-body">
@@ -613,7 +614,7 @@
 </div>
 
 <!-- Resources modal -->
-<div id="res-modal" class="modal-overlay" onclick="closeResModal(event)">
+<div id="res-modal" class="modal-overlay">
   <div class="modal-panel" id="res-panel">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-4">
@@ -621,15 +622,15 @@
       <span id="res-timestamp" class="text-[10px] text-slate-600">—</span>
     </div>
     <div class="res-tabs" id="res-tabs">
-      <button class="res-tab active" data-source="pi" onclick="switchResSource('pi')">
+      <button class="res-tab active" data-source="pi">
         <span class="tab-dot bg-slate-600" id="pi-tab-dot"></span>
         <span>Raspberry Pi</span>
       </button>
-      <button class="res-tab" data-source="pc" onclick="switchResSource('pc')">
+      <button class="res-tab" data-source="pc">
         <span class="tab-dot bg-slate-600" id="pc-tab-dot"></span>
         <span>Egnal PC</span>
       </button>
-      <button class="res-tab" data-source="metrics" id="res-tab-metrics" onclick="switchResSource('metrics')" style="display:none">
+      <button class="res-tab hidden" data-source="metrics" id="res-tab-metrics">
         <span class="tab-dot bg-slate-600" id="metrics-tab-dot"></span>
         <span id="metrics-tab-label">Métricas</span>
       </button>
@@ -641,27 +642,27 @@
 </div>
 
 <!-- Services modal (external + infra) -->
-<div id="svc-modal" class="modal-overlay" onclick="closeSvcModal(event)">
+<div id="svc-modal" class="modal-overlay">
   <div class="modal-panel" id="svc-panel">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-4">
       <span class="text-sm font-semibold text-slate-200">Servicios</span>
     </div>
     <div class="res-tabs" id="svc-tabs">
-      <button class="res-tab active" data-tab="external" onclick="switchSvcTab('external')">Externos</button>
-      <button class="res-tab" data-tab="infra" onclick="switchSvcTab('infra')">Infraestructura</button>
+      <button class="res-tab active" data-tab="external">Externos</button>
+      <button class="res-tab" data-tab="infra">Infraestructura</button>
     </div>
     <div id="svc-body"></div>
   </div>
 </div>
 
 <!-- Widget config modal (per-user dashboard layout) -->
-<div id="widget-modal" class="modal-overlay" onclick="closeWidgetModal(event)">
+<div id="widget-modal" class="modal-overlay">
   <div class="modal-panel" id="widget-panel" style="max-width: 440px;">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-2">
       <span id="widget-title" class="text-sm font-semibold text-slate-200">Personalizar panel</span>
-      <button class="text-slate-400 hover:text-white" onclick="closeWidgetModal()" aria-label="Cerrar">&times;</button>
+      <button id="widget-close-btn" class="text-slate-400 hover:text-white" aria-label="Cerrar">&times;</button>
     </div>
     <p id="widget-hint" class="wcfg-hint">Activa o desactiva widgets y arrástralos para reordenarlos.</p>
     <div id="widget-list" class="wcfg-list"></div>
@@ -669,15 +670,15 @@
 </div>
 
 <!-- Admin modal -->
-<div id="admin-modal" class="modal-overlay" onclick="closeAdminModal(event)">
+<div id="admin-modal" class="modal-overlay">
   <div class="modal-panel" id="admin-panel" style="max-width: 560px;">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-4">
       <span class="text-sm font-semibold text-slate-200">Administración</span>
     </div>
-    <div class="admin-tabs">
-      <button class="admin-tab active" data-tab="users" onclick="switchAdminTab('users')">Usuarios</button>
-      <button class="admin-tab" data-tab="profiles" onclick="switchAdminTab('profiles')">Perfiles</button>
+    <div class="admin-tabs" id="admin-tabs">
+      <button class="admin-tab active" data-tab="users">Usuarios</button>
+      <button class="admin-tab" data-tab="profiles">Perfiles</button>
     </div>
     <div id="admin-body">
       <div class="text-center text-slate-600 py-4 text-sm">Cargando…</div>
@@ -686,14 +687,14 @@
 </div>
 
 <!-- Profile Edit Modal -->
-<div id="profile-edit-modal" class="modal-overlay" onclick="closeProfileEditModal(event)">
+<div id="profile-edit-modal" class="modal-overlay">
   <div class="modal-panel" style="max-width: 400px;">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-4">
       <span class="text-sm font-semibold text-slate-200">Editar Perfil</span>
-      <button class="text-slate-400 hover:text-white" onclick="closeProfileEditModal()">&times;</button>
+      <button id="profile-edit-close-btn" class="text-slate-400 hover:text-white">&times;</button>
     </div>
-    <form id="profile-edit-form" onsubmit="submitProfileEdit(event)">
+    <form id="profile-edit-form">
       <input type="hidden" id="profile-edit-id">
       <div class="mb-3">
         <label class="block text-xs text-slate-400 mb-1">Nombre</label>
@@ -708,7 +709,7 @@
         <input type="text" id="profile-edit-desc" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white">
       </div>
       <div class="flex gap-2">
-        <button type="button" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-sm py-2 rounded" onclick="closeProfileEditModal()">Cancelar</button>
+        <button type="button" id="profile-edit-cancel-btn" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-sm py-2 rounded">Cancelar</button>
         <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-sm py-2 rounded">Guardar</button>
       </div>
     </form>
@@ -716,14 +717,14 @@
 </div>
 
 <!-- User Edit Modal -->
-<div id="user-edit-modal" class="modal-overlay" onclick="closeUserEditModal(event)">
+<div id="user-edit-modal" class="modal-overlay">
   <div class="modal-panel" style="max-width: 400px;">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-4">
       <span class="text-sm font-semibold text-slate-200" id="user-edit-title">Editar Usuario</span>
-      <button class="text-slate-400 hover:text-white" onclick="closeUserEditModal()">&times;</button>
+      <button id="user-edit-close-btn" class="text-slate-400 hover:text-white">&times;</button>
     </div>
-    <form id="user-edit-form" onsubmit="submitUserEdit(event)">
+    <form id="user-edit-form">
       <input type="hidden" id="user-edit-id">
       <div class="mb-3">
         <label class="block text-xs text-slate-400 mb-1">Username (no editable)</label>
@@ -742,8 +743,8 @@
         <input type="text" id="user-edit-icon" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white" placeholder="https://...">
       </div>
       <div class="flex gap-2">
-        <button type="button" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-sm py-2 rounded" onclick="closeUserEditModal()">Cancelar</button>
-        <button type="button" class="bg-red-600 hover:bg-red-500 text-white text-sm py-2 px-3 rounded" onclick="deleteCurrentUser()" id="user-delete-btn">Eliminar</button>
+        <button type="button" id="user-edit-cancel-btn" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-sm py-2 rounded">Cancelar</button>
+        <button type="button" class="bg-red-600 hover:bg-red-500 text-white text-sm py-2 px-3 rounded" id="user-delete-btn">Eliminar</button>
         <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-sm py-2 rounded">Guardar</button>
       </div>
     </form>
@@ -751,14 +752,14 @@
 </div>
 
 <!-- User Create Modal -->
-<div id="user-create-modal" class="modal-overlay" onclick="closeUserCreateModal(event)">
+<div id="user-create-modal" class="modal-overlay">
   <div class="modal-panel" style="max-width: 400px;">
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-4">
       <span class="text-sm font-semibold text-slate-200">Crear Usuario</span>
-      <button class="text-slate-400 hover:text-white" onclick="closeUserCreateModal()">&times;</button>
+      <button id="user-create-close-btn" class="text-slate-400 hover:text-white">&times;</button>
     </div>
-    <form id="user-create-form" onsubmit="submitUserCreate(event)">
+    <form id="user-create-form">
       <div class="mb-3">
         <label class="block text-xs text-slate-400 mb-1">Username</label>
         <input type="text" id="user-create-username" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white" required pattern="[a-z0-9_]+" title="Solo letras minúsculas, números y guión bajo">
@@ -772,7 +773,7 @@
         <input type="text" id="user-create-displayname" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white">
       </div>
       <div class="flex gap-2">
-        <button type="button" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-sm py-2 rounded" onclick="closeUserCreateModal()">Cancelar</button>
+        <button type="button" id="user-create-cancel-btn" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-sm py-2 rounded">Cancelar</button>
         <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-sm py-2 rounded">Crear</button>
       </div>
     </form>
@@ -787,13 +788,13 @@
         <h1 id="title" class="text-xl font-bold tracking-tight">Cuchi Casa</h1>
         <div class="flex items-center gap-2">
             <!-- Services button (SUPER only) -->
-            <button id="svc-btn" class="hdr-btn" onclick="openSvcModal()" style="display:none" title="Servicios">
+            <button id="svc-btn" class="hdr-btn hidden" title="Servicios">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
                 </svg>
             </button>
             <!-- Resources button (admin only) -->
-            <button id="res-btn" class="hdr-btn" onclick="openResModal()" style="display:none" title="Recursos del sistema">
+            <button id="res-btn" class="hdr-btn hidden" title="Recursos del sistema">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>
                     <line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/>
@@ -803,15 +804,15 @@
                 </svg>
             </button>
             <!-- Alerts button (admin only) -->
-            <button id="alert-btn" class="hdr-btn" onclick="openAlertModal()" style="display:none;position:relative" title="Alertas">
+            <button id="alert-btn" class="hdr-btn hidden" title="Alertas">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
                     <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
                 </svg>
-                <span id="alert-badge" class="alert-badge" style="display:none">0</span>
+                <span id="alert-badge" class="alert-badge hidden">0</span>
             </button>
             <!-- Admin button (admin only) -->
-            <button id="admin-btn" class="hdr-btn" onclick="openAdminModal()" style="display:none" title="Administración">
+            <button id="admin-btn" class="hdr-btn hidden" title="Administración">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                     <circle cx="9" cy="7" r="4"/>
@@ -820,15 +821,15 @@
                 </svg>
             </button>
             <!-- Widget config button (any logged-in user: customise own layout) -->
-            <button id="widget-btn" class="hdr-btn" onclick="openWidgetModal()" style="display:none" title="Personalizar panel">
+            <button id="widget-btn" class="hdr-btn hidden" title="Personalizar panel">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="3"/>
                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                 </svg>
             </button>
             <!-- User dropdown -->
-            <div class="user-dropdown" id="user-dropdown" style="display:none">
-                <div class="user-chip" id="user-chip" onclick="toggleUserMenu()">
+            <div class="user-dropdown hidden" id="user-dropdown">
+                <div class="user-chip" id="user-chip">
                     <div class="user-avatar" id="user-avatar">?</div>
                     <span id="user-name">—</span>
                 </div>
@@ -836,7 +837,7 @@
                     <div class="theme-toggle-row">
                         <span id="dark-mode-label">Modo oscuro</span>
                         <label class="theme-switch">
-                            <input type="checkbox" id="dark-mode-toggle" onchange="onDarkModeToggle(this.checked)">
+                            <input type="checkbox" id="dark-mode-toggle">
                             <span class="slider"></span>
                         </label>
                     </div>
@@ -850,14 +851,14 @@
             </div>
             <!-- Language selector -->
             <div class="lang-dropdown">
-                <div class="lang-current" onclick="toggleLang()" id="lang-btn">
+                <div class="lang-current" id="lang-btn">
                     <img id="current-flag" src="/static/flags/es.svg" alt="Language" class="flag-img">
                 </div>
                 <div class="lang-menu" id="lang-menu">
-                    <div class="lang-option" onclick="setLang('en')" data-lang="en" title="English">
+                    <div class="lang-option" data-lang="en" title="English">
                         <img src="/static/flags/gb.svg" alt="English" class="flag-img">
                     </div>
-                    <div class="lang-option" onclick="setLang('es')" data-lang="es" title="Español">
+                    <div class="lang-option" data-lang="es" title="Español">
                         <img src="/static/flags/es.svg" alt="Español" class="flag-img">
                     </div>
                 </div>
@@ -866,7 +867,7 @@
     </header>
 
     <!-- Services section -->
-    <section id="services-section" style="display:none">
+    <section id="services-section" class="hidden">
         <p id="apps-label" class="section-label mb-3 px-1">Servicios</p>
         <div id="apps-list" class="space-y-2"></div>
     </section>
@@ -1180,7 +1181,7 @@ function renderPcResources() {
             </div>
             <p class="text-xs text-slate-500 uppercase tracking-wider mb-4">Perfil de energía</p>
             <div class="flex justify-center gap-3" id="pc-mode-btns">
-                ${modes.map(mode => `<button class="pc-mode-btn ${currentPcMode === mode ? 'active' : ''}" data-mode="${mode}" onclick="setPcMode('${mode}')"><span>${modeIcons[mode]}</span><span>${mode.charAt(0).toUpperCase() + mode.slice(1)}</span></button>`).join('')}
+                ${modes.map(mode => `<button class="pc-mode-btn ${currentPcMode === mode ? 'active' : ''}" data-mode="${mode}"><span>${modeIcons[mode]}</span><span>${mode.charAt(0).toUpperCase() + mode.slice(1)}</span></button>`).join('')}
             </div>
         </div>
     `;
@@ -1219,7 +1220,7 @@ function openResModal() {
     currentResSource = 'pi';
     // Metrics tab is SUPER-only (host/container internals): show it for admins only.
     const mxTab = document.getElementById('res-tab-metrics');
-    if (mxTab) mxTab.style.display = isAdmin() ? '' : 'none';
+    if (mxTab) mxTab.classList.toggle('hidden', !isAdmin());
     document.querySelectorAll('#res-tabs .res-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.source === 'pi'));
     fetchAndRenderResources();
     _resInterval = setInterval(fetchAndRenderResources, 5000);
@@ -1384,8 +1385,8 @@ async function fetchAndRenderMetrics() {
         if (mxDot) mxDot.className = 'tab-dot bg-green-500';
         body.innerHTML = `
           <div class="days-selector" id="mx-range">
-            <button class="days-btn ${mxRange === '1h' ? 'active' : ''}" data-range="1h" onclick="setMxRange('1h')">${t('mx_range_1h')}</button>
-            <button class="days-btn ${mxRange === '24h' ? 'active' : ''}" data-range="24h" onclick="setMxRange('24h')">${t('mx_range_24h')}</button>
+            <button class="days-btn ${mxRange === '1h' ? 'active' : ''}" data-range="1h">${t('mx_range_1h')}</button>
+            <button class="days-btn ${mxRange === '24h' ? 'active' : ''}" data-range="24h">${t('mx_range_24h')}</button>
           </div>
           <div class="mx-section">
             <div class="mx-section-title">${t('mx_trends')}</div>
@@ -1452,9 +1453,9 @@ function updateAlertBadge() {
     if (!badge) return;
     const count = unifiedUnreadCount;
     if (count === 0) {
-        badge.style.display = 'none';
+        badge.classList.add('hidden');
     } else {
-        badge.style.display = 'flex';
+        badge.classList.remove('hidden');
         badge.textContent = count > 99 ? '99+' : count;
         const hasCritical = unifiedAlerts.some(a => a.severity === 'critical' && !a.read);
         badge.classList.toggle('pulse', hasCritical);
@@ -1468,9 +1469,9 @@ function updateTabBadges() {
         if (!el) return;
         const n = alertsForTab(tab).length;
         if (n === 0) {
-            el.style.display = 'none';
+            el.classList.add('hidden');
         } else {
-            el.style.display = 'inline-flex';
+            el.classList.remove('hidden');
             el.textContent = n > 99 ? '99+' : n;
         }
     });
@@ -1766,7 +1767,7 @@ function renderAdminContent() {
         body.innerHTML = `
             <div class="mb-4 flex items-center justify-between">
                 <span class="text-xs text-slate-500 uppercase tracking-wider">Gestionar usuarios</span>
-                <button class="btn-sm" onclick="showCreateUserDialog()">+ Nuevo usuario</button>
+                <button class="btn-sm" id="create-user-btn">+ Nuevo usuario</button>
             </div>
             <div class="space-y-3">
                 ${adminUsers.map(u => `
@@ -1779,11 +1780,11 @@ function renderAdminContent() {
                                     <span class="text-xs text-slate-500">@${u.username}</span>
                                 </div>
                                 <div class="flex flex-wrap gap-1 mt-1">
-                                    ${u.profiles.map(p => `<span class="profile-chip-sm ${getLevelClass(p.level)}">${p.name}<span class="remove-btn" onclick="removeUserProfile('${u.username}','${p.id}')">×</span></span>`).join('')}
-                                    <button class="btn-xs" onclick="showAddProfileDialog('${u.username}')" title="Añadir perfil">+</button>
+                                    ${u.profiles.map(p => `<span class="profile-chip-sm ${getLevelClass(p.level)}">${p.name}<span class="remove-btn" data-action="remove-profile" data-username="${u.username}" data-profile-id="${p.id}">×</span></span>`).join('')}
+                                    <button class="btn-xs" data-action="add-profile" data-username="${u.username}" title="Añadir perfil">+</button>
                                 </div>
                             </div>
-                            <button class="btn-sm edit-btn" onclick="editUser('${u.id}')">✏️</button>
+                            <button class="btn-sm edit-btn" data-action="edit-user" data-user-id="${u.id}">✏️</button>
                         </div>
                     </div>
                 `).join('')}
@@ -1794,7 +1795,7 @@ function renderAdminContent() {
         body.innerHTML = `
             <div class="mb-4 flex items-center justify-between">
                 <span class="text-xs text-slate-500 uppercase tracking-wider">Gestionar perfiles de permiso</span>
-                <button class="btn-sm" onclick="showCreateProfileDialog()">+ Nuevo perfil</button>
+                <button class="btn-sm" id="create-profile-btn">+ Nuevo perfil</button>
             </div>
             ${Object.entries(adminProfiles).map(([id, p]) => `
                 <div class="profile-card ${p.protected ? 'protected' : 'editable'}">
@@ -1806,8 +1807,8 @@ function renderAdminContent() {
                     ${p.protected 
                         ? '<p class="text-xs text-slate-600 mt-2 italic">Perfil protegido (no editable)</p>' 
                         : `<div class="profile-card-actions">
-                            <button class="btn-sm edit-btn" onclick="editProfile('${id}')">✏️ Editar</button>
-                            ${id.includes('-0000-') ? '' : `<button class="btn-sm danger" onclick="deleteProfile('${id}')">🗑️ Eliminar</button>`}
+                            <button class="btn-sm edit-btn" data-action="edit-profile" data-profile-id="${id}">✏️ Editar</button>
+                            ${id.includes('-0000-') ? '' : `<button class="btn-sm danger" data-action="delete-profile" data-profile-id="${id}">🗑️ Eliminar</button>`}
                            </div>`
                     }
                 </div>
@@ -2040,10 +2041,10 @@ function renderApps() {
     document.getElementById('apps-list').innerHTML = APPS.map(app => {
         // Only show control button for services that are controllable (not explicitly false)
         const canControl = app.controllable !== false;
-        const btnHtml = (showBtn && canControl) ? `<button class="svc-btn loading" id="btn-${app.key}" onclick="toggleService(event,'${app.key}')">${t('svc_loading')}</button>` : '';
-        const restartHtml = (showBtn && canControl) ? `<button class="svc-restart" id="restart-${app.key}" title="${t('svc_restart')}" aria-label="${t('svc_restart')}" style="display:none" onclick="restartService(event,'${app.key}')">🔄</button>` : '';
+        const btnHtml = (showBtn && canControl) ? `<button class="svc-btn loading" id="btn-${app.key}" data-action="toggle-service" data-key="${app.key}">${t('svc_loading')}</button>` : '';
+        const restartHtml = (showBtn && canControl) ? `<button class="svc-restart hidden" id="restart-${app.key}" title="${t('svc_restart')}" aria-label="${t('svc_restart')}" data-action="restart-service" data-key="${app.key}">🔄</button>` : '';
         // Deploy button: SUPER only, and only for apps mapped to a CI service.
-        const deployHtml = (showBtn && DEPLOY_SERVICES[app.key]) ? `<button class="svc-deploy" id="deploy-${app.key}" title="${t('svc_deploy')}" aria-label="${t('svc_deploy')}" onclick="deployService(event,'${app.key}')">🚀</button>` : '';
+        const deployHtml = (showBtn && DEPLOY_SERVICES[app.key]) ? `<button class="svc-deploy" id="deploy-${app.key}" title="${t('svc_deploy')}" aria-label="${t('svc_deploy')}" data-action="deploy-service" data-key="${app.key}">🚀</button>` : '';
         const tag = app.url ? 'a' : 'div';
         const href = app.url ? `href="${app.url}"` : '';
         return `<${tag} ${href} class="app-card px-4 py-3.5">
@@ -2051,7 +2052,7 @@ function renderApps() {
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 mb-0.5">
                         <span class="text-sm font-semibold">${t(app.nameKey)}</span>
-                        <span id="status-${app.key}" class="health-trigger flex items-center gap-1 text-[10px] text-slate-500" onclick="toggleTip(event,'${app.key}')">
+                        <span id="status-${app.key}" class="health-trigger flex items-center gap-1 text-[10px] text-slate-500" data-action="toggle-tip" data-key="${app.key}">
                             <span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span><span>—</span>
                             <span class="health-tip" id="tip-${app.key}"></span>
                         </span>
@@ -2062,7 +2063,7 @@ function renderApps() {
             </div>
         </${tag}>`;
     }).join('');
-    document.getElementById('services-section').style.display = 'block';
+    document.getElementById('services-section').classList.remove('hidden');
     if (isAdmin()) loadContainerStates();
 }
 
@@ -2089,7 +2090,7 @@ function updateBtn(key, running) {
     // The restart button only makes sense while the service is running.
     const restartBtn = document.getElementById('restart-' + key);
     if (restartBtn) {
-        restartBtn.style.display = running ? 'inline-flex' : 'none';
+        restartBtn.classList.toggle('hidden', !running);
         restartBtn.disabled = false;
         restartBtn.classList.remove('spinning');
     }
@@ -2557,7 +2558,7 @@ function renderWidgetConfigList() {
                 <div class="wcfg-desc">${t(w.descKey)}</div>
             </div>
             <label class="wcfg-switch">
-                <input type="checkbox" ${w.visible ? 'checked' : ''} onchange="onWidgetToggle('${w.key}', this.checked)">
+                <input type="checkbox" ${w.visible ? 'checked' : ''} data-action="widget-toggle" data-key="${w.key}">
                 <span class="wcfg-slider"></span>
             </label>
         </div>
@@ -2678,7 +2679,7 @@ function renderCalendarToday(body) {
         body.innerHTML = `
             <div class="text-center py-6">
                 <p class="text-slate-400 text-sm mb-4">${t('cal_no_events')}</p>
-                <button class="btn-sm" onclick="triggerCalendarSync()" id="cal-sync-btn">${t('cal_sync_now')}</button>
+                <button class="btn-sm" id="cal-sync-btn">${t('cal_sync_now')}</button>
             </div>`;
         return;
     }
@@ -2697,7 +2698,7 @@ function renderCalendarToday(body) {
     }).join('');
     body.innerHTML = `
         <div class="mb-3 flex justify-end">
-            <button class="btn-sm" onclick="triggerCalendarSync()" id="cal-sync-btn">${t('cal_sync_now')}</button>
+            <button class="btn-sm" id="cal-sync-btn">${t('cal_sync_now')}</button>
         </div>
         <div class="space-y-1">${eventsHtml}</div>`;
 }
@@ -2789,18 +2790,19 @@ async function loadUser() {
         
         document.getElementById('user-name').textContent = username;
         document.getElementById('user-avatar').textContent = username.charAt(0).toUpperCase();
-        document.getElementById('user-dropdown').style.display = 'block';
+        document.getElementById('user-dropdown').classList.remove('hidden');
         
         // Show buttons based on level (SUPER = level 0)
         if (isAdmin()) {
-            document.getElementById('svc-btn').style.display = 'flex';
-            document.getElementById('res-btn').style.display = 'flex';
-            document.getElementById('alert-btn').style.display = 'flex';
-            document.getElementById('admin-btn').style.display = 'flex';
-            document.getElementById('calendar-btn').style.display = 'flex';
+            document.getElementById('svc-btn').classList.remove('hidden');
+            document.getElementById('res-btn').classList.remove('hidden');
+            document.getElementById('alert-btn').classList.remove('hidden');
+            document.getElementById('admin-btn').classList.remove('hidden');
+            const calBtn = document.getElementById('calendar-btn');
+            if (calBtn) calBtn.classList.remove('hidden');
         }
         // Widget customisation is per-user and available to everyone.
-        document.getElementById('widget-btn').style.display = 'flex';
+        document.getElementById('widget-btn').classList.remove('hidden');
         
         // Build app list from permissions
         // photos and passwords go in external services modal, not main list
@@ -2905,8 +2907,183 @@ function setupHealthStream() {
     };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Event Listeners Setup (CSP-compliant: no inline handlers)
+// ═══════════════════════════════════════════════════════════════════════════
+function setupEventListeners() {
+    // ── Modal overlays: close when clicking outside panel ──
+    ['alert-modal', 'res-modal', 'svc-modal', 'widget-modal', 'admin-modal',
+     'profile-edit-modal', 'user-edit-modal', 'user-create-modal'].forEach(id => {
+        const modal = document.getElementById(id);
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                const panelId = id.replace('-modal', '-panel');
+                const panel = document.getElementById(panelId) || modal.querySelector('.modal-panel');
+                if (panel && !panel.contains(e.target)) {
+                    modal.classList.remove('open');
+                    // Clean up intervals if any
+                    if (id === 'res-modal' && _resInterval) { clearInterval(_resInterval); _resInterval = null; }
+                    if (id === 'alert-modal' && _alertInterval) { clearInterval(_alertInterval); _alertInterval = null; }
+                }
+            });
+        }
+    });
+
+    // ── Header buttons ──
+    document.getElementById('svc-btn')?.addEventListener('click', openSvcModal);
+    document.getElementById('res-btn')?.addEventListener('click', openResModal);
+    document.getElementById('alert-btn')?.addEventListener('click', openAlertModal);
+    document.getElementById('admin-btn')?.addEventListener('click', openAdminModal);
+    document.getElementById('widget-btn')?.addEventListener('click', openWidgetModal);
+
+    // ── Widget modal close button ──
+    document.getElementById('widget-close-btn')?.addEventListener('click', () => closeWidgetModal());
+
+    // ── User dropdown ──
+    document.getElementById('user-chip')?.addEventListener('click', toggleUserMenu);
+
+    // ── Dark mode toggle ──
+    document.getElementById('dark-mode-toggle')?.addEventListener('change', (e) => {
+        onDarkModeToggle(e.target.checked);
+    });
+
+    // ── Language selector ──
+    document.getElementById('lang-btn')?.addEventListener('click', toggleLang);
+    document.querySelectorAll('.lang-option').forEach(opt => {
+        opt.addEventListener('click', () => setLang(opt.dataset.lang));
+    });
+
+    // ── Alert tabs (delegated) ──
+    document.getElementById('alert-tabs')?.addEventListener('click', (e) => {
+        const tab = e.target.closest('.res-tab[data-tab]');
+        if (tab) switchAlertTab(tab.dataset.tab);
+    });
+
+    // ── Resource tabs (delegated) ──
+    document.getElementById('res-tabs')?.addEventListener('click', (e) => {
+        const tab = e.target.closest('.res-tab[data-source]');
+        if (tab) switchResSource(tab.dataset.source);
+    });
+
+    // ── Services tabs (delegated) ──
+    document.getElementById('svc-tabs')?.addEventListener('click', (e) => {
+        const tab = e.target.closest('.res-tab[data-tab]');
+        if (tab) switchSvcTab(tab.dataset.tab);
+    });
+
+    // ── Admin tabs (delegated) ──
+    document.getElementById('admin-tabs')?.addEventListener('click', (e) => {
+        const tab = e.target.closest('.admin-tab[data-tab]');
+        if (tab) switchAdminTab(tab.dataset.tab);
+    });
+
+    // ── Profile edit modal ──
+    document.getElementById('profile-edit-close-btn')?.addEventListener('click', () => closeProfileEditModal());
+    document.getElementById('profile-edit-cancel-btn')?.addEventListener('click', () => closeProfileEditModal());
+    document.getElementById('profile-edit-form')?.addEventListener('submit', submitProfileEdit);
+
+    // ── User edit modal ──
+    document.getElementById('user-edit-close-btn')?.addEventListener('click', () => closeUserEditModal());
+    document.getElementById('user-edit-cancel-btn')?.addEventListener('click', () => closeUserEditModal());
+    document.getElementById('user-edit-form')?.addEventListener('submit', submitUserEdit);
+    document.getElementById('user-delete-btn')?.addEventListener('click', deleteCurrentUser);
+
+    // ── User create modal ──
+    document.getElementById('user-create-close-btn')?.addEventListener('click', () => closeUserCreateModal());
+    document.getElementById('user-create-cancel-btn')?.addEventListener('click', () => closeUserCreateModal());
+    document.getElementById('user-create-form')?.addEventListener('submit', submitUserCreate);
+
+    // ── Delegated handlers for dynamically rendered content ──
+    
+    // Admin body (users/profiles management)
+    document.getElementById('admin-body')?.addEventListener('click', (e) => {
+        const target = e.target.closest('[data-action]');
+        if (!target) return;
+        const action = target.dataset.action;
+        if (action === 'remove-profile') {
+            removeUserProfile(target.dataset.username, target.dataset.profileId);
+        } else if (action === 'add-profile') {
+            showAddProfileDialog(target.dataset.username);
+        } else if (action === 'edit-user') {
+            editUser(target.dataset.userId);
+        } else if (action === 'edit-profile') {
+            editProfile(target.dataset.profileId);
+        } else if (action === 'delete-profile') {
+            deleteProfile(target.dataset.profileId);
+        } else if (target.id === 'create-user-btn') {
+            showCreateUserDialog();
+        } else if (target.id === 'create-profile-btn') {
+            showCreateProfileDialog();
+        }
+    });
+
+    // Apps list (service control buttons)
+    document.getElementById('apps-list')?.addEventListener('click', (e) => {
+        const target = e.target.closest('[data-action]');
+        if (!target) return;
+        const action = target.dataset.action;
+        const key = target.dataset.key;
+        if (action === 'toggle-service') {
+            e.preventDefault(); e.stopPropagation();
+            toggleService(e, key);
+        } else if (action === 'restart-service') {
+            e.preventDefault(); e.stopPropagation();
+            restartService(e, key);
+        } else if (action === 'deploy-service') {
+            e.preventDefault(); e.stopPropagation();
+            deployService(e, key);
+        } else if (action === 'toggle-tip') {
+            toggleTip(e, key);
+        }
+    });
+
+    // PC mode buttons (delegated on res-body)
+    document.getElementById('res-body')?.addEventListener('click', (e) => {
+        const modeBtn = e.target.closest('.pc-mode-btn[data-mode]');
+        if (modeBtn) {
+            setPcMode(modeBtn.dataset.mode);
+            return;
+        }
+        // Metrics range buttons
+        const rangeBtn = e.target.closest('.days-btn[data-range]');
+        if (rangeBtn) {
+            setMxRange(rangeBtn.dataset.range);
+        }
+    });
+
+    // Widget config toggles (delegated on widget-list)
+    document.getElementById('widget-list')?.addEventListener('change', (e) => {
+        const input = e.target.closest('input[data-action="widget-toggle"]');
+        if (input) {
+            onWidgetToggle(input.dataset.key, input.checked);
+        }
+    });
+
+    // Calendar sync button (delegated on calendar-body)
+    document.getElementById('calendar-body')?.addEventListener('click', (e) => {
+        if (e.target.id === 'cal-sync-btn' || e.target.closest('#cal-sync-btn')) {
+            triggerCalendarSync();
+        }
+    });
+
+    // Close modals on Escape (already exists but ensure it's here)
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeResModal();
+            closeSvcModal();
+            closeAlertModal();
+            closeAdminModal();
+            closeWidgetModal();
+            closeProfileEditModal();
+            closeUserEditModal();
+            closeUserCreateModal();
+        }
+    });
+}
+
 // Init
 (async function init() {
+    setupEventListeners();
     applyLang();
     applyCachedTheme();
     // Seed the widget layout (cache first, reconcile with the server) before
