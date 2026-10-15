@@ -773,7 +773,8 @@ class TestSchedulerTick:
 
 
 class TestRunScraping:
-    def test_scraping_processes_props_and_sends_summary(self, scheduler):
+    def test_scraping_processes_props_and_marks_alerted(self, scheduler):
+        """Scraping processes properties and marks high-scorers as alerted."""
         prop = _make_property()
         zone = ZONES["zamora_meseta"]
 
@@ -795,9 +796,9 @@ class TestRunScraping:
         ):
             scheduler.run_scraping_now()
 
-        # A property passed the threshold → marked alerted; a summary is sent.
+        # A property passed the threshold → marked alerted
         scheduler._db.mark_alerted.assert_called()
-        scheduler._notifier.send_status.assert_called()
+        # Summary notification was removed to reduce Telegram noise
         assert scheduler._last_scraping_result in ("ok", "ok_with_errors")
 
     def test_scraping_marks_error_when_zero_scored(self, scheduler):
@@ -840,6 +841,7 @@ class TestRunScraping:
         assert any(e.portal == "idealista_apify" for e in status.scraper_errors)
 
     def test_scraping_sends_price_drop_alert(self, scheduler):
+        """Price drop alert is sent only for properties on radar."""
         prop = _make_property()
         zone = ZONES["zamora_meseta"]
         from models import PriceEvent
@@ -848,6 +850,8 @@ class TestRunScraping:
             property_uid=prop.unique_id, old_price=200_000, new_price=180_000
         )
         scheduler._db.upsert_property.return_value = price_event
+        # Property is on radar (scored and not dismissed)
+        scheduler._db.is_on_radar.return_value = True
 
         with (
             patch("casita_scheduler.pisos_scraper.scrape_zone", return_value=[prop]),
@@ -859,6 +863,30 @@ class TestRunScraping:
             scheduler.run_scraping_now()
 
         scheduler._notifier.send_price_drop_alert.assert_called()
+
+    def test_scraping_skips_price_drop_alert_when_not_on_radar(self, scheduler):
+        """Price drop alert is NOT sent for properties not on radar."""
+        prop = _make_property()
+        zone = ZONES["zamora_meseta"]
+        from models import PriceEvent
+
+        price_event = PriceEvent(
+            property_uid=prop.unique_id, old_price=200_000, new_price=180_000
+        )
+        scheduler._db.upsert_property.return_value = price_event
+        # Property is NOT on radar (dismissed or below threshold)
+        scheduler._db.is_on_radar.return_value = False
+
+        with (
+            patch("casita_scheduler.pisos_scraper.scrape_zone", return_value=[prop]),
+            patch("casita_scheduler.fotocasa_scraper.scrape_zone", return_value=[]),
+            patch("casita_scheduler.habitaclia_scraper.scrape_zone", return_value=[]),
+            patch("casita_scheduler.evaluate", return_value=_high_score(prop, zone)),
+        ):
+            scheduler._apify.scrape_zone.return_value = []
+            scheduler.run_scraping_now()
+
+        scheduler._notifier.send_price_drop_alert.assert_not_called()
 
 
 # ── Gmail check ───────────────────────────────────────────────────────────────

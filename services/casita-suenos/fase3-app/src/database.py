@@ -772,6 +772,22 @@ class Database:
         ).fetchall()
         return {r["zone_id"]: r["cnt"] for r in rows}
 
+    def is_on_radar(self, uid: str, min_score: float = 119.0) -> bool:
+        """Check if a property is on the radar (scored above threshold and not dismissed).
+
+        A property is "on radar" when:
+        - It has a score record in scored_properties
+        - Its score_total >= min_score (default 119 = alert threshold)
+        - It has not been dismissed (dismissed = 0)
+        """
+        _validate_property_uid(uid)
+        row = self._conn.execute(
+            "SELECT 1 FROM scored_properties "
+            "WHERE property_uid = ? AND score_total >= ? AND dismissed = 0",
+            (uid, min_score),
+        ).fetchone()
+        return row is not None
+
     def count_radar_properties(self, min_score: float = 55.0) -> int:
         """Cuenta solo las propiedades en el radar.
 

@@ -419,13 +419,16 @@ class CasitaScheduler:
                             total_new += 1
                             new_by_zone[zone_id] = new_by_zone.get(zone_id, 0) + 1
                     if price_event and price_event.delta < 0:
-                        self._notifier.send_price_drop_alert(
-                            event=price_event,
-                            title=prop.title,
-                            url=prop.url,
-                            zone_name=zone.name,
-                        )
-                        total_price_drops += 1
+                        # Only notify price drops for properties on the radar
+                        # (score >= threshold and not dismissed)
+                        if self._db.is_on_radar(prop.unique_id):
+                            self._notifier.send_price_drop_alert(
+                                event=price_event,
+                                title=prop.title,
+                                url=prop.url,
+                                zone_name=zone.name,
+                            )
+                            total_price_drops += 1
                 except Exception as e:
                     logger.error("[casita] Error procesando %s: %s", prop.unique_id, e)
 
@@ -470,16 +473,8 @@ class CasitaScheduler:
             total_scored,
             len(new_errors),
         )
-        self._send_scraping_summary(
-            result=result,
-            elapsed_str=elapsed_str,
-            total_new=total_new,
-            total_price_drops=total_price_drops,
-            total_scored=total_scored,
-            portals_active=portals_active,
-            new_by_zone=new_by_zone,
-            errors_count=len(new_errors),
-        )
+        # NOTE: Scraping summary notification removed to reduce Telegram noise.
+        # Results are logged above and visible in the dashboard.
 
     def _send_scraping_summary(
         self,
