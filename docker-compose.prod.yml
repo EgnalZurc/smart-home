@@ -170,8 +170,7 @@ services:
       - TZ=Europe/Madrid
       - MQTT_BROKER=mosquitto
       - MQTT_PORT=1883
-      - MQTT_USER=ac-service
-      - MQTT_PASSWORD=${MQTT_AC_SERVICE_PASSWORD}
+      - MQTT_ALLOW_ANONYMOUS=true
     networks:
       - smart-home
     healthcheck:
