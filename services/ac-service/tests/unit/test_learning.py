@@ -165,10 +165,20 @@ class TestAnalyzeHistory:
 
     def test_records_with_missing_fields_are_skipped(self):
         records = [
-            {"timestamp": None, "state": "cooling_max", "setpoint": 24.0,
-             "average_temp": 27.0, "active_sensors": 3},
-            {"timestamp": _ts(18), "state": "cooling_max", "setpoint": None,
-             "average_temp": 27.0, "active_sensors": 3},
+            {
+                "timestamp": None,
+                "state": "cooling_max",
+                "setpoint": 24.0,
+                "average_temp": 27.0,
+                "active_sensors": 3,
+            },
+            {
+                "timestamp": _ts(18),
+                "state": "cooling_max",
+                "setpoint": None,
+                "average_temp": 27.0,
+                "active_sensors": 3,
+            },
             _record(18, "cooling_max", 27.0, 24.0),
         ]
         # Should not raise despite the partial records.

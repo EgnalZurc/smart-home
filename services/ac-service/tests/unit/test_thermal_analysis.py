@@ -6,7 +6,6 @@ outdoor-temperature efficiency breakdown).
 """
 
 import pytest
-
 from thermal_analysis import (
     MIN_SEGMENT_SAMPLES,
     ThermalBuffer,
@@ -96,7 +95,7 @@ class TestAnalyzeEmpty:
 
     def test_segment_too_short_in_samples_is_ignored(self):
         # Fewer than MIN_SEGMENT_SAMPLES → no segment.
-        temps = [26.0, 25.5][:MIN_SEGMENT_SAMPLES - 1]
+        temps = [26.0, 25.5][: MIN_SEGMENT_SAMPLES - 1]
         samples = _series(0.0, temps, setpoint=24.0, mode="cool")
         result = analyze(samples)
         assert result["segment_count"] == 0
@@ -203,9 +202,7 @@ class TestSegmentation:
 
 class TestEfficiencyByOutdoor:
     def test_buckets_by_outdoor_temp(self):
-        warm = _series(
-            0.0, [30.0, 29.0, 28.0, 27.0, 26.0], 26.0, "cool", outdoor=32.0
-        )
+        warm = _series(0.0, [30.0, 29.0, 28.0, 27.0, 26.0], 26.0, "cool", outdoor=32.0)
         # An off sample forces a segment break so the two runs are analysed
         # independently rather than merged into one averaged segment.
         gap = [ThermalSample(300.0, 26.0, 26.0, "off", "cool")]

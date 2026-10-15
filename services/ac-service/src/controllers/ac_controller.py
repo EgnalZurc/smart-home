@@ -44,6 +44,11 @@ from controllers.state_machine import (
     StateMachineOutputs,
     evaluate,
 )
+from controllers.thermal import (
+    EnergyConfig,
+    EnergyTracker,
+    ThermalSampleRecorder,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -239,15 +244,16 @@ class ACController:
         self._last_modulating_setpoint: float = DEFAULT_SETPOINT
 
         # Thermal analysis (optional, injected via set_thermal_buffer())
-        self._thermal_buffer = None
-        self._outdoor_temp_provider = None
+        self._thermal_recorder = ThermalSampleRecorder()
 
-        # Energy tracking
-        self._energy_state = {
-            "last_state": "off",
-            "last_transition": time.time(),
-            "kwh_session": 0.0,
-        }
+        # Energy tracking using dedicated tracker
+        energy_config = EnergyConfig(
+            ac_power_cooling_max=config.ac_power_cooling_max,
+            ac_power_cooling_mid=config.ac_power_cooling_mid,
+            ac_power_modulating=config.ac_power_modulating,
+            ac_power_forced_on=config.ac_power_forced_on,
+        )
+        self._energy_tracker = EnergyTracker(energy_config)
 
     @property
     def current_state(self) -> ControlState:
@@ -407,8 +413,9 @@ class ACController:
             outdoor_temp_provider: Zero-arg callable returning outdoor temp (°C)
                 or None. Called defensively so failures don't break control.
         """
-        self._thermal_buffer = buffer
-        self._outdoor_temp_provider = outdoor_temp_provider
+        self._thermal_recorder.set_buffer(buffer)
+        if outdoor_temp_provider is not None:
+            self._thermal_recorder.set_outdoor_provider(outdoor_temp_provider)
 
     def restore_state(self) -> bool:
         """Restore controller state from disk.
@@ -827,29 +834,12 @@ class ACController:
             outputs: State machine outputs from this tick.
             avg_temp: Average temperature from sensors (°C).
         """
-        buffer = self._thermal_buffer
-        if buffer is None:
-            return
-
-        outdoor_temp = None
-        provider = self._outdoor_temp_provider
-        if provider is not None:
-            try:
-                outdoor_temp = provider()
-            except Exception:
-                logger.debug("Outdoor temp provider failed for thermal sample")
-
-        from thermal_analysis import ThermalSample
-
-        buffer.add(
-            ThermalSample(
-                timestamp=time.time(),
-                average_temp=round(avg_temp, 2) if avg_temp else None,
-                setpoint=outputs.setpoint,
-                state=outputs.state.value,
-                mode=outputs.mode,
-                outdoor_temp=outdoor_temp,
-            )
+        self._thermal_recorder.record(
+            timestamp=time.time(),
+            average_temp=avg_temp,
+            setpoint=outputs.setpoint,
+            state=outputs.state.value,
+            mode=outputs.mode,
         )
 
     def update_ac_real_cache(self, melcloud_data: dict) -> None:
@@ -881,25 +871,7 @@ class ACController:
         Args:
             new_state: New controller state name.
         """
-        now = time.time()
-        elapsed_hours = (now - self._energy_state["last_transition"]) / 3600
-
-        power_kw = self._get_power_for_state(self._energy_state["last_state"])
-        kwh_consumed = power_kw * elapsed_hours
-        self._energy_state["kwh_session"] += kwh_consumed
-
-        self._energy_state["last_state"] = new_state
-        self._energy_state["last_transition"] = now
-
-        if kwh_consumed > 0:
-            logger.debug(
-                "Energía: estado %s durante %.2fh consumió %.4f kWh "
-                "(total sesión: %.4f kWh)",
-                self._energy_state["last_state"],
-                elapsed_hours,
-                kwh_consumed,
-                self._energy_state["kwh_session"],
-            )
+        self._energy_tracker.record_transition(new_state)
 
     def _get_power_for_state(self, state: str) -> float:
         """Return power consumption in kW for a given state.
@@ -910,13 +882,7 @@ class ACController:
         Returns:
             Power consumption in kW, or 0.0 for off states.
         """
-        power_map = {
-            "cooling_max": self.config.ac_power_cooling_max,
-            "cooling_mid": self.config.ac_power_cooling_mid,
-            "modulating": self.config.ac_power_modulating,
-            "forced_on": self.config.ac_power_forced_on,
-        }
-        return power_map.get(state, 0.0)
+        return self._energy_tracker.get_power_for_state(state)
 
     def get_session_kwh(self) -> float:
         """Return kWh consumed in current session since last reset.
@@ -926,17 +892,8 @@ class ACController:
         Returns:
             Total kWh consumed in the current session.
         """
-        now = time.time()
-        elapsed_hours = (now - self._energy_state["last_transition"]) / 3600
-        power_kw = self._get_power_for_state(self._energy_state["last_state"])
-        current_kwh = power_kw * elapsed_hours
-        return self._energy_state["kwh_session"] + current_kwh
+        return self._energy_tracker.get_session_kwh()
 
     def reset_session_kwh(self) -> None:
         """Reset session energy counter (called after hourly log)."""
-        logger.info(
-            "Resetting energy session (accumulated: %.4f kWh)",
-            self._energy_state["kwh_session"],
-        )
-        self._energy_state["kwh_session"] = 0.0
-        self._energy_state["last_transition"] = time.time()
+        self._energy_tracker.reset_session()
