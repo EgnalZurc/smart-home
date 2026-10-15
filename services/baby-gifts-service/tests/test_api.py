@@ -29,7 +29,7 @@ class TestAdminGiftEndpoints:
 
     def test_get_all_gifts_empty(self, client):
         """GET /api/baby-gifts should return empty list initially."""
-        response = client.get("/api/baby-gifts")
+        response = client.get("/api/baby-gifts", headers={"X-Auth-User": "admin"})
 
         assert response.status_code == 200
         data = response.json()
@@ -38,7 +38,9 @@ class TestAdminGiftEndpoints:
 
     def test_create_gift(self, client, sample_gift):
         """POST /api/baby-gifts should create a gift."""
-        response = client.post("/api/baby-gifts", json=sample_gift)
+        response = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -49,12 +51,16 @@ class TestAdminGiftEndpoints:
     def test_update_gift(self, client, sample_gift):
         """PUT /api/baby-gifts/{id} should update a gift."""
         # Create a gift first
-        create_resp = client.post("/api/baby-gifts", json=sample_gift)
+        create_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = create_resp.json()["gift"]["id"]
 
         # Update it
         response = client.put(
-            f"/api/baby-gifts/{gift_id}", json={"name": "Updated Name"}
+            f"/api/baby-gifts/{gift_id}",
+            json={"name": "Updated Name"},
+            headers={"X-Auth-User": "admin"},
         )
 
         assert response.status_code == 200
@@ -65,7 +71,9 @@ class TestAdminGiftEndpoints:
         """PUT /api/baby-gifts/{id} should return 404 for non-existent gift."""
         # Use a valid ID format that doesn't exist
         response = client.put(
-            "/api/baby-gifts/g_9999999999999_deadbeef", json={"name": "New Name"}
+            "/api/baby-gifts/g_9999999999999_deadbeef",
+            json={"name": "New Name"},
+            headers={"X-Auth-User": "admin"},
         )
 
         assert response.status_code == 404
@@ -73,22 +81,30 @@ class TestAdminGiftEndpoints:
     def test_delete_gift(self, client, sample_gift):
         """DELETE /api/baby-gifts/{id} should delete a gift."""
         # Create a gift first
-        create_resp = client.post("/api/baby-gifts", json=sample_gift)
+        create_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = create_resp.json()["gift"]["id"]
 
         # Delete it
-        response = client.delete(f"/api/baby-gifts/{gift_id}")
+        response = client.delete(
+            f"/api/baby-gifts/{gift_id}", headers={"X-Auth-User": "admin"}
+        )
 
         assert response.status_code == 200
 
         # Verify it's gone
-        all_gifts = client.get("/api/baby-gifts").json()
+        all_gifts = client.get(
+            "/api/baby-gifts", headers={"X-Auth-User": "admin"}
+        ).json()
         gift_ids = [g["id"] for g in all_gifts["gifts"]]
         assert gift_id not in gift_ids
 
     def test_delete_nonexistent_gift_404(self, client):
         """DELETE /api/baby-gifts/{id} should return 404."""
-        response = client.delete("/api/baby-gifts/nonexistent")
+        response = client.delete(
+            "/api/baby-gifts/nonexistent", headers={"X-Auth-User": "admin"}
+        )
 
         assert response.status_code == 404
 
@@ -98,7 +114,9 @@ class TestInvitationEndpoints:
 
     def test_list_invitations_empty(self, client):
         """GET /api/baby-gifts/invitations should return empty list initially."""
-        response = client.get("/api/baby-gifts/invitations")
+        response = client.get(
+            "/api/baby-gifts/invitations", headers={"X-Auth-User": "admin"}
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -108,7 +126,9 @@ class TestInvitationEndpoints:
     def test_create_invitation(self, client, sample_invitation_name):
         """POST /api/baby-gifts/invitations should create invitation."""
         response = client.post(
-            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
         )
 
         assert response.status_code == 200
@@ -119,7 +139,11 @@ class TestInvitationEndpoints:
 
     def test_create_invitation_empty_name_fails(self, client):
         """POST /api/baby-gifts/invitations with empty name should fail."""
-        response = client.post("/api/baby-gifts/invitations", json={"name": "   "})
+        response = client.post(
+            "/api/baby-gifts/invitations",
+            json={"name": "   "},
+            headers={"X-Auth-User": "admin"},
+        )
 
         assert response.status_code == 400
 
@@ -127,12 +151,16 @@ class TestInvitationEndpoints:
         """DELETE /api/baby-gifts/invitations/{token} should delete invitation."""
         # Create first
         create_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
         )
         token = create_resp.json()["token"]
 
         # Delete
-        response = client.delete(f"/api/baby-gifts/invitations/{token}")
+        response = client.delete(
+            f"/api/baby-gifts/invitations/{token}", headers={"X-Auth-User": "admin"}
+        )
 
         assert response.status_code == 200
 
@@ -140,34 +168,55 @@ class TestInvitationEndpoints:
         """POST /api/baby-gifts/invitations/{token}/revoke should revoke."""
         # Create first
         create_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
         )
         token = create_resp.json()["token"]
 
         # Revoke
-        response = client.post(f"/api/baby-gifts/invitations/{token}/revoke")
+        response = client.post(
+            f"/api/baby-gifts/invitations/{token}/revoke",
+            headers={"X-Auth-User": "admin"},
+        )
 
         assert response.status_code == 200
 
         # Check it's revoked
-        invitations = client.get("/api/baby-gifts/invitations").json()["invitations"]
+        invitations = client.get(
+            "/api/baby-gifts/invitations", headers={"X-Auth-User": "admin"}
+        ).json()["invitations"]
         revoked = next(inv for inv in invitations if inv["token"] == token)
         assert revoked["revoked"] is True
 
     def test_invitations_include_gift_stats(self, client, sample_invitation_name):
         """GET /api/baby-gifts/invitations should include visible_gifts and available_gifts."""
         # Create some gifts: 2 visible (1 reserved, 1 not), 1 hidden
-        gift1_resp = client.post("/api/baby-gifts", json={"name": "Visible Gift 1"})
+        gift1_resp = client.post(
+            "/api/baby-gifts",
+            json={"name": "Visible Gift 1"},
+            headers={"X-Auth-User": "admin"},
+        )
         gift1_id = gift1_resp.json()["gift"]["id"]
 
-        client.post("/api/baby-gifts", json={"name": "Visible Gift 2"})
+        client.post(
+            "/api/baby-gifts",
+            json={"name": "Visible Gift 2"},
+            headers={"X-Auth-User": "admin"},
+        )
 
-        hidden_resp = client.post("/api/baby-gifts", json={"name": "Hidden Gift"})
+        hidden_resp = client.post(
+            "/api/baby-gifts",
+            json={"name": "Hidden Gift"},
+            headers={"X-Auth-User": "admin"},
+        )
         hidden_id = hidden_resp.json()["gift"]["id"]
 
         # Create invitation
         inv_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
         )
         token = inv_resp.json()["token"]
 
@@ -181,7 +230,9 @@ class TestInvitationEndpoints:
         )
 
         # Get invitations and verify stats
-        response = client.get("/api/baby-gifts/invitations")
+        response = client.get(
+            "/api/baby-gifts/invitations", headers={"X-Auth-User": "admin"}
+        )
         assert response.status_code == 200
         data = response.json()
 
@@ -209,12 +260,16 @@ class TestGuestEndpoints:
         """GET /api/baby-gifts/guest/{token} with valid token should return gifts."""
         # Create invitation
         inv_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
         )
         token = inv_resp.json()["token"]
 
         # Create a gift
-        client.post("/api/baby-gifts", json=sample_gift)
+        client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
 
         # Get as guest
         response = client.get(f"/api/baby-gifts/guest/{token}")
@@ -228,12 +283,16 @@ class TestGuestEndpoints:
         """POST /api/baby-gifts/guest/{token}/reserve/{id} should reserve gift."""
         # Create invitation
         inv_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
         )
         token = inv_resp.json()["token"]
 
         # Create a gift
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         # Reserve as guest
@@ -248,12 +307,16 @@ class TestGuestEndpoints:
         """POST /api/baby-gifts/guest/{token}/unreserve/{id} should unreserve own gift."""
         # Create invitation
         inv_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
         )
         token = inv_resp.json()["token"]
 
         # Create and reserve a gift
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
         client.post(f"/api/baby-gifts/guest/{token}/reserve/{gift_id}")
 
@@ -267,22 +330,34 @@ class TestGuestEndpoints:
         """Guests should not see hidden gifts."""
         # Create invitation
         inv_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
         )
         _token = inv_resp.json()["token"]
 
         # Create a visible gift
-        visible_resp = client.post("/api/baby-gifts", json={"name": "Visible Gift"})
+        visible_resp = client.post(
+            "/api/baby-gifts",
+            json={"name": "Visible Gift"},
+            headers={"X-Auth-User": "admin"},
+        )
         _visible_id = visible_resp.json()["gift"]["id"]
 
         # Create a hidden gift
-        hidden_resp = client.post("/api/baby-gifts", json={"name": "Hidden Gift"})
+        hidden_resp = client.post(
+            "/api/baby-gifts",
+            json={"name": "Hidden Gift"},
+            headers={"X-Auth-User": "admin"},
+        )
         _hidden_id = hidden_resp.json()["gift"]["id"]
 
         # Hide it via admin unreserve endpoint won't work, we need direct access
         # Using the toggle visibility would require user endpoint
         # For now, verify both are visible in admin view
-        admin_gifts = client.get("/api/baby-gifts").json()["gifts"]
+        admin_gifts = client.get(
+            "/api/baby-gifts", headers={"X-Auth-User": "admin"}
+        ).json()["gifts"]
         assert len(admin_gifts) == 2
 
 
@@ -297,7 +372,9 @@ class TestUserEndpoints:
     def test_user_get_gifts_with_auth(self, client, sample_gift):
         """GET /api/baby-gifts/user with auth header should return gifts."""
         # Create a gift
-        client.post("/api/baby-gifts", json=sample_gift)
+        client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
 
         # Get as authenticated user
         response = client.get(
@@ -312,7 +389,9 @@ class TestUserEndpoints:
 
     def test_user_get_gifts_familia_user(self, client, sample_gift):
         """GET /api/baby-gifts/user for FAMILIA user returns is_familia=True."""
-        client.post("/api/baby-gifts", json=sample_gift)
+        client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
 
         response = client.get("/api/baby-gifts/user", headers={"X-Auth-User": "egnal"})
 
@@ -323,7 +402,9 @@ class TestUserEndpoints:
     def test_user_get_gifts_hides_others_reservations(self, client, sample_gift):
         """User should see 'Alguien' for gifts reserved by others."""
         # Create gift
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         # Reserve as different user
@@ -346,7 +427,9 @@ class TestUserEndpoints:
     def test_user_sees_own_reservation(self, client, sample_gift):
         """User should see their own reservation details."""
         # Create gift
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         # Reserve as user
@@ -367,7 +450,9 @@ class TestUserEndpoints:
     def test_user_reserve_gift(self, client, sample_gift):
         """POST /api/baby-gifts/user/reserve/{id} should reserve gift."""
         # Create gift
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         # Reserve
@@ -384,7 +469,9 @@ class TestUserEndpoints:
 
     def test_user_reserve_without_auth_returns_401(self, client, sample_gift):
         """POST /api/baby-gifts/user/reserve/{id} without auth returns 401."""
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         response = client.post(f"/api/baby-gifts/user/reserve/{gift_id}")
@@ -393,7 +480,9 @@ class TestUserEndpoints:
     def test_user_reserve_already_reserved_fails(self, client, sample_gift):
         """POST /api/baby-gifts/user/reserve/{id} for reserved gift returns 400."""
         # Create and reserve gift
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         with patch("main.send_gift_notification"):
@@ -412,7 +501,9 @@ class TestUserEndpoints:
     def test_user_unreserve_own_gift(self, client, sample_gift):
         """POST /api/baby-gifts/user/unreserve/{id} should unreserve own gift."""
         # Create and reserve gift
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         with patch("main.send_gift_notification"):
@@ -434,7 +525,9 @@ class TestUserEndpoints:
 
     def test_user_unreserve_without_auth_returns_401(self, client, sample_gift):
         """POST /api/baby-gifts/user/unreserve/{id} without auth returns 401."""
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         response = client.post(f"/api/baby-gifts/user/unreserve/{gift_id}")
@@ -443,7 +536,9 @@ class TestUserEndpoints:
     def test_user_unreserve_others_gift_fails(self, client, sample_gift):
         """POST /api/baby-gifts/user/unreserve/{id} for other's gift returns 400."""
         # Create and reserve gift as user1
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         with patch("main.send_gift_notification"):
@@ -462,8 +557,16 @@ class TestUserEndpoints:
     def test_familia_user_sees_hidden_gifts(self, client):
         """FAMILIA users (egnal, virchu) should see hidden gifts."""
         # Create visible and hidden gifts
-        client.post("/api/baby-gifts", json={"name": "Visible Gift"})
-        hidden_resp = client.post("/api/baby-gifts", json={"name": "Hidden Gift"})
+        client.post(
+            "/api/baby-gifts",
+            json={"name": "Visible Gift"},
+            headers={"X-Auth-User": "admin"},
+        )
+        hidden_resp = client.post(
+            "/api/baby-gifts",
+            json={"name": "Hidden Gift"},
+            headers={"X-Auth-User": "admin"},
+        )
         hidden_id = hidden_resp.json()["gift"]["id"]
 
         # Hide the gift
@@ -480,8 +583,16 @@ class TestUserEndpoints:
     def test_non_familia_user_cannot_see_hidden_gifts(self, client):
         """Non-FAMILIA users should not see hidden gifts."""
         # Create visible and hidden gifts
-        client.post("/api/baby-gifts", json={"name": "Visible Gift"})
-        hidden_resp = client.post("/api/baby-gifts", json={"name": "Hidden Gift"})
+        client.post(
+            "/api/baby-gifts",
+            json={"name": "Visible Gift"},
+            headers={"X-Auth-User": "admin"},
+        )
+        hidden_resp = client.post(
+            "/api/baby-gifts",
+            json={"name": "Hidden Gift"},
+            headers={"X-Auth-User": "admin"},
+        )
         hidden_id = hidden_resp.json()["gift"]["id"]
 
         # Hide the gift (as FAMILIA user)
@@ -499,7 +610,11 @@ class TestUserEndpoints:
 
     def test_toggle_visibility_requires_familia(self, client):
         """POST /api/baby-gifts/user/toggle-visibility requires FAMILIA user."""
-        gift_resp = client.post("/api/baby-gifts", json={"name": "Test Gift"})
+        gift_resp = client.post(
+            "/api/baby-gifts",
+            json={"name": "Test Gift"},
+            headers={"X-Auth-User": "admin"},
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         # Non-FAMILIA user should get 403
@@ -511,7 +626,11 @@ class TestUserEndpoints:
 
     def test_toggle_visibility_without_auth_returns_401(self, client):
         """POST /api/baby-gifts/user/toggle-visibility without auth returns 401."""
-        gift_resp = client.post("/api/baby-gifts", json={"name": "Test Gift"})
+        gift_resp = client.post(
+            "/api/baby-gifts",
+            json={"name": "Test Gift"},
+            headers={"X-Auth-User": "admin"},
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         response = client.post(f"/api/baby-gifts/user/toggle-visibility/{gift_id}")
@@ -528,11 +647,21 @@ class TestUserEndpoints:
     def test_gifts_sorted_by_price_descending(self, client):
         """User gifts should be sorted by price descending."""
         # Create gifts with different prices
-        client.post("/api/baby-gifts", json={"name": "Cheap", "price_range": "50€"})
         client.post(
-            "/api/baby-gifts", json={"name": "Expensive", "price_range": "200€"}
+            "/api/baby-gifts",
+            json={"name": "Cheap", "price_range": "50€"},
+            headers={"X-Auth-User": "admin"},
         )
-        client.post("/api/baby-gifts", json={"name": "Medium", "price_range": "100€"})
+        client.post(
+            "/api/baby-gifts",
+            json={"name": "Expensive", "price_range": "200€"},
+            headers={"X-Auth-User": "admin"},
+        )
+        client.post(
+            "/api/baby-gifts",
+            json={"name": "Medium", "price_range": "100€"},
+            headers={"X-Auth-User": "admin"},
+        )
 
         response = client.get(
             "/api/baby-gifts/user", headers={"X-Auth-User": "testuser"}
@@ -547,7 +676,11 @@ class TestUserEndpoints:
     def test_hidden_reservation_shows_oculto(self, client):
         """For hidden gifts, other users see 'oculto' instead of 'otro'."""
         # Create and hide a gift
-        gift_resp = client.post("/api/baby-gifts", json={"name": "Hidden Gift"})
+        gift_resp = client.post(
+            "/api/baby-gifts",
+            json={"name": "Hidden Gift"},
+            headers={"X-Auth-User": "admin"},
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         client.post(
@@ -575,7 +708,9 @@ class TestSPAServing:
         """GET /guest/baby-gifts/{token} with valid token serves HTML."""
         # Create invitation
         inv_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
         )
         token = inv_resp.json()["token"]
 
@@ -614,7 +749,9 @@ class TestAdminUnreserve:
     def test_admin_unreserve_reserved_gift(self, client, sample_gift):
         """POST /api/baby-gifts/{id}/unreserve as admin should unreserve any gift."""
         # Create and reserve gift
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         with patch("main.send_gift_notification"):
@@ -624,17 +761,23 @@ class TestAdminUnreserve:
             )
 
         # Admin unreserve
-        response = client.post(f"/api/baby-gifts/{gift_id}/unreserve")
+        response = client.post(
+            f"/api/baby-gifts/{gift_id}/unreserve", headers={"X-Auth-User": "admin"}
+        )
 
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
 
     def test_admin_unreserve_not_reserved_returns_400(self, client, sample_gift):
         """POST /api/baby-gifts/{id}/unreserve for unreserved gift returns 400."""
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
-        response = client.post(f"/api/baby-gifts/{gift_id}/unreserve")
+        response = client.post(
+            f"/api/baby-gifts/{gift_id}/unreserve", headers={"X-Auth-User": "admin"}
+        )
         assert response.status_code == 400
 
 
@@ -643,15 +786,23 @@ class TestUpdateGiftValidation:
 
     def test_update_gift_no_changes_returns_400(self, client, sample_gift):
         """PUT /api/baby-gifts/{id} with no fields returns 400."""
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
-        response = client.put(f"/api/baby-gifts/{gift_id}", json={})
+        response = client.put(
+            f"/api/baby-gifts/{gift_id}", json={}, headers={"X-Auth-User": "admin"}
+        )
         assert response.status_code == 400
 
     def test_update_gift_invalid_id_format_returns_400(self, client):
         """PUT /api/baby-gifts/{id} with invalid ID format returns 400."""
-        response = client.put("/api/baby-gifts/invalid-format", json={"name": "New"})
+        response = client.put(
+            "/api/baby-gifts/invalid-format",
+            json={"name": "New"},
+            headers={"X-Auth-User": "admin"},
+        )
         assert response.status_code == 400
         assert "Invalid gift_id format" in response.json()["detail"]
 
@@ -663,14 +814,22 @@ class TestGuestEndpointsExtended:
         """Guest gifts should be sorted by price descending."""
         # Create invitation
         inv_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
         )
         token = inv_resp.json()["token"]
 
         # Create gifts with different prices
-        client.post("/api/baby-gifts", json={"name": "Cheap", "price_range": "30€"})
         client.post(
-            "/api/baby-gifts", json={"name": "Expensive", "price_range": "150€"}
+            "/api/baby-gifts",
+            json={"name": "Cheap", "price_range": "30€"},
+            headers={"X-Auth-User": "admin"},
+        )
+        client.post(
+            "/api/baby-gifts",
+            json={"name": "Expensive", "price_range": "150€"},
+            headers={"X-Auth-User": "admin"},
         )
 
         response = client.get(f"/api/baby-gifts/guest/{token}")
@@ -681,7 +840,9 @@ class TestGuestEndpointsExtended:
 
     def test_guest_reserve_invalid_token_returns_401(self, client, sample_gift):
         """POST /api/baby-gifts/guest/{token}/reserve/{id} with invalid token returns 401."""
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         response = client.post(f"/api/baby-gifts/guest/invalid_token/reserve/{gift_id}")
@@ -689,7 +850,9 @@ class TestGuestEndpointsExtended:
 
     def test_guest_unreserve_invalid_token_returns_401(self, client, sample_gift):
         """POST /api/baby-gifts/guest/{token}/unreserve/{id} with invalid token returns 401."""
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         response = client.post(
@@ -702,14 +865,24 @@ class TestGuestEndpointsExtended:
     ):
         """Guest cannot unreserve gift reserved by someone else."""
         # Create two invitations
-        inv1_resp = client.post("/api/baby-gifts/invitations", json={"name": "Guest 1"})
+        inv1_resp = client.post(
+            "/api/baby-gifts/invitations",
+            json={"name": "Guest 1"},
+            headers={"X-Auth-User": "admin"},
+        )
         token1 = inv1_resp.json()["token"]
 
-        inv2_resp = client.post("/api/baby-gifts/invitations", json={"name": "Guest 2"})
+        inv2_resp = client.post(
+            "/api/baby-gifts/invitations",
+            json={"name": "Guest 2"},
+            headers={"X-Auth-User": "admin"},
+        )
         token2 = inv2_resp.json()["token"]
 
         # Create and reserve gift as guest1
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         with patch("main.send_gift_notification"):
@@ -725,12 +898,16 @@ class TestGuestEndpointsExtended:
         """Guest cannot reserve already reserved gift."""
         # Create invitation
         inv_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
         )
         token = inv_resp.json()["token"]
 
         # Create and reserve gift
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         with patch("main.send_gift_notification"):
@@ -745,11 +922,15 @@ class TestGuestEndpointsExtended:
     ):
         """Guest cannot unreserve gift that is not reserved."""
         inv_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
         )
         token = inv_resp.json()["token"]
 
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = gift_resp.json()["gift"]["id"]
 
         response = client.post(f"/api/baby-gifts/guest/{token}/unreserve/{gift_id}")
@@ -761,7 +942,11 @@ class TestInputSanitization:
 
     def test_gift_name_strips_whitespace(self, client):
         """Gift name should have leading/trailing whitespace stripped."""
-        response = client.post("/api/baby-gifts", json={"name": "  Carrito de bebé  "})
+        response = client.post(
+            "/api/baby-gifts",
+            json={"name": "  Carrito de bebé  "},
+            headers={"X-Auth-User": "admin"},
+        )
 
         assert response.status_code == 200
         gift = response.json()["gift"]
@@ -770,7 +955,9 @@ class TestInputSanitization:
     def test_gift_name_escapes_html(self, client):
         """Gift name should have HTML characters escaped."""
         response = client.post(
-            "/api/baby-gifts", json={"name": "<script>alert('xss')</script>"}
+            "/api/baby-gifts",
+            json={"name": "<script>alert('xss')</script>"},
+            headers={"X-Auth-User": "admin"},
         )
 
         assert response.status_code == 200
@@ -783,6 +970,7 @@ class TestInputSanitization:
         response = client.post(
             "/api/baby-gifts",
             json={"name": "Test", "description": "<img onerror='alert(1)'>"},
+            headers={"X-Auth-User": "admin"},
         )
 
         assert response.status_code == 200
@@ -793,13 +981,16 @@ class TestInputSanitization:
     def test_gift_update_sanitizes_fields(self, client, sample_gift):
         """Gift update should sanitize all text fields."""
         # Create a gift
-        create_resp = client.post("/api/baby-gifts", json=sample_gift)
+        create_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = create_resp.json()["gift"]["id"]
 
         # Update with dirty input
         response = client.put(
             f"/api/baby-gifts/{gift_id}",
             json={"name": "  <b>Bold</b>  ", "description": "  <i>Italic</i>  "},
+            headers={"X-Auth-User": "admin"},
         )
 
         assert response.status_code == 200
@@ -810,7 +1001,9 @@ class TestInputSanitization:
     def test_invitation_name_strips_whitespace(self, client):
         """Invitation name should have leading/trailing whitespace stripped."""
         response = client.post(
-            "/api/baby-gifts/invitations", json={"name": "  Tía María  "}
+            "/api/baby-gifts/invitations",
+            json={"name": "  Tía María  "},
+            headers={"X-Auth-User": "admin"},
         )
 
         assert response.status_code == 200
@@ -819,7 +1012,9 @@ class TestInputSanitization:
     def test_invitation_name_escapes_html(self, client):
         """Invitation name should have HTML characters escaped."""
         response = client.post(
-            "/api/baby-gifts/invitations", json={"name": "<script>hack</script>"}
+            "/api/baby-gifts/invitations",
+            json={"name": "<script>hack</script>"},
+            headers={"X-Auth-User": "admin"},
         )
 
         assert response.status_code == 200
@@ -830,7 +1025,11 @@ class TestInputSanitization:
     def test_gift_url_not_html_escaped(self, client):
         """Gift URL should not have HTML escaping (URLs need special chars)."""
         url = "https://example.com/search?q=carrito&page=1"
-        response = client.post("/api/baby-gifts", json={"name": "Test", "url": url})
+        response = client.post(
+            "/api/baby-gifts",
+            json={"name": "Test", "url": url},
+            headers={"X-Auth-User": "admin"},
+        )
 
         assert response.status_code == 200
         gift = response.json()["gift"]
@@ -840,7 +1039,11 @@ class TestInputSanitization:
     def test_gift_name_truncated_to_max_length(self, client):
         """Gift name longer than 200 chars should be truncated."""
         long_name = "A" * 300
-        response = client.post("/api/baby-gifts", json={"name": long_name})
+        response = client.post(
+            "/api/baby-gifts",
+            json={"name": long_name},
+            headers={"X-Auth-User": "admin"},
+        )
 
         assert response.status_code == 200
         gift = response.json()["gift"]
@@ -849,7 +1052,11 @@ class TestInputSanitization:
     def test_invitation_name_truncated_to_max_length(self, client):
         """Invitation name longer than 100 chars should be truncated."""
         long_name = "B" * 150
-        response = client.post("/api/baby-gifts/invitations", json={"name": long_name})
+        response = client.post(
+            "/api/baby-gifts/invitations",
+            json={"name": long_name},
+            headers={"X-Auth-User": "admin"},
+        )
 
         assert response.status_code == 200
         name = response.json()["name"]
@@ -875,13 +1082,17 @@ class TestInvitationRateLimiting:
             # Make requests up to the limit
             for i in range(3):
                 response = client.post(
-                    "/api/baby-gifts/invitations", json={"name": f"Guest {i}"}
+                    "/api/baby-gifts/invitations",
+                    json={"name": f"Guest {i}"},
+                    headers={"X-Auth-User": "admin"},
                 )
                 assert response.status_code == 200
 
             # Next request should be rate limited
             response = client.post(
-                "/api/baby-gifts/invitations", json={"name": "One Too Many"}
+                "/api/baby-gifts/invitations",
+                json={"name": "One Too Many"},
+                headers={"X-Auth-User": "admin"},
             )
             assert response.status_code == 429
             assert "Demasiadas invitaciones" in response.json()["detail"]
@@ -899,11 +1110,15 @@ class TestInvitationRateLimiting:
 
         # Create invitation and gift for guest endpoint testing
         inv_resp = client.post(
-            "/api/baby-gifts/invitations", json={"name": sample_invitation_name}
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
         )
         token = inv_resp.json()["token"]
 
-        gift_resp = client.post("/api/baby-gifts", json=sample_gift)
+        gift_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         _gift_id = gift_resp.json()["gift"]["id"]
 
         # Save original values
@@ -925,7 +1140,9 @@ class TestInvitationRateLimiting:
 
             # But invitation creation should still work (different bucket)
             inv_resp = client.post(
-                "/api/baby-gifts/invitations", json={"name": "Another Guest"}
+                "/api/baby-gifts/invitations",
+                json={"name": "Another Guest"},
+                headers={"X-Auth-User": "admin"},
             )
             # This may succeed or fail depending on invitation rate limit state,
             # but it should NOT be a 429 from the guest rate limiter

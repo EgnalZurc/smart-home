@@ -151,6 +151,7 @@ class TestApiEndpointsSanitization:
                 "name": "<script>alert('xss')</script>",
                 "description": "Test gift",
             },
+            headers={"X-Auth-User": "admin"},
         )
 
         assert response.status_code == 200
@@ -161,13 +162,16 @@ class TestApiEndpointsSanitization:
     def test_update_gift_sanitizes_xss_attempt(self, client, sample_gift):
         """PUT /api/baby-gifts/{id} should sanitize XSS in updates."""
         # Create gift first
-        create_resp = client.post("/api/baby-gifts", json=sample_gift)
+        create_resp = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        )
         gift_id = create_resp.json()["gift"]["id"]
 
         # Update with XSS attempt
         response = client.put(
             f"/api/baby-gifts/{gift_id}",
             json={"description": "<img src=x onerror=alert(1)>"},
+            headers={"X-Auth-User": "admin"},
         )
 
         assert response.status_code == 200
@@ -180,6 +184,7 @@ class TestApiEndpointsSanitization:
         response = client.post(
             "/api/baby-gifts/invitations",
             json={"name": "<b>Tía María</b>"},
+            headers={"X-Auth-User": "admin"},
         )
 
         assert response.status_code == 200
