@@ -432,4 +432,4 @@ async def update_config(update: ConfigUpdate) -> dict:
 if __name__ == "__main__":  # pragma: no cover
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=PORT)  # noqa: S104
+    uvicorn.run(app, host="0.0.0.0", port=PORT)  # noqa: S104  # nosec B104
