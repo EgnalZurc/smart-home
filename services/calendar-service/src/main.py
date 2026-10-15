@@ -125,20 +125,22 @@ def _do_sync() -> None:
                 time_max=datetime.fromtimestamp(horizon, tz=ZoneInfo("UTC")),
             )
             for ev in events:
-                store.upsert_event({
-                    "uid": ev["id"],
-                    "calendar_id": cal.id,
-                    "google_id": ev["id"],
-                    "title": ev.get("summary", "(no title)"),
-                    "start_ts": _parse_event_time(ev.get("start", {})),
-                    "end_ts": _parse_event_time(ev.get("end", {})),
-                    "all_day": "date" in ev.get("start", {}),
-                    "location": ev.get("location"),
-                    "description": ev.get("description"),
-                    "person_id": None,
-                    "status": ev.get("status", "confirmed"),
-                    "etag": ev.get("etag"),
-                })
+                store.upsert_event(
+                    {
+                        "uid": ev["id"],
+                        "calendar_id": cal.id,
+                        "google_id": ev["id"],
+                        "title": ev.get("summary", "(no title)"),
+                        "start_ts": _parse_event_time(ev.get("start", {})),
+                        "end_ts": _parse_event_time(ev.get("end", {})),
+                        "all_day": "date" in ev.get("start", {}),
+                        "location": ev.get("location"),
+                        "description": ev.get("description"),
+                        "person_id": None,
+                        "status": ev.get("status", "confirmed"),
+                        "etag": ev.get("etag"),
+                    }
+                )
             if new_token:
                 store.update_sync_token(cal.id, new_token)
             logger.info("Synced %d events from %s", len(events), cal.label)
@@ -223,7 +225,11 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning("Failed to parse CALENDAR_SEED: %s", exc)
 
-    if GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET and GoogleCalendarClient is not None:
+    if (
+        GOOGLE_OAUTH_CLIENT_ID
+        and GOOGLE_OAUTH_CLIENT_SECRET
+        and GoogleCalendarClient is not None
+    ):
         try:
             google_client = GoogleCalendarClient(
                 client_id=GOOGLE_OAUTH_CLIENT_ID,
@@ -337,7 +343,9 @@ async def get_today() -> dict:
     now_dt = datetime.now(tz)
     start_of_day = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
     end_of_day = start_of_day.replace(hour=23, minute=59, second=59)
-    events = store.get_events_in_window(int(start_of_day.timestamp()), int(end_of_day.timestamp()))
+    events = store.get_events_in_window(
+        int(start_of_day.timestamp()), int(end_of_day.timestamp())
+    )
     return {"ts": int(time.time()), "date": now_dt.date().isoformat(), "events": events}
 
 
@@ -423,4 +431,5 @@ async def update_config(update: ConfigUpdate) -> dict:
 
 if __name__ == "__main__":  # pragma: no cover
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=PORT)  # noqa: S104
