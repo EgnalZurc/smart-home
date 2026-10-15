@@ -1,0 +1,10 @@
+# TLS certificates and private keys - NEVER commit these
+*.key
+*.crt
+*.csr
+*.srl
+*.pem
+
+# Keep this file to preserve directory structure
+!.gitkeep
+!.gitignore
