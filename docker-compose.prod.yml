@@ -251,9 +251,10 @@ services:
     image: egnal/smart-home-casita-suenos:latest
     container_name: casita-suenos
     restart: on-failure:5
-    # Reduced from 256m based on 26% usage (67MB) - was over-provisioned
-    mem_limit: 128m
-    memswap_limit: 128m
+    # Increased from 128m: scraping + BeautifulSoup HTML parsing + telegram-bot
+    # requires ~113MB baseline; 192MB gives 70% headroom for parsing spikes
+    mem_limit: 192m
+    memswap_limit: 192m
     expose:
       - 8001
     volumes:
