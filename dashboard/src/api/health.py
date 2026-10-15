@@ -485,29 +485,19 @@ async def get_passwords_health() -> dict[str, Any]:
 async def get_valheim_health() -> dict[str, Any]:
     """Health check for valheim-admin service.
 
-    Checks if the valheim-admin container (running on Pi) is healthy.
-    valheim-admin provides the web UI for managing the Valheim server
-    that runs on EgnalPC via pc-agent.
+    Checks if the valheim-admin container (running on Pi) is responsive.
 
     Returns:
-    - online: whether valheim-admin is running and responsive
-    - error: connection error message if any
+    - online: whether valheim-admin responds with HTTP 200
     """
 
     async def _check() -> dict:
         try:
             async with httpx.AsyncClient(timeout=3.0) as client:
                 r = await client.get("http://valheim-admin:8080/health")
-                if r.status_code == 200:
-                    data = r.json()
-                    return {"online": data.get("online", False)}
-                return {"online": False, "error": f"HTTP {r.status_code}"}
-        except httpx.ConnectError:
-            return {"online": False, "error": "Cannot connect to valheim-admin"}
-        except httpx.TimeoutException:
-            return {"online": False, "error": "Timeout"}
-        except Exception as e:
-            return {"online": False, "error": str(e)}
+                return {"online": r.status_code == 200}
+        except Exception:
+            return {"online": False}
 
     return await _cached_health_check("valheim", _check)
 

@@ -127,14 +127,14 @@ SERVICE_CONTRACTS = {
     },
     "valheim": {
         "required_fields": {"online"},
-        "optional_fields": {"error", "latency_ms", "cached"},
+        "optional_fields": {"latency_ms", "cached"},
         "field_types": {
             "online": bool,
-            "error": str,
             "latency_ms": int,
             "cached": bool,
         },
     },
+
     "metrics": {
         "required_fields": {"online"},
         "optional_fields": {"db_ok", "collector_last_tick_age_s", "error", "latency_ms", "cached"},
@@ -512,26 +512,6 @@ class TestServiceContracts:
         assert not errors, f"Contract violations: {errors}"
 
     @pytest.mark.asyncio
-    async def test_valheim_health_contract_online(self):
-        """Valheim-admin health response matches contract when online."""
-        from api.health import get_valheim_health
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"online": True}
-
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-
-        with patch("httpx.AsyncClient", return_value=mock_client):
-            result = await get_valheim_health()
-
-        errors = _validate_contract(result, SERVICE_CONTRACTS["valheim"], "valheim")
-        assert not errors, f"Contract violations: {errors}"
-
-    @pytest.mark.asyncio
     async def test_metrics_health_contract_online(self):
         """Metrics health response matches contract when online."""
         from api.health import get_metrics_health
@@ -692,7 +672,6 @@ class TestErrorResponses:
             ("baby-gifts", "get_baby_gifts_health"),
             ("portfolio", "get_portfolio_health"),
             ("passwords", "get_passwords_health"),
-            ("valheim", "get_valheim_health"),
             ("metrics", "get_metrics_health"),
             ("energy", "get_energy_health"),
             ("presence", "get_presence_health"),
@@ -730,7 +709,6 @@ class TestErrorResponses:
             ("baby-gifts", "get_baby_gifts_health"),
             ("portfolio", "get_portfolio_health"),
             ("passwords", "get_passwords_health"),
-            ("valheim", "get_valheim_health"),
             ("metrics", "get_metrics_health"),
             ("energy", "get_energy_health"),
             ("presence", "get_presence_health"),

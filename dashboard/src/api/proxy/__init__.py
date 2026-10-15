@@ -11,7 +11,6 @@ from .external import router as external_router
 from .pc import router as pc_router
 from .portfolio import router as portfolio_router
 from .vacaciones import router as vacaciones_router
-from .valheim import router as valheim_router
 
 __all__ = [
     "ServiceProxy",
@@ -22,5 +21,4 @@ __all__ = [
     "pc_router",
     "portfolio_router",
     "vacaciones_router",
-    "valheim_router",
 ]
