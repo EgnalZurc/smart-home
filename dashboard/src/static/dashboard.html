@@ -848,6 +848,13 @@
                             <span class="slider"></span>
                         </label>
                     </div>
+                    <div class="theme-toggle-row">
+                        <span id="sound-label">Sonido alertas</span>
+                        <label class="theme-switch">
+                            <input type="checkbox" id="alert-sound-toggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
                     <form method="post" action="/api/auth/logout">
                         <button type="submit" class="user-menu-item">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -887,7 +894,7 @@
 // Translations
 const T = {
     es: {
-        title: 'Cuchi Casa', services: 'Servicios', logout_label: 'Salir', dark_mode_label: 'Modo oscuro',
+        title: 'Cuchi Casa', services: 'Servicios', logout_label: 'Salir', dark_mode_label: 'Modo oscuro', sound_label: 'Sonido alertas',
         connected: 'Conectado', offline: 'Sin conexión',
         svc_stop: 'Parar', svc_start: 'Arrancar', svc_loading: '…', svc_restart: 'Reiniciar',
         svc_deploy: 'Desplegar',
@@ -932,7 +939,7 @@ const T = {
         mx_no_data: 'Sin datos todavía', mx_error: 'No se pudieron cargar las métricas',
     },
     en: {
-        title: 'Cuchi Casa', services: 'Services', logout_label: 'Sign out', dark_mode_label: 'Dark mode',
+        title: 'Cuchi Casa', services: 'Services', logout_label: 'Sign out', dark_mode_label: 'Dark mode', sound_label: 'Alert sound',
         connected: 'Connected', offline: 'Offline',
         svc_stop: 'Stop', svc_start: 'Start', svc_loading: '…', svc_restart: 'Restart',
         svc_deploy: 'Deploy',
@@ -1055,6 +1062,8 @@ function applyLang() {
     if (logoutText) logoutText.textContent = t('logout_label');
     const darkModeLabel = document.getElementById('dark-mode-label');
     if (darkModeLabel) darkModeLabel.textContent = t('dark_mode_label');
+    const soundLabel = document.getElementById('sound-label');
+    if (soundLabel) soundLabel.textContent = t('sound_label');
     const widgetBtn = document.getElementById('widget-btn');
     if (widgetBtn) widgetBtn.title = t('widget_config');
     const widgetTitle = document.getElementById('widget-title');
@@ -2432,6 +2441,23 @@ async function onDarkModeToggle(checked) {
     } catch {}
 }
 
+function onAlertSoundToggle(checked) {
+    _alertSoundEnabled = checked;
+    try {
+        localStorage.setItem('alert_sound_enabled', checked ? '1' : '0');
+    } catch {}
+}
+
+function loadAlertSoundPreference() {
+    try {
+        const saved = localStorage.getItem('alert_sound_enabled');
+        // Default to enabled if not set
+        _alertSoundEnabled = saved !== '0';
+        const toggle = document.getElementById('alert-sound-toggle');
+        if (toggle) toggle.checked = _alertSoundEnabled;
+    } catch {}
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Widget configuration (dashboard app-card layout: visibility + order)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2987,6 +3013,11 @@ function setupEventListeners() {
         onDarkModeToggle(e.target.checked);
     });
 
+    // ── Alert sound toggle ──
+    document.getElementById('alert-sound-toggle')?.addEventListener('change', (e) => {
+        onAlertSoundToggle(e.target.checked);
+    });
+
     // ── Language selector ──
     document.getElementById('lang-btn')?.addEventListener('click', toggleLang);
     document.querySelectorAll('.lang-option').forEach(opt => {
@@ -3126,6 +3157,7 @@ function setupEventListeners() {
     setupEventListeners();
     applyLang();
     applyCachedTheme();
+    loadAlertSoundPreference();
     // Seed the widget layout (cache first, reconcile with the server) before
     // loadUser() builds and renders APPS, so the first paint already honours
     // the saved order/visibility instead of flashing the default layout.
