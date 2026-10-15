@@ -185,7 +185,7 @@ def default_thresholds() -> dict[str, Threshold]:
             key="service_latency",
             metric="service.{label}.latency_ms",
             comparison=Comparison.GT,
-            value=3000.0,
+            value=10000.0,
             severity=Severity.WARNING,
             sustained_s=600,
             scope=Scope.PER_LABEL,
