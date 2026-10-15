@@ -15,7 +15,6 @@ Features:
     - Configuration viewing and updates
     - World management (create, activate, delete)
     - Log streaming
-    - PC power profile control
     - Rate limiting on server control endpoints
 
 Security:
@@ -65,7 +64,6 @@ from config import (
     SERVICE_NAME,
     SERVICE_TITLE,
     SERVICE_VERSION,
-    VALID_POWER_MODES,
     WORLD_NAME_MAX_LENGTH,
     WORLD_NAME_PATTERN,
 )
@@ -766,77 +764,6 @@ async def delete_world(world_name: str) -> dict[str, Any]:
     logger.warning("Deleting world: %s", world_name)
     result = await pc_agent.delete(f"/valheim/worlds/{world_name}")
     logger.warning("World deleted: %s", world_name)
-    return result
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# PC Control Endpoints
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-@app.get("/api/pc/status")
-async def get_pc_status() -> dict[str, Any]:
-    """Get the status of pc-agent and the Windows PC.
-
-    Checks if pc-agent is online and Docker is available.
-
-    Returns:
-        Status dictionary from pc-agent, or offline status if unreachable.
-
-    Example success response::
-
-        {"online": true, "docker": true}
-
-    Example failure response::
-
-        {"online": false, "docker": false}
-    """
-    try:
-        return await pc_agent.get("/health")
-    except HTTPException:
-        return {"online": False, "docker": False}
-
-
-@app.get("/api/pc/mode")
-async def get_pc_mode() -> dict[str, Any]:
-    """Get the current Windows power profile.
-
-    Retrieves which power profile is currently active on the PC.
-
-    Returns:
-        Dictionary with current power mode from pc-agent.
-
-    Example response::
-
-        {"mode": "gaming"}
-    """
-    return await pc_agent.get("/system/mode")
-
-
-@app.post("/api/pc/mode/{mode}")
-async def set_pc_mode(mode: str) -> dict[str, Any]:
-    """Set the Windows power profile.
-
-    Changes the PC's power profile to optimize for different workloads.
-    Valid modes are: gaming, servidor, balanced.
-
-    Args:
-        mode: The power profile to activate.
-
-    Returns:
-        Result dictionary from pc-agent confirming the change.
-
-    Raises:
-        HTTPException: 400 if mode is not one of the valid options.
-    """
-    if mode not in VALID_POWER_MODES:
-        logger.warning("Invalid power mode requested: %s", mode)
-        raise HTTPException(
-            400, f"Invalid mode. Valid modes: {', '.join(sorted(VALID_POWER_MODES))}"
-        )
-    logger.info("Setting PC power mode: %s", mode)
-    result = await pc_agent.post(f"/system/mode/{mode}")
-    logger.info("PC power mode set: %s", mode)
     return result
 
 
