@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from middleware import CSPNonceMiddleware
 from profiles import db as profiles_db
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 from starlette.responses import RedirectResponse as StarletteRedirect
 
 # Configure logging
@@ -328,15 +329,37 @@ app.include_router(routes.router)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _serve_html(filename: str):
-    """Serve an HTML file with no-cache headers."""
+def _serve_html(filename: str, request: Request):
+    """Serve an HTML file with no-cache headers and CSP nonce injection.
+
+    Injects the CSP nonce (from CSPNonceMiddleware) into inline <style> and
+    <script> tags so they pass the Content-Security-Policy checks.
+    """
+    import re
     import time
 
     from fastapi.responses import HTMLResponse
+    from middleware import get_csp_nonce
 
     frontend_path = Path(__file__).parent / "static" / filename
     content = frontend_path.read_text(encoding="utf-8")
+
+    # Inject version comment for cache busting
     content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")
+
+    # Inject CSP nonce into inline <style> and <script> tags (those without src=)
+    nonce = get_csp_nonce(request)
+    if nonce:
+        # Add nonce to <style> tags (none have attributes typically)
+        content = re.sub(r"<style>", f'<style nonce="{nonce}">', content)
+        # Add nonce to inline <script> tags (those without src=)
+        # Match <script> but not <script src="...">
+        content = re.sub(
+            r"<script(?![^>]*\bsrc\s*=)([^>]*)>",
+            rf'<script nonce="{nonce}"\1>',
+            content,
+        )
+
     return HTMLResponse(
         content=content,
         headers={
@@ -358,9 +381,9 @@ async def serve_root():
 
 # Dashboard page (not in Swagger)
 @app.get("/smart-home", include_in_schema=False)
-async def serve_dashboard():
+async def serve_dashboard(request: Request):
     """Serves the Smart Home platform dashboard."""
-    return _serve_html("dashboard.html")
+    return _serve_html("dashboard.html", request)
 
 
 # Login page served via auth_routes (GET /auth/login)
@@ -369,9 +392,9 @@ async def serve_dashboard():
 
 # Casita detail page (not in Swagger)
 @app.get("/smart-home/casita", include_in_schema=False)
-async def serve_casita():
+async def serve_casita(request: Request):
     """Serves the Casita Sueños detail page."""
-    return _serve_html("casita.html")
+    return _serve_html("casita.html", request)
 
 
 # Serve other static files normally

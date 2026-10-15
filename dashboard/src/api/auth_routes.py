@@ -71,15 +71,25 @@ BASE_URL: str = "https://raspberrypi.tailaa37cd.ts.net"
 # ---------------------------------------------------------------------------
 
 
-def _serve_login_html(error: str | None = None) -> HTMLResponse:
-    """Read and return login.html, optionally injecting an error message."""
+def _serve_login_html(
+    request: Request | None = None, error: str | None = None
+) -> HTMLResponse:
+    """Read and return login.html, optionally injecting an error message.
+
+    Args:
+        request: The current request (for CSP nonce injection). Optional for
+                 backwards compatibility but should always be passed.
+        error: Optional error message to display on the login page.
+    """
+    import re as _re
+
+    from middleware import get_csp_nonce
+
     # __file__ is /app/api/auth_routes.py — static/ is at /app/static/
     login_path = Path(__file__).parent.parent / "static" / "login.html"
     content = login_path.read_text(encoding="utf-8")
     if error:
         # Remove 'hidden' from the error div class (works regardless of other classes)
-        import re as _re
-
         content = _re.sub(
             r'(id="error-msg"[^>]*?)\bhidden\b',
             r"\1",
@@ -88,6 +98,18 @@ def _serve_login_html(error: str | None = None) -> HTMLResponse:
         ).replace("__ERROR__", error)
     else:
         content = content.replace("__ERROR__", "")
+
+    # Inject CSP nonce into inline <style> and <script> tags
+    if request:
+        nonce = get_csp_nonce(request)
+        if nonce:
+            content = _re.sub(r"<style>", f'<style nonce="{nonce}">', content)
+            content = _re.sub(
+                r"<script(?![^>]*\bsrc\s*=)([^>]*)>",
+                rf'<script nonce="{nonce}"\1>',
+                content,
+            )
+
     return HTMLResponse(
         content=content,
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
@@ -192,7 +214,7 @@ async def get_login(request: Request):
     """Serve the login page. Redirect to /smart-home if already authenticated."""
     if auth_core.get_current_user(request):
         return RedirectResponse(url="/smart-home", status_code=302)
-    return _serve_login_html()
+    return _serve_login_html(request)
 
 
 @router.post("/token")
@@ -230,7 +252,8 @@ async def post_token(
             client_ip,
         )
         return _serve_login_html(
-            error="Demasiados intentos. Espera unos minutos e inténtalo de nuevo."
+            request,
+            error="Demasiados intentos. Espera unos minutos e inténtalo de nuevo.",
         )
 
     if not auth_users.authenticate_user(username, password):
@@ -240,7 +263,7 @@ async def post_token(
             client_ip,
             user_agent[:200],
         )
-        return _serve_login_html(error="Usuario o contraseña incorrectos")
+        return _serve_login_html(request, error="Usuario o contraseña incorrectos")
 
     # Successful login
     logger.info(
