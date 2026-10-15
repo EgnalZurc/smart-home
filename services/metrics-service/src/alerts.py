@@ -178,7 +178,9 @@ def default_thresholds() -> dict[str, Threshold]:
             value=1.0,  # online < 1 → offline
             severity=Severity.CRITICAL,
             scope=Scope.PER_LABEL,
-            count_ticks=3,
+            # 5 ticks × 30s = 150s grace period; tolerates typical deploy restarts
+            # (~30-60s) without false alarms while still catching real outages.
+            count_ticks=5,
             unit="",
         ),
         Threshold(
