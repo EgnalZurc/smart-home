@@ -216,7 +216,13 @@ DEFAULT_MQTT_BROKER: str = "mosquitto"
 """Default MQTT broker hostname."""
 
 DEFAULT_MQTT_PORT: int = 1883
-"""Default MQTT broker port."""
+"""Default MQTT broker port (1883 for plain, 8883 for TLS)."""
+
+DEFAULT_MQTT_TLS_ENABLED: bool = False
+"""Default TLS setting - disabled for backward compatibility."""
+
+DEFAULT_MQTT_TLS_CA_CERTS: str | None = None
+"""Default path to CA certificate file. None uses system CA bundle when TLS enabled."""
 
 DEFAULT_MQTT_CONNECT_RETRIES: int = 30
 """Default number of MQTT connection retries."""

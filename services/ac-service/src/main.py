@@ -60,6 +60,8 @@ from config import (
     DEFAULT_MQTT_KEEPALIVE,
     DEFAULT_MQTT_PORT,
     DEFAULT_MQTT_RETRY_DELAY,
+    DEFAULT_MQTT_TLS_CA_CERTS,
+    DEFAULT_MQTT_TLS_ENABLED,
     DEFAULT_OUTDOOR_CACHE_TTL,
     DEFAULT_OUTDOOR_UPDATE_INTERVAL,
     DEFAULT_SENSOR_TIMEOUT,
@@ -99,6 +101,15 @@ MQTT_BROKER = os.environ.get("MQTT_BROKER", DEFAULT_MQTT_BROKER)
 MQTT_PORT = int(os.environ.get("MQTT_PORT", str(DEFAULT_MQTT_PORT)))
 MQTT_USER = os.environ.get("MQTT_USER")
 MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD")
+# TLS configuration - disabled by default for backward compatibility
+MQTT_TLS_ENABLED = os.environ.get(
+    "MQTT_TLS_ENABLED", str(DEFAULT_MQTT_TLS_ENABLED)
+).lower() in (
+    "true",
+    "1",
+    "yes",
+)
+MQTT_TLS_CA_CERTS = os.environ.get("MQTT_TLS_CA_CERTS", DEFAULT_MQTT_TLS_CA_CERTS)
 # When MQTT_ALLOW_ANONYMOUS is true, skip the credentials warning (broker
 # configured with allow_anonymous). Default false for safety.
 MQTT_ALLOW_ANONYMOUS = os.environ.get("MQTT_ALLOW_ANONYMOUS", "false").lower() == "true"
@@ -224,6 +235,8 @@ async def lifespan(app: FastAPI):
         timeout=Z2M_DISCOVERY_TIMEOUT,
         username=MQTT_USER,
         password=MQTT_PASSWORD,
+        tls_enabled=MQTT_TLS_ENABLED,
+        tls_ca_certs=MQTT_TLS_CA_CERTS,
     )
     sensor_names = z2m.discover_temperature_sensors()
     if not sensor_names:
@@ -240,6 +253,8 @@ async def lifespan(app: FastAPI):
         max_history=MAX_HISTORY_PER_SENSOR,
         username=MQTT_USER,
         password=MQTT_PASSWORD,
+        tls_enabled=MQTT_TLS_ENABLED,
+        tls_ca_certs=MQTT_TLS_CA_CERTS,
     )
     mqtt_handler.start()
     mqtt_handler.set_error_tracker(error_tracker)

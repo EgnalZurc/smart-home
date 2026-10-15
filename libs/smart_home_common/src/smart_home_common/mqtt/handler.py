@@ -8,6 +8,7 @@ so they survive restarts.
 import json
 import logging
 import os
+import ssl
 import threading
 import time
 from pathlib import Path
@@ -67,7 +68,25 @@ class MqttHandler:
         max_history: int = 200,
         username: str | None = None,
         password: str | None = None,
+        tls_enabled: bool = False,
+        tls_ca_certs: str | None = None,
     ):
+        """Initialize MQTT handler.
+
+        Args:
+            broker: MQTT broker hostname
+            port: MQTT broker port (1883 for plain, 8883 for TLS)
+            sensor_names: List of sensor friendly names to subscribe to
+            connect_retries: Number of connection attempts before giving up
+            retry_delay: Initial delay between retries (doubles with backoff)
+            keepalive: MQTT keepalive interval in seconds
+            max_history: Maximum readings to keep per sensor
+            username: MQTT username for authentication
+            password: MQTT password for authentication
+            tls_enabled: Enable TLS encryption (default: False)
+            tls_ca_certs: Path to CA certificate file for TLS verification.
+                If None and tls_enabled=True, uses system CA bundle.
+        """
         self.broker = broker
         self.port = port
         self.sensor_names = sensor_names
@@ -77,6 +96,8 @@ class MqttHandler:
         self.max_history = max_history
         self.username = username
         self.password = password
+        self.tls_enabled = tls_enabled
+        self.tls_ca_certs = tls_ca_certs
         self.readings: dict[str, SensorReading] = {}  # Last reading per sensor
         self.history: dict[str, list[SensorReading]] = {}  # FIFO history per sensor
         self._lock = threading.Lock()
@@ -141,7 +162,17 @@ class MqttHandler:
         if self.username and self.password:
             self._client.username_pw_set(self.username, self.password)
 
-        logger.info("Connecting to MQTT %s:%d", self.broker, self.port)
+        # Configure TLS if enabled
+        if self.tls_enabled:
+            if self.tls_ca_certs:
+                self._client.tls_set(ca_certs=self.tls_ca_certs)
+                logger.info("TLS enabled with CA: %s", self.tls_ca_certs)
+            else:
+                # Use system CA bundle
+                self._client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
+                logger.info("TLS enabled with system CA bundle")
+
+        logger.info("Connecting to MQTT %s:%d (TLS=%s)", self.broker, self.port, self.tls_enabled)
 
         # Retry connection with exponential backoff
         delay = self.retry_delay
