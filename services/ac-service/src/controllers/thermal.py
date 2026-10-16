@@ -8,9 +8,16 @@ These classes are injected into ACController to separate thermal/energy
 concerns from the main control logic.
 """
 
+from __future__ import annotations
+
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from thermal_analysis import ThermalBuffer
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +70,16 @@ class EnergyTracker:
     """
 
     # Map of state names to power consumption attributes
-    STATE_POWER_MAP = {
+    STATE_POWER_MAP: dict[str, str] = {
         "cooling_max": "ac_power_cooling_max",
         "cooling_mid": "ac_power_cooling_mid",
         "modulating": "ac_power_modulating",
         "forced_on": "ac_power_forced_on",
         "manual": "ac_power_forced_on",  # Manual uses same as forced_on
     }
+
+    _config: EnergyConfig
+    _state: EnergyState
 
     def __init__(self, config: EnergyConfig | None = None) -> None:
         """Initialize energy tracker.
@@ -150,7 +160,7 @@ class EnergyTracker:
         self._state.last_transition = time.time()
         return accumulated
 
-    def update_config(self, **kwargs) -> None:
+    def update_config(self, **kwargs: Any) -> None:
         """Update power configuration parameters.
 
         Args:
@@ -181,7 +191,10 @@ class ThermalSampleRecorder:
         ... )
     """
 
-    def __init__(self, buffer=None) -> None:
+    _buffer: ThermalBuffer | None
+    _outdoor_provider: Callable[[], float | None] | None
+
+    def __init__(self, buffer: ThermalBuffer | None = None) -> None:
         """Initialize thermal sample recorder.
 
         Args:
@@ -191,7 +204,7 @@ class ThermalSampleRecorder:
         self._buffer = buffer
         self._outdoor_provider = None
 
-    def set_buffer(self, buffer) -> None:
+    def set_buffer(self, buffer: ThermalBuffer) -> None:
         """Set or replace the thermal buffer.
 
         Args:
@@ -199,7 +212,7 @@ class ThermalSampleRecorder:
         """
         self._buffer = buffer
 
-    def set_outdoor_provider(self, provider) -> None:
+    def set_outdoor_provider(self, provider: Callable[[], float | None]) -> None:
         """Set the outdoor temperature provider.
 
         Args:

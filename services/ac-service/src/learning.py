@@ -27,6 +27,7 @@ All functions are pure (no I/O) so they can be unit-tested in isolation.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any, TypedDict
 
 # Controller states that mean the AC is actively producing cold air.
 # "off", "cooldown", "system_off" and "error" are considered inactive.
@@ -35,7 +36,70 @@ ACTIVE_STATES: frozenset[str] = frozenset(
 )
 
 # Minimum number of history records required before we attempt any analysis.
-MIN_RECORDS_FOR_ANALYSIS = 3
+MIN_RECORDS_FOR_ANALYSIS: int = 3
+
+
+class HourPattern(TypedDict):
+    """Hour pattern entry."""
+
+    hour: int
+    count: int
+
+
+class SetpointStats(TypedDict):
+    """Setpoint statistics."""
+
+    average: float | None
+    min: float | None
+    max: float | None
+    samples: int
+
+
+class CorrelationResult(TypedDict):
+    """Temperature vs setpoint correlation result."""
+
+    temp_vs_setpoint: float | None
+    samples: int
+
+
+class ActivityStats(TypedDict):
+    """Activity ratio statistics."""
+
+    active_ratio: float | None
+    active_records: int
+    total_records: int
+
+
+class Recommendation(TypedDict):
+    """A recommendation entry."""
+
+    type: str
+    message: str
+    message_en: str
+
+
+class PatternsDict(TypedDict):
+    """Patterns section of analysis result."""
+
+    frequent_hours: list[HourPattern]
+    preferred_setpoints: SetpointStats
+
+
+class CorrelationsDict(TypedDict):
+    """Correlations section of analysis result."""
+
+    temperature_vs_setpoint: CorrelationResult
+    activity: ActivityStats
+
+
+class LearningResult(TypedDict):
+    """Full learning analysis result."""
+
+    enough_data: bool
+    sample_size: int
+    patterns: PatternsDict
+    correlations: CorrelationsDict
+    recommendations: list[Recommendation]
 
 
 def _record_hour(timestamp: float) -> int:
@@ -73,7 +137,7 @@ def _pearson(xs: list[float], ys: list[float]) -> float | None:
     return cov / (var_x * var_y) ** 0.5
 
 
-def _detect_hour_patterns(records: list[dict]) -> list[dict]:
+def _detect_hour_patterns(records: list[dict[str, Any]]) -> list[HourPattern]:
     """Count how often the AC was active per hour-of-day.
 
     Returns a list sorted by descending activation count, each entry::
@@ -94,7 +158,7 @@ def _detect_hour_patterns(records: list[dict]) -> list[dict]:
     return [{"hour": hour, "count": count} for hour, count in ranked]
 
 
-def _preferred_setpoints(records: list[dict]) -> dict:
+def _preferred_setpoints(records: list[dict[str, Any]]) -> SetpointStats:
     """Summarise the setpoints the AC ran at while active."""
     setpoints = [
         rec["setpoint"]
@@ -104,15 +168,16 @@ def _preferred_setpoints(records: list[dict]) -> dict:
     if not setpoints:
         return {"average": None, "min": None, "max": None, "samples": 0}
 
+    avg = _mean(setpoints)
     return {
-        "average": round(_mean(setpoints), 2),
+        "average": round(avg, 2) if avg is not None else None,
         "min": round(min(setpoints), 2),
         "max": round(max(setpoints), 2),
         "samples": len(setpoints),
     }
 
 
-def _temp_setpoint_correlation(records: list[dict]) -> dict:
+def _temp_setpoint_correlation(records: list[dict[str, Any]]) -> CorrelationResult:
     """Correlate room temperature against commanded setpoint while active."""
     temps: list[float] = []
     setpoints: list[float] = []
@@ -133,7 +198,7 @@ def _temp_setpoint_correlation(records: list[dict]) -> dict:
     }
 
 
-def _activity_ratio(records: list[dict]) -> dict:
+def _activity_ratio(records: list[dict[str, Any]]) -> ActivityStats:
     """Share of history records in which the AC was actively running."""
     total = len(records)
     if total == 0:
@@ -148,10 +213,12 @@ def _activity_ratio(records: list[dict]) -> dict:
 
 
 def _build_recommendations(
-    hour_patterns: list[dict], setpoints: dict, activity: dict
-) -> list[dict]:
+    hour_patterns: list[HourPattern],
+    setpoints: SetpointStats,
+    activity: ActivityStats,
+) -> list[Recommendation]:
     """Turn raw patterns into short, human-readable hints (ES + EN)."""
-    recommendations: list[dict] = []
+    recommendations: list[Recommendation] = []
 
     if hour_patterns:
         top_hour = hour_patterns[0]["hour"]
@@ -193,7 +260,7 @@ def _build_recommendations(
     return recommendations
 
 
-def analyze_history(records: list[dict]) -> dict:
+def analyze_history(records: list[dict[str, Any]]) -> LearningResult:
     """Produce the full learning report from controller history.
 
     Args:

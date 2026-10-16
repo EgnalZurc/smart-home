@@ -112,8 +112,11 @@ class ThermalBuffer:
     dropped first.
     """
 
+    _samples: deque[ThermalSample]
+    _lock: threading.Lock
+
     def __init__(self, maxlen: int = DEFAULT_BUFFER_SIZE) -> None:
-        self._samples: deque[ThermalSample] = deque(maxlen=maxlen)
+        self._samples = deque(maxlen=maxlen)
         self._lock = threading.Lock()
 
     def add(self, sample: ThermalSample) -> None:
@@ -243,9 +246,9 @@ def _segment_outdoor_temp(samples: list[ThermalSample]) -> float | None:
 
 def _outdoor_bucket_label(temp: float) -> str:
     """Return a stable bucket label like '20-25' for an outdoor temperature."""
-    width = OUTDOOR_BUCKET_WIDTH_C
     import math
 
+    width = OUTDOOR_BUCKET_WIDTH_C
     low = math.floor(temp / width) * width
     high = low + width
     # Render without trailing '.0' when the bounds are whole numbers.
@@ -261,7 +264,7 @@ def _mean(values: list[float]) -> float | None:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
-def analyze(samples: list[ThermalSample]) -> dict:
+def analyze(samples: list[ThermalSample]) -> dict[str, object]:
     """Analyse a thermal time series into heating/cooling curve metrics.
 
     Args:
@@ -315,7 +318,7 @@ def analyze(samples: list[ThermalSample]) -> dict:
     }
 
 
-def _efficiency_by_outdoor(stats: list[SegmentStats]) -> dict[str, dict]:
+def _efficiency_by_outdoor(stats: list[SegmentStats]) -> dict[str, dict[str, object]]:
     """Group segment rates into outdoor-temperature buckets.
 
     Each bucket reports the mean heating and cooling rate observed while the
@@ -330,7 +333,7 @@ def _efficiency_by_outdoor(stats: list[SegmentStats]) -> dict[str, dict]:
         bucket = buckets.setdefault(label, {"heating": [], "cooling": []})
         bucket[s.direction].append(s.rate_c_per_min)
 
-    result: dict[str, dict] = {}
+    result: dict[str, dict[str, object]] = {}
     for label in sorted(buckets, key=_bucket_sort_key):
         heating_rates = buckets[label]["heating"]
         cooling_rates = buckets[label]["cooling"]
