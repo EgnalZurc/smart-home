@@ -85,6 +85,41 @@ class TestGiftCreateSanitization:
         # & in URLs should NOT become &amp;
         assert "?a=1&b=2" in gift.url
 
+    def test_url_rejects_javascript_protocol(self):
+        """javascript: URLs should be rejected to prevent XSS."""
+        from main import GiftCreate
+
+        gift = GiftCreate(name="Test", url="javascript:alert('xss')")
+        assert gift.url == ""
+
+    def test_url_rejects_javascript_protocol_case_insensitive(self):
+        """javascript: rejection should be case-insensitive."""
+        from main import GiftCreate
+
+        gift = GiftCreate(name="Test", url="JaVaScRiPt:alert(1)")
+        assert gift.url == ""
+
+    def test_url_rejects_data_protocol(self):
+        """data: URLs should be rejected."""
+        from main import GiftCreate
+
+        gift = GiftCreate(name="Test", url="data:text/html,<script>alert(1)</script>")
+        assert gift.url == ""
+
+    def test_url_allows_http_protocol(self):
+        """http:// URLs should be allowed."""
+        from main import GiftCreate
+
+        gift = GiftCreate(name="Test", url="http://example.com/product")
+        assert gift.url == "http://example.com/product"
+
+    def test_url_allows_https_protocol(self):
+        """https:// URLs should be allowed."""
+        from main import GiftCreate
+
+        gift = GiftCreate(name="Test", url="https://amazon.es/dp/B123")
+        assert gift.url == "https://amazon.es/dp/B123"
+
     def test_name_truncated_to_200(self):
         """Name should be truncated to 200 chars."""
         from main import GiftCreate
