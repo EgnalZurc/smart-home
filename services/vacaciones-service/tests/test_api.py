@@ -302,7 +302,6 @@ class TestResourceLimits:
         assert "max" in data["message"].lower()
 
 
-
 class TestRateLimiting:
     """Tests for rate limiting on write endpoints."""
 
@@ -340,7 +339,10 @@ class TestRateLimiting:
                 json={"nucleos": [], "personas": []},
             )
             assert response.status_code == 429
-            assert "too many" in response.json()["detail"].lower() or "rate limit" in response.json()["detail"].lower()
+            assert (
+                "too many" in response.json()["detail"].lower()
+                or "rate limit" in response.json()["detail"].lower()
+            )
         finally:
             main._rate_limiter = original_limiter
 
@@ -429,3 +431,215 @@ class TestRateLimiting:
             assert response.status_code == 200
         finally:
             main._rate_limiter = original_limiter
+
+
+class TestCSRFProtection:
+    """Tests for CSRF protection via Origin/Referer validation."""
+
+    def test_csrf_blocks_request_without_origin_when_enabled(self, tmp_data_file):
+        """POST without Origin/Referer should be rejected when CSRF enabled."""
+        import importlib
+        import os
+
+        import main
+
+        # Re-import main with CSRF enabled
+        os.environ["ALLOWED_ORIGINS"] = "https://example.com"
+        importlib.reload(main)
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(main.app)
+
+        try:
+            response = client.post(
+                "/api/vacaciones/config",
+                json={"nucleos": [], "personas": []},
+            )
+            assert response.status_code == 403
+            assert "Origin" in response.json()["detail"]
+        finally:
+            # Restore disabled CSRF for other tests
+            os.environ["ALLOWED_ORIGINS"] = "*"
+            importlib.reload(main)
+
+    def test_csrf_blocks_wrong_origin(self, tmp_data_file):
+        """POST with wrong Origin should be rejected."""
+        import importlib
+        import os
+
+        import main
+
+        os.environ["ALLOWED_ORIGINS"] = "https://allowed.com"
+        importlib.reload(main)
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(main.app)
+
+        try:
+            response = client.post(
+                "/api/vacaciones/config",
+                json={"nucleos": [], "personas": []},
+                headers={"Origin": "https://evil.com"},
+            )
+            assert response.status_code == 403
+            assert "not allowed" in response.json()["detail"]
+        finally:
+            os.environ["ALLOWED_ORIGINS"] = "*"
+            importlib.reload(main)
+
+    def test_csrf_allows_correct_origin(self, tmp_data_file):
+        """POST with correct Origin should succeed."""
+        import importlib
+        import os
+
+        import main
+
+        os.environ["ALLOWED_ORIGINS"] = "https://allowed.com"
+        importlib.reload(main)
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(main.app)
+
+        try:
+            response = client.post(
+                "/api/vacaciones/config",
+                json={"nucleos": [], "personas": []},
+                headers={"Origin": "https://allowed.com"},
+            )
+            assert response.status_code == 200
+        finally:
+            os.environ["ALLOWED_ORIGINS"] = "*"
+            importlib.reload(main)
+
+    def test_csrf_allows_referer_when_no_origin(self, tmp_data_file):
+        """POST with Referer (no Origin) should succeed if Referer allowed."""
+        import importlib
+        import os
+
+        import main
+
+        os.environ["ALLOWED_ORIGINS"] = "https://allowed.com"
+        importlib.reload(main)
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(main.app)
+
+        try:
+            response = client.post(
+                "/api/vacaciones/config",
+                json={"nucleos": [], "personas": []},
+                headers={"Referer": "https://allowed.com/some/path"},
+            )
+            assert response.status_code == 200
+        finally:
+            os.environ["ALLOWED_ORIGINS"] = "*"
+            importlib.reload(main)
+
+    def test_csrf_allows_multiple_origins(self, tmp_data_file):
+        """ALLOWED_ORIGINS can contain multiple comma-separated origins."""
+        import importlib
+        import os
+
+        import main
+
+        os.environ["ALLOWED_ORIGINS"] = "https://a.com, https://b.com"
+        importlib.reload(main)
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(main.app)
+
+        try:
+            # Origin a.com should work
+            response = client.post(
+                "/api/vacaciones/config",
+                json={"nucleos": [], "personas": []},
+                headers={"Origin": "https://a.com"},
+            )
+            assert response.status_code == 200
+
+            # Origin b.com should work
+            response = client.post(
+                "/api/vacaciones/year",
+                headers={"Origin": "https://b.com"},
+            )
+            assert response.status_code == 200
+
+            # Origin c.com should be blocked
+            response = client.delete(
+                "/api/vacaciones/year/2025",
+                headers={"Origin": "https://c.com"},
+            )
+            assert response.status_code == 403
+        finally:
+            os.environ["ALLOWED_ORIGINS"] = "*"
+            importlib.reload(main)
+
+    def test_csrf_disabled_with_star(self, client):
+        """ALLOWED_ORIGINS='*' should disable CSRF checking."""
+        # This test uses the default client which has CSRF disabled via conftest
+        # Just verify POST works without any Origin header
+        response = client.post(
+            "/api/vacaciones/config",
+            json={"nucleos": [], "personas": []},
+        )
+        assert response.status_code == 200
+
+    def test_csrf_get_requests_not_checked(self, tmp_data_file):
+        """GET requests should not require Origin header."""
+        import importlib
+        import os
+
+        import main
+
+        os.environ["ALLOWED_ORIGINS"] = "https://allowed.com"
+        importlib.reload(main)
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(main.app)
+
+        try:
+            # GET without Origin should work
+            response = client.get("/api/vacaciones")
+            assert response.status_code == 200
+
+            response = client.get("/api/vacaciones/config")
+            assert response.status_code == 200
+
+            response = client.get("/health")
+            assert response.status_code == 200
+        finally:
+            os.environ["ALLOWED_ORIGINS"] = "*"
+            importlib.reload(main)
+
+    def test_csrf_delete_endpoint_protected(self, tmp_data_file):
+        """DELETE endpoints should also be CSRF protected."""
+        import importlib
+        import os
+
+        import main
+
+        os.environ["ALLOWED_ORIGINS"] = "https://allowed.com"
+        importlib.reload(main)
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(main.app)
+
+        try:
+            # First add a year with correct origin
+            client.post(
+                "/api/vacaciones/year", headers={"Origin": "https://allowed.com"}
+            )
+
+            # DELETE without Origin should fail
+            response = client.delete("/api/vacaciones/year/2025")
+            assert response.status_code == 403
+        finally:
+            os.environ["ALLOWED_ORIGINS"] = "*"
+            importlib.reload(main)
