@@ -33,7 +33,11 @@ logger = logging.getLogger(__name__)
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
-    """Create the metrics table + index if they do not exist."""
+    """Create the metrics table + index if they do not exist.
+
+    Args:
+        conn: SQLite database connection to execute schema DDL on.
+    """
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS metrics (
@@ -52,9 +56,21 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 
 
 class SqliteStore:
-    """Durable rolled-up metric store backed by SQLite."""
+    """Durable rolled-up metric store backed by SQLite.
+
+    Attributes:
+        db_path: Path to the SQLite database file.
+    """
+
+    db_path: str
+    _db: SqliteHelper
 
     def __init__(self, db_path: str = DB_PATH) -> None:
+        """Initialize the SQLite store.
+
+        Args:
+            db_path: Path to the SQLite database file. Defaults to config value.
+        """
         self.db_path = db_path
         self._db = SqliteHelper(db_path, init=_ensure_schema)
 
