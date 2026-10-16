@@ -211,8 +211,10 @@ class PresenceStore:
     def count_transitions(self) -> int:
         """Return the total number of transition rows (tests / diagnostics)."""
         with self._db.connect() as conn:
-            row = conn.execute("SELECT COUNT(*) AS n FROM transitions").fetchone()
-        return int(row["n"])
+            row: sqlite3.Row | None = conn.execute(
+                "SELECT COUNT(*) AS n FROM transitions"
+            ).fetchone()
+        return int(row["n"]) if row else 0
 
     def db_ok(self) -> bool:
         """Return True if the store answers a trivial query."""

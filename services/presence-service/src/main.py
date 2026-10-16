@@ -18,14 +18,16 @@ import logging
 import os
 import sys
 import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from config import DB_PATH, LOG_LEVEL, PORT, SERVICE_NAME
 from database import PresenceStore
 from fastapi import FastAPI
 
 # Shared libs live at /app/libs in the container; add to path for imports.
-_LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
+_LIBS_PATH: str = os.environ.get("LIBS_PATH", "/app/libs")
 if _LIBS_PATH not in sys.path:
     sys.path.insert(0, _LIBS_PATH)
 
@@ -33,17 +35,17 @@ logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 # Single durable store for the process lifetime.
-store = PresenceStore(DB_PATH)
+store: PresenceStore = PresenceStore(DB_PATH)
 
 # Service start time, used as a liveness proxy until the engine tick loop exists.
-_started_at = time.monotonic()
+_started_at: float = time.monotonic()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Start/stop background tasks with the app.
 
     Scaffold: no background loops yet. Later tasks start the router poll loop,
@@ -77,7 +79,7 @@ def _last_tick_age_s() -> float | None:
     return round(time.monotonic() - _started_at, 1)
 
 
-def _health_payload() -> dict:
+def _health_payload() -> dict[str, Any]:
     """Build the health dict exercising the DB and source liveness.
 
     ``router_online`` / ``mqtt_online`` are ``None`` in the scaffold (their
@@ -97,13 +99,13 @@ def _health_payload() -> dict:
 
 
 @app.get("/health")
-async def health() -> dict:
+async def health() -> dict[str, Any]:
     """Health check — exercises the DB and reports source liveness."""
     return _health_payload()
 
 
 @app.get("/api/health/presence")
-async def health_alias() -> dict:
+async def health_alias() -> dict[str, Any]:
     """Health check alias — matches the path expected by the dashboard/CI."""
     return _health_payload()
 
