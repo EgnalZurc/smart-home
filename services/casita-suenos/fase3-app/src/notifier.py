@@ -8,12 +8,32 @@ Si no hay chats en BD, usa TELEGRAM_CHAT_ID del .env como fallback.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 
 import telegram
 from models import PriceEvent, ScoreBreakdown, ScoredProperty
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_telegram_error(exc: Exception) -> str:
+    """Strip Telegram bot token from exception messages to prevent leaks in logs.
+
+    Args:
+        exc: The exception to sanitize.
+
+    Returns:
+        A sanitized error string with any bot token replaced by <REDACTED>.
+    """
+    msg = str(exc)
+    # Telegram bot tokens look like: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+    # Match /bot<token>/ in URLs and standalone tokens
+    sanitized = re.sub(r"/bot[0-9]+:[A-Za-z0-9_-]+/", "/bot<REDACTED>/", msg)
+    sanitized = re.sub(r"\b[0-9]+:[A-Za-z0-9_-]{20,}\b", "<REDACTED>", sanitized)
+    return sanitized
+
+
 _SCORE_EMOJI = {
     range(70, 85): "🏆",
     range(60, 70): "⭐⭐⭐",
@@ -194,7 +214,10 @@ class TelegramNotifier:
                 if ids:
                     return ids
             except Exception as e:
-                logger.warning("[telegram] Error leyendo chat_ids de BD: %s", e)
+                logger.warning(
+                    "[telegram] Error leyendo chat_ids de BD: %s",
+                    _sanitize_telegram_error(e),
+                )
         # Fallback
         return [self._fallback_chat_id] if self._fallback_chat_id else []
 
@@ -234,10 +257,11 @@ class TelegramNotifier:
                     )
                     success = False
             except Exception as e:
-                # Log only the error type/message, not the full exception which may
-                # contain the URL with the bot token in tracebacks
+                # Log sanitized error to prevent token leak in tracebacks
                 logger.error(
-                    "[telegram] Error enviando a chat %s: %s", chat_id, type(e).__name__
+                    "[telegram] Error enviando a chat %s: %s",
+                    chat_id,
+                    _sanitize_telegram_error(e),
                 )
                 success = False
         return success
@@ -249,7 +273,11 @@ class TelegramNotifier:
                 self._db.register_telegram_chat(chat_id, username)
                 logger.info("[telegram] Chat registrado: %s (%s)", chat_id, username)
             except Exception as e:
-                logger.error("[telegram] Error registrando chat %s: %s", chat_id, e)
+                logger.error(
+                    "[telegram] Error registrando chat %s: %s",
+                    chat_id,
+                    _sanitize_telegram_error(e),
+                )
 
     def send_new_property_alert(self, scored: ScoredProperty) -> bool:
         text = _format_new_property_alert(scored)
