@@ -426,8 +426,9 @@ class CalendarStore:
 
     # ── Reads ────────────────────────────────────────────────────────────────
     def upcoming(self, now: int | None = None, limit: int = 5) -> list[dict]:
-        """Return the next ``limit`` confirmed events at or after ``now``.
+        """Return the next ``limit`` active events at or after ``now``.
 
+        Includes confirmed and tentative (shared calendar) events.
         Ordered by start time. Powers ``/api/calendar/upcoming`` (widget 1).
         """
         now = int(time.time()) if now is None else now
@@ -437,7 +438,7 @@ class CalendarStore:
                 SELECT uid, calendar_id, google_id, title, description, location,
                        start_ts, end_ts, all_day, person_id, status
                 FROM events
-                WHERE status = 'confirmed' AND start_ts >= ?
+                WHERE status IN ('confirmed', 'tentative') AND start_ts >= ?
                 ORDER BY start_ts ASC
                 LIMIT ?
                 """,
@@ -450,6 +451,7 @@ class CalendarStore:
     ) -> list[dict]:
         """Return events with start_ts between now and now+max_offset.
 
+        Includes confirmed and tentative (shared calendar) events.
         Used by the reminder tick loop to find events needing reminders soon.
         """
         now = int(time.time()) if now is None else now
@@ -460,7 +462,7 @@ class CalendarStore:
                 SELECT uid, calendar_id, google_id, title, description, location,
                        start_ts, end_ts, all_day, person_id, status
                 FROM events
-                WHERE status = 'confirmed' AND start_ts >= ? AND start_ts <= ?
+                WHERE status IN ('confirmed', 'tentative') AND start_ts >= ? AND start_ts <= ?
                 ORDER BY start_ts ASC
                 """,
                 (now, window_end),
@@ -471,6 +473,7 @@ class CalendarStore:
         """Return events that overlap with the given time window.
 
         An event overlaps if it starts before window ends AND ends after window starts.
+        Includes confirmed and tentative (shared calendar) events.
         Used by the /today endpoint to get day's agenda.
         """
         with self._db.connect() as conn:
@@ -479,7 +482,7 @@ class CalendarStore:
                 SELECT uid, calendar_id, google_id, title, description, location,
                        start_ts, end_ts, all_day, person_id, status
                 FROM events
-                WHERE status = 'confirmed' AND start_ts <= ? AND end_ts >= ?
+                WHERE status IN ('confirmed', 'tentative') AND start_ts <= ? AND end_ts >= ?
                 ORDER BY start_ts ASC
                 """,
                 (end_ts, start_ts),
