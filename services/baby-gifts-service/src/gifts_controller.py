@@ -1,4 +1,5 @@
 """Baby Gifts Controller — data and invitation management.
+
 Data model:
 - gifts.json: list of gift items with reservation status
 - invitations table in SQLite: token-based access for guests (6-month expiry)
@@ -36,24 +37,26 @@ import tempfile
 import threading
 import uuid
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 import config
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
-_lock = threading.Lock()
+_lock: threading.Lock = threading.Lock()
 
 # Module-level references that can be patched by tests
-DATA_DIR = config.DATA_DIR
-GIFTS_FILE = config.GIFTS_FILE
-DB_FILE = config.DB_FILE
+DATA_DIR: Path = config.DATA_DIR
+GIFTS_FILE: Path = config.GIFTS_FILE
+DB_FILE: Path = config.DB_FILE
 
 
 # ── Database setup ────────────────────────────────────────────────────────────
-def _init_db():
+def _init_db() -> None:
     """Initialize SQLite database for invitations."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_FILE))
+    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE))
     conn.execute("""
         CREATE TABLE IF NOT EXISTS invitations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,7 +83,7 @@ def _init_db():
         conn.execute("ALTER TABLE invitations ADD COLUMN expires_at TEXT")
         # Set expiry for existing invitations (6 months from created_at)
         conn.execute("""
-            UPDATE invitations 
+            UPDATE invitations
             SET expires_at = datetime(created_at, '+180 days')
             WHERE expires_at IS NULL
         """)
@@ -91,10 +94,10 @@ def _init_db():
     conn.close()
 
 
-def _get_db():
+def _get_db() -> sqlite3.Connection:
     """Get a database connection."""
     _init_db()
-    conn = sqlite3.connect(str(DB_FILE))
+    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE))
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -115,7 +118,7 @@ def _validate_gift_id(gift_id: str) -> bool:
 
 
 # ── Gifts data ────────────────────────────────────────────────────────────────
-def _load_gifts() -> dict:
+def _load_gifts() -> dict[str, Any]:
     """Load gifts data from JSON file."""
     if not GIFTS_FILE.exists():
         return {"gifts": []}
@@ -126,7 +129,7 @@ def _load_gifts() -> dict:
         return {"gifts": []}
 
 
-def _save_gifts(data: dict):
+def _save_gifts(data: dict[str, Any]) -> None:
     """Save gifts data to JSON file atomically.
 
     Writes to a temporary file in the same directory, fsyncs it, then renames
@@ -140,7 +143,7 @@ def _save_gifts(data: dict):
     because baby-gifts does not ship the shared library.
     """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    temp_path = None
+    temp_path: str | None = None
     try:
         with tempfile.NamedTemporaryFile(
             "w",
@@ -165,10 +168,10 @@ def _save_gifts(data: dict):
                 logger.warning(f"Could not remove temp file {temp_path}: {e}")
 
 
-def get_gifts_data(include_admin: bool = False) -> dict:
+def get_gifts_data(include_admin: bool = False) -> dict[str, Any]:
     """Get all gifts data. If not admin, hide who reserved (privacy)."""
     with _lock:
-        data = _load_gifts()
+        data: dict[str, Any] = _load_gifts()
         if not include_admin:
             # For guests: show if reserved, but not by whom (unless it's them)
             # This will be filtered in the API layer based on the guest's token
@@ -176,23 +179,25 @@ def get_gifts_data(include_admin: bool = False) -> dict:
         return data
 
 
-def get_gift(gift_id: str) -> dict | None:
+def get_gift(gift_id: str) -> dict[str, Any] | None:
     """Get a single gift by ID."""
     with _lock:
-        data = _load_gifts()
+        data: dict[str, Any] = _load_gifts()
         for gift in data.get("gifts", []):
             if gift["id"] == gift_id:
                 return gift
         return None
 
 
-def add_gift(gift: dict) -> dict:
+def add_gift(gift: dict[str, Any]) -> dict[str, Any]:
     """Add a new gift (admin only)."""
     with _lock:
-        data = _load_gifts()
+        data: dict[str, Any] = _load_gifts()
         # Use timestamp + random suffix to ensure unique IDs even in rapid succession
-        gift_id = f"g_{int(datetime.now().timestamp() * 1000)}_{secrets.token_hex(4)}"
-        new_gift = {
+        gift_id: str = (
+            f"g_{int(datetime.now().timestamp() * 1000)}_{secrets.token_hex(4)}"
+        )
+        new_gift: dict[str, Any] = {
             "id": gift_id,
             "name": gift.get("name", ""),
             "description": gift.get("description", ""),
@@ -209,13 +214,15 @@ def add_gift(gift: dict) -> dict:
         return new_gift
 
 
-def update_gift(gift_id: str, updates: dict) -> dict | None | tuple[None, int, str]:
+def update_gift(
+    gift_id: str, updates: dict[str, Any]
+) -> dict[str, Any] | None | tuple[None, int, str]:
     """Update a gift (admin only).
 
     Returns:
         - dict: Updated gift on success
         - None: Gift not found (legacy behavior, returns 404 at API layer)
-        - tuple[None, int, str]: (None, status_code, error_message) for validation errors
+        - tuple[None, int, str]: (None, status_code, error_message) for validation
     """
     # Validate gift_id format - must be non-empty string
     if not gift_id or not isinstance(gift_id, str):
@@ -227,7 +234,7 @@ def update_gift(gift_id: str, updates: dict) -> dict | None | tuple[None, int, s
         return (None, 400, "Invalid gift_id format")
 
     with _lock:
-        data = _load_gifts()
+        data: dict[str, Any] = _load_gifts()
         for i, gift in enumerate(data.get("gifts", [])):
             if gift["id"] == gift_id:
                 # Only update allowed fields
@@ -251,8 +258,8 @@ def update_gift(gift_id: str, updates: dict) -> dict | None | tuple[None, int, s
 def delete_gift(gift_id: str) -> bool:
     """Delete a gift (admin only)."""
     with _lock:
-        data = _load_gifts()
-        original_len = len(data.get("gifts", []))
+        data: dict[str, Any] = _load_gifts()
+        original_len: int = len(data.get("gifts", []))
         data["gifts"] = [g for g in data.get("gifts", []) if g["id"] != gift_id]
         if len(data["gifts"]) < original_len:
             _save_gifts(data)
@@ -260,7 +267,7 @@ def delete_gift(gift_id: str) -> bool:
         return False
 
 
-def reserve_gift(gift_id: str, token: str, guest_name: str) -> dict:
+def reserve_gift(gift_id: str, token: str, guest_name: str) -> dict[str, Any]:
     """Reserve a gift for a guest or authenticated user.
 
     Args:
@@ -269,7 +276,7 @@ def reserve_gift(gift_id: str, token: str, guest_name: str) -> dict:
         guest_name: Display name for the reservation
     """
     with _lock:
-        data = _load_gifts()
+        data: dict[str, Any] = _load_gifts()
         for i, gift in enumerate(data.get("gifts", [])):
             if gift["id"] == gift_id:
                 if gift.get("reserved_by"):
@@ -286,10 +293,10 @@ def reserve_gift(gift_id: str, token: str, guest_name: str) -> dict:
         return {"status": "error", "message": "Regalo no encontrado"}
 
 
-def unreserve_gift(gift_id: str, token: str, is_admin: bool = False) -> dict:
+def unreserve_gift(gift_id: str, token: str, is_admin: bool = False) -> dict[str, Any]:
     """Cancel a reservation. Users can only cancel their own."""
     with _lock:
-        data = _load_gifts()
+        data: dict[str, Any] = _load_gifts()
         for i, gift in enumerate(data.get("gifts", [])):
             if gift["id"] == gift_id:
                 if not gift.get("reserved_by"):
@@ -312,10 +319,10 @@ def unreserve_gift(gift_id: str, token: str, is_admin: bool = False) -> dict:
         return {"status": "error", "message": "Regalo no encontrado"}
 
 
-def toggle_gift_visibility(gift_id: str) -> dict:
+def toggle_gift_visibility(gift_id: str) -> dict[str, Any]:
     """Toggle a gift's hidden status (FAMILIA users only)."""
     with _lock:
-        data = _load_gifts()
+        data: dict[str, Any] = _load_gifts()
         for i, gift in enumerate(data.get("gifts", [])):
             if gift["id"] == gift_id:
                 gift["hidden"] = not gift.get("hidden", False)
@@ -331,10 +338,10 @@ def is_familia_user(username: str) -> bool:
 
 
 # ── Invitations ───────────────────────────────────────────────────────────────
-MAX_INVITATION_RETRIES = 3
+MAX_INVITATION_RETRIES: int = 3
 
 
-def create_invitation(name: str, _retries: int = 0) -> dict:
+def create_invitation(name: str, _retries: int = 0) -> dict[str, Any]:
     """Create a new invitation with a unique token. Expires in 6 months.
 
     Args:
@@ -353,14 +360,15 @@ def create_invitation(name: str, _retries: int = 0) -> dict:
         )
         return {"status": "error", "message": "Failed to generate unique token"}
 
-    token = secrets.token_urlsafe(24)  # 32 chars
-    now = datetime.now()
-    expires_at = now + timedelta(days=config.INVITATION_EXPIRY_DAYS)
+    token: str = secrets.token_urlsafe(24)  # 32 chars
+    now: datetime = datetime.now()
+    expires_at: datetime = now + timedelta(days=config.INVITATION_EXPIRY_DAYS)
 
-    conn = _get_db()
+    conn: sqlite3.Connection = _get_db()
     try:
         conn.execute(
-            "INSERT INTO invitations (token, name, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            "INSERT INTO invitations (token, name, created_at, expires_at) "
+            "VALUES (?, ?, ?, ?)",
             (token, name, now.isoformat(), expires_at.isoformat()),
         )
         conn.commit()
@@ -378,22 +386,22 @@ def create_invitation(name: str, _retries: int = 0) -> dict:
         conn.close()
 
 
-def validate_invitation(token: str) -> dict | None:
-    """Validate an invitation token. Returns guest info or None if invalid/expired/revoked."""
-    conn = _get_db()
+def validate_invitation(token: str) -> dict[str, Any] | None:
+    """Validate invitation token. Returns guest info or None if invalid."""
+    conn: sqlite3.Connection = _get_db()
     try:
-        row = conn.execute(
+        row: sqlite3.Row | None = conn.execute(
             "SELECT * FROM invitations WHERE token = ? AND revoked = 0", (token,)
         ).fetchone()
         if row:
             # Check expiry
             if row["expires_at"]:
-                expires_at = datetime.fromisoformat(row["expires_at"])
+                expires_at: datetime = datetime.fromisoformat(row["expires_at"])
                 if datetime.now() > expires_at:
                     return None  # Expired
 
             # Update last access
-            now = datetime.now().isoformat()
+            now: str = datetime.now().isoformat()
             conn.execute(
                 "UPDATE invitations SET last_access = ? WHERE token = ?", (now, token)
             )
@@ -411,20 +419,20 @@ def validate_invitation(token: str) -> dict | None:
         conn.close()
 
 
-def list_invitations() -> list:
+def list_invitations() -> list[dict[str, Any]]:
     """List all invitations (admin only)."""
-    conn = _get_db()
+    conn: sqlite3.Connection = _get_db()
     try:
-        rows = conn.execute(
+        rows: list[sqlite3.Row] = conn.execute(
             "SELECT * FROM invitations ORDER BY created_at DESC"
         ).fetchall()
-        now = datetime.now()
-        result = []
+        now: datetime = datetime.now()
+        result: list[dict[str, Any]] = []
         for row in rows:
-            expired = False
+            expired: bool = False
             if row["expires_at"]:
                 try:
-                    expires_at = datetime.fromisoformat(row["expires_at"])
+                    expires_at: datetime = datetime.fromisoformat(row["expires_at"])
                     expired = now > expires_at
                 except Exception:
                     pass
@@ -445,11 +453,11 @@ def list_invitations() -> list:
         conn.close()
 
 
-def revoke_invitation(token: str) -> dict:
+def revoke_invitation(token: str) -> dict[str, Any]:
     """Revoke an invitation (admin only)."""
-    conn = _get_db()
+    conn: sqlite3.Connection = _get_db()
     try:
-        result = conn.execute(
+        result: sqlite3.Cursor = conn.execute(
             "UPDATE invitations SET revoked = 1 WHERE token = ?", (token,)
         )
         conn.commit()
@@ -460,11 +468,13 @@ def revoke_invitation(token: str) -> dict:
         conn.close()
 
 
-def delete_invitation(token: str) -> dict:
+def delete_invitation(token: str) -> dict[str, Any]:
     """Delete an invitation completely (admin only)."""
-    conn = _get_db()
+    conn: sqlite3.Connection = _get_db()
     try:
-        result = conn.execute("DELETE FROM invitations WHERE token = ?", (token,))
+        result: sqlite3.Cursor = conn.execute(
+            "DELETE FROM invitations WHERE token = ?", (token,)
+        )
         conn.commit()
         if result.rowcount > 0:
             return {"status": "ok", "message": "Invitación eliminada"}
@@ -476,8 +486,10 @@ def delete_invitation(token: str) -> dict:
 def get_invitation_reservations(token: str) -> int:
     """Count how many gifts are reserved by this invitation."""
     with _lock:
-        data = _load_gifts()
-        count = sum(1 for g in data.get("gifts", []) if g.get("reserved_by") == token)
+        data: dict[str, Any] = _load_gifts()
+        count: int = sum(
+            1 for g in data.get("gifts", []) if g.get("reserved_by") == token
+        )
         return count
 
 
@@ -486,19 +498,20 @@ def get_invitation_reservations(token: str) -> int:
 
 def check_rate_limit(ip: str) -> bool:
     """Check if IP is rate limited. Returns True if allowed, False if blocked."""
-    conn = _get_db()
+    conn: sqlite3.Connection = _get_db()
     try:
-        now = datetime.now()
-        row = conn.execute(
+        now: datetime = datetime.now()
+        row: sqlite3.Row | None = conn.execute(
             "SELECT attempts, window_start FROM rate_limits WHERE ip = ?", (ip,)
         ).fetchone()
         if row:
-            window_start = datetime.fromisoformat(row["window_start"])
-            elapsed = (now - window_start).total_seconds()
+            window_start: datetime = datetime.fromisoformat(row["window_start"])
+            elapsed: float = (now - window_start).total_seconds()
             if elapsed > config.RATE_LIMIT_WINDOW_SECONDS:
                 # Reset window
                 conn.execute(
-                    "UPDATE rate_limits SET attempts = 1, window_start = ? WHERE ip = ?",
+                    "UPDATE rate_limits SET attempts = 1, window_start = ? "
+                    "WHERE ip = ?",
                     (now.isoformat(), ip),
                 )
                 conn.commit()
@@ -531,7 +544,7 @@ def check_invitation_rate_limit(ip: str) -> bool:
 
     Returns True if allowed, False if blocked.
     """
-    conn = _get_db()
+    conn: sqlite3.Connection = _get_db()
     try:
         # Ensure invitation_rate_limits table exists
         conn.execute("""
@@ -543,18 +556,19 @@ def check_invitation_rate_limit(ip: str) -> bool:
         """)
         conn.commit()
 
-        now = datetime.now()
-        row = conn.execute(
+        now: datetime = datetime.now()
+        row: sqlite3.Row | None = conn.execute(
             "SELECT attempts, window_start FROM invitation_rate_limits WHERE ip = ?",
             (ip,),
         ).fetchone()
         if row:
-            window_start = datetime.fromisoformat(row["window_start"])
-            elapsed = (now - window_start).total_seconds()
+            window_start: datetime = datetime.fromisoformat(row["window_start"])
+            elapsed: float = (now - window_start).total_seconds()
             if elapsed > config.INVITATION_RATE_LIMIT_WINDOW_SECONDS:
                 # Reset window
                 conn.execute(
-                    "UPDATE invitation_rate_limits SET attempts = 1, window_start = ? WHERE ip = ?",
+                    "UPDATE invitation_rate_limits SET attempts = 1, window_start = ? "
+                    "WHERE ip = ?",
                     (now.isoformat(), ip),
                 )
                 conn.commit()
@@ -563,7 +577,8 @@ def check_invitation_rate_limit(ip: str) -> bool:
                 return False
             # Increment attempts
             conn.execute(
-                "UPDATE invitation_rate_limits SET attempts = attempts + 1 WHERE ip = ?",
+                "UPDATE invitation_rate_limits SET attempts = attempts + 1 "
+                "WHERE ip = ?",
                 (ip,),
             )
             conn.commit()
@@ -571,7 +586,8 @@ def check_invitation_rate_limit(ip: str) -> bool:
         else:
             # First attempt from this IP
             conn.execute(
-                "INSERT INTO invitation_rate_limits (ip, attempts, window_start) VALUES (?, 1, ?)",
+                "INSERT INTO invitation_rate_limits (ip, attempts, window_start) "
+                "VALUES (?, 1, ?)",
                 (ip, now.isoformat()),
             )
             conn.commit()
