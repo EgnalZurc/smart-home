@@ -7,7 +7,54 @@ a single source of truth. Defaults match the design document
 
 from __future__ import annotations
 
+import ipaddress
 import os
+import re
+
+# ── Validation helpers ───────────────────────────────────────────────────────
+
+_NIGHT_WINDOW_RE = re.compile(r"^\d{2}:\d{2}-\d{2}:\d{2}$")
+_HOSTNAME_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?$")
+
+
+def _validate_subnet(value: str) -> str:
+    """Validate CIDR notation (e.g. 192.168.1.0/24)."""
+    try:
+        ipaddress.ip_network(value, strict=False)
+    except ValueError as exc:
+        raise ValueError(f"ARP_SUBNET invalid CIDR: {value!r}") from exc
+    return value
+
+
+def _validate_router_host(value: str) -> str:
+    """Validate IP address or alphanumeric hostname."""
+    # Try IP first
+    try:
+        ipaddress.ip_address(value)
+        return value
+    except ValueError:
+        pass
+    # Must be a valid hostname (alphanumeric + hyphens, not starting/ending with hyphen)
+    if not _HOSTNAME_RE.match(value):
+        raise ValueError(
+            f"ROUTER_HOST must be valid IP or alphanumeric hostname: {value!r}"
+        )
+    return value
+
+
+def _validate_night_window(value: str) -> str:
+    """Validate HH:MM-HH:MM format with valid time ranges."""
+    if not _NIGHT_WINDOW_RE.match(value):
+        raise ValueError(f"NIGHT_WINDOW must match HH:MM-HH:MM format: {value!r}")
+    start, end = value.split("-")
+    for time_str in (start, end):
+        hh, mm = map(int, time_str.split(":"))
+        if not (0 <= hh <= 23 and 0 <= mm <= 59):
+            raise ValueError(
+                f"NIGHT_WINDOW contains invalid time {time_str!r}: {value!r}"
+            )
+    return value
+
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -39,16 +86,20 @@ PRESENT_THRESHOLD = float(os.environ.get("PRESENCE_PRESENT_THRESHOLD", "0.5"))
 ARRIVAL_DEBOUNCE_S = int(os.environ.get("PRESENCE_ARRIVAL_DEBOUNCE_S", "30"))
 DEPARTURE_GRACE_S = int(os.environ.get("PRESENCE_DEPARTURE_GRACE_S", "300"))
 SLEEP_INACTIVITY_S = int(os.environ.get("PRESENCE_SLEEP_INACTIVITY_S", "2700"))
-NIGHT_WINDOW = os.environ.get("PRESENCE_NIGHT_WINDOW", "23:00-08:00")
+NIGHT_WINDOW = _validate_night_window(
+    os.environ.get("PRESENCE_NIGHT_WINDOW", "23:00-08:00")
+)
 SLEEP_ZONE = os.environ.get("PRESENCE_SLEEP_ZONE", "bedroom")
 
 # ── Router access (one mode) ─────────────────────────────────────────────────
 # arpsweep | openwrt_ssh | fritzbox | mikrotik
 ROUTER_MODE = os.environ.get("PRESENCE_ROUTER_MODE", "arpsweep")
-ROUTER_HOST = os.environ.get("PRESENCE_ROUTER_HOST", "192.168.1.1")
+ROUTER_HOST = _validate_router_host(
+    os.environ.get("PRESENCE_ROUTER_HOST", "192.168.1.1")
+)
 ROUTER_USER = os.environ.get("PRESENCE_ROUTER_USER", "")
 # ROUTER_PASSWORD / key supplied via .env, never logged.
-ARP_SUBNET = os.environ.get("PRESENCE_ARP_SUBNET", "192.168.1.0/24")
+ARP_SUBNET = _validate_subnet(os.environ.get("PRESENCE_ARP_SUBNET", "192.168.1.0/24"))
 
 # ── MQTT (shared broker) ─────────────────────────────────────────────────────
 MQTT_BROKER = os.environ.get("PRESENCE_MQTT_BROKER", "mosquitto")
