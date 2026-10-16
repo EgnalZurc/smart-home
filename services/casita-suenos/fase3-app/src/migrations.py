@@ -9,9 +9,44 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import re
 import sqlite3
 
 logger = logging.getLogger(__name__)
+
+# Whitelist of allowed table names for migrations
+ALLOWED_TABLES: frozenset[str] = frozenset({
+    "properties",
+    "scored_properties",
+    "telegram_chats",
+    "alerts",
+})
+
+# Pattern for allowed column names: lowercase letters, digits, underscores
+# Must start with a letter, max 64 chars
+COLUMN_NAME_PATTERN: re.Pattern[str] = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+
+def validate_migration_params(table: str, column: str) -> None:
+    """Validate table and column names against whitelist before SQL interpolation.
+
+    Args:
+        table: Table name to validate.
+        column: Column name to validate.
+
+    Raises:
+        ValueError: If table or column name is not allowed.
+    """
+    if table not in ALLOWED_TABLES:
+        raise ValueError(
+            f"Table '{table}' is not in the allowed tables whitelist: "
+            f"{sorted(ALLOWED_TABLES)}"
+        )
+    if not COLUMN_NAME_PATTERN.match(column):
+        raise ValueError(
+            f"Column '{column}' does not match allowed pattern: "
+            f"{COLUMN_NAME_PATTERN.pattern}"
+        )
 
 
 def run_migrations(conn: sqlite3.Connection) -> None:
@@ -32,6 +67,7 @@ def run_migrations(conn: sqlite3.Connection) -> None:
         ("scored_properties", "comment", "TEXT NOT NULL DEFAULT ''"),
     ]
     for table, col, definition in migrations:
+        validate_migration_params(table, col)
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
             logger.info("[db] Migración: añadida columna %s.%s", table, col)
@@ -63,6 +99,7 @@ def run_migrations(conn: sqlite3.Connection) -> None:
         ("properties", "has_ac_preinstalled", "INTEGER NOT NULL DEFAULT 0"),
     ]
     for table, col, defn in new_cols_props:
+        validate_migration_params(table, col)
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
             logger.info("[db] Migración R1-R18: añadida %s.%s", table, col)
@@ -91,6 +128,7 @@ def run_migrations(conn: sqlite3.Connection) -> None:
         ("scored_properties", "score_r18", "REAL NOT NULL DEFAULT 0"),
     ]
     for table, col, defn in new_cols_score:
+        validate_migration_params(table, col)
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
             logger.info("[db] Migración R1-R18: añadida %s.%s", table, col)
