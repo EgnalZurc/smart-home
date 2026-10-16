@@ -1,7 +1,7 @@
 """Baby Gifts Service — standalone microservice for baby gift registry.
 
 Three access modes:
-1. Admin (authenticated via nginx auth_request + SUPER profile): full CRUD + invitation management
+1. Admin (authenticated via nginx auth_request + SUPER profile): full CRUD
 2. Authenticated User (via nginx auth_request): view gifts + reserve/unreserve
 3. Guest (via invitation token): view gifts + reserve/unreserve own
 
@@ -39,9 +39,11 @@ Port: 8004
 import logging
 from html import escape as html_escape
 from pathlib import Path
+from typing import Any
 
 from config import TRUSTED_PROXY_IPS
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from gifts_controller import (
     add_gift,
@@ -63,7 +65,7 @@ from gifts_controller import (
     validate_invitation,
 )
 from notifier import send_gift_notification
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ValidationInfo, field_validator
 from utils import parse_price
 
 
@@ -83,7 +85,7 @@ def sanitize_string(value: str, max_length: int) -> str:
     if not value:
         return ""
     # Strip leading/trailing whitespace
-    cleaned = value.strip()
+    cleaned: str = value.strip()
     # Truncate to max length
     if len(cleaned) > max_length:
         cleaned = cleaned[:max_length]
@@ -105,9 +107,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
-app = FastAPI(
+app: FastAPI = FastAPI(
     title="Baby Gifts Service",
     version="1.0.0",
     docs_url="/swagger",
@@ -119,6 +121,8 @@ app = FastAPI(
 # Pydantic models with input sanitization
 # ═══════════════════════════════════════════════════════════════════════════════
 class GiftCreate(BaseModel):
+    """Model for creating a new gift."""
+
     name: str
     description: str = ""
     url: str = ""
@@ -127,10 +131,14 @@ class GiftCreate(BaseModel):
 
     @field_validator("name", "description", "price_range", mode="after")
     @classmethod
-    def sanitize_text_fields(cls, v: str, info) -> str:
+    def sanitize_text_fields(cls, v: str, info: ValidationInfo) -> str:
         """Sanitize text fields: strip, truncate, escape HTML."""
-        max_lengths = {"name": 200, "description": 1000, "price_range": 100}
-        return sanitize_string(v, max_lengths.get(info.field_name, 200))
+        max_lengths: dict[str, int] = {
+            "name": 200,
+            "description": 1000,
+            "price_range": 100,
+        }
+        return sanitize_string(v, max_lengths.get(info.field_name or "", 200))
 
     @field_validator("url", mode="after")
     @classmethod
@@ -138,14 +146,16 @@ class GiftCreate(BaseModel):
         """Sanitize URL: strip, truncate, validate protocol (no HTML escape)."""
         if not v:
             return ""
-        cleaned = v.strip()
-        # Block non-HTTP schemes (javascript:, data:, vbscript:, etc.) to prevent XSS
+        cleaned: str = v.strip()
+        # Block non-HTTP schemes (javascript:, data:, vbscript:, etc.)
         if cleaned and not cleaned.lower().startswith(("http://", "https://")):
             return ""
         return cleaned[:2000] if len(cleaned) > 2000 else cleaned
 
 
 class GiftUpdate(BaseModel):
+    """Model for updating an existing gift."""
+
     name: str | None = None
     description: str | None = None
     url: str | None = None
@@ -154,12 +164,16 @@ class GiftUpdate(BaseModel):
 
     @field_validator("name", "description", "price_range", mode="after")
     @classmethod
-    def sanitize_text_fields(cls, v: str | None, info) -> str | None:
+    def sanitize_text_fields(cls, v: str | None, info: ValidationInfo) -> str | None:
         """Sanitize text fields if provided."""
         if v is None:
             return None
-        max_lengths = {"name": 200, "description": 1000, "price_range": 100}
-        return sanitize_string(v, max_lengths.get(info.field_name, 200))
+        max_lengths: dict[str, int] = {
+            "name": 200,
+            "description": 1000,
+            "price_range": 100,
+        }
+        return sanitize_string(v, max_lengths.get(info.field_name or "", 200))
 
     @field_validator("url", mode="after")
     @classmethod
@@ -167,14 +181,16 @@ class GiftUpdate(BaseModel):
         """Sanitize URL if provided: strip, truncate, validate protocol."""
         if v is None:
             return ""
-        cleaned = v.strip()
-        # Block non-HTTP schemes (javascript:, data:, vbscript:, etc.) to prevent XSS
+        cleaned: str = v.strip()
+        # Block non-HTTP schemes (javascript:, data:, vbscript:, etc.)
         if cleaned and not cleaned.lower().startswith(("http://", "https://")):
             return ""
         return cleaned[:2000] if len(cleaned) > 2000 else cleaned
 
 
 class InvitationCreate(BaseModel):
+    """Model for creating a new invitation."""
+
     name: str
 
     @field_validator("name", mode="after")
@@ -187,7 +203,7 @@ class InvitationCreate(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════════
-_STATIC_DIR = Path(__file__).parent / "static"
+_STATIC_DIR: Path = Path(__file__).parent / "static"
 
 
 def _get_client_ip(request: Request) -> str:
@@ -196,8 +212,8 @@ def _get_client_ip(request: Request) -> str:
     Only trusts X-Forwarded-For header if the direct connection comes from
     a trusted proxy IP (e.g., nginx container). This prevents IP spoofing.
     """
-    client_ip = request.client.host if request.client else "unknown"
-    forwarded = request.headers.get("X-Forwarded-For")
+    client_ip: str = request.client.host if request.client else "unknown"
+    forwarded: str | None = request.headers.get("X-Forwarded-For")
 
     # Only trust X-Forwarded-For if request comes from trusted proxy
     if forwarded and client_ip in TRUSTED_PROXY_IPS:
@@ -212,7 +228,7 @@ def require_rate_limit(request: Request) -> str:
     Resolves the client IP (honouring trusted proxies) and raises 429 when the
     limit is exceeded. Returns the resolved client IP so handlers can reuse it.
     """
-    client_ip = _get_client_ip(request)
+    client_ip: str = _get_client_ip(request)
     if not check_rate_limit(client_ip):
         raise HTTPException(
             status_code=429, detail="Demasiados intentos. Espera un momento."
@@ -226,7 +242,7 @@ def require_invitation_rate_limit(request: Request) -> str:
     Resolves the client IP (honouring trusted proxies) and raises 429 when the
     limit is exceeded. Returns the resolved client IP so handlers can reuse it.
     """
-    client_ip = _get_client_ip(request)
+    client_ip: str = _get_client_ip(request)
     if not check_invitation_rate_limit(client_ip):
         raise HTTPException(
             status_code=429,
@@ -256,7 +272,7 @@ def require_auth_user(request: Request) -> str:
     Raises:
         HTTPException: 401 if X-Auth-User header is missing.
     """
-    username = request.headers.get("X-Auth-User")
+    username: str | None = request.headers.get("X-Auth-User")
     if not username:
         raise HTTPException(status_code=401, detail="Authentication required")
     return username
@@ -280,7 +296,7 @@ def _truncate_token(token: str) -> str:
 # Health endpoints
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/health")
-def health():
+def health() -> dict[str, Any]:
     """Health check endpoint for nginx and the dashboard.
 
     Returns:
@@ -290,7 +306,7 @@ def health():
 
 
 @app.get("/api/health/baby-gifts")
-def health_alias():
+def health_alias() -> dict[str, bool]:
     """Health check alias matching path expected by the dashboard.
 
     Returns:
@@ -303,7 +319,7 @@ def health_alias():
 # SPA serving
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/smart-home/baby-gifts")
-async def serve_admin(request: Request):
+async def serve_admin(request: Request) -> HTMLResponse:
     """Serve the admin/user SPA (protected by nginx auth_request).
 
     If user is an admin (SUPER profile), they get full management capabilities.
@@ -315,7 +331,7 @@ async def serve_admin(request: Request):
     Returns:
         HTMLResponse: Rendered baby-gifts.html with user context.
     """
-    username = _get_auth_user(request)
+    username: str | None = _get_auth_user(request)
     if username:
         return serve_html(
             _STATIC_DIR, "baby-gifts.html", auth_user={"username": username}
@@ -325,7 +341,7 @@ async def serve_admin(request: Request):
 
 
 @app.get("/guest/baby-gifts/{token}")
-async def serve_guest(token: str, request: Request):
+async def serve_guest(token: str, request: Request) -> HTMLResponse:
     """Serve the guest SPA (public, token-validated).
 
     NOTE: No rate limiting here - we only validate token once on page load.
@@ -341,13 +357,14 @@ async def serve_guest(token: str, request: Request):
     Raises:
         HTTPException: 404 if token is invalid or expired.
     """
-    guest = validate_invitation(token)
+    guest: dict[str, Any] | None = validate_invitation(token)
     if not guest:
         raise HTTPException(status_code=404, detail="Enlace no válido o expirado")
 
-    client_ip = _get_client_ip(request)
+    client_ip: str = _get_client_ip(request)
     logger.info(
-        f"Guest access: {guest['name']} (token: {_truncate_token(token)}) from {client_ip}"
+        f"Guest access: {guest['name']} (token: {_truncate_token(token)}) "
+        f"from {client_ip}"
     )
     return serve_html(_STATIC_DIR, "baby-gifts.html", guest_token=token)
 
@@ -356,7 +373,7 @@ async def serve_guest(token: str, request: Request):
 # Admin API (protected by nginx auth_request)
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/baby-gifts")
-def get_all_gifts(username: str = Depends(require_auth_user)):
+def get_all_gifts(username: str = Depends(require_auth_user)) -> dict[str, Any]:
     """Get all gifts with full reservation details (admin only).
 
     Args:
@@ -365,8 +382,8 @@ def get_all_gifts(username: str = Depends(require_auth_user)):
     Returns:
         dict: Gifts list, FAMILIA status, and username.
     """
-    user_is_familia = is_familia_user(username)
-    data = get_gifts_data(include_admin=True)
+    user_is_familia: bool = is_familia_user(username)
+    data: dict[str, Any] = get_gifts_data(include_admin=True)
     return {
         "gifts": data.get("gifts", []),
         "is_familia": user_is_familia,
@@ -375,7 +392,9 @@ def get_all_gifts(username: str = Depends(require_auth_user)):
 
 
 @app.post("/api/baby-gifts")
-def create_gift(gift: GiftCreate, username: str = Depends(require_auth_user)):
+def create_gift(
+    gift: GiftCreate, username: str = Depends(require_auth_user)
+) -> dict[str, Any]:
     """Add a new gift to the registry (admin only).
 
     Args:
@@ -385,14 +404,14 @@ def create_gift(gift: GiftCreate, username: str = Depends(require_auth_user)):
     Returns:
         dict: Status and newly created gift.
     """
-    new_gift = add_gift(gift.model_dump())
+    new_gift: dict[str, Any] = add_gift(gift.model_dump())
     return {"status": "ok", "gift": new_gift}
 
 
 @app.put("/api/baby-gifts/{gift_id}")
 def modify_gift(
     gift_id: str, gift: GiftUpdate, username: str = Depends(require_auth_user)
-):
+) -> dict[str, Any]:
     """Update an existing gift (admin only).
 
     Args:
@@ -406,10 +425,14 @@ def modify_gift(
     Raises:
         HTTPException: 400 if no changes or validation error, 404 if not found.
     """
-    updates = {k: v for k, v in gift.model_dump().items() if v is not None}
+    updates: dict[str, Any] = {
+        k: v for k, v in gift.model_dump().items() if v is not None
+    }
     if not updates:
         raise HTTPException(status_code=400, detail="No hay cambios")
-    result = update_gift(gift_id, updates)
+    result: dict[str, Any] | None | tuple[None, int, str] = update_gift(
+        gift_id, updates
+    )
 
     # Handle validation errors (tuple: None, status_code, message)
     if isinstance(result, tuple):
@@ -424,7 +447,9 @@ def modify_gift(
 
 
 @app.delete("/api/baby-gifts/{gift_id}")
-def remove_gift(gift_id: str, username: str = Depends(require_auth_user)):
+def remove_gift(
+    gift_id: str, username: str = Depends(require_auth_user)
+) -> dict[str, str]:
     """Delete a gift from the registry (admin only).
 
     Args:
@@ -443,7 +468,9 @@ def remove_gift(gift_id: str, username: str = Depends(require_auth_user)):
 
 
 @app.post("/api/baby-gifts/{gift_id}/unreserve")
-def admin_unreserve(gift_id: str, username: str = Depends(require_auth_user)):
+def admin_unreserve(
+    gift_id: str, username: str = Depends(require_auth_user)
+) -> dict[str, Any]:
     """Unreserve any gift (admin only, bypasses ownership check).
 
     Args:
@@ -456,7 +483,7 @@ def admin_unreserve(gift_id: str, username: str = Depends(require_auth_user)):
     Raises:
         HTTPException: 400 if gift not reserved or other error.
     """
-    result = unreserve_gift(gift_id, token="", is_admin=True)
+    result: dict[str, Any] = unreserve_gift(gift_id, token="", is_admin=True)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
     return result
@@ -466,7 +493,9 @@ def admin_unreserve(gift_id: str, username: str = Depends(require_auth_user)):
 # Invitation management (admin only)
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/baby-gifts/invitations")
-def get_invitations(username: str = Depends(require_auth_user)):
+def get_invitations(
+    username: str = Depends(require_auth_user),
+) -> dict[str, list[dict[str, Any]]]:
     """List all invitations with reservation counts (admin only).
 
     Args:
@@ -475,20 +504,20 @@ def get_invitations(username: str = Depends(require_auth_user)):
     Returns:
         dict: List of invitations with computed stats.
     """
-    invitations = list_invitations()
+    invitations: list[dict[str, Any]] = list_invitations()
 
     # Count reservations per guest and compute gift stats
-    gifts_data = get_gifts_data(include_admin=True)
-    all_gifts = gifts_data.get("gifts", [])
+    gifts_data: dict[str, Any] = get_gifts_data(include_admin=True)
+    all_gifts: list[dict[str, Any]] = gifts_data.get("gifts", [])
     reservation_counts: dict[str, int] = {}
     for gift in all_gifts:
         if gift.get("reserved_by"):
-            token = gift["reserved_by"]
+            token: str = gift["reserved_by"]
             reservation_counts[token] = reservation_counts.get(token, 0) + 1
 
     # Compute visible_gifts and available_gifts counts
-    visible_gifts = sum(1 for g in all_gifts if not g.get("hidden", False))
-    available_gifts = sum(
+    visible_gifts: int = sum(1 for g in all_gifts if not g.get("hidden", False))
+    available_gifts: int = sum(
         1 for g in all_gifts if not g.get("hidden", False) and not g.get("reserved_by")
     )
 
@@ -506,7 +535,7 @@ def create_new_invitation(
     data: InvitationCreate,
     username: str = Depends(require_auth_user),
     client_ip: str = Depends(require_invitation_rate_limit),
-):
+) -> dict[str, Any]:
     """Create a new invitation with 6-month expiry (admin only).
 
     Rate limited to 30 requests/minute per IP to prevent abuse.
@@ -520,16 +549,18 @@ def create_new_invitation(
         dict: Status and invitation details including token.
 
     Raises:
-        HTTPException: 400 if name is empty, 401 if not authenticated, 429 if rate limited.
+        HTTPException: 400 if name is empty, 401 unauthenticated, 429 rate limited.
     """
     if not data.name.strip():
         raise HTTPException(status_code=400, detail="El nombre es obligatorio")
-    result = create_invitation(data.name.strip())
+    result: dict[str, Any] = create_invitation(data.name.strip())
     return result
 
 
 @app.delete("/api/baby-gifts/invitations/{token}")
-def remove_invitation(token: str, username: str = Depends(require_auth_user)):
+def remove_invitation(
+    token: str, username: str = Depends(require_auth_user)
+) -> dict[str, Any]:
     """Delete an invitation completely (admin only).
 
     Args:
@@ -542,14 +573,16 @@ def remove_invitation(token: str, username: str = Depends(require_auth_user)):
     Raises:
         HTTPException: 401 if not authenticated, 404 if invitation not found.
     """
-    result = delete_invitation(token)
+    result: dict[str, Any] = delete_invitation(token)
     if result["status"] == "error":
         raise HTTPException(status_code=404, detail=result["message"])
     return result
 
 
 @app.post("/api/baby-gifts/invitations/{token}/revoke")
-def revoke_inv(token: str, username: str = Depends(require_auth_user)):
+def revoke_inv(
+    token: str, username: str = Depends(require_auth_user)
+) -> dict[str, Any]:
     """Revoke an invitation without deleting it (admin only).
 
     Revoked invitations remain in the database but cannot be used.
@@ -564,7 +597,7 @@ def revoke_inv(token: str, username: str = Depends(require_auth_user)):
     Raises:
         HTTPException: 401 if not authenticated, 404 if invitation not found.
     """
-    result = revoke_invitation(token)
+    result: dict[str, Any] = revoke_invitation(token)
     if result["status"] == "error":
         raise HTTPException(status_code=404, detail=result["message"])
     return result
@@ -574,12 +607,12 @@ def revoke_inv(token: str, username: str = Depends(require_auth_user)):
 # Authenticated User API (protected by nginx auth_request)
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/baby-gifts/user")
-def get_gifts_for_user(request: Request):
+def get_gifts_for_user(request: Request) -> dict[str, Any]:
     """Get gifts for an authenticated user.
 
     Shows what's reserved but not by whom (except own).
     FAMILIA users (egnal, virchu) can see hidden gifts.
-    Gifts are sorted: visible first by price descending, then hidden by price descending.
+    Gifts sorted: visible first by price descending, then hidden by price descending.
 
     Args:
         request: FastAPI request object.
@@ -590,16 +623,16 @@ def get_gifts_for_user(request: Request):
     Raises:
         HTTPException: 401 if user not authenticated.
     """
-    username = _get_auth_user(request)
+    username: str | None = _get_auth_user(request)
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
 
-    user_token = f"user:{username}"
-    user_is_familia = is_familia_user(username)
+    user_token: str = f"user:{username}"
+    user_is_familia: bool = is_familia_user(username)
 
     # Get gifts and filter reservation info
-    data = get_gifts_data(include_admin=False)
-    filtered_gifts = []
+    data: dict[str, Any] = get_gifts_data(include_admin=False)
+    filtered_gifts: list[dict[str, Any]] = []
 
     for gift in data.get("gifts", []):
         # Filter hidden gifts for non-FAMILIA users
@@ -624,8 +657,12 @@ def get_gifts_for_user(request: Request):
         filtered_gifts.append(gift)
 
     # Sort: visible gifts by price descending, then hidden gifts by price descending
-    visible_gifts = [g for g in filtered_gifts if not g.get("hidden", False)]
-    hidden_gifts = [g for g in filtered_gifts if g.get("hidden", False)]
+    visible_gifts: list[dict[str, Any]] = [
+        g for g in filtered_gifts if not g.get("hidden", False)
+    ]
+    hidden_gifts: list[dict[str, Any]] = [
+        g for g in filtered_gifts if g.get("hidden", False)
+    ]
 
     visible_gifts.sort(
         key=lambda g: parse_price(g.get("price_range", "")), reverse=True
@@ -640,7 +677,7 @@ def get_gifts_for_user(request: Request):
 
 
 @app.post("/api/baby-gifts/user/reserve/{gift_id}")
-def user_reserve(gift_id: str, request: Request):
+def user_reserve(gift_id: str, request: Request) -> dict[str, Any]:
     """Reserve a gift as an authenticated user.
 
     Args:
@@ -653,12 +690,12 @@ def user_reserve(gift_id: str, request: Request):
     Raises:
         HTTPException: 401 if not authenticated, 400 if already reserved.
     """
-    username = _get_auth_user(request)
+    username: str | None = _get_auth_user(request)
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
 
-    user_token = f"user:{username}"
-    result = reserve_gift(gift_id, user_token, username)
+    user_token: str = f"user:{username}"
+    result: dict[str, Any] = reserve_gift(gift_id, user_token, username)
 
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
@@ -669,7 +706,7 @@ def user_reserve(gift_id: str, request: Request):
 
 
 @app.post("/api/baby-gifts/user/unreserve/{gift_id}")
-def user_unreserve(gift_id: str, request: Request):
+def user_unreserve(gift_id: str, request: Request) -> dict[str, Any]:
     """Cancel own reservation as an authenticated user.
 
     Args:
@@ -682,15 +719,15 @@ def user_unreserve(gift_id: str, request: Request):
     Raises:
         HTTPException: 401 if not authenticated, 400 if not own reservation.
     """
-    username = _get_auth_user(request)
+    username: str | None = _get_auth_user(request)
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
 
-    user_token = f"user:{username}"
-    gift = get_gift(gift_id)
-    gift_name = gift["name"] if gift else "Unknown"
+    user_token: str = f"user:{username}"
+    gift: dict[str, Any] | None = get_gift(gift_id)
+    gift_name: str = gift["name"] if gift else "Unknown"
 
-    result = unreserve_gift(gift_id, user_token, is_admin=False)
+    result: dict[str, Any] = unreserve_gift(gift_id, user_token, is_admin=False)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
 
@@ -700,7 +737,7 @@ def user_unreserve(gift_id: str, request: Request):
 
 
 @app.post("/api/baby-gifts/user/toggle-visibility/{gift_id}")
-def user_toggle_visibility(gift_id: str, request: Request):
+def user_toggle_visibility(gift_id: str, request: Request) -> dict[str, Any]:
     """Toggle gift visibility (FAMILIA users only: egnal, virchu).
 
     Args:
@@ -711,9 +748,9 @@ def user_toggle_visibility(gift_id: str, request: Request):
         dict: Status, updated gift, and new hidden state.
 
     Raises:
-        HTTPException: 401 if not authenticated, 403 if not FAMILIA, 404 if not found.
+        HTTPException: 401 if not authenticated, 403 if not FAMILIA, 404 not found.
     """
-    username = _get_auth_user(request)
+    username: str | None = _get_auth_user(request)
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
 
@@ -722,7 +759,7 @@ def user_toggle_visibility(gift_id: str, request: Request):
             status_code=403, detail="No tienes permiso para esta acción"
         )
 
-    result = toggle_gift_visibility(gift_id)
+    result: dict[str, Any] = toggle_gift_visibility(gift_id)
     if result["status"] == "error":
         raise HTTPException(status_code=404, detail=result["message"])
 
@@ -739,7 +776,7 @@ def user_toggle_visibility(gift_id: str, request: Request):
 def get_gifts_for_guest(
     token: str,
     client_ip: str = Depends(require_rate_limit),
-):
+) -> dict[str, Any]:
     """Get gifts for a guest via invitation token.
 
     Shows what's reserved but not by whom (except own).
@@ -756,13 +793,13 @@ def get_gifts_for_guest(
     Raises:
         HTTPException: 401 if token invalid/expired, 429 if rate limited.
     """
-    guest = validate_invitation(token)
+    guest: dict[str, Any] | None = validate_invitation(token)
     if not guest:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
 
     # Get gifts and filter reservation info
-    data = get_gifts_data(include_admin=False)
-    filtered_gifts = []
+    data: dict[str, Any] = get_gifts_data(include_admin=False)
+    filtered_gifts: list[dict[str, Any]] = []
 
     for gift in data.get("gifts", []):
         # Filter out hidden gifts for guests
@@ -797,7 +834,7 @@ def guest_reserve(
     token: str,
     gift_id: str,
     client_ip: str = Depends(require_rate_limit),
-):
+) -> dict[str, Any]:
     """Reserve a gift as a guest.
 
     Args:
@@ -809,13 +846,13 @@ def guest_reserve(
         dict: Status and reserved gift details.
 
     Raises:
-        HTTPException: 401 if token invalid, 400 if already reserved, 429 if rate limited.
+        HTTPException: 401 if token invalid, 400 already reserved, 429 rate limited.
     """
-    guest = validate_invitation(token)
+    guest: dict[str, Any] | None = validate_invitation(token)
     if not guest:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
 
-    result = reserve_gift(gift_id, token, guest["name"])
+    result: dict[str, Any] = reserve_gift(gift_id, token, guest["name"])
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
 
@@ -829,7 +866,7 @@ def guest_unreserve(
     token: str,
     gift_id: str,
     client_ip: str = Depends(require_rate_limit),
-):
+) -> dict[str, Any]:
     """Cancel own reservation as a guest.
 
     Args:
@@ -841,16 +878,16 @@ def guest_unreserve(
         dict: Status and updated gift details.
 
     Raises:
-        HTTPException: 401 if token invalid, 400 if not own reservation, 429 if rate limited.
+        HTTPException: 401 token invalid, 400 not own reservation, 429 rate limited.
     """
-    guest = validate_invitation(token)
+    guest: dict[str, Any] | None = validate_invitation(token)
     if not guest:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
 
-    gift = get_gift(gift_id)
-    gift_name = gift["name"] if gift else "Unknown"
+    gift: dict[str, Any] | None = get_gift(gift_id)
+    gift_name: str = gift["name"] if gift else "Unknown"
 
-    result = unreserve_gift(gift_id, token, is_admin=False)
+    result: dict[str, Any] = unreserve_gift(gift_id, token, is_admin=False)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
 

@@ -15,8 +15,9 @@ Example: TELEGRAM_CHAT_IDS=123456789,987654321
 
 import logging
 import sys
+from typing import TYPE_CHECKING
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 # Import TelegramNotifier from shared lib
 # The lib path is added to PYTHONPATH in Dockerfile/CI
@@ -25,6 +26,9 @@ try:
 except ImportError:
     # Fallback for local development without libs in path
     sys.path.insert(0, str(__file__).replace("\\", "/").split("/services/")[0])
+    from libs.notifications import TelegramNotifier
+
+if TYPE_CHECKING:
     from libs.notifications import TelegramNotifier
 
 
@@ -51,7 +55,7 @@ def send_gift_notification(gift_name: str, person_name: str, action: str) -> boo
     Returns:
         True if all notifications were sent successfully, False otherwise
     """
-    notifier = _get_notifier()
+    notifier: TelegramNotifier = _get_notifier()
 
     if not notifier.enabled:
         logger.warning(
@@ -59,6 +63,7 @@ def send_gift_notification(gift_name: str, person_name: str, action: str) -> boo
         )
         return False
 
+    message: str
     if action == "reserved":
         message = f"🎁 *{person_name}* ha seleccionado: _{gift_name}_"
     else:

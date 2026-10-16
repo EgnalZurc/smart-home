@@ -25,7 +25,7 @@ def parse_price(price_str: str) -> float:
         return 0
 
     # Remove currency symbols and spaces, find numbers
-    numbers = re.findall(r"[\d,\.]+", price_str.replace(",", "."))
+    numbers: list[str] = re.findall(r"[\d,\.]+", price_str.replace(",", "."))
     if numbers:
         try:
             # If there's a range (e.g., "100-150"), use the average
