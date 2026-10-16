@@ -6,13 +6,18 @@ Device tokens: long-lived opaque Jaspan tokens, stored as HttpOnly cookie
                'smh_device' — see auth_devices.py.
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import jwt
 from passlib.hash import apr_md5_crypt
+from starlette.requests import Request
+from starlette.responses import Response
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Configuration (injected from main.py lifespan)
@@ -23,8 +28,8 @@ AUTH_TRUSTED_TTL: int = (
     31536000  # kept for reference; device tokens use auth_devices.py
 )
 
-COOKIE_NAME = "smh_session"
-ALGORITHM = "HS256"
+COOKIE_NAME: str = "smh_session"
+ALGORITHM: str = "HS256"
 
 
 # ---------------------------------------------------------------------------
@@ -61,8 +66,8 @@ def create_token(username: str) -> str:
     if not AUTH_SECRET:
         raise RuntimeError("AUTH_SECRET is not configured")
 
-    now = datetime.now(timezone.utc)
-    payload = {
+    now: datetime = datetime.now(timezone.utc)
+    payload: dict[str, Any] = {
         "sub": username,
         "iat": now,
         "exp": now + timedelta(seconds=AUTH_SESSION_TTL),
@@ -70,7 +75,7 @@ def create_token(username: str) -> str:
     return jwt.encode(payload, AUTH_SECRET, algorithm=ALGORITHM)
 
 
-def decode_token(token: str) -> dict | None:
+def decode_token(token: str) -> dict[str, Any] | None:
     """Decode and validate a JWT session token.
 
     Returns the payload dict on success, or None if invalid/expired.
@@ -87,7 +92,7 @@ def decode_token(token: str) -> dict | None:
         return None
 
 
-def decode_token_expired_ok(token: str) -> dict | None:
+def decode_token_expired_ok(token: str) -> dict[str, Any] | None:
     """Decode a JWT without checking expiry.
 
     Used by the middleware to read the username from an expired JWT before
@@ -107,27 +112,27 @@ def decode_token_expired_ok(token: str) -> dict | None:
         return None
 
 
-def get_token_from_cookie(request) -> str | None:
+def get_token_from_cookie(request: Request) -> str | None:
     """Extract the session JWT from the request cookie jar."""
     return request.cookies.get(COOKIE_NAME)
 
 
-def get_current_user(request) -> str | None:
+def get_current_user(request: Request) -> str | None:
     """Return the authenticated username from the session cookie, or None.
 
     Only returns a value if the JWT is valid AND not expired.
     For the expired-but-refreshable case, see the AuthMiddleware in main.py.
     """
-    token = get_token_from_cookie(request)
+    token: str | None = get_token_from_cookie(request)
     if not token:
         return None
-    payload = decode_token(token)
+    payload: dict[str, Any] | None = decode_token(token)
     if payload is None:
         return None
     return payload.get("sub")
 
 
-def set_session_cookie(response, token: str) -> None:
+def set_session_cookie(response: Response, token: str) -> None:
     """Attach the 24h session JWT cookie to a response."""
     response.set_cookie(
         key=COOKIE_NAME,
@@ -140,7 +145,7 @@ def set_session_cookie(response, token: str) -> None:
     )
 
 
-def clear_session_cookie(response) -> None:
+def clear_session_cookie(response: Response) -> None:
     """Delete the session JWT cookie."""
     response.delete_cookie(
         key=COOKIE_NAME,

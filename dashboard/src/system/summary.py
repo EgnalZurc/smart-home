@@ -34,6 +34,8 @@ the payload exposes host internals (container states, CPU/RAM/disk/temp) that
 only the admin should see.
 """
 
+from __future__ import annotations
+
 import asyncio
 import time
 from typing import Any
@@ -49,10 +51,10 @@ router = APIRouter(prefix="/api/system", tags=["System"])
 # includes the username because the alerts section embeds per-user read-state,
 # and ``days`` because it changes the alerts look-back window.
 
-SUMMARY_CACHE_TTL = 30.0  # seconds
+SUMMARY_CACHE_TTL: float = 30.0  # seconds
 
 # Maps a cache key -> (timestamp, payload) of the last assembled summary.
-_summary_cache: dict[str, tuple[float, dict]] = {}
+_summary_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
 def _error_slot(exc: BaseException) -> dict[str, Any]:
@@ -87,11 +89,11 @@ async def get_system_summary(
     A failing source never fails the whole endpoint: its slot carries an
     ``error`` string instead.
     """
-    user = require_super(request)
+    user: str = require_super(request)
 
-    cache_key = f"{user}:{days}"
-    now = time.monotonic()
-    cached = _summary_cache.get(cache_key)
+    cache_key: str = f"{user}:{days}"
+    now: float = time.monotonic()
+    cached: tuple[float, dict[str, Any]] | None = _summary_cache.get(cache_key)
     if cached is not None:
         timestamp, payload = cached
         if now - timestamp < SUMMARY_CACHE_TTL:
@@ -105,7 +107,7 @@ async def get_system_summary(
     from system.containers import get_containers
     from system.stats import get_system_stats
 
-    results = await asyncio.gather(
+    results: tuple[Any, ...] = await asyncio.gather(
         get_containers(request),
         get_system_stats(request),
         get_unified_alerts(request, days=days),

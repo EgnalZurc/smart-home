@@ -9,6 +9,8 @@ Route modules:
 - system/*.py: Container control and system stats
 """
 
+from __future__ import annotations
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from system.containers import router as containers_router
@@ -33,7 +35,7 @@ from api.user_prefs import router as user_prefs_router
 from api.ws import router as ws_router
 
 # Main router that aggregates all sub-routers
-router = APIRouter()
+router: APIRouter = APIRouter()
 
 # Include all sub-routers
 router.include_router(health_router)
@@ -60,7 +62,7 @@ router.include_router(user_prefs_router)
 @router.get("/api/valheim", include_in_schema=False)
 @router.get("/api/valheim/", include_in_schema=False)
 @router.get("/api/valheim/{path:path}", include_in_schema=False)
-async def valheim_proxy_redirect():
+async def valheim_proxy_redirect() -> JSONResponse:
     """Return info about the removed valheim proxy."""
     return JSONResponse(
         status_code=410,
@@ -73,10 +75,10 @@ async def valheim_proxy_redirect():
 
 # Module-level FIRMS_MAP_KEY, re-exported from the external module.
 # main.py sets it via set_firms_key() during the lifespan startup.
-FIRMS_MAP_KEY = ""  # Will be set by main.py
+FIRMS_MAP_KEY: str = ""  # Will be set by main.py
 
 
-def set_firms_key(key: str):
+def set_firms_key(key: str) -> None:
     """Set the FIRMS API key. Called by main.py lifespan."""
     global FIRMS_MAP_KEY
     FIRMS_MAP_KEY = key

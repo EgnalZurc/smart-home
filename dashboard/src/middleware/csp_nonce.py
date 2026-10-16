@@ -4,10 +4,14 @@ Generates a unique nonce per request for Content-Security-Policy headers,
 allowing inline scripts/styles with nonce= attribute while blocking others.
 """
 
+from __future__ import annotations
+
 import secrets
+from collections.abc import Callable
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 from starlette.types import ASGIApp
 
 
@@ -48,7 +52,9 @@ class CSPNonceMiddleware(BaseHTTPMiddleware):
         nonce = get_csp_nonce(request)
     """
 
-    def __init__(self, app: ASGIApp, csp_directives: dict[str, str] | None = None):
+    def __init__(
+        self, app: ASGIApp, csp_directives: dict[str, str] | None = None
+    ) -> None:
         """Initialize the middleware.
 
         Args:
@@ -59,7 +65,9 @@ class CSPNonceMiddleware(BaseHTTPMiddleware):
                 The {nonce} placeholder will be replaced with the actual nonce.
         """
         super().__init__(app)
-        self.csp_directives = csp_directives or self._default_directives()
+        self.csp_directives: dict[str, str] = (
+            csp_directives or self._default_directives()
+        )
 
     @staticmethod
     def _default_directives() -> dict[str, str]:
@@ -82,26 +90,28 @@ class CSPNonceMiddleware(BaseHTTPMiddleware):
 
     def _build_csp_header(self, nonce: str) -> str:
         """Build the CSP header value with the given nonce."""
-        parts = []
+        parts: list[str] = []
         for directive, value in self.csp_directives.items():
             # Replace {nonce} placeholder with actual nonce
-            resolved_value = value.format(nonce=nonce)
+            resolved_value: str = value.format(nonce=nonce)
             parts.append(f"{directive} {resolved_value}")
         return "; ".join(parts)
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Response]
+    ) -> Response:
         """Generate nonce, store in request, add CSP header to response."""
         # Generate unique nonce for this request
-        nonce = generate_nonce()
+        nonce: str = generate_nonce()
 
         # Store in request.state for template/handler access
         request.state.csp_nonce = nonce
 
         # Process the request
-        response = await call_next(request)
+        response: Response = await call_next(request)
 
         # Add CSP header to response
-        csp_header = self._build_csp_header(nonce)
+        csp_header: str = self._build_csp_header(nonce)
         response.headers["Content-Security-Policy"] = csp_header
 
         return response

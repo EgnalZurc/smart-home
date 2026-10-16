@@ -10,24 +10,27 @@ Assignments
 - virchi → FAMILIA_PRINCIPAL
 """
 
+from __future__ import annotations
+
 import os
 import sys
 
 # Allow running directly without the full app context by pointing to the real DB.
-AUTH_DB_PATH = os.environ.get("AUTH_DB_PATH", "/app/data/auth.db")
+AUTH_DB_PATH: str = os.environ.get("AUTH_DB_PATH", "/app/data/auth.db")
 
 # Inject path so user_profiles can find the DB.
 import user_profiles
 
 user_profiles.AUTH_DB_PATH = AUTH_DB_PATH
 
-INITIAL_PROFILES = {
+INITIAL_PROFILES: dict[str, str] = {
     "egnal": "SUPER",
     "virchi": "FAMILIA_PRINCIPAL",
 }
 
 
 def main() -> None:
+    """Run the profile migration."""
     print(f"Migration target: {AUTH_DB_PATH}")
     for username, profile_key in INITIAL_PROFILES.items():
         try:
