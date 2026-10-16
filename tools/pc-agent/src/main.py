@@ -12,6 +12,20 @@ direct PowerShell execution for power profile changes.
 
 Port: 8090
 Auth: X-Api-Token header (all routes except /health)
+
+Security note — SSRF analysis (2026-10-16):
+    This service has NO SSRF attack surface because:
+    1. No endpoints accept URLs as user input
+    2. No outbound HTTP requests are made (no requests/httpx/urllib usage)
+    3. All external interactions are local-only:
+       - Docker engine via local socket (docker.from_env())
+       - Local filesystem (VALHEIM_SERVER_DIR paths)
+       - Local PowerShell (powercfg commands)
+    User-controllable inputs are limited to:
+       - world_name: sanitized via _sanitize_name(), used as local dir name
+       - config params: strings written to local .env file
+       - lines: integer limiting log output
+    No URL validation is needed as no URLs are processed.
 """
 
 import logging
