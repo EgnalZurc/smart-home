@@ -70,6 +70,10 @@ services:
       - /dev/ttyUSB0:/dev/ttyUSB0
     environment:
       - TZ=Europe/Madrid
+      # Frontend authentication token - defense-in-depth behind nginx auth.
+      # Generate with: openssl rand -hex 32
+      # Used in configuration.yaml via: auth_token: '!env Z2M_FRONTEND_PASSWORD'
+      - Z2M_FRONTEND_PASSWORD=${Z2M_FRONTEND_PASSWORD:-}
     networks:
       - smart-home
 

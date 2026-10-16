@@ -17,8 +17,9 @@ frontend:
   enabled: true
   port: 8081
   # Authentication token - defense-in-depth even behind nginx reverse proxy.
+  # Reads from Z2M_FRONTEND_PASSWORD env var (passed via docker-compose).
   # Generate with: openssl rand -hex 32
-  # auth_token: CHANGE_ME
+  auth_token: '!env Z2M_FRONTEND_PASSWORD'
 advanced:
   log_level: info
   network_key: GENERATE  # Generate a random network key - DO NOT share this key
