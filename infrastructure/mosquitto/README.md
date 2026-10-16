@@ -13,10 +13,13 @@ Eclipse Mosquitto is the MQTT broker for Zigbee sensor communication.
 
 ## Security Overview
 
-- **Authentication**: Password-based (`passwd` file)
+- **Authentication**: Password-based (`passwd` file) — **REQUIRED**
 - **Authorization**: ACL-based topic permissions (`acl.conf`)
 - **Network**: Exposed only to Docker network (not to host)
 - **Anonymous**: Disabled (`allow_anonymous false`)
+- **TLS**: TLS 1.3 required on port 8883
+
+> **⚠️ Authentication is mandatory.** Both listeners (1883 and 8883) require valid credentials from the `passwd` file. Anonymous connections are rejected. Ensure all clients have credentials configured before deploying.
 
 ## Authentication
 
