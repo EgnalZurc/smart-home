@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import Any
 
 # Default drift threshold (percentage points) if config omits it.
-DEFAULT_THRESHOLD_PCT = 5.0
+DEFAULT_THRESHOLD_PCT: float = 5.0
 
 
 def _resolve_targets(
