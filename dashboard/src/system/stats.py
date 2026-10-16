@@ -4,8 +4,11 @@ Provides Raspberry Pi resource usage (RAM, CPU, disk, temperature).
 Only accessible to SUPER profile.
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
+from typing import Any
 
 from api.auth_helpers import require_super
 from fastapi import APIRouter, Request
@@ -14,19 +17,23 @@ router = APIRouter(prefix="/api/system", tags=["System"])
 
 
 def _read_cpu_times() -> tuple[float, float]:
-    """Read total and idle CPU jiffies from /proc/stat."""
+    """Read total and idle CPU jiffies from /proc/stat.
+
+    Returns:
+        A tuple of (total_jiffies, idle_jiffies).
+    """
     try:
-        line = open("/proc/stat").readline()
-        fields = [float(x) for x in line.split()[1:]]
-        idle = fields[3] + (fields[4] if len(fields) > 4 else 0)
-        total = sum(fields)
+        line: str = open("/proc/stat").readline()
+        fields: list[float] = [float(x) for x in line.split()[1:]]
+        idle: float = fields[3] + (fields[4] if len(fields) > 4 else 0)
+        total: float = sum(fields)
         return total, idle
     except Exception:
         return 0.0, 0.0
 
 
 @router.get("/stats")
-async def get_system_stats(request: Request):
+async def get_system_stats(request: Request) -> dict[str, Any]:
     """Return Raspberry Pi system resource usage.
 
     Reads from /proc/meminfo, /proc/stat, statvfs('/'), and the SoC thermal zone.
@@ -42,23 +49,23 @@ async def get_system_stats(request: Request):
     """
     require_super(request)
 
-    stats: dict = {}
+    stats: dict[str, Any] = {}
 
     # ── RAM ──────────────────────────────────────────────────────────────────
     try:
         mem: dict[str, int] = {}
         for line in open("/proc/meminfo"):
-            parts = line.split()
+            parts: list[str] = line.split()
             if len(parts) >= 2:
                 mem[parts[0].rstrip(":")] = int(parts[1])
-        total_kb = mem.get("MemTotal", 0)
-        avail_kb = mem.get("MemAvailable", 0)
-        free_kb = mem.get("MemFree", 0)
-        buffers_kb = mem.get("Buffers", 0)
-        cached_kb = (
+        total_kb: int = mem.get("MemTotal", 0)
+        avail_kb: int = mem.get("MemAvailable", 0)
+        free_kb: int = mem.get("MemFree", 0)
+        buffers_kb: int = mem.get("Buffers", 0)
+        cached_kb: int = (
             mem.get("Cached", 0) + mem.get("SReclaimable", 0) - mem.get("Shmem", 0)
         )
-        used_kb = total_kb - free_kb - buffers_kb - max(0, cached_kb)
+        used_kb: int = total_kb - free_kb - buffers_kb - max(0, cached_kb)
         stats["ram"] = {
             "total_mb": round(total_kb / 1024),
             "used_mb": round(used_kb / 1024),
@@ -66,9 +73,9 @@ async def get_system_stats(request: Request):
             "cache_mb": round((buffers_kb + max(0, cached_kb)) / 1024),
             "percent": round(used_kb / total_kb * 100, 1) if total_kb else 0.0,
         }
-        swap_total = mem.get("SwapTotal", 0)
-        swap_free = mem.get("SwapFree", 0)
-        swap_used = swap_total - swap_free
+        swap_total: int = mem.get("SwapTotal", 0)
+        swap_free: int = mem.get("SwapFree", 0)
+        swap_used: int = swap_total - swap_free
         stats["swap"] = {
             "total_mb": round(swap_total / 1024),
             "used_mb": round(swap_used / 1024),
@@ -83,20 +90,20 @@ async def get_system_stats(request: Request):
         t1, i1 = _read_cpu_times()
         await asyncio.sleep(0.5)
         t2, i2 = _read_cpu_times()
-        dt = t2 - t1
-        di = i2 - i1
-        cpu_pct = round((1.0 - di / dt) * 100, 1) if dt > 0 else 0.0
+        dt: float = t2 - t1
+        di: float = i2 - i1
+        cpu_pct: float = round((1.0 - di / dt) * 100, 1) if dt > 0 else 0.0
         stats["cpu"] = {"percent": cpu_pct}
     except Exception as e:
         stats["cpu"] = {"error": str(e)}
 
     # ── Disk ─────────────────────────────────────────────────────────────────
     try:
-        sv = os.statvfs("/")
-        total_b = sv.f_frsize * sv.f_blocks
-        free_b = sv.f_frsize * sv.f_bavail
-        used_b = total_b - free_b
-        GB = 1024**3
+        sv: os.statvfs_result = os.statvfs("/")
+        total_b: int = sv.f_frsize * sv.f_blocks
+        free_b: int = sv.f_frsize * sv.f_bavail
+        used_b: int = total_b - free_b
+        GB: int = 1024**3
         stats["disk"] = {
             "total_gb": round(total_b / GB, 1),
             "used_gb": round(used_b / GB, 1),
@@ -108,7 +115,7 @@ async def get_system_stats(request: Request):
 
     # ── Temperature ──────────────────────────────────────────────────────────
     try:
-        raw = int(open("/sys/class/thermal/thermal_zone0/temp").read().strip())
+        raw: int = int(open("/sys/class/thermal/thermal_zone0/temp").read().strip())
         stats["temp"] = {"celsius": round(raw / 1000, 1)}
     except Exception as e:
         stats["temp"] = {"error": str(e)}

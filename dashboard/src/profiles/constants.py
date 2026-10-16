@@ -6,11 +6,43 @@ This module contains all constant definitions for the profile system:
 - External services configuration
 """
 
+from __future__ import annotations
+
+from typing import TypedDict
+
+
+class ProfileDefinition(TypedDict):
+    """Type definition for a built-in profile."""
+
+    name: str
+    level: int
+    description: str
+    protected: bool
+
+
+class AppDefinition(TypedDict):
+    """Type definition for an app in the registry."""
+
+    key: str
+    min_level: int
+    max_level: int
+
+
+class ExternalServiceDefinition(TypedDict):
+    """Type definition for an external service."""
+
+    key: str
+    min_level: int
+    max_level: int
+    url: str
+    statusUrl: str
+
+
 # ---------------------------------------------------------------------------
 # Built-in profile definitions with fixed UUIDs
 # These are seeded into the database on first run
 # ---------------------------------------------------------------------------
-BUILTIN_PROFILES: dict[str, dict] = {
+BUILTIN_PROFILES: dict[str, ProfileDefinition] = {
     "super-0000-0000-0000-000000000000": {
         "name": "SUPER",
         "level": 0,
@@ -38,15 +70,17 @@ BUILTIN_PROFILES: dict[str, dict] = {
 }
 
 # Default profile ID for new users
-DEFAULT_PROFILE_ID = "familia-principal-0000-000000000002"
+DEFAULT_PROFILE_ID: str = "familia-principal-0000-000000000002"
 
 # Quick lookup: name -> id for built-ins
-BUILTIN_NAME_TO_ID = {p["name"]: pid for pid, p in BUILTIN_PROFILES.items()}
+BUILTIN_NAME_TO_ID: dict[str, str] = {
+    p["name"]: pid for pid, p in BUILTIN_PROFILES.items()
+}
 
 # ---------------------------------------------------------------------------
 # App registry
 # ---------------------------------------------------------------------------
-APP_REGISTRY: list[dict] = [
+APP_REGISTRY: list[AppDefinition] = [
     {"key": "ac", "min_level": 0, "max_level": 1},
     {"key": "photos", "min_level": 0, "max_level": 1},
     {"key": "vacaciones", "min_level": 0, "max_level": 1},
@@ -61,7 +95,7 @@ APP_REGISTRY: list[dict] = [
 # ---------------------------------------------------------------------------
 # External services configuration
 # ---------------------------------------------------------------------------
-EXTERNAL_SERVICES: list[dict] = [
+EXTERNAL_SERVICES: list[ExternalServiceDefinition] = [
     {
         "key": "photos_ext",
         "min_level": 0,

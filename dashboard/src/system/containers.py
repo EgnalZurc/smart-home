@@ -4,6 +4,8 @@ Only SUPER profile can call these endpoints.
 Uses docker-socket-proxy:2375 (CONTAINERS=1, POST=1 — read + start/stop).
 """
 
+from __future__ import annotations
+
 import asyncio
 from typing import Any
 
@@ -25,7 +27,7 @@ CONTROLLABLE_CONTAINERS: dict[str, list[str]] = {
     "valheim": ["valheim-admin"],
 }
 
-DOCKER_PROXY = "http://docker-socket-proxy:2375/v1.41"
+DOCKER_PROXY: str = "http://docker-socket-proxy:2375/v1.41"
 
 # Seconds to wait before starting each container after the previous one.
 CONTAINER_START_DELAYS: dict[str, int] = {
@@ -46,22 +48,24 @@ async def get_containers(request: Request) -> dict[str, Any]:
     Only accessible to SUPER profile.
     """
     require_super(request)
-    result = {}
+    result: dict[str, Any] = {}
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(f"{DOCKER_PROXY}/containers/json?all=true")
-            all_containers = r.json()
+            r: httpx.Response = await client.get(
+                f"{DOCKER_PROXY}/containers/json?all=true"
+            )
+            all_containers: list[dict[str, Any]] = r.json()
             state_by_name: dict[str, str] = {}
             for c in all_containers:
                 for name in c.get("Names", []):
-                    clean = name.lstrip("/")
+                    clean: str = name.lstrip("/")
                     state_by_name[clean] = c.get("State", "unknown")
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Docker proxy unreachable: {e}")
 
     for key, container_names in CONTROLLABLE_CONTAINERS.items():
-        states = [state_by_name.get(n, "unknown") for n in container_names]
-        running = all(s == "running" for s in states)
+        states: list[str] = [state_by_name.get(n, "unknown") for n in container_names]
+        running: bool = all(s == "running" for s in states)
         result[key] = {
             "containers": container_names,
             "running": running,
@@ -78,27 +82,29 @@ async def stop_service(app_key: str, request: Request) -> dict[str, Any]:
     Only accessible to SUPER profile.
     """
     require_super(request)
-    containers = CONTROLLABLE_CONTAINERS.get(app_key)
+    containers: list[str] | None = CONTROLLABLE_CONTAINERS.get(app_key)
     if not containers:
         raise HTTPException(status_code=404, detail=f"Unknown service: {app_key}")
 
-    results = {}
+    results: dict[str, str] = {}
     async with httpx.AsyncClient(timeout=20.0) as client:
         for name in containers:
             try:
-                r = await client.post(f"{DOCKER_PROXY}/containers/{name}/stop?t=10")
+                r: httpx.Response = await client.post(
+                    f"{DOCKER_PROXY}/containers/{name}/stop?t=10"
+                )
                 results[name] = (
                     "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
                 )
             except Exception as e:
                 results[name] = f"error: {e}"
 
-    all_ok = all(v == "ok" or v == "http_304" for v in results.values())
+    all_ok: bool = all(v == "ok" or v == "http_304" for v in results.values())
     return {"status": "ok" if all_ok else "partial", "results": results}
 
 
 # Seconds to wait between the stop and start phases of a restart.
-RESTART_PAUSE_SECONDS = 2
+RESTART_PAUSE_SECONDS: int = 2
 
 
 @router.post("/containers/{app_key}/restart")
@@ -111,18 +117,20 @@ async def restart_service(app_key: str, request: Request) -> dict[str, Any]:
     Only accessible to SUPER profile.
     """
     require_super(request)
-    containers = CONTROLLABLE_CONTAINERS.get(app_key)
+    containers: list[str] | None = CONTROLLABLE_CONTAINERS.get(app_key)
     if not containers:
         raise HTTPException(status_code=404, detail=f"Unknown service: {app_key}")
 
     stop_results: dict[str, str] = {}
     start_results: dict[str, str] = {}
-    delay = CONTAINER_START_DELAYS.get(app_key, 0)
+    delay: int = CONTAINER_START_DELAYS.get(app_key, 0)
     async with httpx.AsyncClient(timeout=20.0) as client:
         # Phase 1: stop every container.
         for name in containers:
             try:
-                r = await client.post(f"{DOCKER_PROXY}/containers/{name}/stop?t=10")
+                r: httpx.Response = await client.post(
+                    f"{DOCKER_PROXY}/containers/{name}/stop?t=10"
+                )
                 stop_results[name] = (
                     "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
                 )
@@ -147,7 +155,7 @@ async def restart_service(app_key: str, request: Request) -> dict[str, Any]:
     def _ok(v: str) -> bool:
         return v == "ok" or v == "http_304"
 
-    all_ok = all(_ok(v) for v in stop_results.values()) and all(
+    all_ok: bool = all(_ok(v) for v in stop_results.values()) and all(
         _ok(v) for v in start_results.values()
     )
     return {
@@ -164,23 +172,25 @@ async def start_service(app_key: str, request: Request) -> dict[str, Any]:
     Only accessible to SUPER profile.
     """
     require_super(request)
-    containers = CONTROLLABLE_CONTAINERS.get(app_key)
+    containers: list[str] | None = CONTROLLABLE_CONTAINERS.get(app_key)
     if not containers:
         raise HTTPException(status_code=404, detail=f"Unknown service: {app_key}")
 
-    results = {}
-    delay = CONTAINER_START_DELAYS.get(app_key, 0)
+    results: dict[str, str] = {}
+    delay: int = CONTAINER_START_DELAYS.get(app_key, 0)
     async with httpx.AsyncClient(timeout=20.0) as client:
         for i, name in enumerate(containers):
             if i > 0 and delay > 0:
                 await asyncio.sleep(delay)
             try:
-                r = await client.post(f"{DOCKER_PROXY}/containers/{name}/start")
+                r: httpx.Response = await client.post(
+                    f"{DOCKER_PROXY}/containers/{name}/start"
+                )
                 results[name] = (
                     "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
                 )
             except Exception as e:
                 results[name] = f"error: {e}"
 
-    all_ok = all(v == "ok" or v == "http_304" for v in results.values())
+    all_ok: bool = all(v == "ok" or v == "http_304" for v in results.values())
     return {"status": "ok" if all_ok else "partial", "results": results}
