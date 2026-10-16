@@ -206,6 +206,14 @@ class CalendarStore:
             rows = conn.execute("SELECT * FROM calendars").fetchall()
         return [Calendar(r) for r in rows]
 
+    def get_calendar_by_id(self, calendar_id: str) -> Calendar | None:
+        """Return a single calendar by its id, or None if not found."""
+        with self._db.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM calendars WHERE id = ?", (calendar_id,)
+            ).fetchone()
+        return Calendar(row) if row else None
+
     def upsert_calendar(
         self,
         id: str,
