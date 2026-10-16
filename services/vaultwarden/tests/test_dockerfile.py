@@ -13,7 +13,7 @@ DOCKERFILE_PATH = Path(__file__).parent.parent / "Dockerfile"
 
 
 @pytest.fixture
-def dockerfile_content():
+def dockerfile_content() -> str:
     """Read the Dockerfile content."""
     return DOCKERFILE_PATH.read_text()
 
