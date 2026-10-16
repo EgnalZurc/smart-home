@@ -508,7 +508,7 @@ class TestCommandLogging:
         mock_components["ac_controller"].state.control_mode = "manual"
         mock_components["ac_controller"].melcloud.set_temperature.return_value = True
 
-        client.post("/api/ac/manual/param?param=fan_speed&value=2")
+        client.post("/api/ac/manual/param", json={"param": "fan_speed", "value": 2})
 
         call = mock_components["event_log"].log_command.call_args
         assert call.args[0] == "manual_param"
@@ -707,7 +707,9 @@ class TestManualParamEndpoint:
         mock_components["ac_controller"].state.control_mode = "manual"
         mock_components["ac_controller"].melcloud.set_temperature.return_value = True
 
-        response = client.post("/api/ac/manual/param?param=temperature&value=24.0")
+        response = client.post(
+            "/api/ac/manual/param", json={"param": "temperature", "value": 24.0}
+        )
 
         assert response.status_code == 200
 
@@ -715,7 +717,9 @@ class TestManualParamEndpoint:
         """POST /api/ac/manual/param should fail when not in manual mode."""
         mock_components["ac_controller"].state.control_mode = "auto"
 
-        response = client.post("/api/ac/manual/param?param=temperature&value=24.0")
+        response = client.post(
+            "/api/ac/manual/param", json={"param": "temperature", "value": 24.0}
+        )
 
         assert response.status_code == 400
 
@@ -723,16 +727,19 @@ class TestManualParamEndpoint:
         """POST /api/ac/manual/param with invalid param should fail."""
         mock_components["ac_controller"].state.control_mode = "manual"
 
-        response = client.post("/api/ac/manual/param?param=invalid&value=24.0")
+        response = client.post(
+            "/api/ac/manual/param", json={"param": "invalid", "value": 24.0}
+        )
 
-        assert response.status_code == 400
+        assert response.status_code == 422  # Pydantic validation error
 
     def test_update_manual_param_invalid_temperature(self, client, mock_components):
         """POST /api/ac/manual/param with invalid temp value should fail."""
         mock_components["ac_controller"].state.control_mode = "manual"
 
         response = client.post(
-            "/api/ac/manual/param?param=temperature&value=not_a_number"
+            "/api/ac/manual/param",
+            json={"param": "temperature", "value": "not_a_number"},
         )
 
         assert response.status_code == 400
@@ -743,7 +750,9 @@ class TestManualParamEndpoint:
         """POST /api/ac/manual/param with out of range temp should fail."""
         mock_components["ac_controller"].state.control_mode = "manual"
 
-        response = client.post("/api/ac/manual/param?param=temperature&value=15.0")
+        response = client.post(
+            "/api/ac/manual/param", json={"param": "temperature", "value": 15.0}
+        )
 
         assert response.status_code == 400
 
@@ -752,7 +761,9 @@ class TestManualParamEndpoint:
         mock_components["ac_controller"].state.control_mode = "manual"
         mock_components["ac_controller"].melcloud.set_temperature.return_value = True
 
-        response = client.post("/api/ac/manual/param?param=fan_speed&value=2")
+        response = client.post(
+            "/api/ac/manual/param", json={"param": "fan_speed", "value": 2}
+        )
 
         assert response.status_code == 200
 
@@ -761,7 +772,7 @@ class TestManualParamEndpoint:
         mock_components["ac_controller"].state.control_mode = "manual"
 
         response = client.post(
-            "/api/ac/manual/param?param=fan_speed&value=not_a_number"
+            "/api/ac/manual/param", json={"param": "fan_speed", "value": "not_a_number"}
         )
 
         assert response.status_code == 400
@@ -770,7 +781,9 @@ class TestManualParamEndpoint:
         """POST /api/ac/manual/param with out of range fan speed should fail."""
         mock_components["ac_controller"].state.control_mode = "manual"
 
-        response = client.post("/api/ac/manual/param?param=fan_speed&value=5")
+        response = client.post(
+            "/api/ac/manual/param", json={"param": "fan_speed", "value": 5}
+        )
 
         assert response.status_code == 400
 
@@ -779,7 +792,9 @@ class TestManualParamEndpoint:
         mock_components["ac_controller"].state.control_mode = "manual"
         mock_components["ac_controller"].melcloud.set_temperature.return_value = True
 
-        response = client.post("/api/ac/manual/param?param=mode&value=heat")
+        response = client.post(
+            "/api/ac/manual/param", json={"param": "mode", "value": "heat"}
+        )
 
         assert response.status_code == 200
 
@@ -787,7 +802,9 @@ class TestManualParamEndpoint:
         """POST /api/ac/manual/param with invalid mode should fail."""
         mock_components["ac_controller"].state.control_mode = "manual"
 
-        response = client.post("/api/ac/manual/param?param=mode&value=turbo")
+        response = client.post(
+            "/api/ac/manual/param", json={"param": "mode", "value": "turbo"}
+        )
 
         assert response.status_code == 400
 

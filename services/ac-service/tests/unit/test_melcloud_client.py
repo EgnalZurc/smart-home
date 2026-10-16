@@ -109,8 +109,8 @@ class TestMelCloudClientLogin:
 
         assert result is True
         assert client.context_key == "abc123"
-        # Password should be deleted after successful login
-        assert not hasattr(client, "password")
+        # Password should be cleared after successful login
+        assert client.password is None
         client.close()
 
     def test_login_api_error(self):

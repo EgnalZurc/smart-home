@@ -85,6 +85,7 @@ from smart_home_common.clients.melcloud import MelCloudClient
 from smart_home_common.clients.zigbee import Zigbee2MQTTClient
 from smart_home_common.mqtt.handler import MqttHandler
 from smart_home_common.mqtt.subscription import SubscriptionConfig, SubscriptionManager
+from smart_home_common.rate_limiter import InMemoryRateLimiter
 from smart_home_common.utils.error_tracker import ErrorTracker
 from spa import serve_html
 from thermal_analysis import ThermalBuffer, analyze
@@ -213,6 +214,9 @@ event_log: ACEventLog | None = None
 # at import so the endpoint can be queried even before the lifespan wires it
 # into the controller (it simply returns empty curves until samples arrive).
 thermal_buffer: ThermalBuffer = ThermalBuffer()
+
+# Rate limiter for control endpoints (10 calls/minute)
+control_rate_limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60)
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -440,6 +444,43 @@ class ManualParamsRequest(BaseModel):
         return v.lower()
 
 
+class ManualParamUpdate(BaseModel):
+    """Request model for updating a single manual parameter."""
+
+    param: str
+    value: str | float | int
+
+    @field_validator("param")
+    @classmethod
+    def validate_param(cls, v: str) -> str:
+        allowed = {"mode", "fan_speed", "temperature"}
+        if v not in allowed:
+            raise ValueError(f"param must be one of {allowed}")
+        return v
+
+
+# ── Rate limiting helper ──────────────────────────────────────────────────────
+
+
+def _check_rate_limit(endpoint: str) -> None:
+    """Check rate limit for control endpoints.
+
+    Raises HTTPException 429 if rate limit is exceeded.
+    Uses endpoint name as the rate limit key (service-wide, not per-client).
+    """
+    if not control_rate_limiter.is_allowed(endpoint):
+        status = control_rate_limiter.get_status(endpoint)
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "Rate limit exceeded",
+                "reset_at": status.reset_at.isoformat(),
+                "max_requests": control_rate_limiter.max_requests,
+                "window_seconds": control_rate_limiter.window_seconds,
+            },
+        )
+
+
 # ── Command event logging helper ──────────────────────────────────────────────
 
 
@@ -662,6 +703,7 @@ def get_config():
 @app.post("/api/ac/config", tags=["AC Control"])
 def update_config(update: ConfigUpdate):
     """Update controller configuration."""
+    _check_rate_limit("config")
     changes = update.model_dump(exclude_none=True)
     if not changes:
         _log_command("config", {}, False, "No changes")
@@ -686,6 +728,7 @@ def update_config(update: ConfigUpdate):
 @app.post("/api/ac/control", tags=["AC Control"])
 def set_control_mode(req: ControlModeRequest):
     """Set control mode (auto/manual/off)."""
+    _check_rate_limit("control")
     # Pydantic validates mode and normalizes to lowercase
     if req.mode == "manual":
         state = ac_controller.current_state
@@ -702,6 +745,7 @@ def set_control_mode(req: ControlModeRequest):
 @app.post("/api/ac/manual", tags=["AC Control"])
 def set_manual_params(req: ManualParamsRequest):
     """Set manual control parameters."""
+    _check_rate_limit("manual")
     # Pydantic validates temperature (16-31), fan_speed (0-3), and mode (cool/heat)
     params = {
         "mode": req.mode,
@@ -739,17 +783,20 @@ def set_manual_params(req: ManualParamsRequest):
 
 
 @app.post("/api/ac/manual/param", tags=["AC Control"])
-def update_manual_param(param: str, value: str):
+def update_manual_param(req: ManualParamUpdate):
     """Update a single manual parameter."""
+    _check_rate_limit("manual_param")
     state = ac_controller.current_state
     if state.control_mode != "manual":
         raise HTTPException(400, "Not in manual mode")
-    if param not in ("mode", "fan_speed", "temperature"):
-        raise HTTPException(400, f"Invalid parameter: {param}")
+
+    param = req.param
+    value = req.value
+
     if param == "temperature":
         try:
             converted_value = float(value)
-        except ValueError:
+        except (ValueError, TypeError):
             raise HTTPException(400, "Temperature must be a number")
         min_temp = ac_controller.config.min_setpoint
         max_temp = ac_controller.config.max_setpoint
@@ -760,16 +807,16 @@ def update_manual_param(param: str, value: str):
     elif param == "fan_speed":
         try:
             converted_value = int(value)
-        except ValueError:
+        except (ValueError, TypeError):
             raise HTTPException(400, "Fan speed must be an integer")
         if converted_value < 0 or converted_value > 3:
             raise HTTPException(400, "Fan speed must be between 0 and 3")
     elif param == "mode":
-        if value not in ("cool", "heat"):
+        if str(value) not in ("cool", "heat"):
             raise HTTPException(400, "Mode must be 'cool' or 'heat'")
-        converted_value = value
+        converted_value = str(value)
     else:
-        # Unreachable due to param validation above, but explicit for safety
+        # Unreachable due to Pydantic validation, but explicit for safety
         raise HTTPException(400, f"Invalid parameter: {param}")
     ac_controller.update_manual_param(param, converted_value)
     manual_params = state.manual_params
