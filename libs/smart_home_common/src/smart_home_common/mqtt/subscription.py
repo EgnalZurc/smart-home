@@ -5,14 +5,18 @@ periodic synchronized updates. Ensures GET requests always return
 cached data (zero additional latency).
 """
 
+from __future__ import annotations
+
 import logging
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 @dataclass
@@ -32,7 +36,7 @@ class Subscription:
     """Represents a subscription to an external service."""
 
     name: str  # Service name
-    fetcher: Callable  # Function to fetch data
+    fetcher: Callable[[], Any]  # Function to fetch data
     interval: int  # Update interval (seconds)
     last_update: float = 0.0  # Last update timestamp
     enabled: bool = True  # Can be disabled
@@ -68,17 +72,22 @@ class SubscriptionManager:
     - Memory-controlled cache with limits
     """
 
-    def __init__(self, config: SubscriptionConfig):
-        self.config = config
+    def __init__(self, config: SubscriptionConfig) -> None:
+        self.config: SubscriptionConfig = config
         self.subscriptions: dict[str, Subscription] = {}
         self.cache: dict[str, CachedData] = {}
-        self._lock = threading.Lock()
-        self._running = False
+        self._lock: threading.Lock = threading.Lock()
+        self._running: bool = False
         self._thread: threading.Thread | None = None
 
         logger.info("=== Subscription Manager Initialized ===")
 
-    def subscribe(self, service: str, fetcher: Callable, interval: int | None = None):
+    def subscribe(
+        self,
+        service: str,
+        fetcher: Callable[[], Any],
+        interval: int | None = None,
+    ) -> None:
         """Subscribe to a service.
 
         Args:
@@ -95,7 +104,7 @@ class SubscriptionManager:
 
         logger.info("✓ Subscribed to '%s' (interval=%ds)", service, interval)
 
-    def start(self):
+    def start(self) -> None:
         """Start periodic updates."""
         if self._running:
             logger.warning("Subscription Manager already running")
@@ -111,14 +120,14 @@ class SubscriptionManager:
         # Initial fetch for all subscriptions
         self._update_all_services()
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop periodic updates."""
         self._running = False
         if self._thread:
             self._thread.join(timeout=5)
         logger.info("Subscription Manager stopped")
 
-    def get_cached(self, service: str, default=None) -> Any:
+    def get_cached(self, service: str, default: T | None = None) -> T | Any | None:
         """Get cached data (NEVER fetches, always returns cached).
 
         This method is designed for GET requests. It NEVER triggers
@@ -137,7 +146,7 @@ class SubscriptionManager:
                 return default
             return cached.data
 
-    def force_update(self, service: str):
+    def force_update(self, service: str) -> None:
         """Force immediate update of a specific service.
 
         Called after POST operations to refresh cache immediately.
@@ -154,7 +163,7 @@ class SubscriptionManager:
         # Update in background thread to avoid blocking
         threading.Thread(target=self._update_service, args=(service, sub), daemon=True).start()
 
-    def _update_loop(self):
+    def _update_loop(self) -> None:
         """Background thread that updates all subscriptions periodically."""
         while self._running:
             try:
@@ -166,7 +175,7 @@ class SubscriptionManager:
             # We check every 5 seconds to ensure timely updates
             time.sleep(5)
 
-    def _update_all_services(self):
+    def _update_all_services(self) -> None:
         """Update all subscriptions that are due."""
         now = time.time()
 
@@ -178,7 +187,7 @@ class SubscriptionManager:
             if now - sub.last_update >= sub.interval:
                 self._update_service(service, sub)
 
-    def _update_service(self, service: str, sub: Subscription):
+    def _update_service(self, service: str, sub: Subscription) -> None:
         """Update a specific service by fetching fresh data.
 
         Args:
@@ -208,7 +217,7 @@ class SubscriptionManager:
             sub.error_count += 1
             logger.error("✗ Failed to update '%s' (error %d): %s", service, sub.error_count, e)
 
-    def get_stats(self) -> dict:
+    def get_stats(self) -> dict[str, Any]:
         """Get subscription manager statistics.
 
         Returns:
@@ -235,7 +244,7 @@ class SubscriptionManager:
                 ],
             }
 
-    def cleanup_stale_cache(self):
+    def cleanup_stale_cache(self) -> None:
         """Remove stale cache entries (older than max_cache_age).
 
         Called periodically to prevent memory issues.
