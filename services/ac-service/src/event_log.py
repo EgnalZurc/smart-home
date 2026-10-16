@@ -21,9 +21,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from smart_home_common.sqlite_helpers import SqliteHelper
 
@@ -32,10 +33,20 @@ logger = logging.getLogger(__name__)
 # Database file (inside container, mounted as volume). Mirrors the location
 # convention used by state_persistence.STATE_FILE.
 _DATA_DIR = os.environ.get("AC_DATA_DIR", "/app/data")
-EVENT_LOG_FILE = Path(_DATA_DIR) / "ac_event_log.db"
+EVENT_LOG_FILE: Path = Path(_DATA_DIR) / "ac_event_log.db"
 
 
-def _ensure_schema(conn) -> None:
+class EventLogEntry(TypedDict):
+    """A single event log entry."""
+
+    timestamp: float
+    command_type: str
+    params: dict[str, Any]
+    success: bool
+    error_msg: str | None
+
+
+def _ensure_schema(conn: sqlite3.Connection) -> None:
     """Create the command event-log table if it does not exist."""
     conn.execute(
         """
@@ -64,6 +75,9 @@ class ACEventLog:
     connection via :class:`SqliteHelper` (``check_same_thread=False``), so it
     can be called from FastAPI request handlers and background threads alike.
     """
+
+    db_path: Path
+    _db: SqliteHelper
 
     def __init__(self, db_path: str | Path | None = None) -> None:
         """Initialise the event log.
@@ -117,7 +131,7 @@ class ACEventLog:
             logger.exception("Failed to log AC command event (command=%s)", command)
             return False
 
-    def get_history(self, hours: int = 24) -> list[dict[str, Any]]:
+    def get_history(self, hours: int = 24) -> list[EventLogEntry]:
         """Return command events from the last ``hours`` hours, newest first.
 
         Args:
@@ -146,7 +160,7 @@ class ACEventLog:
             logger.exception("Failed to read AC command event history")
             return []
 
-        history: list[dict[str, Any]] = []
+        history: list[EventLogEntry] = []
         for row in rows:
             try:
                 params = json.loads(row["params_json"])

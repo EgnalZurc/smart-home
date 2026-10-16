@@ -6,10 +6,13 @@ can continue from where it left off after restarts.
 Goal: Minimize AC on/off cycles to protect the compressor.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from smart_home_common.persistence import atomic_read_json, atomic_write_json
 
@@ -17,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # Persistence file (inside container, mounted as volume)
 _DATA_DIR = os.environ.get("AC_DATA_DIR", "/app/data")
-STATE_FILE = Path(_DATA_DIR) / "controller_state.json"
+STATE_FILE: Path = Path(_DATA_DIR) / "controller_state.json"
 
 
 @dataclass
@@ -43,7 +46,7 @@ class PersistedState:
     last_off_timestamp: float
     last_modulating_setpoint: float
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Converts to dictionary for JSON serialization."""
         return {
             "target_temperature": self.target_temperature,
@@ -62,7 +65,7 @@ class PersistedState:
         }
 
     @staticmethod
-    def from_dict(data: dict) -> "PersistedState":
+    def from_dict(data: dict[str, Any]) -> PersistedState:
         """Creates from dictionary loaded from JSON."""
         return PersistedState(
             target_temperature=data["target_temperature"],

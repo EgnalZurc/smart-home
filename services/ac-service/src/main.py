@@ -486,7 +486,7 @@ def _check_rate_limit(endpoint: str) -> None:
 
 def _log_command(
     command: str,
-    params: dict | None,
+    params: dict[str, object] | None,
     result: bool,
     error_msg: str | None = None,
 ) -> None:
@@ -504,13 +504,13 @@ def _log_command(
 
 
 @app.get("/health", tags=["Health"])
-def health():
+def health() -> dict[str, object]:
     """Internal health check for Docker/nginx."""
     return {"online": True, "service": "ac"}
 
 
 @app.get("/api/health/ac", tags=["Health"])
-def health_api():
+def health_api() -> dict[str, object]:
     """Public health check endpoint (matches dashboard pattern)."""
     return {"online": True, "service": "ac"}
 
@@ -528,7 +528,7 @@ async def serve_ac():
 
 
 @app.get("/api/ac/status", tags=["AC Control"])
-def get_status():
+def get_status() -> dict[str, object]:
     """Get current AC and sensor status."""
     state = ac_controller.current_state
     return {
@@ -567,11 +567,11 @@ def get_status():
 
 
 @app.get("/api/ac/sensors", tags=["Sensors"])
-def get_sensors():
+def get_sensors() -> dict[str, list[dict[str, object]]]:
     """Get all sensor readings."""
     all_sensors = mqtt_handler.sensor_names
     now = time.time()
-    sensors = []
+    sensors: list[dict[str, object]] = []
     for name in all_sensors:
         reading = mqtt_handler.readings.get(name)
         if reading:
@@ -605,9 +605,9 @@ def get_sensors():
 @app.get("/api/ac/sensors/history", tags=["Sensors"])
 def get_sensors_history(
     start: float | None = None, end: float | None = None, last: int | None = None
-):
+) -> dict[str, list[dict[str, object]]]:
     """Get sensor reading history."""
-    result = {}
+    result: dict[str, list[dict[str, object]]] = {}
     with mqtt_handler._lock:
         for name, readings_list in mqtt_handler.history.items():
             if start is not None or end is not None:
@@ -634,14 +634,14 @@ def get_sensors_history(
 
 
 @app.get("/api/ac/history", tags=["AC Control"])
-def get_history(limit: int = 100):
+def get_history(limit: int = 100) -> dict[str, list[dict[str, object]]]:
     """Get controller action history."""
     limit = max(HISTORY_LIMIT_MIN, min(limit, HISTORY_LIMIT_MAX))
     return {"history": ac_controller.get_history(limit)}
 
 
 @app.get("/api/ac/event-log", tags=["AC Control"])
-def get_event_log(hours: int = 24):
+def get_event_log(hours: int = 24) -> dict[str, object]:
     """Get the history of control commands sent to the AC.
 
     Returns every logged command (mode changes, manual params, config
@@ -654,7 +654,7 @@ def get_event_log(hours: int = 24):
 
 
 @app.get("/api/ac/learning", tags=["AC Control"])
-def get_learning(window: int = HISTORY_LIMIT_MAX):
+def get_learning(window: int = HISTORY_LIMIT_MAX) -> dict[str, object]:
     """Return usage patterns, correlations and recommendations.
 
     Performs a basic statistical analysis over the controller action history
@@ -672,7 +672,7 @@ def get_learning(window: int = HISTORY_LIMIT_MAX):
 
 
 @app.get("/api/ac/thermal-curves", tags=["AC Control"])
-def get_thermal_curves():
+def get_thermal_curves() -> dict[str, object]:
     """Heating/cooling curve analysis from accumulated thermal samples.
 
     Returns heating/cooling rates (°C/min), average time to reach the target
@@ -683,7 +683,7 @@ def get_thermal_curves():
 
 
 @app.get("/api/ac/config", tags=["AC Control"])
-def get_config():
+def get_config() -> dict[str, object]:
     """Get controller configuration."""
     cfg = ac_controller.config
     return {
@@ -701,7 +701,7 @@ def get_config():
 
 
 @app.post("/api/ac/config", tags=["AC Control"])
-def update_config(update: ConfigUpdate):
+def update_config(update: ConfigUpdate) -> dict[str, object]:
     """Update controller configuration."""
     _check_rate_limit("config")
     changes = update.model_dump(exclude_none=True)
@@ -726,7 +726,7 @@ def update_config(update: ConfigUpdate):
 
 
 @app.post("/api/ac/control", tags=["AC Control"])
-def set_control_mode(req: ControlModeRequest):
+def set_control_mode(req: ControlModeRequest) -> dict[str, str]:
     """Set control mode (auto/manual/off)."""
     _check_rate_limit("control")
     # Pydantic validates mode and normalizes to lowercase
@@ -743,11 +743,11 @@ def set_control_mode(req: ControlModeRequest):
 
 
 @app.post("/api/ac/manual", tags=["AC Control"])
-def set_manual_params(req: ManualParamsRequest):
+def set_manual_params(req: ManualParamsRequest) -> dict[str, object]:
     """Set manual control parameters."""
     _check_rate_limit("manual")
     # Pydantic validates temperature (16-31), fan_speed (0-3), and mode (cool/heat)
-    params = {
+    params: dict[str, object] = {
         "mode": req.mode,
         "fan_speed": req.fan_speed,
         "temperature": req.temperature,
@@ -783,7 +783,7 @@ def set_manual_params(req: ManualParamsRequest):
 
 
 @app.post("/api/ac/manual/param", tags=["AC Control"])
-def update_manual_param(req: ManualParamUpdate):
+def update_manual_param(req: ManualParamUpdate) -> dict[str, object]:
     """Update a single manual parameter."""
     _check_rate_limit("manual_param")
     state = ac_controller.current_state
@@ -792,6 +792,7 @@ def update_manual_param(req: ManualParamUpdate):
 
     param = req.param
     value = req.value
+    converted_value: str | int | float
 
     if param == "temperature":
         try:
@@ -847,7 +848,7 @@ def update_manual_param(req: ManualParamUpdate):
 
 
 @app.get("/api/ac/real", tags=["AC Control"])
-def get_ac_real():
+def get_ac_real() -> dict[str, object]:
     """Get real AC state from MELCloud."""
     try:
         state = ac_controller.melcloud.get_device_state(
@@ -883,7 +884,7 @@ def get_ac_real():
 
 
 @app.get("/api/ac/outdoor", tags=["Environment"])
-def get_outdoor():
+def get_outdoor() -> dict[str, object]:
     """Get outdoor temperature and air quality."""
     outdoor_data = subscription_manager.get_cached("outdoor", default={})
     if not outdoor_data:
@@ -899,7 +900,7 @@ def get_outdoor():
 
 
 @app.get("/api/ac/errors", tags=["AC Control"])
-def get_errors():
+def get_errors() -> dict[str, object]:
     """Get active errors."""
     if error_tracker is None:
         return {"errors": [], "has_errors": False}
@@ -908,9 +909,9 @@ def get_errors():
 
 
 @app.get("/api/ac/alerts", tags=["AC Control"])
-def get_ac_alerts():
+def get_ac_alerts() -> dict[str, list[dict[str, object]]]:
     """Return current AC alerts for the unified alerts system."""
-    alerts = []
+    alerts: list[dict[str, object]] = []
     if ac_controller is not None and ac_controller.current_state.sensor_alert:
         timeout = ac_controller.config.sensor_timeout
         alerts.append(
@@ -928,7 +929,7 @@ def get_ac_alerts():
 
 
 @app.get("/api/ac/energy/current", tags=["Energy"])
-def get_energy_current():
+def get_energy_current() -> dict[str, object]:
     """Get current energy consumption (placeholder)."""
     return {
         "kwh": 0.0,
@@ -939,19 +940,19 @@ def get_energy_current():
 
 
 @app.get("/api/ac/energy/hourly", tags=["Energy"])
-def get_energy_hourly():
+def get_energy_hourly() -> dict[str, dict[str, object]]:
     """Get hourly energy data (placeholder)."""
     return {"data": {}}
 
 
 @app.get("/api/ac/energy/monthly", tags=["Energy"])
-def get_energy_monthly():
+def get_energy_monthly() -> dict[str, dict[str, object]]:
     """Get monthly energy data (placeholder)."""
     return {"data": {}}
 
 
 @app.get("/api/ac/subscriptions/stats", tags=["AC Control"])
-def get_subscription_stats():
+def get_subscription_stats() -> dict[str, object]:
     """Get subscription manager stats."""
     if subscription_manager is None:
         return {"error": "not initialized"}
@@ -959,10 +960,10 @@ def get_subscription_stats():
 
 
 @app.get("/api/ac/health/zigbee", tags=["Health"])
-def get_zigbee_health():
+def get_zigbee_health() -> dict[str, object]:
     """Get Zigbee/MQTT health status."""
     mqtt_ok = mqtt_handler is not None and mqtt_handler.is_connected
-    active = {}
+    active: dict[str, object] = {}
     if mqtt_handler is not None:
         active = mqtt_handler.get_active_readings(max_age_seconds=7200)
     return {

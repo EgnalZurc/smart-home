@@ -18,14 +18,22 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Protocol
+from typing import Protocol, TypedDict
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
-WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
-AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
+WEATHER_URL: str = "https://api.open-meteo.com/v1/forecast"
+AIR_QUALITY_URL: str = "https://air-quality-api.open-meteo.com/v1/air-quality"
+
+
+class OutdoorData(TypedDict):
+    """Outdoor weather and air quality data."""
+
+    temperature: float | None
+    humidity: float | None
+    aqi: int | None
 
 
 class ErrorTrackerLike(Protocol):
@@ -42,7 +50,7 @@ def build_outdoor_fetcher(
     latitude: float,
     longitude: float,
     error_tracker: ErrorTrackerLike,
-) -> Callable[[], dict | None]:
+) -> Callable[[], OutdoorData | None]:
     """Build a zero-arg fetcher closure for the subscription manager.
 
     Args:
@@ -57,7 +65,7 @@ def build_outdoor_fetcher(
         failure (having registered a warning with the error tracker).
     """
 
-    def fetch_outdoor_temp() -> dict | None:
+    def fetch_outdoor_temp() -> OutdoorData | None:
         # connect=15.0 allows more time for the (slow on Pi) SSL handshake,
         # read=10.0 for data transfer, pool=5.0 for connection reuse.
         timeout = httpx.Timeout(connect=15.0, read=10.0, write=10.0, pool=5.0)
