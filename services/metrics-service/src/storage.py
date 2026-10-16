@@ -27,11 +27,25 @@ class RingBuffer:
     The collector appends from an asyncio task while HTTP handlers read; a
     :class:`threading.Lock` guards the shared dict so a read never observes a
     half-mutated deque.
+
+    Attributes:
+        _maxlen: Maximum number of points to keep per series.
+        _series: Mapping of (metric, label) keys to deques of points.
+        _lock: Threading lock for thread-safe access.
     """
 
+    _maxlen: int
+    _series: dict[tuple[str, str], deque[Point]]
+    _lock: threading.Lock
+
     def __init__(self, maxlen: int = RING_BUFFER_MAXLEN) -> None:
+        """Initialize a new ring buffer collection.
+
+        Args:
+            maxlen: Maximum number of points per series. Defaults to config value.
+        """
         self._maxlen = maxlen
-        self._series: dict[tuple[str, str], deque[Point]] = {}
+        self._series = {}
         self._lock = threading.Lock()
 
     def add(self, metric: str, label: str, value: float, ts: int) -> None:
@@ -84,13 +98,14 @@ class RingBuffer:
             points = [p for p in points if p[0] <= until]
         return points
 
-    def latest(self) -> dict[str, dict[str, float | int | str]]:
+    def latest(self) -> dict[str, dict[str, str | int | float]]:
         """Return the newest point for every known series.
 
-        Returns a mapping ``"metric|label" -> {metric, label, ts, value}`` which
-        is JSON-friendly for :func:`GET /api/metrics/latest`.
+        Returns:
+            A mapping ``"metric|label" -> {metric, label, ts, value}`` which
+            is JSON-friendly for :func:`GET /api/metrics/latest`.
         """
-        out: dict[str, dict[str, float | int | str]] = {}
+        out: dict[str, dict[str, str | int | float]] = {}
         with self._lock:
             for (metric, label), buf in self._series.items():
                 if not buf:
