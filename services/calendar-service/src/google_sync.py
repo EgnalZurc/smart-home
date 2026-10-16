@@ -123,16 +123,20 @@ class GoogleCalendarClient:
             False if no valid credentials exist (token_path missing or invalid).
         """
         # Attempt to load existing token
+        # Note: client_id and client_secret are NOT loaded from the token file.
+        # They come from env vars (passed to __init__) for security separation.
         if self.token_path.exists():
             try:
                 token_data = json.loads(self.token_path.read_text())
                 self._credentials = Credentials(
                     token=token_data.get("token"),
                     refresh_token=token_data.get("refresh_token"),
-                    token_uri="https://oauth2.googleapis.com/token",
-                    client_id=self.client_id,
-                    client_secret=self.client_secret,
-                    scopes=self.scopes,
+                    token_uri=token_data.get(
+                        "token_uri", "https://oauth2.googleapis.com/token"
+                    ),
+                    client_id=self.client_id,  # From env, not from file
+                    client_secret=self.client_secret,  # From env, not from file
+                    scopes=token_data.get("scopes") or self.scopes,
                 )
                 logger.debug("Loaded credentials from %s", self.token_path)
             except (json.JSONDecodeError, KeyError, TypeError) as exc:
@@ -173,25 +177,43 @@ class GoogleCalendarClient:
             return False
 
     def _save_token(self) -> None:
-        """Persist credentials to token_path (mode 600 for security)."""
+        """Persist credentials to token_path atomically (mode 600 for security).
+
+        Only saves token data (token, refresh_token, token_uri, scopes).
+        Client ID and secret are NOT persisted — they are loaded from env vars
+        at runtime. This separation ensures secrets aren't leaked if the token
+        file is accidentally exposed.
+
+        The save is atomic: writes to a temp file first, then uses os.replace()
+        to move it to the final location. This prevents data loss if the process
+        crashes mid-write (e.g., during refresh token rotation).
+        """
         if self._credentials is None:
             return
+
+        # Only persist token data, NOT client_id/secret (loaded from env at runtime)
         token_data = {
             "token": self._credentials.token,
             "refresh_token": self._credentials.refresh_token,
             "token_uri": self._credentials.token_uri,
-            "client_id": self._credentials.client_id,
-            "client_secret": self._credentials.client_secret,
             "scopes": list(self._credentials.scopes or []),
         }
+
         self.token_path.parent.mkdir(parents=True, exist_ok=True)
-        self.token_path.write_text(json.dumps(token_data, indent=2))
-        # Set restrictive permissions (secrets should not be world-readable)
+
+        # Atomic write: temp file + os.replace() to prevent corruption on crash
+        tmp_path = self.token_path.with_suffix(".json.tmp")
+        tmp_path.write_text(json.dumps(token_data, indent=2))
+
+        # Set restrictive permissions on temp file before moving
         try:
-            os.chmod(self.token_path, 0o600)
+            os.chmod(tmp_path, 0o600)
         except OSError:
             pass  # Windows doesn't support chmod the same way
-        logger.debug("Saved token to %s", self.token_path)
+
+        # Atomic move to final location
+        os.replace(tmp_path, self.token_path)
+        logger.debug("Saved token to %s (atomic)", self.token_path)
 
     def list_calendars(self) -> list[dict[str, Any]]:
         """List all calendars accessible by the authenticated account.
