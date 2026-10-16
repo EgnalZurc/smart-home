@@ -34,7 +34,7 @@ try:
 except ImportError:  # pragma: no cover - import fallback outside the container
     TelegramNotifier = None  # type: ignore[assignment]
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class AlertEngine:

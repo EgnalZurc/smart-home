@@ -44,7 +44,7 @@ except ImportError:  # pragma: no cover - import fallback outside the container
     sys.path.insert(0, str(_repo_root / "libs" / "smart_home_common" / "src"))
     from smart_home_common.sqlite_helpers import SqliteHelper
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
