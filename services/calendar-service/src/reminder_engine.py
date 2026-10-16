@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime
+from typing import TYPE_CHECKING, TypedDict
 from zoneinfo import ZoneInfo
 
 from config import TZ
@@ -34,6 +35,19 @@ except ImportError:  # pragma: no cover - import fallback outside the container
 
 from database import CalendarStore
 
+if TYPE_CHECKING:
+    from database import EventRow
+
+
+class ReminderStats(TypedDict):
+    """Statistics from a reminder check run."""
+
+    checked: int
+    sent: int
+    skipped: int
+    failed: int
+
+
 logger = logging.getLogger(__name__)
 
 # Default offsets (seconds before event start): 1 day, 2 hours, 30 minutes
@@ -41,7 +55,7 @@ OFFSETS_DEFAULT = [86400, 7200, 1800]
 
 
 def get_applicable_rules(
-    event: dict,
+    event: EventRow,
     store: CalendarStore,
 ) -> list[int]:
     """Return the list of offset_s values applicable to this event.
@@ -115,7 +129,7 @@ def _format_relative_time(event_start: int, now: int, tz: ZoneInfo) -> str:
 
 
 def format_reminder_message(
-    event: dict,
+    event: EventRow,
     offset_s: int,
     store: CalendarStore | None = None,
     now: int | None = None,
@@ -173,7 +187,7 @@ def check_and_send_reminders(
     store: CalendarStore,
     telegram_notifier: TelegramNotifier,
     now: int | None = None,
-) -> dict:
+) -> ReminderStats:
     """Check for due reminders and send them.
 
     For each event in the reminder window:
