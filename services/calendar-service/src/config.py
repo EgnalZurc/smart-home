@@ -66,6 +66,11 @@ CALENDAR_SEED = os.environ.get("CALENDAR_SEED", "")
 # ── HTTP timeouts ────────────────────────────────────────────────────────────
 HTTP_TIMEOUT_S = float(os.environ.get("CALENDAR_HTTP_TIMEOUT_S", "10.0"))
 
+# ── API authentication ───────────────────────────────────────────────────────
+# Bearer token for protecting sensitive config endpoints. If empty, auth is
+# disabled (open access — useful for dev but NOT for production).
+CALENDAR_API_KEY = os.environ.get("CALENDAR_API_KEY", "")
+
 # Telegram delivery is driven by smart_home_common.telegram.TelegramNotifier
 # .from_env(), which reads TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_IDS. If unset, the
 # notifier is a no-op (reminders still recorded, nothing sent) — design §5.3.
