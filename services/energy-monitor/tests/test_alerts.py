@@ -63,9 +63,7 @@ def test_power_spike_resolves(store):
     store.write_power(_NOW, [("ch0", 1000.0, 500.0, 230.0, 0.9)])
     events = engine.evaluate(now=_NOW + 60)
     resolved = [
-        e
-        for e in events
-        if e["rule_key"] == "power_spike" and e["state"] == "resolved"
+        e for e in events if e["rule_key"] == "power_spike" and e["state"] == "resolved"
     ]
     assert len(resolved) == 1
     # Audit trail holds both the fired and resolved events.

@@ -207,9 +207,7 @@ def test_stats_empty(store):
 def test_stats_total_and_peak(store):
     import datetime as _dt
 
-    month_start = int(
-        _dt.datetime(2023, 6, 1, tzinfo=_dt.timezone.utc).timestamp()
-    )
+    month_start = int(_dt.datetime(2023, 6, 1, tzinfo=_dt.timezone.utc).timestamp())
     day = 24 * 3600
     # Daily cumulative readings: +5 kWh day 1, +8 kWh day 2, +3 kWh day 3.
     store.write_energy(month_start, [("ch0", 0.0)])

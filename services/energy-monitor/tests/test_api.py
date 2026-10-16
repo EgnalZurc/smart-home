@@ -2,7 +2,7 @@
 
 Exercises the FastAPI routes directly against the in-process app using
 ``httpx.ASGITransport`` WITHOUT triggering the lifespan (so the background poll
-loops never start). The module-level ``collector`` is pointed at a temp DB and
+loops never start). The module-level ``_collector`` is pointed at a temp DB and
 has its ring buffer manipulated directly so tests never touch hardware or the
 production path.
 """
@@ -18,7 +18,7 @@ from database import EnergyStore
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        main.collector, "store", EnergyStore(str(tmp_path / "energy.db"))
+        main._collector, "store", EnergyStore(str(tmp_path / "energy.db"))
     )
     transport = httpx.ASGITransport(app=main.app)
     return httpx.AsyncClient(transport=transport, base_url="http://test")
@@ -51,7 +51,7 @@ async def test_health_db_ok_false_when_store_broken(client, monkeypatch):
         def count(self):
             raise RuntimeError("db gone")
 
-    monkeypatch.setattr(main.collector, "store", BrokenStore())
+    monkeypatch.setattr(main._collector, "store", BrokenStore())
     async with client as c:
         resp = await c.get("/health")
     assert resp.status_code == 200
@@ -71,10 +71,10 @@ async def test_current_returns_empty_channels_when_no_data(client):
 
 async def test_current_reflects_ring_buffer(client, monkeypatch):
     # Seed the collector's ring buffer with two live channels and mark online.
-    monkeypatch.setitem(main.collector.labels, "main:ch0", "General")
-    main.collector.ring["main:ch0"].append((1000, 1200.0, 230.0, 0.95))
-    main.collector.ring["main:ch1"].append((1000, 300.0, 230.0, 0.9))
-    main.collector.meter_online = True
+    monkeypatch.setitem(main._collector.labels, "main:ch0", "General")
+    main._collector.ring["main:ch0"].append((1000, 1200.0, 230.0, 0.95))
+    main._collector.ring["main:ch1"].append((1000, 300.0, 230.0, 0.9))
+    main._collector.meter_online = True
     try:
         async with client as c:
             resp = await c.get("/api/energy/current")
@@ -86,22 +86,20 @@ async def test_current_reflects_ring_buffer(client, monkeypatch):
         # No inventory label for ch1 → key is used as the fallback label.
         assert body["channels"]["main:ch1"]["label"] == "main:ch1"
     finally:
-        main.collector.ring.clear()
-        main.collector.meter_online = None
+        main._collector.ring.clear()
+        main._collector.meter_online = None
 
 
 async def test_db_ok_helper_true_and_false(monkeypatch, tmp_path):
     # Direct unit coverage of the _db_ok helper on both branches.
-    monkeypatch.setattr(
-        main.collector, "store", EnergyStore(str(tmp_path / "e.db"))
-    )
+    monkeypatch.setattr(main._collector, "store", EnergyStore(str(tmp_path / "e.db")))
     assert main._db_ok() is True
 
     class Broken:
         def count(self):
             raise RuntimeError("boom")
 
-    monkeypatch.setattr(main.collector, "store", Broken())
+    monkeypatch.setattr(main._collector, "store", Broken())
     assert main._db_ok() is False
 
 
@@ -120,8 +118,8 @@ async def test_history_empty_defaults_to_day(client):
 async def test_history_returns_deltas(client):
     import time as _time
 
-    main.collector.store.write_energy(int(_time.time()) - 7200, [("ch0", 0.0)])
-    main.collector.store.write_energy(int(_time.time()) - 3600, [("ch0", 1500.0)])
+    main._collector.store.write_energy(int(_time.time()) - 7200, [("ch0", 0.0)])
+    main._collector.store.write_energy(int(_time.time()) - 3600, [("ch0", 1500.0)])
     async with client as c:
         resp = await c.get("/api/energy/history?period=hour&count=3&channel=ch0")
     assert resp.status_code == 200
@@ -173,7 +171,7 @@ async def test_alerts_empty(client):
 
 
 async def test_alerts_returns_recorded(client):
-    main.collector.store.record_alert("daily_budget", "warning", "fired", value=25.0)
+    main._collector.store.record_alert("daily_budget", "warning", "fired", value=25.0)
     async with client as c:
         resp = await c.get("/api/energy/alerts?limit=10")
     assert resp.status_code == 200

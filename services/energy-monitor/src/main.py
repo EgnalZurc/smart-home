@@ -23,7 +23,7 @@ import os
 import sys
 from contextlib import asynccontextmanager
 
-from config import DB_PATH, LOG_LEVEL, PORT, SERVICE_NAME
+from config import LOG_LEVEL, PORT, SERVICE_NAME
 from fastapi import FastAPI, HTTPException, Query
 
 # Shared libs live at /app/libs in the container; add to path for imports.
@@ -39,28 +39,28 @@ logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 # Single collector instance for the process lifetime. It owns the SQLite store,
 # the per-channel ring buffer and the Shelly poll loops.
-collector = Collector()
-alert_engine = AlertEngine(collector.store)
+_collector = Collector()
+_alert_engine = AlertEngine(_collector.store)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def _lifespan(app: FastAPI):
     """Start/stop the collector background tasks with the app."""
-    logger.info("Starting %s...", SERVICE_NAME)
+    _logger.info("Starting %s...", SERVICE_NAME)
     # Touch the DB so the schema is created eagerly (surfaces a bad bind mount
     # as db_ok=false at the first health check rather than on first write).
     try:
-        collector.store.count()
+        _collector.store.count()
     except Exception as exc:  # pragma: no cover - defensive startup log
-        logger.warning("initial DB touch failed: %s", exc)
-    await collector.start()
+        _logger.warning("initial DB touch failed: %s", exc)
+    await _collector.start()
     yield
-    logger.info("Shutting down %s...", SERVICE_NAME)
-    await collector.stop()
+    _logger.info("Shutting down %s...", SERVICE_NAME)
+    await _collector.stop()
 
 
 app = FastAPI(
@@ -69,7 +69,7 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/swagger",
     redoc_url="/redoc",
-    lifespan=lifespan,
+    lifespan=_lifespan,
 )
 
 
@@ -79,10 +79,10 @@ app = FastAPI(
 def _db_ok() -> bool:
     """Return True if the SQLite store answers a trivial query."""
     try:
-        collector.store.count()
+        _collector.store.count()
         return True
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("db health check failed: %s", exc)
+        _logger.warning("db health check failed: %s", exc)
         return False
 
 
@@ -92,14 +92,15 @@ def _health_payload() -> dict:
     ``meter_online`` is True once at least one device has answered a poll,
     ``collector_last_tick_age_s`` reports seconds since the last poll — both are
     part of the design's health contract (§7/§10).
+
+    Note: db_path is intentionally omitted to avoid exposing internal paths.
     """
     return {
         "online": True,
         "service": SERVICE_NAME,
         "db_ok": _db_ok(),
-        "meter_online": collector.meter_online,
-        "collector_last_tick_age_s": collector.last_tick_age_s(),
-        "db_path": DB_PATH,
+        "meter_online": _collector.meter_online,
+        "collector_last_tick_age_s": _collector.last_tick_age_s(),
     }
 
 
@@ -126,7 +127,7 @@ async def get_current() -> dict:
     poll (or with no devices configured) ``channels`` is empty and
     ``meter_online`` reflects collector state.
     """
-    return collector.current()
+    return _collector.current()
 
 
 @app.get("/api/energy/history")
@@ -148,7 +149,7 @@ async def get_history(
             status_code=422,
             detail=f"period must be one of {list(VALID_PERIODS)}",
         )
-    series = collector.store.consumption_by_period(period, count, channel=channel)
+    series = _collector.store.consumption_by_period(period, count, channel=channel)
     return {
         "period": period,
         "channel": channel,
@@ -164,7 +165,7 @@ async def get_stats() -> dict:
     Reports total, average daily, peak daily and peak instantaneous power for
     the current calendar month. Metrics are ``null`` until enough data exists.
     """
-    return collector.store.stats()
+    return _collector.store.stats()
 
 
 @app.get("/api/energy/alerts")
@@ -172,7 +173,7 @@ async def get_alerts(
     limit: int = Query(50, ge=1, le=500, description="Max events to return"),
 ) -> dict:
     """Return the most recent consumption-alert events (newest first)."""
-    events = collector.store.recent_alerts(limit)
+    events = _collector.store.recent_alerts(limit)
     return {"count": len(events), "alerts": events}
 
 
