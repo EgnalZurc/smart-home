@@ -20,10 +20,11 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 from contextlib import asynccontextmanager
 
-from config import DB_PATH, LOG_LEVEL, PORT, SERVICE_NAME
+from config import LOG_LEVEL, PORT, SERVICE_NAME
 from fastapi import FastAPI, HTTPException, Query
 
 # Shared libs live at /app/libs in the container; add to path for imports.
@@ -39,27 +40,32 @@ logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
+
+# ── Input validation constants (private) ──────────────────────────────────────
+_MAX_CHANNEL_LEN = 64
+_CHANNEL_PATTERN = re.compile(r"^[a-zA-Z0-9_:\-]+$")
 
 # Single collector instance for the process lifetime. It owns the SQLite store,
 # the per-channel ring buffer and the Shelly poll loops.
+# Note: Kept module-level for test access; internal helpers are prefixed with _.
 collector = Collector()
 alert_engine = AlertEngine(collector.store)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def _lifespan(app: FastAPI):
     """Start/stop the collector background tasks with the app."""
-    logger.info("Starting %s...", SERVICE_NAME)
+    _logger.info("Starting %s...", SERVICE_NAME)
     # Touch the DB so the schema is created eagerly (surfaces a bad bind mount
     # as db_ok=false at the first health check rather than on first write).
     try:
         collector.store.count()
     except Exception as exc:  # pragma: no cover - defensive startup log
-        logger.warning("initial DB touch failed: %s", exc)
+        _logger.warning("initial DB touch failed: %s", exc)
     await collector.start()
     yield
-    logger.info("Shutting down %s...", SERVICE_NAME)
+    _logger.info("Shutting down %s...", SERVICE_NAME)
     await collector.stop()
 
 
@@ -69,12 +75,12 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/swagger",
     redoc_url="/redoc",
-    lifespan=lifespan,
+    lifespan=_lifespan,
 )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Health
+# Health (internal helpers)
 # ═══════════════════════════════════════════════════════════════════════════════
 def _db_ok() -> bool:
     """Return True if the SQLite store answers a trivial query."""
@@ -82,7 +88,7 @@ def _db_ok() -> bool:
         collector.store.count()
         return True
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("db health check failed: %s", exc)
+        _logger.warning("db health check failed: %s", exc)
         return False
 
 
@@ -92,6 +98,8 @@ def _health_payload() -> dict:
     ``meter_online`` is True once at least one device has answered a poll,
     ``collector_last_tick_age_s`` reports seconds since the last poll — both are
     part of the design's health contract (§7/§10).
+
+    Note: Sensitive config values (DB_PATH, device credentials) are not exposed.
     """
     return {
         "online": True,
@@ -99,7 +107,6 @@ def _health_payload() -> dict:
         "db_ok": _db_ok(),
         "meter_online": collector.meter_online,
         "collector_last_tick_age_s": collector.last_tick_age_s(),
-        "db_path": DB_PATH,
     }
 
 
@@ -116,7 +123,33 @@ async def health_alias() -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Energy read API (scaffold stub)
+# Input validation (internal helpers)
+# ═══════════════════════════════════════════════════════════════════════════════
+def _validate_channel(channel: str | None) -> str | None:
+    """Validate and sanitize channel parameter.
+
+    Returns the channel if valid, raises HTTPException if malformed.
+    """
+    if channel is None:
+        return None
+    channel = channel.strip()
+    if not channel:
+        return None
+    if len(channel) > _MAX_CHANNEL_LEN:
+        raise HTTPException(
+            status_code=422,
+            detail=f"channel must be at most {_MAX_CHANNEL_LEN} characters",
+        )
+    if not _CHANNEL_PATTERN.match(channel):
+        raise HTTPException(
+            status_code=422,
+            detail="channel must contain only alphanumeric, underscore, colon, or dash",
+        )
+    return channel
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Energy read API
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/energy/current")
 async def get_current() -> dict:
@@ -148,10 +181,13 @@ async def get_history(
             status_code=422,
             detail=f"period must be one of {list(VALID_PERIODS)}",
         )
-    series = collector.store.consumption_by_period(period, count, channel=channel)
+    validated_channel = _validate_channel(channel)
+    series = collector.store.consumption_by_period(
+        period, count, channel=validated_channel
+    )
     return {
         "period": period,
-        "channel": channel,
+        "channel": validated_channel,
         "count": len(series),
         "series": series,
     }

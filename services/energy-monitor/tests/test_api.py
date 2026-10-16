@@ -12,14 +12,14 @@ from __future__ import annotations
 import httpx
 import main
 import pytest
+from collector import Collector
 from database import EnergyStore
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        main.collector, "store", EnergyStore(str(tmp_path / "energy.db"))
-    )
+    test_collector = Collector(EnergyStore(str(tmp_path / "energy.db")))
+    monkeypatch.setattr(main, "collector", test_collector)
     transport = httpx.ASGITransport(app=main.app)
     return httpx.AsyncClient(transport=transport, base_url="http://test")
 
@@ -32,6 +32,8 @@ async def test_health_reports_db_ok(client):
     assert body["online"] is True
     assert body["service"] == "energy-monitor"
     assert body["db_ok"] is True
+    # Sensitive config (db_path) should not be exposed in responses.
+    assert "db_path" not in body
     # No poll has run in-test, so collector/meter liveness is "no data yet".
     assert body["meter_online"] is None
     assert body["collector_last_tick_age_s"] is None
@@ -44,6 +46,8 @@ async def test_health_alias_matches(client):
     body = resp.json()
     assert body["service"] == "energy-monitor"
     assert body["db_ok"] is True
+    # Sensitive config should not be exposed.
+    assert "db_path" not in body
 
 
 async def test_health_db_ok_false_when_store_broken(client, monkeypatch):
@@ -51,7 +55,14 @@ async def test_health_db_ok_false_when_store_broken(client, monkeypatch):
         def count(self):
             raise RuntimeError("db gone")
 
-    monkeypatch.setattr(main.collector, "store", BrokenStore())
+    class BrokenCollector:
+        store = BrokenStore()
+        meter_online = None
+
+        def last_tick_age_s(self):
+            return None
+
+    monkeypatch.setattr(main, "collector", BrokenCollector())
     async with client as c:
         resp = await c.get("/health")
     assert resp.status_code == 200
@@ -92,16 +103,15 @@ async def test_current_reflects_ring_buffer(client, monkeypatch):
 
 async def test_db_ok_helper_true_and_false(monkeypatch, tmp_path):
     # Direct unit coverage of the _db_ok helper on both branches.
-    monkeypatch.setattr(
-        main.collector, "store", EnergyStore(str(tmp_path / "e.db"))
-    )
+    test_collector = Collector(EnergyStore(str(tmp_path / "e.db")))
+    monkeypatch.setattr(main, "collector", test_collector)
     assert main._db_ok() is True
 
     class Broken:
         def count(self):
             raise RuntimeError("boom")
 
-    monkeypatch.setattr(main.collector, "store", Broken())
+    test_collector.store = Broken()  # type: ignore[assignment]
     assert main._db_ok() is False
 
 
@@ -180,3 +190,42 @@ async def test_alerts_returns_recorded(client):
     body = resp.json()
     assert body["count"] == 1
     assert body["alerts"][0]["rule_key"] == "daily_budget"
+
+
+# ── Channel validation ────────────────────────────────────────────────────────
+async def test_history_channel_too_long_422(client):
+    async with client as c:
+        resp = await c.get(f"/api/energy/history?channel={'x' * 100}")
+    assert resp.status_code == 422
+    assert "64 characters" in resp.json()["detail"]
+
+
+async def test_history_channel_invalid_chars_422(client):
+    async with client as c:
+        resp = await c.get("/api/energy/history?channel=test;DROP TABLE")
+    assert resp.status_code == 422
+    assert "alphanumeric" in resp.json()["detail"]
+
+
+async def test_history_channel_valid_special_chars(client):
+    async with client as c:
+        resp = await c.get("/api/energy/history?channel=device_1:ch-0")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["channel"] == "device_1:ch-0"
+
+
+async def test_history_empty_channel_treated_as_none(client):
+    async with client as c:
+        resp = await c.get("/api/energy/history?channel=")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["channel"] is None
+
+
+async def test_history_whitespace_channel_treated_as_none(client):
+    async with client as c:
+        resp = await c.get("/api/energy/history?channel=   ")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["channel"] is None
