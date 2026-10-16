@@ -19,6 +19,13 @@ Auth:
     This service trusts all incoming requests as already authenticated.
     No auth logic here — keep it simple.
 
+Security:
+    CSRF protection via Origin/Referer header validation on state-changing
+    requests (POST, PUT, DELETE). Since this is a JSON API consumed by an
+    SPA (no HTML forms, no session cookies), traditional token-based CSRF
+    is not applicable. Origin validation prevents cross-origin requests
+    from malicious sites.
+
 Port: 8003
 
 Typical usage:
@@ -28,8 +35,10 @@ Typical usage:
 """
 
 import logging
+import os
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi import Path as PathParam
@@ -59,6 +68,93 @@ logger = logging.getLogger(__name__)
 
 MIN_YEAR = 2000
 MAX_YEAR = 2100
+
+# ── CSRF Protection ───────────────────────────────────────────────────────────
+
+# Allowed origins for state-changing requests (POST/PUT/DELETE).
+# Configured via ALLOWED_ORIGINS env var (comma-separated) or defaults to
+# the production Tailscale domain. In development/testing, set to "*" to disable.
+_DEFAULT_ORIGINS = "https://raspberrypi.tailaa37cd.ts.net"
+_allowed_origins_raw = os.environ.get("ALLOWED_ORIGINS", _DEFAULT_ORIGINS)
+ALLOWED_ORIGINS: set[str] = (
+    set()
+    if _allowed_origins_raw == "*"
+    else {o.strip().rstrip("/") for o in _allowed_origins_raw.split(",") if o.strip()}
+)
+
+
+def _extract_origin(header_value: str | None) -> str | None:
+    """Extract the origin (scheme://host[:port]) from Origin or Referer header.
+
+    Args:
+        header_value: The value of the Origin or Referer header.
+
+    Returns:
+        The origin string (e.g., "https://example.com") or None if invalid.
+    """
+    if not header_value:
+        return None
+    try:
+        parsed = urlparse(header_value)
+        if parsed.scheme and parsed.netloc:
+            # Reconstruct origin without path
+            origin = f"{parsed.scheme}://{parsed.netloc}"
+            return origin.rstrip("/")
+    except Exception:
+        pass
+    return None
+
+
+def _check_csrf(request: Request) -> None:
+    """Validate Origin/Referer header for CSRF protection.
+
+    For state-changing methods (POST, PUT, DELETE, PATCH), verifies that
+    the request comes from an allowed origin. This prevents cross-site
+    request forgery attacks where a malicious site submits requests on
+    behalf of an authenticated user.
+
+    Args:
+        request: The FastAPI request object.
+
+    Raises:
+        HTTPException: 403 if the origin is not allowed.
+    """
+    # Skip CSRF check if disabled (ALLOWED_ORIGINS="*")
+    if not ALLOWED_ORIGINS:
+        return
+
+    # Only check state-changing methods
+    if request.method not in ("POST", "PUT", "DELETE", "PATCH"):
+        return
+
+    # Try Origin header first, then Referer
+    origin = _extract_origin(request.headers.get("origin"))
+    if origin is None:
+        origin = _extract_origin(request.headers.get("referer"))
+
+    # If neither header is present, reject (could be a direct curl/script call,
+    # but in a browser context this would be suspicious)
+    if origin is None:
+        logger.warning(
+            "CSRF check failed: no Origin/Referer header from %s",
+            _get_client_ip(request),
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Missing Origin or Referer header",
+        )
+
+    if origin not in ALLOWED_ORIGINS:
+        logger.warning(
+            "CSRF check failed: origin %s not in allowed list from %s",
+            origin,
+            _get_client_ip(request),
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Origin not allowed",
+        )
+
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 
@@ -318,8 +414,9 @@ def post_vacaciones_config(request: Request, data: VacacionesConfigRequest) -> d
         Dictionary with 'status' key ('ok' on success).
 
     Raises:
-        HTTPException: 429 if rate limit exceeded.
+        HTTPException: 403 if CSRF check fails, 429 if rate limit exceeded.
     """
+    _check_csrf(request)
     _check_rate_limit(request)
     nucleos = [n.model_dump() for n in data.nucleos]
     personas = [p.model_dump() for p in data.personas]
@@ -340,8 +437,9 @@ def add_vacaciones_year(request: Request) -> dict:
         Dictionary with 'status' and 'year' (the newly created year).
 
     Raises:
-        HTTPException: 429 if rate limit exceeded.
+        HTTPException: 403 if CSRF check fails, 429 if rate limit exceeded.
     """
+    _check_csrf(request)
     _check_rate_limit(request)
     return add_year()
 
@@ -367,10 +465,11 @@ def post_vacaciones_year(
         Dictionary with 'status' key ('ok' on success).
 
     Raises:
-        HTTPException: 400 if year is out of range, 429 if rate limit
-            exceeded.
+        HTTPException: 400 if year is out of range, 403 if CSRF check fails,
+            429 if rate limit exceeded.
     """
     _validate_year(year)
+    _check_csrf(request)
     _check_rate_limit(request)
     comidas = [c.model_dump() for c in data.comidas]
     return save_year(year, comidas, data.notas)
@@ -396,9 +495,10 @@ def delete_vacaciones_year(
 
     Raises:
         HTTPException: 400 if year is out of range or deletion is not
-            allowed, 429 if rate limit exceeded.
+            allowed, 403 if CSRF check fails, 429 if rate limit exceeded.
     """
     _validate_year(year)
+    _check_csrf(request)
     _check_rate_limit(request)
     result = delete_year(year)
     if result.get("status") == "error":

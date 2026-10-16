@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 # Set test environment variables before importing modules
 os.environ["VACACIONES_DATA_FILE"] = str(Path(tempfile.mkdtemp()) / "vacaciones.json")
+# Disable CSRF protection for existing tests (they don't send Origin headers)
+os.environ["ALLOWED_ORIGINS"] = "*"
 
 
 @pytest.fixture
