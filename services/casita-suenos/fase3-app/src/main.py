@@ -735,6 +735,25 @@ async def serve_frontend():
 # ── Telegram polling (background thread) ──────────────────────────────────────
 
 
+def _sanitize_telegram_error(exc: Exception) -> str:
+    """Strip Telegram bot token from exception messages to prevent leaks in logs.
+
+    Args:
+        exc: The exception to sanitize.
+
+    Returns:
+        A sanitized error string with any bot token replaced by <REDACTED>.
+    """
+    import re
+
+    msg = str(exc)
+    # Telegram bot tokens look like: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+    # Match /bot<token>/ in URLs and standalone tokens
+    sanitized = re.sub(r"/bot[0-9]+:[A-Za-z0-9_-]+/", "/bot<REDACTED>/", msg)
+    sanitized = re.sub(r"\b[0-9]+:[A-Za-z0-9_-]{20,}\b", "<REDACTED>", sanitized)
+    return sanitized
+
+
 def _telegram_polling(db) -> None:
     """Background thread that polls Telegram for /start commands.
 
@@ -767,17 +786,24 @@ def _telegram_polling(db) -> None:
                         chat_id,
                         username,
                     )
-                    # Mensaje de bienvenida
-                    httpx.post(
-                        f"https://api.telegram.org/bot{token}/sendMessage",
-                        json={
-                            "chat_id": chat_id,
-                            "text": "Bienvenido/a a Casita Sueños! Recibirás alertas de nuevas casas en el radar.",
-                        },
-                        timeout=10,
-                    )
+                    # Mensaje de bienvenida — wrap in try/except to avoid token leak
+                    try:
+                        httpx.post(
+                            f"https://api.telegram.org/bot{token}/sendMessage",
+                            json={
+                                "chat_id": chat_id,
+                                "text": "Bienvenido/a a Casita Sueños! Recibirás alertas de nuevas casas en el radar.",
+                            },
+                            timeout=10,
+                        )
+                    except Exception as send_err:
+                        logger.warning(
+                            "[main] Error enviando bienvenida a %s: %s",
+                            chat_id,
+                            _sanitize_telegram_error(send_err),
+                        )
         except Exception as e:
-            logger.debug("[main] Telegram polling error: %s", e)
+            logger.debug("[main] Telegram polling error: %s", _sanitize_telegram_error(e))
         time.sleep(1)
 
 
