@@ -173,24 +173,28 @@ class GoogleCalendarClient:
             return False
 
     def _save_token(self) -> None:
-        """Persist credentials to token_path (mode 600 for security)."""
+        """Persist credentials to token_path atomically (mode 600 for security).
+
+        Only saves token data; client_id/client_secret come from environment.
+        Uses atomic write (temp file + os.replace) to prevent corruption.
+        """
         if self._credentials is None:
             return
         token_data = {
             "token": self._credentials.token,
             "refresh_token": self._credentials.refresh_token,
             "token_uri": self._credentials.token_uri,
-            "client_id": self._credentials.client_id,
-            "client_secret": self._credentials.client_secret,
             "scopes": list(self._credentials.scopes or []),
         }
         self.token_path.parent.mkdir(parents=True, exist_ok=True)
-        self.token_path.write_text(json.dumps(token_data, indent=2))
-        # Set restrictive permissions (secrets should not be world-readable)
+        tmp_path = self.token_path.with_suffix(".json.tmp")
+        tmp_path.write_text(json.dumps(token_data, indent=2))
+        # Set restrictive permissions before moving to final location
         try:
-            os.chmod(self.token_path, 0o600)
+            os.chmod(tmp_path, 0o600)
         except OSError:
             pass  # Windows doesn't support chmod the same way
+        os.replace(tmp_path, self.token_path)
         logger.debug("Saved token to %s", self.token_path)
 
     def list_calendars(self) -> list[dict[str, Any]]:
