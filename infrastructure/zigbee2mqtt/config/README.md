@@ -80,3 +80,40 @@ This setup uses a TCP serial bridge (`scripts/serial_bridge.py`) to connect the 
 - Serial port: `COM3` (Windows)
 - TCP endpoint: `tcp://host.docker.internal:8282`
 - Adapter: `ember`
+
+## Frontend Authentication
+
+The Zigbee2MQTT frontend is protected by two layers of authentication:
+
+### Layer 1: nginx auth_request (primary)
+All requests to `/zigbee/` go through nginx's `auth_request` directive, which validates the user's session cookie against the main dashboard. Unauthenticated users are redirected to the login page.
+
+### Layer 2: Z2M auth_token (defense-in-depth)
+As an additional security measure, the frontend can require an auth token. This protects against scenarios where nginx auth might be bypassed (misconfiguration, internal network access, etc.).
+
+#### Setup
+
+1. Generate a secure token:
+   ```bash
+   openssl rand -hex 32
+   ```
+
+2. Add it to `.env` on the Pi:
+   ```bash
+   Z2M_FRONTEND_PASSWORD=your_generated_token_here
+   ```
+
+3. Update `/data/zigbee2mqtt/configuration.yaml`:
+   ```yaml
+   frontend:
+     enabled: true
+     port: 8081
+     auth_token: '!env Z2M_FRONTEND_PASSWORD'
+   ```
+
+4. Restart the zigbee2mqtt container:
+   ```bash
+   docker compose restart zigbee2mqtt
+   ```
+
+The `!env` directive tells Zigbee2MQTT to read the value from the environment variable. If `Z2M_FRONTEND_PASSWORD` is empty or not set, the frontend will have no token protection (nginx auth still applies).
