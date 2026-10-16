@@ -32,11 +32,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from types import TracebackType
+from typing import Any, Self
 
 import httpx
 from fastapi import HTTPException
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -98,10 +100,15 @@ class AsyncServiceClient:
             await self._client.aclose()
         self._client = None
 
-    async def __aenter__(self) -> AsyncServiceClient:
+    async def __aenter__(self) -> Self:
         return self
 
-    async def __aexit__(self, *exc_info: object) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         await self.aclose()
 
     def _headers(self) -> dict[str, str]:
@@ -111,7 +118,9 @@ class AsyncServiceClient:
             headers[self.config.token_header] = self.config.token
         return headers
 
-    async def get(self, path: str, params: dict | None = None) -> dict:
+    async def get(
+        self, path: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         GET request to the configured service.
 
@@ -141,7 +150,9 @@ class AsyncServiceClient:
         except httpx.HTTPStatusError as e:
             raise HTTPException(e.response.status_code, e.response.text)
 
-    async def post(self, path: str, data: dict | None = None) -> dict:
+    async def post(
+        self, path: str, data: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         POST request to the configured service.
 
@@ -171,7 +182,7 @@ class AsyncServiceClient:
         except httpx.HTTPStatusError as e:
             raise HTTPException(e.response.status_code, e.response.text)
 
-    async def delete(self, path: str) -> dict:
+    async def delete(self, path: str) -> dict[str, Any]:
         """
         DELETE request to the configured service.
 

@@ -2,4 +2,4 @@
 
 from .client import AsyncServiceClient, ServiceClientConfig
 
-__all__ = ["AsyncServiceClient", "ServiceClientConfig"]
+__all__: list[str] = ["AsyncServiceClient", "ServiceClientConfig"]
