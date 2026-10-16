@@ -19,6 +19,7 @@ import os
 import sys
 import threading
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -249,7 +250,7 @@ def _prune_loop() -> None:
 # Lifespan
 # ═══════════════════════════════════════════════════════════════════════════════
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize clients and start background loops."""
     global google_client, telegram_notifier
 
