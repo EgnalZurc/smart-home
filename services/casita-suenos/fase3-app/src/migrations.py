@@ -11,11 +11,12 @@ import contextlib
 import logging
 import re
 import sqlite3
+from typing import Final
 
 logger = logging.getLogger(__name__)
 
 # Whitelist of allowed table names for migrations
-ALLOWED_TABLES: frozenset[str] = frozenset(
+ALLOWED_TABLES: Final[frozenset[str]] = frozenset(
     {
         "properties",
         "scored_properties",
@@ -26,7 +27,7 @@ ALLOWED_TABLES: frozenset[str] = frozenset(
 
 # Pattern for allowed column names: lowercase letters, digits, underscores
 # Must start with a letter, max 64 chars
-COLUMN_NAME_PATTERN: re.Pattern[str] = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+COLUMN_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 
 def validate_migration_params(table: str, column: str) -> None:
@@ -58,7 +59,7 @@ def run_migrations(conn: sqlite3.Connection) -> None:
         conn: Conexión SQLite abierta con la base de datos.
     """
     # Migraciones de scored_properties (p11-p13, dismissed, viewed, comment)
-    migrations = [
+    migrations: list[tuple[str, str, str]] = [
         ("scored_properties", "score_p11", "REAL NOT NULL DEFAULT 0"),
         ("scored_properties", "score_p12", "REAL NOT NULL DEFAULT 0"),
         ("scored_properties", "score_p13", "REAL NOT NULL DEFAULT 0"),
@@ -93,7 +94,7 @@ def run_migrations(conn: sqlite3.Connection) -> None:
         pass  # ya existe
 
     # Rework R1-R18: nuevas columnas en properties
-    new_cols_props = [
+    new_cols_props: list[tuple[str, str, str]] = [
         ("properties", "terrain_m2", "REAL"),
         ("properties", "garage_type", "TEXT NOT NULL DEFAULT 'ninguno'"),
         ("properties", "habitability", "TEXT NOT NULL DEFAULT 'desconocido'"),
@@ -109,7 +110,7 @@ def run_migrations(conn: sqlite3.Connection) -> None:
             pass  # ya existe
 
     # Rework: nuevas columnas en scored_properties (r8-r18)
-    new_cols_score = [
+    new_cols_score: list[tuple[str, str, str]] = [
         ("scored_properties", "score_r1", "REAL NOT NULL DEFAULT 0"),
         ("scored_properties", "score_r2", "REAL NOT NULL DEFAULT 0"),
         ("scored_properties", "score_r3", "REAL NOT NULL DEFAULT 0"),

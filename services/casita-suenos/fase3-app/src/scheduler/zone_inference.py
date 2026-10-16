@@ -10,6 +10,7 @@ API y los puntos de parcheo de los tests.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from zones import ZONE_COORDS, ZONES, Zone
 
@@ -19,7 +20,10 @@ logger = logging.getLogger(__name__)
 
 
 def infer_zone_from_hint(
-    hint: str | None, url: str, *, nominatim_fallback
+    hint: str | None,
+    url: str,
+    *,
+    nominatim_fallback: Callable[[str], Zone | None],
 ) -> Zone | None:
     """
     Infiere la zona de un anuncio combinando la pista de ubicación y la URL.
@@ -111,7 +115,7 @@ def infer_zone_nominatim(hint: str) -> Zone | None:
             data[0].get("type", "?"),
         )
 
-        def _haversine(lat1, lon1, lat2, lon2):
+        def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
             R = 6371.0
             dlat = math.radians(lat2 - lat1)
             dlon = math.radians(lon2 - lon1)
@@ -123,8 +127,8 @@ def infer_zone_nominatim(hint: str) -> Zone | None:
             )
             return R * 2 * math.asin(math.sqrt(a))
 
-        best_zone = None
-        best_dist = float("inf")
+        best_zone: Zone | None = None
+        best_dist: float = float("inf")
         for zone in ZONES.values():
             coords = ZONE_COORDS.get(zone.id)
             if not coords:

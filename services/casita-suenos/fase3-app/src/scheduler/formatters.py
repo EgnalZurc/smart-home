@@ -8,17 +8,23 @@ se encarga de enviarlo con el notifier. Extraídas de ``casita_scheduler.py``
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from zones import ZONES
 
 if TYPE_CHECKING:
     from scheduler.models import ScraperError
 
-CASITA_DASHBOARD_URL = "https://raspberrypi.tailaa37cd.ts.net/smart-home/casita"
+CASITA_DASHBOARD_URL: Final[str] = (
+    "https://raspberrypi.tailaa37cd.ts.net/smart-home/casita"
+)
 
-_RESULT_EMOJI = {"ok": "✅", "ok_with_errors": "⚠️", "error": "❌"}
-_PORTAL_LABELS = {
+_RESULT_EMOJI: Final[dict[str, str]] = {
+    "ok": "✅",
+    "ok_with_errors": "⚠️",
+    "error": "❌",
+}
+_PORTAL_LABELS: Final[dict[str, str]] = {
     "pisos": "Pisos.com",
     "habitaclia": "Habitaclia",
     "fotocasa": "Fotocasa",
@@ -44,7 +50,7 @@ def build_scraping_summary(
         )
     else:
         portals_str = "ninguno"
-    lines = [
+    lines: list[str] = [
         f"{result_emoji} *Scraping completado*",
         f"⏱ Tiempo: {elapsed_str}",
         f"📡 Portales: {portals_str}",
@@ -73,7 +79,7 @@ def build_scraping_summary(
 
 def build_scraper_errors_message(errors: list[ScraperError]) -> str:
     """Construye el texto de la notificación de errores de scraper."""
-    lines = ["🔧 *Errores de scraper detectados*", ""]
+    lines: list[str] = ["🔧 *Errores de scraper detectados*", ""]
     for err in errors:
         lines.append(f"• *{err.portal}* / {err.zone_id}")
         # Acortar el mensaje de error para que no sea enorme
@@ -97,7 +103,7 @@ def build_email_check_summary(
     Construye el texto del resumen de un check de correo (Idealista/Fotocasa).
     Reproduce el formato previamente inline en los jobs de Gmail/Fotocasa.
     """
-    lines = [
+    lines: list[str] = [
         f"Correo {portal_label} procesado",
         f"Anuncios analizados: {total_alerts}",
         f"Nuevas en radar: {total_new}",

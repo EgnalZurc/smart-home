@@ -10,9 +10,13 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime
+from typing import TYPE_CHECKING, Final
 
 import telegram
 from models import PriceEvent, ScoreBreakdown, ScoredProperty
+
+if TYPE_CHECKING:
+    from database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +38,13 @@ def _sanitize_telegram_error(exc: Exception) -> str:
     return sanitized
 
 
-_SCORE_EMOJI = {
+_SCORE_EMOJI: Final[dict[range, str]] = {
     range(70, 85): "🏆",
     range(60, 70): "⭐⭐⭐",
     range(55, 60): "⭐⭐",
     range(50, 55): "⭐",
 }
-_PISCINA_EMOJI = {
+_PISCINA_EMOJI: Final[dict[str, str]] = {
     "propia": "🏊 piscina propia",
     "espacio": "🏊 espacio para piscina",
     "comunitaria": "🏊 piscina comunitaria",
@@ -73,13 +77,13 @@ def _format_new_property_alert(scored: ScoredProperty) -> str:
     emoji = _score_emoji(scored.total_score)
     safe_zone = _escape_md(scored.zone.name)
     piscina = _PISCINA_EMOJI.get(prop.piscina.value, "")
-    lines = [
+    lines: list[str] = [
         f"{emoji} Nueva vivienda — {scored.total_score:.1f}/{ScoreBreakdown.MAX_SCORE:.0f} pts",
         f"📍 {safe_zone}",
         f"💰 {_format_price(prop.price)}",
         "",
     ]
-    details = []
+    details: list[str] = []
     if prop.rooms:
         details.append(f"🛏 {prop.rooms} hab.")
     if prop.size_m2:
@@ -122,7 +126,7 @@ def _format_high_scorer_alert(prop: dict) -> str:
     score = float(prop.get("score") or 0.0)
     emoji = _score_emoji(score) or "🎯"
     title = _escape_md(str(prop.get("title") or "Nueva vivienda"))
-    lines = [
+    lines: list[str] = [
         f"{emoji} Propiedad destacada — {score:.1f}/{ScoreBreakdown.MAX_SCORE:.0f} pts",
         f"🏠 {title}",
     ]
@@ -133,7 +137,7 @@ def _format_high_scorer_alert(prop: dict) -> str:
     if price:
         lines.append(f"💰 {_format_price(int(price))}")
 
-    details = []
+    details: list[str] = []
     if prop.get("rooms"):
         details.append(f"🛏 {prop['rooms']} hab.")
     if prop.get("size_m2"):
@@ -152,7 +156,7 @@ def _format_price_drop_alert(
     event: PriceEvent, title: str, url: str, zone_name: str
 ) -> str:
     direction = "📉 *Bajada de precio*" if event.delta < 0 else "📈 *Subida de precio*"
-    lines = [
+    lines: list[str] = [
         direction,
         f"📍 *{zone_name}*",
         f"🏠 {title}",
@@ -167,7 +171,7 @@ def _format_price_drop_alert(
 
 
 def _format_weekly_summary(top_properties: list[dict]) -> str:
-    lines = [
+    lines: list[str] = [
         "📋 *Resumen semanal — Casita Suenos*",
         f"_{datetime.now().strftime('%d/%m/%Y')}_",
         "",
@@ -197,10 +201,12 @@ class TelegramNotifier:
     Fallback al chat_id del .env si no hay chats en BD.
     """
 
-    def __init__(self, bot_token: str, fallback_chat_id: str, db=None) -> None:
+    def __init__(
+        self, bot_token: str, fallback_chat_id: str, db: Database | None = None
+    ) -> None:
         self._bot = telegram.Bot(token=bot_token)
         self._fallback_chat_id = fallback_chat_id
-        self._db = db  # instancia de Database para leer chat_ids
+        self._db: Database | None = db  # instancia de Database para leer chat_ids
         logger.info(
             "[telegram] Notificador inicializado. fallback_chat=%s",
             fallback_chat_id,

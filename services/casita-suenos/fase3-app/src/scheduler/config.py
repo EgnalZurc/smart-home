@@ -8,9 +8,10 @@ No contiene lógica: solo datos de configuración de los jobs periódicos.
 from __future__ import annotations
 
 from datetime import time as dtime
+from typing import Final
 
 # Zonas top 8 por puntuación — para el scraping semanal de Apify (free tier)
-TOP_ZONES_FOR_APIFY: list[str] = [
+TOP_ZONES_FOR_APIFY: Final[list[str]] = [
     "zamora_meseta",
     "castellon_costa_norte",
     "salamanca_alrededores",
@@ -22,18 +23,18 @@ TOP_ZONES_FOR_APIFY: list[str] = [
 ]
 
 # Días de la semana para scraping completo (0=lunes, 3=jueves)
-SCRAPING_DAYS: set[int] = {0, 3}
-SCRAPING_HOUR: dtime = dtime(7, 0)
+SCRAPING_DAYS: Final[set[int]] = {0, 3}
+SCRAPING_HOUR: Final[dtime] = dtime(7, 0)
 
 # Día del resumen semanal (6=domingo)
-SUMMARY_DAY: int = 6
-SUMMARY_HOUR: dtime = dtime(9, 0)
+SUMMARY_DAY: Final[int] = 6
+SUMMARY_HOUR: Final[dtime] = dtime(9, 0)
 
 # Intervalo del check de Gmail (segundos)
-GMAIL_CHECK_INTERVAL_SEC: int = 30 * 60  # 30 minutos
+GMAIL_CHECK_INTERVAL_SEC: Final[int] = 30 * 60  # 30 minutos
 
 # Intervalo del loop principal (segundos) — cada minuto comprueba si toca algo
-LOOP_TICK_SEC: int = 60
+LOOP_TICK_SEC: Final[int] = 60
 
 # Distancia máxima (km) aceptada por el fallback geográfico de Nominatim
-NOMINATIM_MAX_DIST_KM: float = 200.0
+NOMINATIM_MAX_DIST_KM: Final[float] = 200.0
