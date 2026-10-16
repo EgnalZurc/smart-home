@@ -15,6 +15,8 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
+from pathlib import Path
+from typing import Any
 
 from config import DB_PATH, RETENTION_DAYS
 from models import PresenceEvent
@@ -23,13 +25,12 @@ try:
     from smart_home_common.sqlite_helpers import SqliteHelper
 except ImportError:  # pragma: no cover - import fallback outside the container
     import sys
-    from pathlib import Path
 
-    _repo_root = Path(__file__).resolve().parents[3]
+    _repo_root: Path = Path(__file__).resolve().parents[3]
     sys.path.insert(0, str(_repo_root / "libs" / "smart_home_common" / "src"))
     from smart_home_common.sqlite_helpers import SqliteHelper
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -105,8 +106,8 @@ class PresenceStore:
     """Durable presence store backed by SQLite (config + snapshot + history)."""
 
     def __init__(self, db_path: str = DB_PATH) -> None:
-        self.db_path = db_path
-        self._db = SqliteHelper(db_path, init=_ensure_schema)
+        self.db_path: str = db_path
+        self._db: SqliteHelper = SqliteHelper(db_path, init=_ensure_schema)
 
     # ── Current snapshot ────────────────────────────────────────────────────
     def upsert_current(
@@ -127,10 +128,10 @@ class PresenceStore:
                 (person_id, state, confidence, since, last_seen, last_source),
             )
 
-    def get_current(self) -> list[dict[str, object]]:
+    def get_current(self) -> list[dict[str, Any]]:
         """Return the current snapshot for every person (one row each)."""
         with self._db.connect() as conn:
-            rows = conn.execute(
+            rows: list[sqlite3.Row] = conn.execute(
                 "SELECT person_id, state, confidence, since, last_seen, last_source "
                 "FROM presence_current"
             ).fetchall()
@@ -140,7 +141,7 @@ class PresenceStore:
     def record_transition(self, event: PresenceEvent) -> int:
         """Persist one confirmed transition; return its row id."""
         with self._db.connect() as conn:
-            cur = conn.execute(
+            cur: sqlite3.Cursor = conn.execute(
                 "INSERT INTO transitions "
                 "(ts, person_id, from_state, to_state, confidence, source) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
@@ -161,16 +162,16 @@ class PresenceStore:
         *,
         since: int | None = None,
         until: int | None = None,
-    ) -> list[dict[str, object]]:
+    ) -> list[dict[str, Any]]:
         """Return the transition audit trail, optionally filtered.
 
         Rows are returned newest-first.
         """
-        query = (
+        query: str = (
             "SELECT id, ts, person_id, from_state, to_state, confidence, source "
             "FROM transitions WHERE 1 = 1"
         )
-        args: list[object] = []
+        args: list[Any] = []
         if person_id is not None:
             query += " AND person_id = ?"
             args.append(person_id)
@@ -182,7 +183,7 @@ class PresenceStore:
             args.append(until)
         query += " ORDER BY ts DESC"
         with self._db.connect() as conn:
-            rows = conn.execute(query, args).fetchall()
+            rows: list[sqlite3.Row] = conn.execute(query, args).fetchall()
         return [dict(r) for r in rows]
 
     # ── Retention ─────────────────────────────────────────────────────────────
@@ -193,11 +194,13 @@ class PresenceStore:
 
         Returns the number of rows deleted.
         """
-        now = int(time.time()) if now is None else now
-        cutoff = now - retention_days * 24 * 3600
+        now_ts: int = int(time.time()) if now is None else now
+        cutoff: int = now_ts - retention_days * 24 * 3600
         with self._db.connect() as conn:
-            cur = conn.execute("DELETE FROM transitions WHERE ts < ?", (cutoff,))
-            deleted = cur.rowcount
+            cur: sqlite3.Cursor = conn.execute(
+                "DELETE FROM transitions WHERE ts < ?", (cutoff,)
+            )
+            deleted: int = cur.rowcount
             try:
                 conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             except sqlite3.Error as exc:  # pragma: no cover - best-effort
@@ -211,8 +214,10 @@ class PresenceStore:
     def count_transitions(self) -> int:
         """Return the total number of transition rows (tests / diagnostics)."""
         with self._db.connect() as conn:
-            row = conn.execute("SELECT COUNT(*) AS n FROM transitions").fetchone()
-        return int(row["n"])
+            row: sqlite3.Row | None = conn.execute(
+                "SELECT COUNT(*) AS n FROM transitions"
+            ).fetchone()
+        return int(row["n"]) if row else 0
 
     def db_ok(self) -> bool:
         """Return True if the store answers a trivial query."""
