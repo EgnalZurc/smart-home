@@ -279,7 +279,7 @@ async def test_series_rejects_too_long_metric(client):
 async def test_rate_limit_allows_under_threshold(client, monkeypatch):
     """Requests under the rate limit should succeed (M-8)."""
     # Clear rate limit state
-    main._rate_limit.clear()
+    main.rate_limiter._data.clear()
     async with client as c:
         for _ in range(5):
             resp = await c.get("/api/metrics/latest")
@@ -289,9 +289,14 @@ async def test_rate_limit_allows_under_threshold(client, monkeypatch):
 async def test_rate_limit_blocks_over_threshold(client, monkeypatch):
     """Requests exceeding rate limit should get 429 (M-8)."""
     # Use X-Forwarded-For to have a known, consistent IP for the test
-    main._rate_limit.clear()
-    now = time.time()
-    main._rate_limit["192.168.1.100"] = [now - i for i in range(60)]
+    from datetime import datetime
+
+    main.rate_limiter._data.clear()
+    # Pre-fill the rate limiter to exceed the limit
+    main.rate_limiter._data["192.168.1.100"] = {
+        "count": 60,  # Exceeds MAX_REQUESTS_PER_MINUTE
+        "window_start": datetime.now(),
+    }
 
     async with client as c:
         resp = await c.get(
@@ -304,9 +309,14 @@ async def test_rate_limit_blocks_over_threshold(client, monkeypatch):
 
 async def test_rate_limit_skips_health_endpoints(client, monkeypatch):
     """Health endpoints should bypass rate limiting."""
-    main._rate_limit.clear()
-    now = time.time()
-    main._rate_limit["unknown"] = [now - i for i in range(100)]  # Over limit
+    from datetime import datetime
+
+    main.rate_limiter._data.clear()
+    # Pre-fill rate limiter to exceed limit
+    main.rate_limiter._data["unknown"] = {
+        "count": 100,
+        "window_start": datetime.now(),
+    }
 
     async with client as c:
         resp = await c.get("/health")
@@ -317,10 +327,14 @@ async def test_rate_limit_skips_health_endpoints(client, monkeypatch):
 
 async def test_rate_limit_respects_x_forwarded_for(client, monkeypatch):
     """Rate limiting should use X-Forwarded-For header when present."""
-    main._rate_limit.clear()
-    now = time.time()
+    from datetime import datetime
+
+    main.rate_limiter._data.clear()
     # Fill bucket for the forwarded IP
-    main._rate_limit["10.0.0.1"] = [now - i for i in range(60)]
+    main.rate_limiter._data["10.0.0.1"] = {
+        "count": 60,
+        "window_start": datetime.now(),
+    }
 
     async with client as c:
         resp = await c.get(
@@ -330,43 +344,16 @@ async def test_rate_limit_respects_x_forwarded_for(client, monkeypatch):
     assert resp.status_code == 429
 
 
-async def test_cleanup_stale_rate_limits_removes_old_ips(client, monkeypatch):
-    """cleanup_stale_rate_limits should remove IPs with only old timestamps."""
-    main._rate_limit.clear()
-    now = time.time()
-    # IP with all timestamps older than window (stale)
-    main._rate_limit["stale-ip"] = [now - 120, now - 180]
-    # IP with recent timestamps (active)
-    main._rate_limit["active-ip"] = [now - 10, now - 5]
+async def test_rate_limiter_reset_clears_key(client, monkeypatch):
+    """reset() should clear rate limit for a specific key."""
+    from datetime import datetime
 
-    removed = main.cleanup_stale_rate_limits()
+    main.rate_limiter._data.clear()
+    main.rate_limiter._data["test-ip"] = {
+        "count": 50,
+        "window_start": datetime.now(),
+    }
 
-    assert removed == 1
-    assert "stale-ip" not in main._rate_limit
-    assert "active-ip" in main._rate_limit
+    main.rate_limiter.reset("test-ip")
 
-
-async def test_cleanup_stale_rate_limits_removes_empty_lists(client, monkeypatch):
-    """cleanup_stale_rate_limits should remove IPs with empty timestamp lists."""
-    main._rate_limit.clear()
-    main._rate_limit["empty-ip"] = []
-    main._rate_limit["active-ip"] = [time.time()]
-
-    removed = main.cleanup_stale_rate_limits()
-
-    assert removed == 1
-    assert "empty-ip" not in main._rate_limit
-    assert "active-ip" in main._rate_limit
-
-
-async def test_cleanup_stale_rate_limits_keeps_mixed_timestamps(client, monkeypatch):
-    """IPs with at least one recent timestamp should be kept."""
-    main._rate_limit.clear()
-    now = time.time()
-    # IP with mix of old and recent timestamps
-    main._rate_limit["mixed-ip"] = [now - 120, now - 10]
-
-    removed = main.cleanup_stale_rate_limits()
-
-    assert removed == 0
-    assert "mixed-ip" in main._rate_limit
+    assert "test-ip" not in main.rate_limiter._data
