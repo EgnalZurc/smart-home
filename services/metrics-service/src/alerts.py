@@ -98,8 +98,12 @@ class Threshold:
     enabled: bool = True
     unit: str = ""
 
-    def to_dict(self) -> dict:
-        """Serialise for the thresholds API."""
+    def to_dict(self) -> dict[str, str | float | int | bool | None]:
+        """Serialise for the thresholds API.
+
+        Returns:
+            Dict representation of the threshold suitable for JSON serialization.
+        """
         return {
             "key": self.key,
             "metric": self.metric,
@@ -246,23 +250,45 @@ class AlertEngine:
     The engine is deliberately decoupled from I/O: the ring buffer and store are
     injected, and the notifier is any object with a ``send(message) -> result``
     method (``libs.notifications.TelegramNotifier``), so tests pass a stub.
+
+    Attributes:
+        ring: Ring buffer for high-resolution metric samples.
+        store: AlertStore for persistence of active alerts and history.
+        notifier: Optional TelegramNotifier for sending alert messages.
+        thresholds: Dict of threshold rules keyed by rule key.
     """
+
+    ring: RingBuffer
+    store: AlertStore
+    notifier: TelegramNotifier | None
+    thresholds: dict[str, Threshold]
+    _active: dict[str, ActiveAlert]
+    _tick_counts: dict[str, int]
+    _loaded: bool
 
     def __init__(
         self,
         ring: RingBuffer,
-        store,  # AlertStore (duck-typed to avoid an import cycle in tests)
-        notifier=None,
+        store: AlertStore,
+        notifier: TelegramNotifier | None = None,
         thresholds: dict[str, Threshold] | None = None,
     ) -> None:
+        """Initialize the alert engine.
+
+        Args:
+            ring: Ring buffer for reading high-resolution metric samples.
+            store: AlertStore for persisting active alerts and history.
+            notifier: Optional TelegramNotifier for sending alert messages.
+            thresholds: Optional dict of threshold rules. Uses defaults if None.
+        """
         self.ring = ring
         self.store = store
         self.notifier = notifier
         self.thresholds = thresholds if thresholds is not None else default_thresholds()
         # In-memory mirror of the persisted active set, keyed by fingerprint.
-        self._active: dict[str, ActiveAlert] = {}
+        self._active = {}
         # Consecutive-breach tick counters for count_ticks rules.
-        self._tick_counts: dict[str, int] = {}
+        self._tick_counts = {}
         self._loaded = False
 
     # ── Persistence bootstrap ────────────────────────────────────────────────
@@ -273,17 +299,32 @@ class AlertEngine:
         logger.info("AlertEngine loaded %d active alert(s)", len(self._active))
 
     # ── Thresholds API ────────────────────────────────────────────────────────
-    def get_thresholds(self) -> list[dict]:
-        """Return the current rule set serialised for the API."""
+    def get_thresholds(self) -> list[dict[str, str | float | int | bool | None]]:
+        """Return the current rule set serialised for the API.
+
+        Returns:
+            List of threshold dicts suitable for JSON serialization.
+        """
         return [t.to_dict() for t in self.thresholds.values()]
 
-    def set_thresholds(self, updates: dict[str, dict]) -> list[dict]:
+    def set_thresholds(
+        self, updates: dict[str, dict[str, Any]]
+    ) -> list[dict[str, str | float | int | bool | None]]:
         """Patch thresholds at runtime.
 
         ``updates`` maps a rule key to a dict of fields to override (``value``,
         ``critical_value``, ``sustained_s``, ``enabled``, ``comparison``,
         ``severity``). Unknown keys are ignored; unknown fields raise ``KeyError``
         via the dataclass so callers get a clear 400.
+
+        Args:
+            updates: Dict mapping rule keys to dicts of field updates.
+
+        Returns:
+            Updated list of all threshold dicts.
+
+        Raises:
+            KeyError: If rule key or field name is unknown.
         """
         for key, patch in updates.items():
             rule = self.thresholds.get(key)
@@ -596,8 +637,13 @@ class AlertEngine:
         logger.info("Alert %s dismissed manually", fingerprint)
         return True
 
-    def active_alerts(self) -> list[dict]:
-        """Return currently-firing alerts for ``GET /api/metrics/alerts``."""
+    def active_alerts(self) -> list[dict[str, str | int | float]]:
+        """Return currently-firing alerts for ``GET /api/metrics/alerts``.
+
+        Returns:
+            List of alert dicts with fingerprint, rule_key, label, severity,
+            value, message, fired_at, title, and timestamp keys.
+        """
         from datetime import datetime, timezone
 
         return [
