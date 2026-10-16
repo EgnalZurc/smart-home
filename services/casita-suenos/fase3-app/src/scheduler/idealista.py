@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from models import Piscina, Portal, Property
+from models import GarageType, Piscina, Portal, Property
 from scraper_base import (
     infer_ac,
     infer_ac_type,
@@ -29,10 +30,14 @@ from scraper_base import (
     parse_size,
 )
 
+if TYPE_CHECKING:
+    from idealista_email_parser import IdealistaAlert
+    from zones import Zone
+
 logger = logging.getLogger(__name__)
 
 
-def scrape_idealista_property(alert, zone) -> Property | None:
+def scrape_idealista_property(alert: IdealistaAlert, zone: Zone) -> Property | None:
     """
     Descarga y parsea la ficha de Idealista de ``alert``. Si Idealista bloquea
     el scraping (403) o faltan datos, cae en los datos del correo. Devuelve
@@ -41,17 +46,18 @@ def scrape_idealista_property(alert, zone) -> Property | None:
     import httpx
     from bs4 import BeautifulSoup
 
-    title, price, rooms, size_m2, desc = (
-        alert.title,
-        alert.price,
-        alert.rooms,
-        alert.size_m2,
-        "",
-    )
-    has_garage, has_garden, has_ac_v, piscina = False, False, False, Piscina.NINGUNA
+    title: str = alert.title
+    price: int | None = alert.price
+    rooms: int | None = alert.rooms
+    size_m2: float | None = alert.size_m2
+    desc: str = ""
+    has_garage: bool = False
+    has_garden: bool = False
+    has_ac_v: bool = False
+    piscina: Piscina = Piscina.NINGUNA
     feats: list[str] = []
     try:
-        hdrs = {
+        hdrs: dict[str, str] = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept-Language": "es-ES,es;q=0.9",
         }
@@ -111,6 +117,14 @@ def scrape_idealista_property(alert, zone) -> Property | None:
         has_garden = True  # Idealista ya filtro jardin
     if not has_garage:
         has_garage = True  # Idealista ya filtro garaje
+
+    # Determine garage_type properly
+    garage_type_val: GarageType
+    if desc:
+        garage_type_val = infer_garage_type(desc, feats)
+    else:
+        garage_type_val = GarageType.EDIFICIO if has_garage else GarageType.NINGUNO
+
     return Property(
         portal=Portal.IDEALISTA,
         portal_id=alert.property_id,
@@ -123,9 +137,7 @@ def scrape_idealista_property(alert, zone) -> Property | None:
         has_garage=has_garage,
         has_garden_or_plot=has_garden,
         terrain_m2=infer_terrain_m2(desc, feats) if desc else None,
-        garage_type=infer_garage_type(desc, feats)
-        if desc
-        else ("edificio" if has_garage else "ninguno"),
+        garage_type=garage_type_val,
         habitability=infer_habitability(desc, title or "") if desc else None,
         internet=infer_internet(desc, feats) if desc else None,
         has_ac=(lambda t: t[0])(infer_ac_type(desc, feats)) if desc else has_ac_v,

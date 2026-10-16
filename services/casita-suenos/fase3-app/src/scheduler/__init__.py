@@ -16,6 +16,11 @@ módulos contienen funciones puras que el orquestador invoca o delega.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from scheduler.models import SchedulerStatus, ScraperError
 
-__all__ = ["ScraperError", "SchedulerStatus"]
+if TYPE_CHECKING:
+    pass
+
+__all__: list[str] = ["ScraperError", "SchedulerStatus"]
