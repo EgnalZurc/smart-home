@@ -35,16 +35,18 @@ import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import docker
+from docker.models.containers import Container
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 # Load .env from script directory
 # Try multiple locations to handle NSSM service execution
-_script_dir = Path(__file__).resolve().parent
-_env_candidates = [
+_script_dir: Path = Path(__file__).resolve().parent
+_env_candidates: list[Path] = [
     _script_dir.parent / ".env",  # ../. env relative to src/
     _script_dir / ".env",  # same dir as script
     Path("E:/pc-agent/.env"),  # absolute fallback for NSSM
@@ -58,28 +60,30 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-API_TOKEN = os.environ.get("PC_AGENT_TOKEN", "")
-VALHEIM_CONTAINER = os.environ.get("VALHEIM_CONTAINER", "valheim-server")
+API_TOKEN: str = os.environ.get("PC_AGENT_TOKEN", "")
+VALHEIM_CONTAINER: str = os.environ.get("VALHEIM_CONTAINER", "valheim-server")
 
 # Valheim server paths (on Windows PC)
-VALHEIM_SERVER_DIR = Path(os.environ.get("VALHEIM_SERVER_DIR", r"E:\valheim-server"))
-VALHEIM_ENV_FILE = VALHEIM_SERVER_DIR / ".env"
-VALHEIM_WORLDS_DIR = VALHEIM_SERVER_DIR / "server_data" / "worlds_local"
-VALHEIM_LOGS_DIR = VALHEIM_SERVER_DIR / "server_data" / "logs"
+VALHEIM_SERVER_DIR: Path = Path(
+    os.environ.get("VALHEIM_SERVER_DIR", r"E:\valheim-server")
+)
+VALHEIM_ENV_FILE: Path = VALHEIM_SERVER_DIR / ".env"
+VALHEIM_WORLDS_DIR: Path = VALHEIM_SERVER_DIR / "server_data" / "worlds_local"
+VALHEIM_LOGS_DIR: Path = VALHEIM_SERVER_DIR / "server_data" / "logs"
 
 # Power profile GUIDs (from powercfg /list)
-POWER_PROFILES = {
+POWER_PROFILES: dict[str, str] = {
     "gaming": "cfd582e3-13dc-41bf-82c3-f576249cc8d2",
     "servidor": "9095b64b-d0ef-4962-983f-5726c8569206",
     "balanced": "381b4222-f694-41f0-9685-ff5bb260df2e",
 }
 
 # Max upload size: 600 MB
-MAX_UPLOAD_BYTES = 600 * 1024 * 1024
+MAX_UPLOAD_BYTES: int = 600 * 1024 * 1024
 
 if not API_TOKEN:
     logger.error("PC_AGENT_TOKEN not set — authenticated endpoints will return 503!")
@@ -91,10 +95,10 @@ if not API_TOKEN:
 # at import time would fail permanently in that race. Instead we (re)connect on
 # demand and cache the client only once it pings successfully.
 
-docker_client: "docker.DockerClient | None" = None
+docker_client: docker.DockerClient | None = None
 
 
-def get_docker() -> "docker.DockerClient | None":
+def get_docker() -> docker.DockerClient | None:
     """Return a healthy Docker client, (re)connecting if needed.
 
     Returns None if the engine is still unreachable (e.g. Docker Desktop not
@@ -128,7 +132,7 @@ get_docker()
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 
-app = FastAPI(
+app: FastAPI = FastAPI(
     title="pc-agent",
     version="1.0.0",
     description="Remote control agent for Windows PC (Valheim server + power profiles)",
@@ -145,7 +149,7 @@ app.add_middleware(
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 
-def require_auth(x_api_token: str = Header(None, alias="X-Api-Token")):
+def require_auth(x_api_token: str | None = Header(None, alias="X-Api-Token")) -> None:
     """Validate API token from header.
 
     Fails closed: if PC_AGENT_TOKEN is not configured, all authenticated
@@ -164,9 +168,9 @@ def require_auth(x_api_token: str = Header(None, alias="X-Api-Token")):
 
 
 @app.get("/health")
-def health():
+def health() -> dict[str, Any]:
     """Health check — no authentication required."""
-    docker_ok = get_docker() is not None
+    docker_ok: bool = get_docker() is not None
 
     return {
         "online": True,
@@ -179,43 +183,45 @@ def health():
 
 
 @app.get("/valheim/status")
-def valheim_status(x_api_token: str = Header(None, alias="X-Api-Token")):
+def valheim_status(
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, Any]:
     """Get Valheim server container status."""
     require_auth(x_api_token)
 
-    client = get_docker()
+    client: docker.DockerClient | None = get_docker()
     if not client:
         raise HTTPException(503, "Docker not available")
 
     try:
-        container = client.containers.get(VALHEIM_CONTAINER)
-        state = container.attrs.get("State", {})
+        container: Container = client.containers.get(VALHEIM_CONTAINER)
+        state: dict[str, Any] = container.attrs.get("State", {})
 
         # Calculate uptime
-        uptime_seconds = None
-        started_at = state.get("StartedAt")
+        uptime_seconds: int | None = None
+        started_at: str | None = state.get("StartedAt")
         if started_at and container.status == "running":
             try:
-                dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                dt: datetime = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
                 uptime_seconds = int((datetime.now(timezone.utc) - dt).total_seconds())
             except Exception:
                 pass
 
         # Get join code and players from logs
-        join_code = None
-        players = 0
-        log = _latest_log_file()
+        join_code: str | None = None
+        players: int = 0
+        log: Path | None = _latest_log_file()
         if log and log.exists():
             try:
-                lines = log.read_text(errors="replace")
-                recent = "\n".join(lines.splitlines()[-500:])
+                lines: str = log.read_text(errors="replace")
+                recent: str = "\n".join(lines.splitlines()[-500:])
                 join_code = _parse_join_code(recent)
                 players = _parse_players(recent)
             except Exception:
                 pass
 
         # Get world info from .env
-        env = _read_env()
+        env: dict[str, str] = _read_env()
 
         return {
             "container": VALHEIM_CONTAINER,
@@ -245,16 +251,18 @@ def valheim_status(x_api_token: str = Header(None, alias="X-Api-Token")):
 
 
 @app.post("/valheim/start")
-def valheim_start(x_api_token: str = Header(None, alias="X-Api-Token")):
+def valheim_start(
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, str]:
     """Start Valheim server container."""
     require_auth(x_api_token)
 
-    client = get_docker()
+    client: docker.DockerClient | None = get_docker()
     if not client:
         raise HTTPException(503, "Docker not available")
 
     try:
-        container = client.containers.get(VALHEIM_CONTAINER)
+        container: Container = client.containers.get(VALHEIM_CONTAINER)
 
         if container.status == "running":
             return {"status": "already_running", "container": VALHEIM_CONTAINER}
@@ -272,16 +280,18 @@ def valheim_start(x_api_token: str = Header(None, alias="X-Api-Token")):
 
 
 @app.post("/valheim/stop")
-def valheim_stop(x_api_token: str = Header(None, alias="X-Api-Token")):
+def valheim_stop(
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, str]:
     """Stop Valheim server container gracefully."""
     require_auth(x_api_token)
 
-    client = get_docker()
+    client: docker.DockerClient | None = get_docker()
     if not client:
         raise HTTPException(503, "Docker not available")
 
     try:
-        container = client.containers.get(VALHEIM_CONTAINER)
+        container: Container = client.containers.get(VALHEIM_CONTAINER)
 
         if container.status != "running":
             return {"status": "already_stopped", "container": VALHEIM_CONTAINER}
@@ -299,16 +309,18 @@ def valheim_stop(x_api_token: str = Header(None, alias="X-Api-Token")):
 
 
 @app.post("/valheim/restart")
-def valheim_restart(x_api_token: str = Header(None, alias="X-Api-Token")):
+def valheim_restart(
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, str]:
     """Restart Valheim server container."""
     require_auth(x_api_token)
 
-    client = get_docker()
+    client: docker.DockerClient | None = get_docker()
     if not client:
         raise HTTPException(503, "Docker not available")
 
     try:
-        container = client.containers.get(VALHEIM_CONTAINER)
+        container: Container = client.containers.get(VALHEIM_CONTAINER)
         container.restart(timeout=30)
         logger.info("Restarted container: %s", VALHEIM_CONTAINER)
         return {"status": "restarted", "container": VALHEIM_CONTAINER}
@@ -340,16 +352,16 @@ def _read_env() -> dict[str, str]:
 
 def _write_env(env: dict[str, str]) -> None:
     """Write dict back to .env, preserving comments."""
-    lines = []
+    lines: list[str] = []
     if VALHEIM_ENV_FILE.exists():
-        existing = VALHEIM_ENV_FILE.read_text().splitlines()
-        written = set()
+        existing: list[str] = VALHEIM_ENV_FILE.read_text().splitlines()
+        written: set[str] = set()
         for line in existing:
-            stripped = line.strip()
+            stripped: str = line.strip()
             if stripped.startswith("#") or not stripped:
                 lines.append(line)
             elif "=" in stripped:
-                k = stripped.split("=", 1)[0].strip()
+                k: str = stripped.split("=", 1)[0].strip()
                 if k in env:
                     lines.append(f"{k}={env[k]}")
                     written.add(k)
@@ -370,13 +382,15 @@ def _latest_log_file() -> Path | None:
     """Return the most recent log file."""
     if not VALHEIM_LOGS_DIR.exists():
         return None
-    logs = sorted(VALHEIM_LOGS_DIR.glob("valheim_*.log"), reverse=True)
+    logs: list[Path] = sorted(VALHEIM_LOGS_DIR.glob("valheim_*.log"), reverse=True)
     return logs[0] if logs else None
 
 
 def _parse_join_code(log_lines: str) -> str | None:
     """Extract 6-digit join code from logs."""
-    match = re.search(r"with join code\s+(\d{6})\b", log_lines, re.IGNORECASE)
+    match: re.Match[str] | None = re.search(
+        r"with join code\s+(\d{6})\b", log_lines, re.IGNORECASE
+    )
     if match:
         return match.group(1)
     match = re.search(r"join code[:\s]+(\d{6})\b", log_lines, re.IGNORECASE)
@@ -385,8 +399,8 @@ def _parse_join_code(log_lines: str) -> str | None:
 
 def _parse_players(log_lines: str) -> int:
     """Estimate current players from logs."""
-    connects = len(re.findall(r"Got handshake from client", log_lines))
-    disconnects = len(re.findall(r"Closing socket.*ZDOID", log_lines))
+    connects: int = len(re.findall(r"Got handshake from client", log_lines))
+    disconnects: int = len(re.findall(r"Closing socket.*ZDOID", log_lines))
     return max(0, connects - disconnects)
 
 
@@ -394,10 +408,12 @@ def _parse_players(log_lines: str) -> int:
 
 
 @app.get("/valheim/config")
-def get_config(x_api_token: str = Header(None, alias="X-Api-Token")):
+def get_config(
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, Any]:
     """Get Valheim server configuration."""
     require_auth(x_api_token)
-    env = _read_env()
+    env: dict[str, str] = _read_env()
     return {
         "server_name": env.get("SERVER_NAME", ""),
         "world_name": env.get("WORLD_NAME", ""),
@@ -418,8 +434,8 @@ def update_config(
     crossplay: bool = Form(False),
     save_interval: int = Form(1800),
     backups: int = Form(4),
-    x_api_token: str = Header(None, alias="X-Api-Token"),
-):
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, str]:
     """Update Valheim server configuration and restart."""
     require_auth(x_api_token)
 
@@ -428,7 +444,7 @@ def update_config(
     if not world_name.strip():
         raise HTTPException(400, "World name cannot be empty")
 
-    env = _read_env()
+    env: dict[str, str] = _read_env()
     env["SERVER_NAME"] = server_name
     env["WORLD_NAME"] = world_name
     env["SERVER_PASS"] = server_pass
@@ -439,10 +455,10 @@ def update_config(
     _write_env(env)
 
     # Restart container to apply new config
-    _dc = get_docker()
+    _dc: docker.DockerClient | None = get_docker()
     if _dc:
         try:
-            container = _dc.containers.get(VALHEIM_CONTAINER)
+            container: Container = _dc.containers.get(VALHEIM_CONTAINER)
             if container.status == "running":
                 container.restart(timeout=30)
                 logger.info("Restarted container after config update")
@@ -458,15 +474,15 @@ def update_config(
 @app.get("/valheim/logs")
 def get_logs(
     lines: int = 80,
-    x_api_token: str = Header(None, alias="X-Api-Token"),
-):
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, Any]:
     """Get recent Valheim server logs."""
     require_auth(x_api_token)
-    log = _latest_log_file()
+    log: Path | None = _latest_log_file()
     if not log or not log.exists():
         return {"lines": [], "file": None}
     try:
-        all_lines = log.read_text(errors="replace").splitlines()
+        all_lines: list[str] = log.read_text(errors="replace").splitlines()
         return {"lines": all_lines[-lines:], "file": log.name}
     except Exception as e:
         return {"lines": [], "error": str(e)}
@@ -485,27 +501,30 @@ def _world_format(world_path: Path) -> str:
 
 
 def _sanitize_name(name: str) -> str:
+    """Sanitize world name to safe characters only."""
     return re.sub(r"[^a-zA-Z0-9_\-]", "", name.strip())
 
 
 @app.get("/valheim/worlds")
-def list_worlds(x_api_token: str = Header(None, alias="X-Api-Token")):
+def list_worlds(
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, Any]:
     """List available world folders."""
     require_auth(x_api_token)
 
     if not VALHEIM_WORLDS_DIR.exists():
         return {"worlds": [], "active": None}
 
-    env = _read_env()
-    active = env.get("WORLD_NAME", "")
-    worlds = []
+    env: dict[str, str] = _read_env()
+    active: str = env.get("WORLD_NAME", "")
+    worlds: list[dict[str, Any]] = []
 
     for p in sorted(VALHEIM_WORLDS_DIR.iterdir()):
         if not p.is_dir():
             continue
         if re.search(r"_backup_(auto|20\d{6})", p.name, re.IGNORECASE):
             continue
-        fmt = _world_format(p)
+        fmt: str = _world_format(p)
         worlds.append(
             {
                 "name": p.name,
@@ -521,18 +540,18 @@ def list_worlds(x_api_token: str = Header(None, alias="X-Api-Token")):
 @app.post("/valheim/worlds/new")
 def create_world(
     world_name: str = Form(...),
-    x_api_token: str = Header(None, alias="X-Api-Token"),
-):
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, str]:
     """Create a new empty world folder."""
     require_auth(x_api_token)
 
     if not world_name.strip():
         raise HTTPException(400, "World name cannot be empty")
-    safe = _sanitize_name(world_name)
+    safe: str = _sanitize_name(world_name)
     if not safe:
         raise HTTPException(400, "Invalid world name")
 
-    world_path = VALHEIM_WORLDS_DIR / safe
+    world_path: Path = VALHEIM_WORLDS_DIR / safe
     if world_path.exists():
         raise HTTPException(400, f"World '{safe}' already exists")
 
@@ -543,23 +562,23 @@ def create_world(
 @app.post("/valheim/worlds/activate")
 def activate_world(
     world_name: str = Form(...),
-    x_api_token: str = Header(None, alias="X-Api-Token"),
-):
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, str]:
     """Switch active world and restart server."""
     require_auth(x_api_token)
 
-    world_path = VALHEIM_WORLDS_DIR / world_name
+    world_path: Path = VALHEIM_WORLDS_DIR / world_name
     world_path.mkdir(parents=True, exist_ok=True)
 
-    env = _read_env()
+    env: dict[str, str] = _read_env()
     env["WORLD_NAME"] = world_name
     _write_env(env)
 
     # Restart container
-    _dc = get_docker()
+    _dc: docker.DockerClient | None = get_docker()
     if _dc:
         try:
-            container = _dc.containers.get(VALHEIM_CONTAINER)
+            container: Container = _dc.containers.get(VALHEIM_CONTAINER)
             if container.status == "running":
                 container.restart(timeout=30)
                 logger.info("Restarted container for world switch to %s", world_name)
@@ -572,21 +591,21 @@ def activate_world(
 @app.delete("/valheim/worlds/{world_name}")
 def delete_world(
     world_name: str,
-    x_api_token: str = Header(None, alias="X-Api-Token"),
-):
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, Any]:
     """Delete a world (cannot delete active world)."""
     require_auth(x_api_token)
 
-    env = _read_env()
-    active = env.get("WORLD_NAME", "")
+    env: dict[str, str] = _read_env()
+    active: str = env.get("WORLD_NAME", "")
     if world_name == active:
         raise HTTPException(400, f"Cannot delete active world '{world_name}'")
 
-    world_path = VALHEIM_WORLDS_DIR / world_name
+    world_path: Path = VALHEIM_WORLDS_DIR / world_name
     if not world_path.exists():
         raise HTTPException(404, f"World '{world_name}' not found")
 
-    deleted = [world_name]
+    deleted: list[str] = [world_name]
     shutil.rmtree(world_path)
 
     # Also delete backup folders
@@ -602,12 +621,14 @@ def delete_world(
 
 
 @app.get("/system/mode")
-def get_power_mode(x_api_token: str = Header(None, alias="X-Api-Token")):
+def get_power_mode(
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, str]:
     """Get current power profile."""
     require_auth(x_api_token)
 
     try:
-        result = subprocess.run(
+        result: subprocess.CompletedProcess[str] = subprocess.run(
             ["powercfg", "/getactivescheme"],
             capture_output=True,
             text=True,
@@ -617,10 +638,11 @@ def get_power_mode(x_api_token: str = Header(None, alias="X-Api-Token")):
         if result.returncode != 0:
             return {"mode": "unknown", "error": result.stderr.strip()}
 
-        output = result.stdout.strip()
+        output: str = result.stdout.strip()
         if "(" in output and ")" in output:
-            name = output.split("(")[-1].rstrip(")")
-            name_lower = name.lower()
+            name: str = output.split("(")[-1].rstrip(")")
+            name_lower: str = name.lower()
+            mode: str
             if (
                 "high" in name_lower
                 or "rendimiento" in name_lower
@@ -646,17 +668,20 @@ def get_power_mode(x_api_token: str = Header(None, alias="X-Api-Token")):
 
 
 @app.post("/system/mode/{mode}")
-def set_power_mode(mode: str, x_api_token: str = Header(None, alias="X-Api-Token")):
+def set_power_mode(
+    mode: str,
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, str]:
     """Set power profile using powercfg directly."""
     require_auth(x_api_token)
 
     if mode not in POWER_PROFILES:
         raise HTTPException(400, f"Invalid mode. Valid: {list(POWER_PROFILES.keys())}")
 
-    guid = POWER_PROFILES[mode]
+    guid: str = POWER_PROFILES[mode]
 
     try:
-        result = subprocess.run(
+        result: subprocess.CompletedProcess[str] = subprocess.run(
             ["powercfg", "/setactive", guid],
             capture_output=True,
             text=True,
