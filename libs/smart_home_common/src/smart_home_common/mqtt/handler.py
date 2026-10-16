@@ -214,7 +214,14 @@ class MqttHandler:
         client.subscribe("zigbee2mqtt/+")
         logger.info("Subscribed to zigbee2mqtt/+ (sensors: %s)", self.sensor_names)
 
-    def _on_disconnect(self, client, userdata, flags, reason_code, properties):
+    def _on_disconnect(
+        self,
+        client: mqtt.Client,
+        userdata: Any,
+        flags: dict[str, Any],
+        reason_code: Any,
+        properties: Any,
+    ) -> None:
         logger.warning("Disconnected from MQTT (rc=%s)", reason_code)
         self._connected = False
         if self._error_tracker:
@@ -222,7 +229,12 @@ class MqttHandler:
                 "mqtt_disconnected", "error", "Disconnected from MQTT broker", "mqtt"
             )
 
-    def _on_message(self, client, userdata, msg):
+    def _on_message(
+        self,
+        client: mqtt.Client,
+        userdata: Any,
+        msg: mqtt.MQTTMessage,
+    ) -> None:
         """Processes an MQTT message from a sensor."""
         try:
             parts = msg.topic.split("/")

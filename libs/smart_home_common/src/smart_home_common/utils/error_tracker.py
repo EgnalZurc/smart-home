@@ -6,16 +6,19 @@ Usage:
     tracker.get_active()  ->  list[dict]
 """
 
+from __future__ import annotations
+
 import threading
 import time
 from dataclasses import dataclass
+from typing import Any, Literal
 
 
 @dataclass
 class _TrackedError:
     id: str
     timestamp: float
-    severity: str  # "error" | "warning"
+    severity: Literal["error", "warning"]
     message: str
     source: str
 
@@ -26,11 +29,17 @@ class ErrorTracker:
     Call clear() when the condition resolves.
     """
 
-    def __init__(self):
-        self._errors: dict = {}
-        self._lock = threading.Lock()
+    def __init__(self) -> None:
+        self._errors: dict[str, _TrackedError] = {}
+        self._lock: threading.Lock = threading.Lock()
 
-    def register(self, error_id: str, severity: str, message: str, source: str) -> None:
+    def register(
+        self,
+        error_id: str,
+        severity: Literal["error", "warning"],
+        message: str,
+        source: str,
+    ) -> None:
         """Register an error. No-op if already active."""
         with self._lock:
             if error_id not in self._errors:
@@ -47,7 +56,7 @@ class ErrorTracker:
         with self._lock:
             self._errors.pop(error_id, None)
 
-    def get_active(self) -> list:
+    def get_active(self) -> list[dict[str, Any]]:
         """Return active errors sorted newest-first."""
         with self._lock:
             return sorted(
