@@ -10,6 +10,8 @@ existing patch targets (``patch("api.routes.get_orchestrator")``, etc.) keep
 working without test changes.
 """
 
+from __future__ import annotations
+
 from fastapi import APIRouter
 from orchestrator import get_orchestrator  # noqa: F401 — patched by tests
 
@@ -50,7 +52,7 @@ from .rebalance import router as _rebalance_router
 from .summary import router as _summary_router
 
 # ─── Aggregate router ───────────────────────────────────────────────────────
-router = APIRouter()
+router: APIRouter = APIRouter()
 router.include_router(_summary_router)
 router.include_router(_control_router)
 router.include_router(_alerts_router)

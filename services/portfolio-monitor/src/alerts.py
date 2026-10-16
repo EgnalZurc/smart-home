@@ -10,17 +10,22 @@ Alerts due today (or past and not completed) trigger email notifications.
 Users can mark alerts as completed once the date has arrived.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import config
 from config import DATA_DIR
 from models import ScheduledAlert
 from smart_home_common.persistence import atomic_write_json
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from email_notifier import EmailNotifier
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 # File to persist alert completion state
 ALERTS_STATE_FILE = DATA_DIR / "alerts_state.json"
@@ -53,7 +58,7 @@ def _save_alerts_state(state: dict[str, dict[str, Any]]) -> None:
 def get_all_alerts() -> list[ScheduledAlert]:
     """Get all configured scheduled alerts with their completion state."""
     state = _load_alerts_state()
-    alerts = []
+    alerts: list[ScheduledAlert] = []
 
     for raw in config.get_scheduled_alerts():
         try:
@@ -90,7 +95,7 @@ def get_upcoming_alerts(days: int = 5) -> list[ScheduledAlert]:
     today = datetime.now(timezone.utc).date()
     cutoff = today + timedelta(days=days)
 
-    upcoming = []
+    upcoming: list[ScheduledAlert] = []
     for alert in get_all_alerts():
         # Skip completed alerts
         if alert.completed:
@@ -121,7 +126,7 @@ def get_alerts_due(include_overdue: bool = True) -> list[ScheduledAlert]:
     """
     today = datetime.now(timezone.utc).date()
 
-    due = []
+    due: list[ScheduledAlert] = []
     for alert in get_all_alerts():
         # Skip already triggered or completed
         if alert.triggered or alert.completed:
@@ -197,13 +202,13 @@ def mark_alert_completed(alert_id: str) -> bool:
     return True
 
 
-def check_and_trigger_alerts(notifier: Any) -> list[ScheduledAlert]:
+def check_and_trigger_alerts(notifier: EmailNotifier) -> list[ScheduledAlert]:
     """
     Check for alerts due today (or overdue) and send notifications.
     Returns list of triggered alerts.
     """
     due_alerts = get_alerts_due(include_overdue=True)
-    triggered = []
+    triggered: list[ScheduledAlert] = []
 
     if not due_alerts:
         logger.debug("No alerts due for notification")
@@ -228,7 +233,7 @@ def check_and_trigger_alerts(notifier: Any) -> list[ScheduledAlert]:
 def serialize_alert(alert: ScheduledAlert) -> dict[str, Any]:
     """Convert alert to JSON-serializable dict."""
     # Calculate days until (negative if overdue)
-    days_until = None
+    days_until: int | None = None
     is_actionable = False
     try:
         today = datetime.now(timezone.utc).date()

@@ -3,6 +3,8 @@ Portfolio Monitor — Savings Account Monitor.
 Tracks interest from remunerada/deposit accounts.
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -12,7 +14,7 @@ from models import AlertLevel, SavingsAnalysis
 
 from . import BaseMonitor, register_monitor
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def calculate_interest(balance: float, apy: float) -> tuple[float, float]:
@@ -60,11 +62,11 @@ def days_until_next_payment(payment_day: int = 25) -> int:
 class SavingsMonitor(BaseMonitor):
     """Savings account monitor."""
 
-    name = "savings"
+    name: str = "savings"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._last_update: datetime | None = None
-        self._level = AlertLevel.OK
+        self._level: AlertLevel = AlertLevel.OK
         self._results: list[SavingsAnalysis] = []
 
     async def run(self) -> dict[str, Any]:
@@ -87,14 +89,14 @@ class SavingsMonitor(BaseMonitor):
         total_yearly = 0.0
 
         for account in accounts:
-            account_id = account.get("id", "")
+            account_id: str = account.get("id", "")
             logger.info(f"  → Processing {account_id}...")
 
             try:
-                balance = account.get("balance", 0)
-                apy = account.get("apy", 0)
+                balance: float = account.get("balance", 0)
+                apy: float = account.get("apy", 0)
                 monthly, yearly = calculate_interest(balance, apy)
-                payment_day = account.get("payment_day", 25)
+                payment_day: int = account.get("payment_day", 25)
                 days_to_payment = days_until_next_payment(payment_day)
 
                 analysis = SavingsAnalysis(

@@ -12,6 +12,8 @@ base currency (EUR): DeFi deposits are commonly stablecoins or LP positions the
 user already values in fiat, so there is no price lookup to perform.
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -21,7 +23,7 @@ from models import AlertLevel, DeFiAnalysis
 
 from . import BaseMonitor, register_monitor
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def calculate_yield(amount: float, apy_pct: float) -> tuple[float, float, float]:
@@ -46,11 +48,11 @@ def calculate_yield(amount: float, apy_pct: float) -> tuple[float, float, float]
 class DeFiMonitor(BaseMonitor):
     """DeFi yield monitor (manual APY, no external APIs)."""
 
-    name = "defi"
+    name: str = "defi"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._last_update: datetime | None = None
-        self._level = AlertLevel.OK
+        self._level: AlertLevel = AlertLevel.OK
         self._results: list[DeFiAnalysis] = []
 
     async def run(self) -> dict[str, Any]:
@@ -73,8 +75,8 @@ class DeFiMonitor(BaseMonitor):
         total_yearly = 0.0
 
         for position in positions:
-            protocol = position.get("protocol", "")
-            asset = position.get("asset", "")
+            protocol: str = position.get("protocol", "")
+            asset: str = position.get("asset", "")
             position_id = f"{protocol}:{asset}" if protocol or asset else "defi"
             logger.info(f"  → Processing {position_id}...")
 

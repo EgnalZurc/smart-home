@@ -20,20 +20,25 @@ Serves:
 Port: 8010
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import sys
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from api import router as api_router
 from config import LOG_LEVEL
 from fastapi import FastAPI
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from orchestrator import get_orchestrator
 
 # Add libs to path for shared library import (mirrors monitors/crypto_monitor.py)
-_LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
+_LIBS_PATH: str = os.environ.get("LIBS_PATH", "/app/libs")
 if _LIBS_PATH not in sys.path:
     sys.path.insert(0, _LIBS_PATH)
 
@@ -46,14 +51,14 @@ logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Lifespan
 # ─────────────────────────────────────────────────────────────────────────────
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan handler."""
     logger.info("Starting Portfolio Monitor service...")
 
@@ -71,7 +76,7 @@ async def lifespan(app: FastAPI):
 # ─────────────────────────────────────────────────────────────────────────────
 # FastAPI App
 # ─────────────────────────────────────────────────────────────────────────────
-app = FastAPI(
+app: FastAPI = FastAPI(
     title="Portfolio Monitor",
     description="ETF and Crypto staking portfolio monitoring service",
     version="1.0.0",
@@ -88,7 +93,7 @@ app.include_router(api_router)
 # Health endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 @app.get("/health")
-async def health():
+async def health() -> dict[str, Any]:
     """Health check — used by nginx and the dashboard."""
     orch = get_orchestrator()
     state = orch.get_state()
@@ -103,7 +108,7 @@ async def health():
 
 
 @app.get("/api/health/portfolio")
-async def health_alias():
+async def health_alias() -> dict[str, Any]:
     """Health check alias — matches path expected by the dashboard."""
     return await health()
 
@@ -111,12 +116,14 @@ async def health_alias():
 # ─────────────────────────────────────────────────────────────────────────────
 # SPA Serving
 # ─────────────────────────────────────────────────────────────────────────────
-_STATIC_DIR = Path(__file__).parent / "static"
-_NOT_FOUND_HTML = "<h1>404 - Dashboard not found</h1><p>Static files not deployed.</p>"
+_STATIC_DIR: Path = Path(__file__).parent / "static"
+_NOT_FOUND_HTML: str = (
+    "<h1>404 - Dashboard not found</h1><p>Static files not deployed.</p>"
+)
 
 
 @app.get("/smart-home/portfolio")
-async def serve_dashboard():
+async def serve_dashboard() -> Response:
     """Serves the portfolio monitor SPA."""
     return serve_html(_STATIC_DIR, "portfolio.html", not_found_html=_NOT_FOUND_HTML)
 

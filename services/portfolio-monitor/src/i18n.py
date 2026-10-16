@@ -12,19 +12,19 @@ import os
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
-_SUPPORTED = {"es", "en"}
-_DEFAULT = "es"
+_SUPPORTED: set[str] = {"es", "en"}
+_DEFAULT: str = "es"
 # Try multiple locations: Docker (/app/locales) and development (../locales)
-_LOCALES_DIR_CANDIDATES = [
+_LOCALES_DIR_CANDIDATES: list[Path] = [
     Path(__file__).parent / "locales",  # Docker: /app/locales
     Path(__file__).parent.parent / "locales",  # Dev: services/portfolio-monitor/locales
 ]
-_LOCALES_DIR = next(
+_LOCALES_DIR: Path = next(
     (p for p in _LOCALES_DIR_CANDIDATES if p.exists()), _LOCALES_DIR_CANDIDATES[0]
 )
 
@@ -43,7 +43,7 @@ def _load_translations() -> None:
         if locale_file.exists():
             try:
                 with locale_file.open("r", encoding="utf-8") as f:
-                    translations = json.load(f)
+                    translations: dict[str, str] = json.load(f)
                     for key, value in translations.items():
                         if key not in _CATALOGUE:
                             _CATALOGUE[key] = {}
