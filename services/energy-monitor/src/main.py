@@ -23,12 +23,13 @@ import os
 import re
 import sys
 from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator
 
 from config import LOG_LEVEL, PORT, SERVICE_NAME
 from fastapi import FastAPI, HTTPException, Query
 
 # Shared libs live at /app/libs in the container; add to path for imports.
-_LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
+_LIBS_PATH: str = os.environ.get("LIBS_PATH", "/app/libs")
 if _LIBS_PATH not in sys.path:
     sys.path.insert(0, _LIBS_PATH)
 
@@ -43,18 +44,18 @@ logging.basicConfig(
 _logger = logging.getLogger(__name__)
 
 # ── Input validation constants (private) ──────────────────────────────────────
-_MAX_CHANNEL_LEN = 64
-_CHANNEL_PATTERN = re.compile(r"^[a-zA-Z0-9_:\-]+$")
+_MAX_CHANNEL_LEN: int = 64
+_CHANNEL_PATTERN: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_:\-]+$")
 
 # Single collector instance for the process lifetime. It owns the SQLite store,
 # the per-channel ring buffer and the Shelly poll loops.
 # Note: Kept module-level for test access; internal helpers are prefixed with _.
-collector = Collector()
-alert_engine = AlertEngine(collector.store)
+collector: Collector = Collector()
+alert_engine: AlertEngine = AlertEngine(collector.store)
 
 
 @asynccontextmanager
-async def _lifespan(app: FastAPI):
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start/stop the collector background tasks with the app."""
     _logger.info("Starting %s...", SERVICE_NAME)
     # Touch the DB so the schema is created eagerly (surfaces a bad bind mount
@@ -92,7 +93,7 @@ def _db_ok() -> bool:
         return False
 
 
-def _health_payload() -> dict:
+def _health_payload() -> dict[str, Any]:
     """Build the health dict exercising DB + collector/meter liveness.
 
     ``meter_online`` is True once at least one device has answered a poll,
@@ -111,13 +112,13 @@ def _health_payload() -> dict:
 
 
 @app.get("/health")
-async def health() -> dict:
+async def health() -> dict[str, Any]:
     """Health check — exercises the DB and reports collector/meter liveness."""
     return _health_payload()
 
 
 @app.get("/api/health/energy")
-async def health_alias() -> dict:
+async def health_alias() -> dict[str, Any]:
     """Health check alias — matches the path expected by the dashboard/CI."""
     return _health_payload()
 
@@ -152,7 +153,7 @@ def _validate_channel(channel: str | None) -> str | None:
 # Energy read API
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/energy/current")
-async def get_current() -> dict:
+async def get_current() -> dict[str, Any]:
     """Return the newest power reading per channel.
 
     Served live from the collector's ring buffer. Before the first successful
@@ -169,7 +170,7 @@ async def get_history(
     channel: str | None = Query(
         None, description="Channel id, or omit for whole-home total"
     ),
-) -> dict:
+) -> dict[str, Any]:
     """Return consumption per period derived from the cumulative kWh counter.
 
     ``period`` must be one of ``hour``, ``day``, ``week``, ``month``. Buckets are
@@ -181,8 +182,8 @@ async def get_history(
             status_code=422,
             detail=f"period must be one of {list(VALID_PERIODS)}",
         )
-    validated_channel = _validate_channel(channel)
-    series = collector.store.consumption_by_period(
+    validated_channel: str | None = _validate_channel(channel)
+    series: list[dict[str, float | int | None]] = collector.store.consumption_by_period(
         period, count, channel=validated_channel
     )
     return {
@@ -194,7 +195,7 @@ async def get_history(
 
 
 @app.get("/api/energy/stats")
-async def get_stats() -> dict:
+async def get_stats() -> dict[str, float | int | None]:
     """Return month-to-date consumption statistics (whole-home total).
 
     Reports total, average daily, peak daily and peak instantaneous power for
@@ -206,9 +207,9 @@ async def get_stats() -> dict:
 @app.get("/api/energy/alerts")
 async def get_alerts(
     limit: int = Query(50, ge=1, le=500, description="Max events to return"),
-) -> dict:
+) -> dict[str, Any]:
     """Return the most recent consumption-alert events (newest first)."""
-    events = collector.store.recent_alerts(limit)
+    events: list[dict[str, Any]] = collector.store.recent_alerts(limit)
     return {"count": len(events), "alerts": events}
 
 

@@ -39,8 +39,8 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # Shelly generation identifiers used across the inventory + client.
-GEN1 = 1
-GEN2 = 2
+GEN1: int = 1
+GEN2: int = 2
 
 
 class ShellyError(Exception):
@@ -74,11 +74,11 @@ class ShellyEMClient:
         timeout: float = 4.0,
         client: httpx.AsyncClient | None = None,
     ) -> None:
-        self.device_id = device_id
-        self.ip = ip
-        self.gen = gen
-        self.channels = channels or {}
-        self._timeout = timeout
+        self.device_id: str = device_id
+        self.ip: str = ip
+        self.gen: int = gen
+        self.channels: dict[str, str] = channels or {}
+        self._timeout: float = timeout
         self._auth: httpx.Auth | None = None
         if username and password:
             # httpx.DigestAuth also works against Basic challenges, but Gen1
@@ -87,8 +87,8 @@ class ShellyEMClient:
                 self._auth = httpx.DigestAuth(username, password)
             else:
                 self._auth = httpx.BasicAuth(username, password)
-        self._owns_client = client is None
-        self._client = client or httpx.AsyncClient(timeout=timeout)
+        self._owns_client: bool = client is None
+        self._client: httpx.AsyncClient = client or httpx.AsyncClient(timeout=timeout)
 
     @property
     def base_url(self) -> str:
@@ -98,9 +98,11 @@ class ShellyEMClient:
     # ── Low-level fetch ───────────────────────────────────────────────────────
     async def _get_json(self, path: str) -> dict[str, Any]:
         """GET a JSON document from the device, raising ShellyError on failure."""
-        url = f"{self.base_url}{path}"
+        url: str = f"{self.base_url}{path}"
         try:
-            resp = await self._client.get(url, auth=self._auth, timeout=self._timeout)
+            resp: httpx.Response = await self._client.get(
+                url, auth=self._auth, timeout=self._timeout
+            )
             resp.raise_for_status()
             return resp.json()
         except (httpx.HTTPError, ValueError) as exc:
@@ -147,12 +149,12 @@ class ShellyEMClient:
 
     async def get_power(self) -> dict[str, dict[str, float | None]]:
         """Return instantaneous power per channel (empty dict if offline)."""
-        status = await self.get_status()
+        status: dict[str, Any] = await self.get_status()
         return status["power"]
 
     async def get_energy(self) -> dict[str, float]:
         """Return the cumulative Wh counter per channel (empty dict if offline)."""
-        status = await self.get_status()
+        status: dict[str, Any] = await self.get_status()
         return status["energy"]
 
     # ── Channel labelling ─────────────────────────────────────────────────────
@@ -165,8 +167,8 @@ class ShellyEMClient:
         self,
     ) -> tuple[dict[str, dict[str, float | None]], dict[str, float]]:
         """Parse the Gen1 ``/status`` payload into (power, energy) maps."""
-        data = await self._get_json("/status")
-        emeters = data.get("emeters")
+        data: dict[str, Any] = await self._get_json("/status")
+        emeters: Any = data.get("emeters")
         if not isinstance(emeters, list) or not emeters:
             raise ShellyError("no emeters in /status payload")
         power: dict[str, dict[str, float | None]] = {}
@@ -174,14 +176,14 @@ class ShellyEMClient:
         for idx, em in enumerate(emeters):
             if not isinstance(em, dict):
                 continue
-            key = self._channel_key(idx)
+            key: str = self._channel_key(idx)
             power[key] = {
                 "power": _as_float(em.get("power")),
                 "voltage": _as_float(em.get("voltage")),
                 "pf": _as_float(em.get("pf")),
             }
             # Gen1 reports cumulative "total" (consumed) in Wh.
-            total = _as_float(em.get("total"))
+            total: float | None = _as_float(em.get("total"))
             if total is not None:
                 energy[key] = total
         return power, energy
@@ -200,7 +202,7 @@ class ShellyEMClient:
           ``act_power`` each, mapped to ``ch0``, ``ch1``, ...; Wh under
           ``em1data:N``.
         """
-        data = await self._get_json("/rpc/Shelly.GetStatus")
+        data: dict[str, Any] = await self._get_json("/rpc/Shelly.GetStatus")
         power: dict[str, dict[str, float | None]] = {}
         energy: dict[str, float] = {}
 
@@ -226,7 +228,7 @@ class ShellyEMClient:
     ) -> None:
         """Map a 3-phase ``em:N`` component to ch0/ch1/ch2 power entries."""
         for idx, phase in enumerate(("a", "b", "c")):
-            act = comp.get(f"{phase}_act_power")
+            act: Any = comp.get(f"{phase}_act_power")
             if act is None:
                 continue
             power[self._channel_key(idx)] = {
@@ -242,7 +244,7 @@ class ShellyEMClient:
         power: dict[str, dict[str, float | None]],
     ) -> None:
         """Map a single ``em1:N`` component to a ``chN`` power entry."""
-        idx = _rpc_index(comp_key)
+        idx: int | None = _rpc_index(comp_key)
         if idx is None:
             return
         power[self._channel_key(idx)] = {
@@ -256,7 +258,7 @@ class ShellyEMClient:
     ) -> None:
         """Map a 3-phase ``emdata:N`` component to ch0/ch1/ch2 Wh counters."""
         for idx, phase in enumerate(("a", "b", "c")):
-            wh = _as_float(comp.get(f"{phase}_total_act_energy"))
+            wh: float | None = _as_float(comp.get(f"{phase}_total_act_energy"))
             if wh is not None:
                 energy[self._channel_key(idx)] = wh
 
@@ -264,10 +266,10 @@ class ShellyEMClient:
         self, comp_key: str, comp: dict[str, Any], energy: dict[str, float]
     ) -> None:
         """Map a single ``em1data:N`` component to a ``chN`` Wh counter."""
-        idx = _rpc_index(comp_key)
+        idx: int | None = _rpc_index(comp_key)
         if idx is None:
             return
-        wh = _as_float(comp.get("total_act_energy"))
+        wh: float | None = _as_float(comp.get("total_act_energy"))
         if wh is not None:
             energy[self._channel_key(idx)] = wh
 

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import TYPE_CHECKING, Any
 
 from config import (
     ALERTS_ENABLED,
@@ -34,6 +35,9 @@ try:
 except ImportError:  # pragma: no cover - import fallback outside the container
     TelegramNotifier = None  # type: ignore[assignment]
 
+if TYPE_CHECKING:
+    from smart_home_common.telegram import TelegramNotifier as TelegramNotifierType
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,11 +49,12 @@ class AlertEngine:
         store: EnergyStore,
         *,
         enabled: bool = ALERTS_ENABLED,
-        notifier=None,
+        notifier: TelegramNotifierType | None = None,
     ) -> None:
-        self.store = store
-        self.enabled = enabled
+        self.store: EnergyStore = store
+        self.enabled: bool = enabled
         # Lazily build a notifier from env unless one is injected (tests inject).
+        self.notifier: TelegramNotifierType | None
         if notifier is not None:
             self.notifier = notifier
         elif TelegramNotifier is not None:
@@ -67,15 +72,19 @@ class AlertEngine:
         rules: list[tuple[str, str, float, float]] = []
 
         if POWER_ALERT_W > 0:
-            latest = self._latest_power_max(now)
+            latest: float | None = self._latest_power_max(now)
             if latest is not None:
                 rules.append(("power_spike", "warning", latest, POWER_ALERT_W))
 
-        stats = self.store.stats(now=now)
+        stats: dict[str, Any] = self.store.stats(now=now)
         # Day-to-date is the last (in-progress) daily bucket.
         if DAILY_KWH_ALERT > 0:
-            daily = self.store.consumption_by_period("day", 1, now=now)
-            today = daily[-1]["consumption_kwh"] if daily else None
+            daily: list[dict[str, float | int | None]] = self.store.consumption_by_period(
+                "day", 1, now=now
+            )
+            today: float | None = (
+                daily[-1]["consumption_kwh"] if daily else None  # type: ignore[assignment]
+            )
             if today is not None:
                 rules.append(("daily_budget", "warning", today, DAILY_KWH_ALERT))
 
@@ -114,9 +123,9 @@ class AlertEngine:
         events: list[dict[str, object]] = []
 
         for rule_key, severity, value, threshold in self._rules(now):
-            over = value > threshold
-            new_state = "fired" if over else "ok"
-            prev = self._state.get(rule_key)
+            over: bool = value > threshold
+            new_state: str = "fired" if over else "ok"
+            prev: str | None = self._state.get(rule_key)
             self._state[rule_key] = new_state
             if prev == new_state:
                 continue  # No edge → no event.
@@ -124,8 +133,8 @@ class AlertEngine:
             if prev is None and new_state == "ok":
                 continue
 
-            state = "fired" if over else "resolved"
-            message = self._format(rule_key, value, threshold, state)
+            state: str = "fired" if over else "resolved"
+            message: str = self._format(rule_key, value, threshold, state)
             self.store.record_alert(
                 rule_key,
                 severity,
@@ -149,9 +158,9 @@ class AlertEngine:
     @staticmethod
     def _format(rule_key: str, value: float, threshold: float, state: str) -> str:
         """Build a human-readable alert message."""
-        unit = "W" if rule_key == "power_spike" else "kWh"
-        verb = "exceeded" if state == "fired" else "back under"
-        label = {
+        unit: str = "W" if rule_key == "power_spike" else "kWh"
+        verb: str = "exceeded" if state == "fired" else "back under"
+        label: str = {
             "power_spike": "Power spike",
             "daily_budget": "Daily consumption",
             "monthly_budget": "Monthly consumption",

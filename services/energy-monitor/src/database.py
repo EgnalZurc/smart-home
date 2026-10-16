@@ -23,6 +23,7 @@ import logging
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from config import (
     ALERT_RETENTION_DAYS,
@@ -32,7 +33,7 @@ from config import (
 )
 
 # Supported aggregation periods for ``consumption_by_period`` (design §4.3).
-VALID_PERIODS = ("hour", "day", "week", "month")
+VALID_PERIODS: tuple[str, ...] = ("hour", "day", "week", "month")
 
 try:
     from smart_home_common.sqlite_helpers import SqliteHelper
@@ -106,7 +107,7 @@ def _floor_to_period(dt: datetime, period: str) -> datetime:
     if period == "day":
         return dt.replace(hour=0, minute=0, second=0, microsecond=0)
     if period == "week":
-        midnight = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        midnight: datetime = dt.replace(hour=0, minute=0, second=0, microsecond=0)
         return midnight - timedelta(days=midnight.weekday())
     if period == "month":
         return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -123,7 +124,8 @@ def _advance_period(dt: datetime, period: str) -> datetime:
         return dt + timedelta(weeks=1)
     if period == "month":
         # Month length varies; step to the 1st of the next month.
-        year, month = dt.year, dt.month
+        year: int = dt.year
+        month: int = dt.month
         if month == 12:
             return dt.replace(year=year + 1, month=1)
         return dt.replace(month=month + 1)
@@ -136,11 +138,13 @@ def _period_starts(now: int, period: str, count: int) -> list[int]:
     The last element is the bucket containing ``now``; earlier elements are the
     preceding buckets. All computed in UTC.
     """
-    current = _floor_to_period(datetime.fromtimestamp(now, tz=timezone.utc), period)
+    current: datetime = _floor_to_period(
+        datetime.fromtimestamp(now, tz=timezone.utc), period
+    )
     starts: list[datetime] = [current]
     for _ in range(count - 1):
         # Walk backwards one calendar period at a time.
-        prev_boundary = current - timedelta(seconds=1)
+        prev_boundary: datetime = current - timedelta(seconds=1)
         current = _floor_to_period(prev_boundary, period)
         starts.append(current)
     starts.reverse()
@@ -151,8 +155,8 @@ class EnergyStore:
     """Durable power + energy store backed by SQLite."""
 
     def __init__(self, db_path: str = DB_PATH) -> None:
-        self.db_path = db_path
-        self._db = SqliteHelper(db_path, init=_ensure_schema)
+        self.db_path: str = db_path
+        self._db: SqliteHelper = SqliteHelper(db_path, init=_ensure_schema)
 
     # ── Writes ──────────────────────────────────────────────────────────────
     def write_power(
@@ -171,7 +175,9 @@ class EnergyStore:
         """
         if not rows:
             return 0
-        params = [(ts, ch, avg, mx, v, pf) for (ch, avg, mx, v, pf) in rows]
+        params: list[tuple[int, str, float, float | None, float | None, float | None]] = [
+            (ts, ch, avg, mx, v, pf) for (ch, avg, mx, v, pf) in rows
+        ]
         with self._db.connect() as conn:
             conn.executemany(
                 "INSERT OR REPLACE INTO power_samples "
@@ -193,7 +199,7 @@ class EnergyStore:
         """
         if not rows:
             return 0
-        params = [(ts, ch, wh) for (ch, wh) in rows]
+        params: list[tuple[int, str, float]] = [(ts, ch, wh) for (ch, wh) in rows]
         with self._db.connect() as conn:
             conn.executemany(
                 "INSERT OR REPLACE INTO energy_readings (ts, channel, energy_wh) "
@@ -211,7 +217,7 @@ class EnergyStore:
         until: int | None = None,
     ) -> list[dict[str, float | int | None]]:
         """Return 1-min power points for one channel, time-ranged (ascending)."""
-        query = (
+        query: str = (
             "SELECT ts, power_avg, power_max, voltage, pf FROM power_samples "
             "WHERE channel = ?"
         )
@@ -224,7 +230,7 @@ class EnergyStore:
             args.append(until)
         query += " ORDER BY ts ASC"
         with self._db.connect() as conn:
-            rows = conn.execute(query, args).fetchall()
+            rows: list[sqlite3.Row] = conn.execute(query, args).fetchall()
         return [
             {
                 "ts": r["ts"],
@@ -244,7 +250,7 @@ class EnergyStore:
         until: int | None = None,
     ) -> list[dict[str, float | int]]:
         """Return hourly cumulative-Wh snapshots for one channel (ascending)."""
-        query = "SELECT ts, energy_wh FROM energy_readings WHERE channel = ?"
+        query: str = "SELECT ts, energy_wh FROM energy_readings WHERE channel = ?"
         args: list[object] = [channel]
         if since is not None:
             query += " AND ts >= ?"
@@ -254,7 +260,7 @@ class EnergyStore:
             args.append(until)
         query += " ORDER BY ts ASC"
         with self._db.connect() as conn:
-            rows = conn.execute(query, args).fetchall()
+            rows: list[sqlite3.Row] = conn.execute(query, args).fetchall()
         return [{"ts": r["ts"], "energy_wh": r["energy_wh"]} for r in rows]
 
     # ── Retention (design §4.4) ───────────────────────────────────────────────
@@ -264,12 +270,12 @@ class EnergyStore:
         Returns a mapping ``{table: rows_deleted}``.
         """
         now = int(time.time()) if now is None else now
-        power_cutoff = now - POWER_RETENTION_DAYS * 24 * 3600
-        energy_cutoff = now - ENERGY_RETENTION_DAYS * 24 * 3600
-        alert_cutoff = now - ALERT_RETENTION_DAYS * 24 * 3600
+        power_cutoff: int = now - POWER_RETENTION_DAYS * 24 * 3600
+        energy_cutoff: int = now - ENERGY_RETENTION_DAYS * 24 * 3600
+        alert_cutoff: int = now - ALERT_RETENTION_DAYS * 24 * 3600
         deleted: dict[str, int] = {}
         with self._db.connect() as conn:
-            cur = conn.execute(
+            cur: sqlite3.Cursor = conn.execute(
                 "DELETE FROM power_samples WHERE ts < ?", (power_cutoff,)
             )
             deleted["power_samples"] = cur.rowcount
@@ -285,7 +291,7 @@ class EnergyStore:
                 conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             except sqlite3.Error as exc:  # pragma: no cover - best-effort
                 logger.warning("wal_checkpoint failed: %s", exc)
-        total = sum(deleted.values())
+        total: int = sum(deleted.values())
         if total:
             logger.info("Pruned %d energy rows past retention", total)
         return deleted
@@ -296,11 +302,13 @@ class EnergyStore:
         Used by the health check (DB liveness) and tests/diagnostics.
         """
         with self._db.connect() as conn:
-            power = conn.execute("SELECT COUNT(*) AS n FROM power_samples").fetchone()
-            energy = conn.execute(
+            power: sqlite3.Row | None = conn.execute(
+                "SELECT COUNT(*) AS n FROM power_samples"
+            ).fetchone()
+            energy: sqlite3.Row | None = conn.execute(
                 "SELECT COUNT(*) AS n FROM energy_readings"
             ).fetchone()
-        return int(power["n"]) + int(energy["n"])
+        return int(power["n"]) + int(energy["n"])  # type: ignore[index]
 
     # ── Aggregation (design §4.3) ─────────────────────────────────────────────
     def _cumulative_at(
@@ -313,7 +321,7 @@ class EnergyStore:
         no reading yet, so the caller can tell "no data" from "zero consumed".
         """
         if channel is not None:
-            row = conn.execute(
+            row: sqlite3.Row | None = conn.execute(
                 "SELECT energy_wh FROM energy_readings "
                 "WHERE channel = ? AND ts <= ? ORDER BY ts DESC LIMIT 1",
                 (channel, boundary),
@@ -321,7 +329,7 @@ class EnergyStore:
             return None if row is None else float(row["energy_wh"])
 
         # Whole-home total: for each channel take its newest reading <= boundary.
-        rows = conn.execute(
+        rows: list[sqlite3.Row] = conn.execute(
             """
             SELECT channel, energy_wh FROM energy_readings AS e
             WHERE ts <= ? AND ts = (
@@ -366,21 +374,22 @@ class EnergyStore:
         count = max(1, min(int(count), 1000))
         now = int(time.time()) if now is None else now
 
-        starts = _period_starts(now, period, count)
+        starts: list[int] = _period_starts(now, period, count)
         out: list[dict[str, float | int | None]] = []
         with self._db.connect() as conn:
             for start in starts:
-                next_start = int(
+                next_start: int = int(
                     _advance_period(
                         datetime.fromtimestamp(start, tz=timezone.utc), period
                     ).timestamp()
                 )
                 # End of the window is "now" for the in-progress bucket.
-                end = min(next_start, now)
-                base = self._cumulative_at(conn, channel, start)
-                tip = self._cumulative_at(conn, channel, end)
+                end: int = min(next_start, now)
+                base: float | None = self._cumulative_at(conn, channel, start)
+                tip: float | None = self._cumulative_at(conn, channel, end)
+                wh: float | None
                 if base is None or tip is None:
-                    wh: float | None = None
+                    wh = None
                 else:
                     wh = max(0.0, round(tip - base, 3))
                 out.append(
@@ -407,34 +416,40 @@ class EnergyStore:
         Returns ``None`` for a metric when there is not enough data yet.
         """
         now = int(time.time()) if now is None else now
-        now_dt = datetime.fromtimestamp(now, tz=timezone.utc)
-        month_start = int(_floor_to_period(now_dt, "month").timestamp())
-        days_elapsed = now_dt.day  # 1-based day of month, == number of day buckets
+        now_dt: datetime = datetime.fromtimestamp(now, tz=timezone.utc)
+        month_start: int = int(_floor_to_period(now_dt, "month").timestamp())
+        days_elapsed: int = now_dt.day  # 1-based day of month, == number of day buckets
 
-        daily = self.consumption_by_period("day", days_elapsed, now=now)
-        values = [
-            d["consumption_kwh"] for d in daily if d["consumption_kwh"] is not None
+        daily: list[dict[str, float | int | None]] = self.consumption_by_period(
+            "day", days_elapsed, now=now
+        )
+        values: list[float] = [
+            d["consumption_kwh"]  # type: ignore[misc]
+            for d in daily
+            if d["consumption_kwh"] is not None
         ]
-        total_kwh = round(sum(values), 4) if values else None
+        total_kwh: float | None = round(sum(values), 4) if values else None
 
         # Completed days exclude the in-progress final bucket (today).
-        completed = values[:-1] if len(values) > 1 else []
-        avg_daily_kwh = round(sum(completed) / len(completed), 4) if completed else None
+        completed: list[float] = values[:-1] if len(values) > 1 else []
+        avg_daily_kwh: float | None = (
+            round(sum(completed) / len(completed), 4) if completed else None
+        )
 
         peak_daily_kwh: float | None = None
         peak_day: int | None = None
         for d in daily:
-            v = d["consumption_kwh"]
+            v: float | None = d["consumption_kwh"]  # type: ignore[assignment]
             if v is not None and (peak_daily_kwh is None or v > peak_daily_kwh):
                 peak_daily_kwh = v
-                peak_day = int(d["period_start"])
+                peak_day = int(d["period_start"])  # type: ignore[arg-type]
 
         with self._db.connect() as conn:
-            row = conn.execute(
+            row: sqlite3.Row | None = conn.execute(
                 "SELECT MAX(power_max) AS pmax FROM power_samples WHERE ts >= ?",
                 (month_start,),
             ).fetchone()
-        peak_power_w = (
+        peak_power_w: float | None = (
             None if row is None or row["pmax"] is None else float(row["pmax"])
         )
 
@@ -463,19 +478,19 @@ class EnergyStore:
         """Persist one alert event to the audit trail; return its row id."""
         ts = int(time.time()) if ts is None else ts
         with self._db.connect() as conn:
-            cur = conn.execute(
+            cur: sqlite3.Cursor = conn.execute(
                 "INSERT INTO energy_alerts "
                 "(ts, rule_key, channel, severity, state, value, message) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (ts, rule_key, channel, severity, state, value, message),
             )
-            return int(cur.lastrowid)
+            return int(cur.lastrowid)  # type: ignore[arg-type]
 
-    def recent_alerts(self, limit: int = 50) -> list[dict[str, object]]:
+    def recent_alerts(self, limit: int = 50) -> list[dict[str, Any]]:
         """Return the most recent alert events, newest first."""
         limit = max(1, min(int(limit), 500))
         with self._db.connect() as conn:
-            rows = conn.execute(
+            rows: list[sqlite3.Row] = conn.execute(
                 "SELECT id, ts, rule_key, channel, severity, state, value, message "
                 "FROM energy_alerts ORDER BY ts DESC, id DESC LIMIT ?",
                 (limit,),

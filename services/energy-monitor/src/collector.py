@@ -25,6 +25,7 @@ import json
 import logging
 import time
 from collections import defaultdict, deque
+from typing import Any
 
 from config import (
     DEVICES_JSON,
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 PowerPoint = tuple[int, float, float | None, float | None]
 
 
-def parse_devices(raw: str) -> list[dict]:
+def parse_devices(raw: str) -> list[dict[str, Any]]:
     """Parse the ``ENERGY_DEVICES`` JSON string into a validated device list.
 
     Each entry must have ``id`` and ``ip``; ``gen`` defaults to 1 and
@@ -52,14 +53,14 @@ def parse_devices(raw: str) -> list[dict]:
     bad config line never takes the whole collector down.
     """
     try:
-        parsed = json.loads(raw)
+        parsed: Any = json.loads(raw)
     except (ValueError, TypeError) as exc:
         logger.warning("ENERGY_DEVICES is not valid JSON (%s); no devices loaded", exc)
         return []
     if not isinstance(parsed, list):
         logger.warning("ENERGY_DEVICES must be a JSON array; no devices loaded")
         return []
-    devices: list[dict] = []
+    devices: list[dict[str, Any]] = []
     for entry in parsed:
         if not isinstance(entry, dict) or not entry.get("id") or not entry.get("ip"):
             logger.warning("Skipping malformed device entry: %r", entry)
@@ -92,10 +93,12 @@ class Collector:
     def __init__(
         self,
         store: EnergyStore | None = None,
-        devices: list[dict] | None = None,
+        devices: list[dict[str, Any]] | None = None,
     ) -> None:
-        self.store = store if store is not None else EnergyStore()
-        self.devices = devices if devices is not None else parse_devices(DEVICES_JSON)
+        self.store: EnergyStore = store if store is not None else EnergyStore()
+        self.devices: list[dict[str, Any]] = (
+            devices if devices is not None else parse_devices(DEVICES_JSON)
+        )
         self.clients: dict[str, ShellyEMClient] = {}
         # channel -> deque[PowerPoint]; last RING_BUFFER_MAXLEN hi-res samples.
         self.ring: dict[str, deque[PowerPoint]] = defaultdict(
@@ -107,7 +110,7 @@ class Collector:
         self.labels: dict[str, str] = {}
         self.last_tick_ts: float | None = None
         self.meter_online: bool | None = None
-        self._tasks: list[asyncio.Task] = []
+        self._tasks: list[asyncio.Task[None]] = []
 
     # ── Setup ─────────────────────────────────────────────────────────────────
     def _build_clients(self) -> None:
@@ -133,19 +136,19 @@ class Collector:
         ``meter_online`` (True if at least one device answered) and
         ``last_tick_ts``.
         """
-        ts = int(time.time())
+        ts: int = int(time.time())
         if not self.clients:
             self.last_tick_ts = time.monotonic()
             self.meter_online = None  # nothing to poll
             return 0
 
-        statuses = await asyncio.gather(
+        statuses: list[dict[str, Any] | BaseException] = await asyncio.gather(
             *(c.get_status() for c in self.clients.values()),
             return_exceptions=True,
         )
 
-        channels_seen = 0
-        any_online = False
+        channels_seen: int = 0
+        any_online: bool = False
         for status in statuses:
             if isinstance(status, BaseException):
                 logger.warning("device poll raised: %s", status)
@@ -153,10 +156,10 @@ class Collector:
             if not status.get("online"):
                 continue
             any_online = True
-            dev_id = status["device_id"]
+            dev_id: str = status["device_id"]
             for ch, reading in status["power"].items():
-                key = _global_channel(dev_id, ch)
-                power = reading.get("power")
+                key: str = _global_channel(dev_id, ch)
+                power: float | None = reading.get("power")
                 if power is None:
                     continue
                 self.ring[key].append(
@@ -178,16 +181,16 @@ class Collector:
         (``INSERT OR REPLACE`` keyed on ``(ts, channel)``).
         """
         now = int(time.time()) if now is None else now
-        bucket = (now // ROLLUP_INTERVAL_S) * ROLLUP_INTERVAL_S
-        start = bucket - ROLLUP_INTERVAL_S  # roll up the *previous* complete window
+        bucket: int = (now // ROLLUP_INTERVAL_S) * ROLLUP_INTERVAL_S
+        start: int = bucket - ROLLUP_INTERVAL_S  # roll up the *previous* complete window
         rows: list[tuple[str, float, float | None, float | None, float | None]] = []
         for channel, points in self.ring.items():
-            window = [p for p in points if start <= p[0] < bucket]
+            window: list[PowerPoint] = [p for p in points if start <= p[0] < bucket]
             if not window:
                 continue
-            powers = [p[1] for p in window]
-            voltages = [p[2] for p in window if p[2] is not None]
-            pfs = [p[3] for p in window if p[3] is not None]
+            powers: list[float] = [p[1] for p in window]
+            voltages: list[float] = [p[2] for p in window if p[2] is not None]
+            pfs: list[float] = [p[3] for p in window if p[3] is not None]
             rows.append(
                 (
                     channel,
@@ -205,11 +208,13 @@ class Collector:
         Returns the number of rows written. No-op when no energy has been seen.
         """
         now = int(time.time()) if now is None else now
-        rows = [(ch, wh) for ch, wh in self.latest_energy.items()]
+        rows: list[tuple[str, float]] = [
+            (ch, wh) for ch, wh in self.latest_energy.items()
+        ]
         return self.store.write_energy(now, rows)
 
     # ── Read API support ──────────────────────────────────────────────────────
-    def current(self) -> dict:
+    def current(self) -> dict[str, Any]:
         """Return the newest power reading per channel for ``/api/energy/current``.
 
         Shape matches the scaffold stub so the endpoint contract is stable::
@@ -217,9 +222,9 @@ class Collector:
             {"ts", "total_w", "channels": {<key>: {power, voltage, pf, label}},
              "meter_online"}
         """
-        channels: dict[str, dict] = {}
-        total_w = 0.0
-        latest_ts = int(time.time())
+        channels: dict[str, dict[str, Any]] = {}
+        total_w: float = 0.0
+        latest_ts: int = int(time.time())
         for key, points in self.ring.items():
             if not points:
                 continue
