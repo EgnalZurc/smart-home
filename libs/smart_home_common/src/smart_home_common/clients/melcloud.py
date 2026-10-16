@@ -60,12 +60,16 @@ class MelCloudClient:
 
     def login(self) -> bool:
         """Authenticate and get ContextKey."""
+        # Copy password to local variable and immediately clear from instance
+        password = self.password
+        self.password = None  # Clear from memory immediately
+
         try:
             resp = self.client.post(
                 f"{self.base_url}/Login/ClientLogin",
                 json={
                     "Email": self.email,
-                    "Password": self.password,
+                    "Password": password,
                     "Language": 0,
                     "AppVersion": self._app_version,
                     "Persist": True,
@@ -86,15 +90,14 @@ class MelCloudClient:
                 return False
 
             logger.info("Successful login to MELCloud")
-
-            # Security: Delete password from memory after successful login
-            del self.password
-
             return True
 
         except httpx.HTTPError as e:
             logger.error("HTTP error on login: %s", e)
             return False
+        finally:
+            # Ensure password is cleared from local scope
+            del password
 
     def get_device_state(self, device_id: int, building_id: int) -> dict | None:
         """Gets complete AC state (raw dict from API)."""

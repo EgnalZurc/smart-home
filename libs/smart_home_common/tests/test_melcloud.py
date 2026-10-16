@@ -117,7 +117,7 @@ class TestMelCloudClientLogin:
 
         assert result is True
         assert client.context_key == "ctx-key-123"
-        assert not hasattr(client, "password")  # Password deleted after login
+        assert client.password is None  # Password cleared after login
         mock_post.assert_called_once()
         call_args = mock_post.call_args
         assert "/Login/ClientLogin" in call_args[0][0]
