@@ -38,7 +38,7 @@ from config import (
 from database import EnergyStore
 from shelly_client import GEN1, ShellyEMClient
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 # One hi-res power point: (unix_ts, power_w, voltage, pf).
 PowerPoint = tuple[int, float, float | None, float | None]
