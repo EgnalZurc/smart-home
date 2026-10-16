@@ -135,10 +135,13 @@ class GiftCreate(BaseModel):
     @field_validator("url", mode="after")
     @classmethod
     def sanitize_url(cls, v: str) -> str:
-        """Sanitize URL: strip and truncate (no HTML escape for URLs)."""
+        """Sanitize URL: strip, truncate, validate protocol (no HTML escape)."""
         if not v:
             return ""
         cleaned = v.strip()
+        # Block non-HTTP schemes (javascript:, data:, vbscript:, etc.) to prevent XSS
+        if cleaned and not cleaned.lower().startswith(("http://", "https://")):
+            return ""
         return cleaned[:2000] if len(cleaned) > 2000 else cleaned
 
 
@@ -161,10 +164,13 @@ class GiftUpdate(BaseModel):
     @field_validator("url", mode="after")
     @classmethod
     def sanitize_url(cls, v: str | None) -> str | None:
-        """Sanitize URL if provided."""
+        """Sanitize URL if provided: strip, truncate, validate protocol."""
         if v is None:
             return ""
         cleaned = v.strip()
+        # Block non-HTTP schemes (javascript:, data:, vbscript:, etc.) to prevent XSS
+        if cleaned and not cleaned.lower().startswith(("http://", "https://")):
+            return ""
         return cleaned[:2000] if len(cleaned) > 2000 else cleaned
 
 
