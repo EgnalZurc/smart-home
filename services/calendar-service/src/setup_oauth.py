@@ -91,8 +91,10 @@ def list_calendars(creds: Credentials) -> None:
 
     try:
         service = build("calendar", "v3", credentials=creds)
-        calendars_result = service.calendarList().list().execute()
-        calendars = calendars_result.get("items", [])
+        calendars_result: dict[str, list[dict[str, str | bool]]] = (
+            service.calendarList().list().execute()
+        )
+        calendars: list[dict[str, str | bool]] = calendars_result.get("items", [])
 
         if not calendars:
             print("No calendars found.")

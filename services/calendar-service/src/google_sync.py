@@ -33,7 +33,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
@@ -42,6 +42,52 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
+
+
+class CalendarInfo(TypedDict):
+    """Calendar metadata from Google Calendar API."""
+
+    id: str | None
+    summary: str
+    description: str | None
+    primary: bool
+    access_role: str | None
+    time_zone: str | None
+    background_color: str | None
+    foreground_color: str | None
+
+
+class AttendeeInfo(TypedDict):
+    """Attendee information from an event."""
+
+    email: str | None
+    display_name: str | None
+    response_status: str | None
+    self: bool
+
+
+class NormalizedEvent(TypedDict):
+    """Normalized event structure returned by sync_events."""
+
+    event_id: str | None
+    calendar_id: str
+    summary: str
+    description: str | None
+    location: str | None
+    start: str | None
+    end: str | None
+    start_timezone: str | None
+    end_timezone: str | None
+    is_all_day: bool
+    status: str | None
+    deleted: bool
+    html_link: str | None
+    organizer: str | None
+    created: str | None
+    updated: str | None
+    recurrence_id: str | None
+    attendees: list[AttendeeInfo]
+
 
 # Read-only scope for least-privilege access (design §2.1).
 CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
@@ -197,14 +243,14 @@ class GoogleCalendarClient:
         os.replace(tmp_path, self.token_path)
         logger.debug("Saved token to %s", self.token_path)
 
-    def list_calendars(self) -> list[dict[str, Any]]:
+    def list_calendars(self) -> list[CalendarInfo]:
         """List all calendars accessible by the authenticated account.
 
         Returns:
             List of calendar dicts with keys: id, summary, description, primary,
             accessRole, timeZone, backgroundColor, foregroundColor.
         """
-        calendars: list[dict[str, Any]] = []
+        calendars: list[CalendarInfo] = []
         page_token: str | None = None
 
         while True:
@@ -239,7 +285,7 @@ class GoogleCalendarClient:
         sync_token: str | None = None,
         time_min: datetime | None = None,
         time_max: datetime | None = None,
-    ) -> tuple[list[dict[str, Any]], str | None]:
+    ) -> tuple[list[NormalizedEvent], str | None]:
         """Sync events from a calendar, using incremental sync when possible.
 
         When a sync_token is provided, the API returns only events that changed
@@ -262,7 +308,7 @@ class GoogleCalendarClient:
             InvalidSyncToken: If the sync_token is stale and a full sync is needed.
             HttpError: For other API errors (quota, auth, network).
         """
-        events: list[dict[str, Any]] = []
+        events: list[NormalizedEvent] = []
         page_token: str | None = None
         new_sync_token: str | None = None
 
@@ -320,7 +366,7 @@ class GoogleCalendarClient:
 
     def _normalize_event(
         self, item: dict[str, Any], calendar_id: str
-    ) -> dict[str, Any]:
+    ) -> NormalizedEvent:
         """Convert a raw API event to our internal format.
 
         Handles both timed events (dateTime) and all-day events (date).

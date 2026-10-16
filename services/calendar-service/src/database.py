@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
+from typing import TypedDict
 
 from config import DB_PATH, EVENT_RETENTION_DAYS, REMINDER_RETENTION_DAYS
 
@@ -30,6 +31,47 @@ except ImportError:  # pragma: no cover - import fallback outside the container
     from smart_home_common.sqlite_helpers import SqliteHelper
 
 logger = logging.getLogger(__name__)
+
+
+class EventDict(TypedDict, total=False):
+    """Dictionary structure for calendar events."""
+
+    uid: str
+    calendar_id: str
+    google_id: str
+    title: str
+    description: str | None
+    location: str | None
+    start_ts: int
+    end_ts: int
+    all_day: bool
+    person_id: str | None
+    status: str
+    etag: str | None
+    updated_ts: int
+
+
+class EventRow(TypedDict):
+    """Event row returned from database queries."""
+
+    uid: str
+    calendar_id: str
+    google_id: str
+    title: str
+    description: str | None
+    location: str | None
+    start_ts: int
+    end_ts: int
+    all_day: int
+    person_id: str | None
+    status: str
+
+
+class PruneResult(TypedDict):
+    """Result of prune operation."""
+
+    events: int
+    reminders: int
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -145,7 +187,7 @@ class Calendar:
         self.sync_token: str | None = row["sync_token"]
         self.last_sync: int | None = row["last_sync"]
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, str | bool | int | None]:
         return {
             "id": self.id,
             "label": self.label,
@@ -169,7 +211,7 @@ class ReminderRule:
         self.offset_s: int = row["offset_s"]
         self.enabled: bool = bool(row["enabled"])
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, str | int | bool | None]:
         return {
             "id": self.id,
             "scope": self.scope,
@@ -269,7 +311,7 @@ class CalendarStore:
             ).fetchall()
         return [ReminderRule(r) for r in rows]
 
-    def get_rules_for_event(self, event: dict) -> list[ReminderRule]:
+    def get_rules_for_event(self, event: EventDict) -> list[ReminderRule]:
         """Return applicable rules for an event (person > calendar > global priority).
 
         Looks up rules in order of specificity:
@@ -397,7 +439,7 @@ class CalendarStore:
         return rowcount
 
     # ── Writes ───────────────────────────────────────────────────────────────
-    def upsert_event(self, event: dict) -> None:
+    def upsert_event(self, event: EventDict) -> None:
         """Insert or replace one cached event instance.
 
         ``event`` is a plain dict matching the ``events`` columns. The sync loop
@@ -433,7 +475,7 @@ class CalendarStore:
             )
 
     # ── Reads ────────────────────────────────────────────────────────────────
-    def upcoming(self, now: int | None = None, limit: int = 5) -> list[dict]:
+    def upcoming(self, now: int | None = None, limit: int = 5) -> list[EventRow]:
         """Return the next ``limit`` active events at or after ``now``.
 
         Includes confirmed and tentative (shared calendar) events.
@@ -456,7 +498,7 @@ class CalendarStore:
 
     def get_events_in_reminder_window(
         self, now: int | None = None, max_offset_s: int = 86400
-    ) -> list[dict]:
+    ) -> list[EventRow]:
         """Return events with start_ts between now and now+max_offset.
 
         Includes confirmed and tentative (shared calendar) events.
@@ -477,7 +519,7 @@ class CalendarStore:
             ).fetchall()
         return [dict(r) for r in rows]
 
-    def get_events_in_window(self, start_ts: int, end_ts: int) -> list[dict]:
+    def get_events_in_window(self, start_ts: int, end_ts: int) -> list[EventRow]:
         """Return events that overlap with the given time window.
 
         An event overlaps if it starts before window ends AND ends after window starts.
@@ -508,7 +550,7 @@ class CalendarStore:
         return rowcount
 
     # ── Retention (design §3.3) ──────────────────────────────────────────────
-    def prune(self, now: int | None = None) -> dict[str, int]:
+    def prune(self, now: int | None = None) -> PruneResult:
         """Apply retention and checkpoint the WAL.
 
         Drops events whose ``end_ts`` is older than ``EVENT_RETENTION_DAYS`` and
