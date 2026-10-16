@@ -13,13 +13,11 @@ Endpoints (served on :8011):
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import re
 import sys
 import time
-from collections import defaultdict
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -30,7 +28,6 @@ from config import (
     MAX_METRIC_NAME_LEN,
     MAX_REQUESTS_PER_MINUTE,
     PORT,
-    RATE_LIMIT_CLEANUP_INTERVAL_S,
     RATE_LIMIT_WINDOW_S,
     SERVICE_NAME,
     SUMMARY_WINDOWS,
@@ -78,29 +75,22 @@ def _validate_metric_name(name: str) -> bool:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Rate limiting (M-8) — simple in-memory, per-IP
+# Rate limiting (M-8) — using shared library InMemoryRateLimiter
 # ═══════════════════════════════════════════════════════════════════════════════
-_rate_limit: dict[str, list[float]] = defaultdict(list)
 
+# Shared libs live at /app/libs in the container; add to path for imports.
+_LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
+if _LIBS_PATH not in sys.path:
+    sys.path.insert(0, _LIBS_PATH)
 
-def _check_rate_limit(client_ip: str) -> bool:
-    """Check if a request from the given IP is allowed under rate limits.
+from collector import Collector  # noqa: E402
+from smart_home_common.rate_limiter import InMemoryRateLimiter  # noqa: E402
 
-    Args:
-        client_ip: The client IP address to check.
-
-    Returns:
-        True if the request is allowed, False if rate limit exceeded.
-    """
-    now = time.time()
-    # Prune timestamps older than the rate limit window
-    _rate_limit[client_ip] = [
-        t for t in _rate_limit[client_ip] if now - t < RATE_LIMIT_WINDOW_S
-    ]
-    if len(_rate_limit[client_ip]) >= MAX_REQUESTS_PER_MINUTE:
-        return False
-    _rate_limit[client_ip].append(now)
-    return True
+# Rate limiter instance: configured via config.py
+rate_limiter = InMemoryRateLimiter(
+    max_requests=MAX_REQUESTS_PER_MINUTE,
+    window_seconds=RATE_LIMIT_WINDOW_S,
+)
 
 
 def _get_client_ip(request: Request) -> str:
@@ -118,47 +108,6 @@ def _get_client_ip(request: Request) -> str:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
-
-def cleanup_stale_rate_limits() -> int:
-    """Remove IPs from _rate_limit that have no recent timestamps.
-
-    An IP is considered stale if all its timestamps are older than
-    RATE_LIMIT_WINDOW_S. This prevents memory growth from IPs that make
-    a few requests and never return.
-
-    Returns:
-        Number of IPs removed.
-    """
-    now = time.time()
-    stale_ips = [
-        ip
-        for ip, timestamps in _rate_limit.items()
-        if not timestamps or all(now - t >= RATE_LIMIT_WINDOW_S for t in timestamps)
-    ]
-    for ip in stale_ips:
-        del _rate_limit[ip]
-    return len(stale_ips)
-
-
-# Background task handle for cleanup loop
-_cleanup_task: asyncio.Task[None] | None = None
-
-
-async def _rate_limit_cleanup_loop() -> None:
-    """Background task that periodically cleans up stale rate limit entries."""
-    while True:
-        await asyncio.sleep(RATE_LIMIT_CLEANUP_INTERVAL_S)
-        removed = cleanup_stale_rate_limits()
-        if removed > 0:
-            logger.debug("Rate limit cleanup: removed %d stale IPs", removed)
-
-
-# Shared libs live at /app/libs in the container; add to path for imports.
-_LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
-if _LIBS_PATH not in sys.path:
-    sys.path.insert(0, _LIBS_PATH)
-
-from collector import Collector  # noqa: E402
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -180,18 +129,10 @@ async def lifespan(app: FastAPI):
     Yields:
         Control to the application after starting the collector.
     """
-    global _cleanup_task
     logger.info("Starting %s...", SERVICE_NAME)
     await collector.start()
-    _cleanup_task = asyncio.create_task(_rate_limit_cleanup_loop())
     yield
     logger.info("Shutting down %s...", SERVICE_NAME)
-    if _cleanup_task:
-        _cleanup_task.cancel()
-        try:
-            await _cleanup_task
-        except asyncio.CancelledError:
-            pass
     await collector.stop()
 
 
@@ -221,7 +162,7 @@ async def rate_limit_middleware(request: Request, call_next) -> JSONResponse:
         return await call_next(request)
 
     client_ip = _get_client_ip(request)
-    if not _check_rate_limit(client_ip):
+    if not rate_limiter.is_allowed(client_ip):
         return JSONResponse(
             status_code=429,
             content={"detail": "Rate limit exceeded. Try again later."},
