@@ -34,7 +34,11 @@ logger = logging.getLogger(__name__)
 
 
 def _ensure_alert_schema(conn: sqlite3.Connection) -> None:
-    """Create the alerts + alert_history tables if they do not exist."""
+    """Create the alerts + alert_history tables if they do not exist.
+
+    Args:
+        conn: SQLite database connection to execute schema DDL on.
+    """
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS alerts (
@@ -67,18 +71,33 @@ def _ensure_alert_schema(conn: sqlite3.Connection) -> None:
 
 
 class AlertStore:
-    """SQLite-backed persistence for active alerts and the alert audit trail."""
+    """SQLite-backed persistence for active alerts and the alert audit trail.
+
+    Attributes:
+        db_path: Path to the SQLite database file.
+    """
+
+    db_path: str
+    _db: SqliteHelper
 
     def __init__(self, db_path: str = DB_PATH) -> None:
+        """Initialize the alert store.
+
+        Args:
+            db_path: Path to the SQLite database file. Defaults to config value.
+        """
         self.db_path = db_path
         self._db = SqliteHelper(db_path, init=_ensure_alert_schema)
 
     # ── Active set ────────────────────────────────────────────────────────────
-    def load_active(self) -> list:
+    def load_active(self) -> list[ActiveAlert]:
         """Return all currently-firing alerts (``resolved_at IS NULL``).
 
         Imports :class:`alerts.ActiveAlert` lazily to avoid a circular import
         (``alerts`` imports this module's instance, not the class).
+
+        Returns:
+            List of ActiveAlert instances for alerts that have not been resolved.
         """
         from alerts import ActiveAlert, Severity
 
@@ -101,8 +120,12 @@ class AlertStore:
             for r in rows
         ]
 
-    def upsert_active(self, alert) -> None:
-        """Insert or update an active alert row (fingerprint is the PK)."""
+    def upsert_active(self, alert: ActiveAlert) -> None:
+        """Insert or update an active alert row (fingerprint is the PK).
+
+        Args:
+            alert: The alert to insert or update.
+        """
         with self._db.connect() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO alerts "
@@ -125,13 +148,23 @@ class AlertStore:
 
         We clear it from the active table so ``load_active`` won't rehydrate it;
         the enduring record lives in ``alert_history``.
+
+        Args:
+            fingerprint: Unique identifier of the alert to resolve.
+            resolved_at: Unix timestamp when the alert was resolved.
         """
         with self._db.connect() as conn:
             conn.execute("DELETE FROM alerts WHERE fingerprint = ?", (fingerprint,))
 
     # ── History ────────────────────────────────────────────────────────────────
-    def record_history(self, alert, event: str, ts: int) -> None:
-        """Append a ``fired``/``resolved`` event to the audit trail."""
+    def record_history(self, alert: ActiveAlert, event: str, ts: int) -> None:
+        """Append a ``fired``/``resolved`` event to the audit trail.
+
+        Args:
+            alert: The alert to record history for.
+            event: Event type, either 'fired' or 'resolved'.
+            ts: Unix timestamp of the event.
+        """
         with self._db.connect() as conn:
             conn.execute(
                 "INSERT INTO alert_history "
@@ -148,8 +181,19 @@ class AlertStore:
                 ),
             )
 
-    def history(self, days: int = 7, now: int | None = None) -> list[dict]:
-        """Return alert-history events in the last ``days`` (newest first)."""
+    def history(
+        self, days: int = 7, now: int | None = None
+    ) -> list[dict[str, str | int | float]]:
+        """Return alert-history events in the last ``days`` (newest first).
+
+        Args:
+            days: Number of days to look back. Defaults to 7.
+            now: Current unix timestamp. Defaults to time.time().
+
+        Returns:
+            List of event dicts with fingerprint, rule_key, label, severity,
+            value, event, and ts keys.
+        """
         now = int(time.time()) if now is None else now
         since = now - days * 24 * 3600
         with self._db.connect() as conn:
@@ -172,7 +216,15 @@ class AlertStore:
         ]
 
     def prune_history(self, days: int = 90, now: int | None = None) -> int:
-        """Delete history rows older than ``days``; returns rows deleted."""
+        """Delete history rows older than ``days``.
+
+        Args:
+            days: Retention period in days. Defaults to 90.
+            now: Current unix timestamp. Defaults to time.time().
+
+        Returns:
+            Number of rows deleted.
+        """
         now = int(time.time()) if now is None else now
         cutoff = now - days * 24 * 3600
         with self._db.connect() as conn:
