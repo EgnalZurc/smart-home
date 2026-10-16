@@ -24,6 +24,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from config import (
+    CALENDAR_API_KEY,
     CALENDAR_SEED,
     DEFAULT_OFFSETS,
     GOOGLE_OAUTH_CLIENT_ID,
@@ -39,7 +40,8 @@ from config import (
     TOKEN_PATH,
     TZ,
 )
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 _LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
@@ -66,6 +68,35 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Authentication
+# ═══════════════════════════════════════════════════════════════════════════════
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+async def require_api_key(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+) -> None:
+    """Dependency that enforces bearer token auth for protected endpoints.
+
+    If CALENDAR_API_KEY is not set (empty), authentication is disabled.
+    """
+    if not CALENDAR_API_KEY:
+        # Auth disabled — allow request (dev mode)
+        return
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing Authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if credentials.credentials != CALENDAR_API_KEY:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key",
+        )
+
 
 store = CalendarStore()
 google_client: GoogleCalendarClient | None = None
@@ -369,7 +400,7 @@ async def get_today() -> dict:
     return {"ts": int(time.time()), "date": now_dt.date().isoformat(), "events": events}
 
 
-@app.post("/api/calendar/sync")
+@app.post("/api/calendar/sync", dependencies=[Depends(require_api_key)])
 async def trigger_sync() -> dict:
     """Trigger an immediate sync."""
     if google_client is None:
@@ -409,7 +440,11 @@ class ConfigUpdate(BaseModel):
     delete_rule_id: int | None = None
 
 
-@app.get("/api/calendar/config", response_model=ConfigResponse)
+@app.get(
+    "/api/calendar/config",
+    response_model=ConfigResponse,
+    dependencies=[Depends(require_api_key)],
+)
 async def get_config() -> ConfigResponse:
     """Get current configuration."""
     calendars = [c.to_dict() for c in store.get_all_calendars()]
@@ -423,7 +458,7 @@ async def get_config() -> ConfigResponse:
     )
 
 
-@app.post("/api/calendar/config")
+@app.post("/api/calendar/config", dependencies=[Depends(require_api_key)])
 async def update_config(update: ConfigUpdate) -> dict:
     """Update configuration."""
     changes = []
