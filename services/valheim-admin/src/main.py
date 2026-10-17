@@ -70,7 +70,21 @@ from config import (
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from smart_home_common.rate_limiter import InMemoryRateLimiter
+
+
+class ConfigUpdateRequest(BaseModel):
+    """Request body for updating server configuration."""
+
+    server_name: str
+    world_name: str
+    server_pass: str
+    server_public: bool = False
+    crossplay: bool = False
+    save_interval: int = SAVE_INTERVAL_DEFAULT_SECONDS
+    backups: int = BACKUPS_DEFAULT
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -581,30 +595,23 @@ async def get_config() -> dict[str, Any]:
 
 
 @app.post("/api/config")
-async def update_config(
-    server_name: str = Form(...),
-    world_name: str = Form(...),
-    server_pass: str = Form(...),
-    server_public: bool = Form(False),
-    crossplay: bool = Form(False),
-    save_interval: int = Form(SAVE_INTERVAL_DEFAULT_SECONDS),
-    backups: int = Form(BACKUPS_DEFAULT),
-) -> dict[str, Any]:
+async def update_config(config: ConfigUpdateRequest) -> dict[str, Any]:
     """Update Valheim server configuration.
 
     Validates all inputs and forwards the configuration update to pc-agent.
     The server may need to be restarted for some changes to take effect.
 
     Args:
-        server_name: Display name for the server in browser (1-64 chars,
-            alphanumeric and spaces).
-        world_name: Name of the world to use (1-64 chars, alphanumeric,
-            underscore, hyphen).
-        server_pass: Server password (max 128 chars, no newlines).
-        server_public: Whether the server appears in the public browser.
-        crossplay: Whether to enable crossplay with Xbox/console players.
-        save_interval: World save interval in seconds (300-86400).
-        backups: Number of backup copies to keep (1-100).
+        config: JSON body with configuration fields:
+            - server_name: Display name for the server (1-64 chars, alphanumeric
+              and spaces).
+            - world_name: Name of the world to use (1-64 chars, alphanumeric,
+              underscore, hyphen).
+            - server_pass: Server password (max 128 chars, no newlines).
+            - server_public: Whether the server appears in the public browser.
+            - crossplay: Whether to enable crossplay with Xbox/console players.
+            - save_interval: World save interval in seconds (300-86400).
+            - backups: Number of backup copies to keep (1-100).
 
     Returns:
         Result dictionary from pc-agent confirming the update.
@@ -612,25 +619,25 @@ async def update_config(
     Raises:
         HTTPException: 400 if any input validation fails.
     """
-    validate_server_name(server_name)
-    validate_world_name(world_name)
-    validate_server_pass(server_pass)
-    save_interval = clamp_save_interval(save_interval)
-    backups = clamp_backups(backups)
+    validate_server_name(config.server_name)
+    validate_world_name(config.world_name)
+    validate_server_pass(config.server_pass)
+    save_interval = clamp_save_interval(config.save_interval)
+    backups = clamp_backups(config.backups)
     logger.info(
         "Config update: world=%s, server_name=%s, public=%s",
-        world_name,
-        server_name,
-        server_public,
+        config.world_name,
+        config.server_name,
+        config.server_public,
     )
     result = await pc_agent.post(
         "/valheim/config",
         {
-            "server_name": server_name,
-            "world_name": world_name,
-            "server_pass": server_pass,
-            "server_public": server_public,
-            "crossplay": crossplay,
+            "server_name": config.server_name,
+            "world_name": config.world_name,
+            "server_pass": config.server_pass,
+            "server_public": config.server_public,
+            "crossplay": config.crossplay,
             "save_interval": save_interval,
             "backups": backups,
         },
