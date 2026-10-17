@@ -15,4 +15,12 @@ src_dir = Path(__file__).parent.parent / "src"
 if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
+# Add libs directories for async_http_client and smart_home_common
+libs_dir = Path(__file__).parent.parent.parent.parent / "libs"
+smart_home_common_src = libs_dir / "smart_home_common" / "src"
+for path in [libs_dir, smart_home_common_src]:
+    path_str = str(path)
+    if path_str not in sys.path:
+        sys.path.insert(0, path_str)
+
 os.environ.setdefault("PC_AGENT_TOKEN", "test-token")

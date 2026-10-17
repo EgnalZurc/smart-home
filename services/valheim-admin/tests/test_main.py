@@ -277,7 +277,7 @@ class TestConfigPostEndpoint:
     """Tests for POST /api/config endpoint."""
 
     def test_update_config_success(self):
-        """Update config should send form data to pc-agent."""
+        """Update config should send JSON data to pc-agent."""
         from src.main import app, pc_agent
 
         with patch.object(
@@ -289,14 +289,14 @@ class TestConfigPostEndpoint:
             client = TestClient(app)
             response = client.post(
                 "/api/config",
-                data={
+                json={
                     "server_name": "New Server",
                     "world_name": "NewWorld",
                     "server_pass": "newpass",
-                    "server_public": "false",
-                    "crossplay": "true",
-                    "save_interval": "900",
-                    "backups": "3",
+                    "server_public": False,
+                    "crossplay": True,
+                    "save_interval": 900,
+                    "backups": 3,
                 },
             )
 
@@ -493,14 +493,14 @@ class TestWorldNameValidation:
             client = TestClient(app)
             response = client.post(
                 "/api/config",
-                data={
+                json={
                     "server_name": "New Server",
                     "world_name": "../evil",
                     "server_pass": "newpass",
-                    "server_public": "false",
-                    "crossplay": "true",
-                    "save_interval": "900",
-                    "backups": "3",
+                    "server_public": False,
+                    "crossplay": True,
+                    "save_interval": 900,
+                    "backups": 3,
                 },
             )
 
