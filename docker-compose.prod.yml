@@ -481,8 +481,10 @@ services:
     image: egnal/smart-home-calendar-service:latest
     container_name: calendar-service
     restart: on-failure:5
-    mem_limit: 96m
-    memswap_limit: 96m
+    # Increased from 96m: baseline 71MB + Google Calendar sync spikes were
+    # hitting 85% threshold (~82MB) causing repeated WARNING/RESOLVED cycles
+    mem_limit: 128m
+    memswap_limit: 128m
     expose:
       - 8014
     volumes:
