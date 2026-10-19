@@ -6,15 +6,18 @@ can continue from where it left off after restarts.
 Goal: Minimize AC on/off cycles to protect the compressor.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Persistence file (inside container, mounted as volume)
-STATE_FILE = Path("/app/data/controller_state.json")
+STATE_FILE: Path = Path("/app/data/controller_state.json")
 
 
 @dataclass
@@ -40,7 +43,7 @@ class PersistedState:
     last_off_timestamp: float
     last_modulating_setpoint: float
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Converts to dictionary for JSON serialization."""
         return {
             "target_temperature": self.target_temperature,
@@ -59,7 +62,7 @@ class PersistedState:
         }
 
     @staticmethod
-    def from_dict(data: dict) -> "PersistedState":
+    def from_dict(data: dict[str, Any]) -> PersistedState:
         """Creates from dictionary loaded from JSON."""
         return PersistedState(
             target_temperature=data["target_temperature"],
