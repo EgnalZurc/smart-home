@@ -103,18 +103,57 @@ def _get_db() -> sqlite3.Connection:
 
 
 # ── Gift ID validation ────────────────────────────────────────────────────────
-def _validate_gift_id(gift_id: str) -> bool:
-    """Validate gift_id is a valid UUID format.
+# Regex pattern for valid gift IDs: g_<timestamp>_<hex8>
+# timestamp: 13+ digits (milliseconds since epoch)
+# hex: 8 hex characters (from secrets.token_hex(4))
+import re
 
-    Note: baby-gifts uses g_<timestamp>_<hex> format for IDs, not UUID.
-    This validates whether a gift_id *could* be a valid UUID if that format
-    is expected. For legacy IDs, this will return False.
+_GIFT_ID_PATTERN: re.Pattern[str] = re.compile(r"^g_\d{13,}_[0-9a-f]{8}$")
+
+
+def _validate_gift_id(gift_id: str) -> bool:
+    """Validate gift_id format for security.
+
+    Accepts:
+    - Native format: g_<timestamp_ms>_<hex8> (e.g., g_1729432800000_a1b2c3d4)
+    - UUID format: for future compatibility
+
+    Rejects:
+    - Empty/None values
+    - Path traversal attempts (../, /, \\)
+    - Non-alphanumeric characters outside the expected pattern
+    - Excessively long IDs (max 50 chars)
+
+    Args:
+        gift_id: The gift ID to validate.
+
+    Returns:
+        bool: True if valid, False otherwise.
     """
+    # Must be a non-empty string
+    if not gift_id or not isinstance(gift_id, str):
+        return False
+
+    # Length check to prevent DoS via regex
+    if len(gift_id) > 50:
+        return False
+
+    # Block path traversal attempts
+    if ".." in gift_id or "/" in gift_id or "\\" in gift_id:
+        return False
+
+    # Check native format: g_<timestamp>_<hex>
+    if _GIFT_ID_PATTERN.match(gift_id):
+        return True
+
+    # Check UUID format for future compatibility
     try:
         uuid.UUID(gift_id)
         return True
     except (ValueError, AttributeError, TypeError):
-        return False
+        pass
+
+    return False
 
 
 # ── Gifts data ────────────────────────────────────────────────────────────────
@@ -180,7 +219,18 @@ def get_gifts_data(include_admin: bool = False) -> dict[str, Any]:
 
 
 def get_gift(gift_id: str) -> dict[str, Any] | None:
-    """Get a single gift by ID."""
+    """Get a single gift by ID.
+
+    Args:
+        gift_id: The gift ID to retrieve.
+
+    Returns:
+        Gift dict if found, None if not found or invalid ID.
+    """
+    # Validate gift_id format
+    if not _validate_gift_id(gift_id):
+        return None
+
     with _lock:
         data: dict[str, Any] = _load_gifts()
         for gift in data.get("gifts", []):
@@ -224,13 +274,8 @@ def update_gift(
         - None: Gift not found (legacy behavior, returns 404 at API layer)
         - tuple[None, int, str]: (None, status_code, error_message) for validation
     """
-    # Validate gift_id format - must be non-empty string
-    if not gift_id or not isinstance(gift_id, str):
-        return (None, 400, "gift_id must be a non-empty string")
-
-    # Validate gift_id format - should match our ID pattern (g_<timestamp>_<hex>)
-    # or be a valid UUID for future compatibility
-    if not (gift_id.startswith("g_") or _validate_gift_id(gift_id)):
+    # Validate gift_id format using centralized validation
+    if not _validate_gift_id(gift_id):
         return (None, 400, "Invalid gift_id format")
 
     with _lock:
@@ -256,7 +301,18 @@ def update_gift(
 
 
 def delete_gift(gift_id: str) -> bool:
-    """Delete a gift (admin only)."""
+    """Delete a gift (admin only).
+
+    Args:
+        gift_id: The gift ID to delete.
+
+    Returns:
+        True if gift was deleted, False if not found or invalid ID.
+    """
+    # Validate gift_id format
+    if not _validate_gift_id(gift_id):
+        return False
+
     with _lock:
         data: dict[str, Any] = _load_gifts()
         original_len: int = len(data.get("gifts", []))
@@ -274,7 +330,14 @@ def reserve_gift(gift_id: str, token: str, guest_name: str) -> dict[str, Any]:
         gift_id: The gift to reserve
         token: Either an invitation token or "user:username" for authenticated users
         guest_name: Display name for the reservation
+
+    Returns:
+        Dict with status 'ok' and gift, or status 'error' with message.
     """
+    # Validate gift_id format
+    if not _validate_gift_id(gift_id):
+        return {"status": "error", "message": "Invalid gift_id format"}
+
     with _lock:
         data: dict[str, Any] = _load_gifts()
         for i, gift in enumerate(data.get("gifts", [])):
@@ -294,7 +357,20 @@ def reserve_gift(gift_id: str, token: str, guest_name: str) -> dict[str, Any]:
 
 
 def unreserve_gift(gift_id: str, token: str, is_admin: bool = False) -> dict[str, Any]:
-    """Cancel a reservation. Users can only cancel their own."""
+    """Cancel a reservation. Users can only cancel their own.
+
+    Args:
+        gift_id: The gift to unreserve.
+        token: The token of the user attempting to unreserve.
+        is_admin: If True, bypass ownership check.
+
+    Returns:
+        Dict with status 'ok' and gift, or status 'error' with message.
+    """
+    # Validate gift_id format
+    if not _validate_gift_id(gift_id):
+        return {"status": "error", "message": "Invalid gift_id format"}
+
     with _lock:
         data: dict[str, Any] = _load_gifts()
         for i, gift in enumerate(data.get("gifts", [])):
@@ -320,7 +396,18 @@ def unreserve_gift(gift_id: str, token: str, is_admin: bool = False) -> dict[str
 
 
 def toggle_gift_visibility(gift_id: str) -> dict[str, Any]:
-    """Toggle a gift's hidden status (FAMILIA users only)."""
+    """Toggle a gift's hidden status (FAMILIA users only).
+
+    Args:
+        gift_id: The gift ID to toggle visibility.
+
+    Returns:
+        Dict with status 'ok', gift and hidden state, or status 'error'.
+    """
+    # Validate gift_id format
+    if not _validate_gift_id(gift_id):
+        return {"status": "error", "message": "Invalid gift_id format"}
+
     with _lock:
         data: dict[str, Any] = _load_gifts()
         for i, gift in enumerate(data.get("gifts", [])):

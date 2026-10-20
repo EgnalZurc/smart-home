@@ -279,16 +279,16 @@ def require_auth_user(request: Request) -> str:
 
 
 def _truncate_token(token: str) -> str:
-    """Truncate token for safe logging (show last 6 chars only).
+    """Truncate token for safe logging (show first 4 chars only).
 
     Args:
         token: Full token string.
 
     Returns:
-        str: Truncated token with '...' prefix, or full token if <= 6 chars.
+        str: Truncated token showing only first 4 chars + '...', or full if <= 4.
     """
-    if len(token) > 6:
-        return f"...{token[-6:]}"
+    if len(token) > 4:
+        return f"{token[:4]}..."
     return token
 
 
