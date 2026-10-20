@@ -33,6 +33,10 @@ from smart_home_common.rate_limiter import InMemoryRateLimiter
 _refresh_limiter = InMemoryRateLimiter(max_requests=5, window_seconds=60)
 _config_limiter = InMemoryRateLimiter(max_requests=2, window_seconds=60)
 
+# Public read endpoints - higher limit but still protected against abuse
+# 30 requests per minute per client (enough for dashboard + background refresh)
+_public_read_limiter = InMemoryRateLimiter(max_requests=30, window_seconds=60)
+
 
 def _retry_after_seconds(limiter: InMemoryRateLimiter, key: str) -> int:
     """Seconds a client should wait before retrying, for the Retry-After header."""
