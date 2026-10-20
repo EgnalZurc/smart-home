@@ -71,6 +71,11 @@ MAX_REQUESTS_PER_MINUTE: int = int(
 )
 # Window size in seconds for rate limit tracking.
 RATE_LIMIT_WINDOW_S: int = int(os.environ.get("METRICS_RATE_LIMIT_WINDOW_S", "60"))
+# Maximum tracked clients for rate limiter (LRU eviction when exceeded).
+# Prevents memory exhaustion from IP spoofing attacks.
+MAX_RATE_LIMIT_ENTRIES: int = int(
+    os.environ.get("METRICS_MAX_RATE_LIMIT_ENTRIES", "1000")
+)
 # Cleanup interval for stale rate limit entries (default: 5 minutes).
 RATE_LIMIT_CLEANUP_INTERVAL_S: int = int(
     os.environ.get("METRICS_RATE_LIMIT_CLEANUP_INTERVAL_S", "300")
