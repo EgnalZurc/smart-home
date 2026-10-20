@@ -768,3 +768,196 @@ class TestSanitizeShellArg:
                 assert result.startswith("'") or '"' in result, (
                     f"Pattern {pattern!r} should be quoted, got {result!r}"
                 )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SSRF Protection Tests
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSSRFProtection:
+    """Tests for SSRF protection in PC_AGENT_URL validation."""
+
+    def test_valid_private_ip_192_168(self):
+        """192.168.x.x addresses should be allowed."""
+        from src.config import validate_pc_agent_url
+
+        result = validate_pc_agent_url("http://192.168.1.164:8090")
+        assert result == "http://192.168.1.164:8090"
+
+    def test_valid_private_ip_10_x(self):
+        """10.x.x.x addresses should be allowed."""
+        from src.config import validate_pc_agent_url
+
+        result = validate_pc_agent_url("http://10.0.0.1:8090")
+        assert result == "http://10.0.0.1:8090"
+
+    def test_valid_private_ip_172_16(self):
+        """172.16-31.x.x addresses should be allowed."""
+        from src.config import validate_pc_agent_url
+
+        result = validate_pc_agent_url("http://172.16.0.1:8090")
+        assert result == "http://172.16.0.1:8090"
+
+        result = validate_pc_agent_url("http://172.31.255.254:8090")
+        assert result == "http://172.31.255.254:8090"
+
+    def test_valid_tailscale_ip(self):
+        """Tailscale CGNAT range (100.64.0.0/10) should be allowed."""
+        from src.config import validate_pc_agent_url
+
+        result = validate_pc_agent_url("http://100.64.0.1:8090")
+        assert result == "http://100.64.0.1:8090"
+
+        result = validate_pc_agent_url("http://100.100.100.100:8090")
+        assert result == "http://100.100.100.100:8090"
+
+    def test_blocked_localhost_ip(self):
+        """127.x.x.x (loopback) should be blocked."""
+        from src.config import validate_pc_agent_url
+
+        with pytest.raises(ValueError) as exc:
+            validate_pc_agent_url("http://127.0.0.1:8090")
+        assert "loopback" in str(exc.value).lower()
+
+    def test_blocked_localhost_hostname(self):
+        """'localhost' hostname should be blocked."""
+        from src.config import validate_pc_agent_url
+
+        with pytest.raises(ValueError) as exc:
+            validate_pc_agent_url("http://localhost:8090")
+        assert "localhost" in str(exc.value).lower()
+
+    def test_blocked_public_ip(self):
+        """Public IP addresses should be blocked."""
+        from src.config import validate_pc_agent_url
+
+        with pytest.raises(ValueError) as exc:
+            validate_pc_agent_url("http://8.8.8.8:8090")
+        assert "private" in str(exc.value).lower()
+
+        with pytest.raises(ValueError) as exc:
+            validate_pc_agent_url("http://93.184.216.34:8090")  # example.com IP
+        assert "private" in str(exc.value).lower()
+
+    def test_blocked_hostname_dns_rebinding(self):
+        """Hostnames (not IPs) should be blocked to prevent DNS rebinding."""
+        from src.config import validate_pc_agent_url
+
+        with pytest.raises(ValueError) as exc:
+            validate_pc_agent_url("http://internal.example.com:8090")
+        assert "hostname" in str(exc.value).lower() or "IP address" in str(exc.value)
+
+    def test_blocked_zero_address(self):
+        """0.0.0.0 should be blocked."""
+        from src.config import validate_pc_agent_url
+
+        with pytest.raises(ValueError) as exc:
+            validate_pc_agent_url("http://0.0.0.0:8090")
+        assert (
+            "address" in str(exc.value).lower() or "private" in str(exc.value).lower()
+        )
+
+    def test_blocked_ip6_localhost(self):
+        """ip6-localhost hostname should be blocked."""
+        from src.config import validate_pc_agent_url
+
+        with pytest.raises(ValueError) as exc:
+            validate_pc_agent_url("http://ip6-localhost:8090")
+        assert "localhost" in str(exc.value).lower()
+
+    def test_invalid_scheme(self):
+        """Non-http(s) schemes should be blocked."""
+        from src.config import validate_pc_agent_url
+
+        with pytest.raises(ValueError) as exc:
+            validate_pc_agent_url("ftp://192.168.1.1:8090")
+        assert "scheme" in str(exc.value).lower()
+
+        with pytest.raises(ValueError) as exc:
+            validate_pc_agent_url("file:///etc/passwd")
+        assert "scheme" in str(exc.value).lower()
+
+    def test_empty_url(self):
+        """Empty URL should be rejected."""
+        from src.config import validate_pc_agent_url
+
+        with pytest.raises(ValueError) as exc:
+            validate_pc_agent_url("")
+        assert "empty" in str(exc.value).lower()
+
+    def test_https_allowed(self):
+        """HTTPS scheme should be allowed."""
+        from src.config import validate_pc_agent_url
+
+        result = validate_pc_agent_url("https://192.168.1.164:8090")
+        assert result == "https://192.168.1.164:8090"
+
+    def test_no_port_allowed(self):
+        """URL without port should be allowed."""
+        from src.config import validate_pc_agent_url
+
+        result = validate_pc_agent_url("http://192.168.1.164")
+        assert result == "http://192.168.1.164"
+
+    def test_172_15_not_private(self):
+        """172.15.x.x is NOT private (private is 172.16-31)."""
+        from src.config import validate_pc_agent_url
+
+        with pytest.raises(ValueError) as exc:
+            validate_pc_agent_url("http://172.15.0.1:8090")
+        assert "private" in str(exc.value).lower()
+
+    def test_172_32_not_private(self):
+        """172.32.x.x is NOT private (private is 172.16-31)."""
+        from src.config import validate_pc_agent_url
+
+        with pytest.raises(ValueError) as exc:
+            validate_pc_agent_url("http://172.32.0.1:8090")
+        assert "private" in str(exc.value).lower()
+
+
+class TestRateLimitClientIP:
+    """Tests for rate limiting using client IP from X-Forwarded-For."""
+
+    def test_get_client_ip_with_forwarded_header(self):
+        """_get_client_ip should return first IP from X-Forwarded-For."""
+        from unittest.mock import MagicMock
+
+        from src.main import _get_client_ip
+
+        mock_request = MagicMock()
+        mock_request.headers.get.return_value = "10.0.0.50, 172.16.0.1"
+        mock_request.client.host = "172.18.0.1"
+
+        result = _get_client_ip(mock_request)
+
+        assert result == "10.0.0.50"
+
+    def test_get_client_ip_without_forwarded_header(self):
+        """_get_client_ip should fallback to request.client.host."""
+        from unittest.mock import MagicMock
+
+        from src.main import _get_client_ip
+
+        mock_request = MagicMock()
+        mock_request.headers.get.return_value = None
+        mock_request.client.host = "192.168.1.100"
+
+        result = _get_client_ip(mock_request)
+
+        assert result == "192.168.1.100"
+
+    def test_get_client_ip_no_client(self):
+        """_get_client_ip should return 'unknown' when client is None."""
+        from unittest.mock import MagicMock
+
+        from src.main import _get_client_ip
+
+        mock_request = MagicMock()
+        mock_request.headers.get.return_value = None
+        mock_request.client = None
+
+        result = _get_client_ip(mock_request)
+
+        assert result == "unknown"

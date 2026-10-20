@@ -153,11 +153,31 @@ def _sanitize_shell_arg(arg: str) -> str:
     return shlex.quote(arg)
 
 
+def _get_client_ip(request: Request) -> str:
+    """Extract real client IP from request, respecting X-Forwarded-For if present.
+
+    When running behind nginx reverse proxy, the original client IP is in
+    X-Forwarded-For header. We take the first IP in the chain (original client).
+
+    Args:
+        request: The FastAPI request object.
+
+    Returns:
+        The client IP address string, or "unknown" if not determinable.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        # Take the first IP in the chain (original client)
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def _check_rate_limit(request: Request) -> None:
     """Check if the request exceeds the rate limit for server control.
 
     This function enforces rate limiting on server control endpoints to prevent
-    abuse. It uses the client's IP address as the identifier.
+    abuse. It uses the client's real IP address as the identifier, respecting
+    X-Forwarded-For when behind nginx proxy.
 
     Args:
         request: The incoming FastAPI request object.
@@ -166,7 +186,7 @@ def _check_rate_limit(request: Request) -> None:
         HTTPException: 429 status if the rate limit is exceeded, includes
             Retry-After header with the reset timestamp.
     """
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = _get_client_ip(request)
     if not server_control_limiter.is_allowed(client_ip):
         status = server_control_limiter.get_status(client_ip)
         logger.warning("Rate limit exceeded for IP: %s", client_ip)

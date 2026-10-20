@@ -15,8 +15,10 @@ Responsabilidades:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+import secrets
 import sys
 import threading
 import time
@@ -104,6 +106,61 @@ def _check_manual_trigger_rate_limit(request: Request) -> None:
             status_code=429,
             detail="Too many requests. Try again in a minute.",
         )
+
+
+# ── CSRF Protection ──────────────────────────────────────────────────────────
+
+# CSRF secret key - generated at startup, persists for container lifetime
+# In production, this could be loaded from environment for multi-instance setups
+_CSRF_SECRET = os.environ.get("CSRF_SECRET", secrets.token_hex(32))
+
+# CSRF is enabled by default but can be disabled for testing
+CSRF_ENABLED = os.environ.get("CSRF_ENABLED", "true").lower() in ("1", "true", "yes")
+
+# Cookie name for CSRF token
+CSRF_COOKIE_NAME = "casita_csrf_token"
+
+# Header name for CSRF token
+CSRF_HEADER_NAME = "x-csrf-token"
+
+# Endpoints exempt from CSRF validation (external webhooks, health checks)
+CSRF_EXEMPT_PATHS = {
+    "/health",
+    "/api/casita/telegram-webhook",  # External Telegram webhook
+}
+
+
+def _generate_csrf_token(session_id: str) -> str:
+    """Generate a CSRF token tied to a session identifier.
+
+    Uses HMAC-like construction: hash(secret + session_id) to create a
+    token that can be verified without storing state.
+
+    Args:
+        session_id: A unique identifier for the session (e.g., from cookie).
+
+    Returns:
+        A hex-encoded CSRF token.
+    """
+    data = f"{_CSRF_SECRET}:{session_id}".encode()
+    return hashlib.sha256(data).hexdigest()
+
+
+def _verify_csrf_token(token: str, session_id: str) -> bool:
+    """Verify a CSRF token matches the expected value for a session.
+
+    Args:
+        token: The CSRF token to verify.
+        session_id: The session identifier used to generate the token.
+
+    Returns:
+        True if the token is valid, False otherwise.
+    """
+    if not token or not session_id:
+        return False
+    expected = _generate_csrf_token(session_id)
+    # Use constant-time comparison to prevent timing attacks
+    return secrets.compare_digest(token, expected)
 
 
 # ── Configuración desde variables de entorno ─────────────────────────────────
@@ -312,6 +369,95 @@ async def rate_limit_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+# ── CSRF Protection Middleware ────────────────────────────────────────────────
+
+
+@app.middleware("http")
+async def csrf_middleware(request: Request, call_next):
+    """Validate CSRF tokens for state-changing requests.
+
+    Implements double-submit cookie pattern:
+    1. A session cookie identifies the user
+    2. A CSRF token in the header must match the expected value for that session
+
+    Skips validation for:
+    - Safe methods (GET, HEAD, OPTIONS)
+    - Exempt paths (health checks, external webhooks)
+    - When CSRF is disabled via environment variable
+    """
+    path = request.url.path
+    method = request.method.upper()
+
+    # Skip CSRF for safe methods
+    if method in ("GET", "HEAD", "OPTIONS"):
+        response = await call_next(request)
+
+        # Set CSRF cookie on GET requests to API endpoints
+        if path.startswith("/api/") and path not in CSRF_EXEMPT_PATHS:
+            # Use client IP + user agent as session identifier
+            # (nginx auth_request ensures authenticated users)
+            client_ip = _get_client_ip(request)
+            user_agent = request.headers.get("user-agent", "")
+            session_id = hashlib.sha256(
+                f"{client_ip}:{user_agent}".encode()
+            ).hexdigest()[:16]
+
+            csrf_token = _generate_csrf_token(session_id)
+
+            # Set cookie if not already set with correct value
+            existing_cookie = request.cookies.get(CSRF_COOKIE_NAME)
+            if existing_cookie != csrf_token:
+                response.set_cookie(
+                    key=CSRF_COOKIE_NAME,
+                    value=csrf_token,
+                    httponly=False,  # JS needs to read it
+                    samesite="strict",
+                    secure=request.url.scheme == "https",
+                    max_age=3600,  # 1 hour
+                )
+
+        return response
+
+    # Skip CSRF for exempt paths
+    if path in CSRF_EXEMPT_PATHS:
+        return await call_next(request)
+
+    # Skip CSRF validation if disabled
+    if not CSRF_ENABLED:
+        return await call_next(request)
+
+    # For state-changing methods (POST, PUT, DELETE, PATCH), validate CSRF token
+    if method in ("POST", "PUT", "DELETE", "PATCH"):
+        # Get session identifier
+        client_ip = _get_client_ip(request)
+        user_agent = request.headers.get("user-agent", "")
+        session_id = hashlib.sha256(f"{client_ip}:{user_agent}".encode()).hexdigest()[
+            :16
+        ]
+
+        # Get CSRF token from header
+        csrf_token = request.headers.get(CSRF_HEADER_NAME)
+
+        if not _verify_csrf_token(csrf_token or "", session_id):
+            logger.warning(
+                "CSRF validation failed for %s %s from %s",
+                method,
+                path,
+                client_ip,
+            )
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "CSRF validation failed",
+                    "detail": "Missing or invalid CSRF token. Include the "
+                    f"'{CSRF_HEADER_NAME}' header with the token from the "
+                    f"'{CSRF_COOKIE_NAME}' cookie.",
+                },
+            )
+
+    return await call_next(request)
+
+
 # ── Pydantic Models ───────────────────────────────────────────────────────────
 
 
@@ -389,6 +535,40 @@ async def health(request: Request):
         "last_scheduler_tick": last_tick,
         "scheduler_stale": scheduler_stale,
     }
+
+
+# ── CSRF Token endpoint ───────────────────────────────────────────────────────
+
+
+@api.get("/csrf-token")
+async def get_csrf_token(request: Request):
+    """Get a CSRF token for the current session.
+
+    The token is also set as a cookie on this response. Frontend code should:
+    1. Call this endpoint on page load
+    2. Include the token in the X-CSRF-Token header on all POST/PUT/DELETE requests
+
+    Returns:
+        JSON with the CSRF token.
+    """
+    from fastapi.responses import JSONResponse as JSONResp
+
+    client_ip = _get_client_ip(request)
+    user_agent = request.headers.get("user-agent", "")
+    session_id = hashlib.sha256(f"{client_ip}:{user_agent}".encode()).hexdigest()[:16]
+
+    csrf_token = _generate_csrf_token(session_id)
+
+    response = JSONResp(content={"csrf_token": csrf_token})
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=csrf_token,
+        httponly=False,  # JS needs to read it
+        samesite="strict",
+        secure=request.url.scheme == "https",
+        max_age=3600,  # 1 hour
+    )
+    return response
 
 
 # ── Status endpoint ───────────────────────────────────────────────────────────
