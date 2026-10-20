@@ -768,3 +768,65 @@ class TestSanitizeShellArg:
                 assert result.startswith("'") or '"' in result, (
                     f"Pattern {pattern!r} should be quoted, got {result!r}"
                 )
+
+
+
+# ── Security Headers Middleware ───────────────────────────────────────────────
+
+
+class TestSecurityHeadersMiddleware:
+    """Tests for security headers middleware."""
+
+    def test_health_endpoint_has_security_headers(self):
+        """Health endpoint should include security headers."""
+        from src.main import app
+
+        client = TestClient(app)
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
+        assert response.headers.get("X-Frame-Options") == "DENY"
+        assert "Content-Security-Policy" in response.headers
+        assert response.headers.get("X-XSS-Protection") == "1; mode=block"
+        assert "Referrer-Policy" in response.headers
+
+    def test_api_endpoint_has_security_headers(self):
+        """API endpoints should include security headers."""
+        from src.main import app, pc_agent
+
+        with patch.object(
+            pc_agent,
+            "get",
+            new_callable=AsyncMock,
+            return_value={"running": False},
+        ):
+            client = TestClient(app)
+            response = client.get("/api/status")
+
+            assert response.status_code == 200
+            assert response.headers.get("X-Content-Type-Options") == "nosniff"
+            assert response.headers.get("X-Frame-Options") == "DENY"
+            assert "default-src" in response.headers.get("Content-Security-Policy", "")
+
+    def test_csp_header_allows_inline_scripts_and_styles(self):
+        """CSP should allow inline scripts/styles for SPA compatibility."""
+        from src.main import app
+
+        client = TestClient(app)
+        response = client.get("/health")
+
+        csp = response.headers.get("Content-Security-Policy", "")
+        assert "'unsafe-inline'" in csp  # Needed for SPA index.html
+
+    def test_referrer_policy_is_strict(self):
+        """Referrer-Policy should be strict-origin-when-cross-origin."""
+        from src.main import app
+
+        client = TestClient(app)
+        response = client.get("/health")
+
+        assert (
+            response.headers.get("Referrer-Policy")
+            == "strict-origin-when-cross-origin"
+        )

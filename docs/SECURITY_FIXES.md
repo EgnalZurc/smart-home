@@ -345,6 +345,15 @@ Each entry follows this format:
 - **Fix Applied**: Added logging for startup/shutdown with port info, health check debug logs, and database failure warnings
 - **Verification**: Check logs during startup show "Starting presence-service on port 8013..."
 
+### [valheim-admin] Missing Security Headers
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: HTTP responses lacked security headers (X-Content-Type-Options, X-Frame-Options, CSP)
+- **Fix Applied**: Added security_headers_middleware with X-Content-Type-Options: nosniff, X-Frame-Options: DENY, Content-Security-Policy (with unsafe-inline for SPA), X-XSS-Protection, Referrer-Policy
+- **Verification**: `curl -I https://raspberrypi.tailaa37cd.ts.net/valheim-admin/health | grep -E "X-Content|X-Frame|Content-Security"`
+
 ---
 
 ## Accepted Risks

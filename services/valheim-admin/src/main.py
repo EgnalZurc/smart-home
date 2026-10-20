@@ -210,6 +210,44 @@ app = FastAPI(title=SERVICE_TITLE, version=SERVICE_VERSION, lifespan=lifespan)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Security Headers Middleware
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Add security headers to all HTTP responses.
+
+    This middleware adds standard security headers to protect against common
+    web vulnerabilities:
+
+    - X-Content-Type-Options: nosniff — Prevents MIME type sniffing attacks
+    - X-Frame-Options: DENY — Prevents clickjacking by disallowing framing
+    - Content-Security-Policy: default-src 'self' — Restricts resource loading
+    - X-XSS-Protection: 1; mode=block — Legacy XSS filter (for older browsers)
+    - Referrer-Policy: strict-origin-when-cross-origin — Controls referrer info
+
+    Args:
+        request: The incoming HTTP request.
+        call_next: The next middleware or route handler in the chain.
+
+    Returns:
+        The HTTP response with security headers added.
+    """
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "font-src 'self'; connect-src 'self'"
+    )
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Input Validation
 # ══════════════════════════════════════════════════════════════════════════════
 
