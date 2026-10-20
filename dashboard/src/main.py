@@ -1,9 +1,13 @@
 """Entry point of the Smart Home Backend application.
+
 Orchestrates all components: MQTT, MELCloud, AC controller, REST API.
 """
 
 import logging
 import os
+import re
+import time
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -14,12 +18,14 @@ from api import alert_reads_db, auth_routes, routes, trust_routes
 from api.auth import admin as auth_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from middleware import CSPNonceMiddleware
+from middleware import CSPNonceMiddleware, get_csp_nonce
 from profiles import db as profiles_db
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse as StarletteRedirect
+from starlette.responses import Response
 
 # Configure logging
 logging.basicConfig(
@@ -126,7 +132,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
     5. No valid session and no valid device token → redirect to /auth/login
     """
 
-    async def dispatch(self, request, call_next):
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Response]
+    ) -> Response:
+        """Dispatch request through the authentication pipeline."""
         path = request.url.path
 
         # 1. Public paths
@@ -200,7 +209,36 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # 5. Not authenticated — redirect to login
         login_url = f"/api/auth/login?next={request.url.path}"
+        logger.debug("Unauthenticated request to %s — redirecting to login", path)
         return StarletteRedirect(login_url, status_code=302)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses.
+
+    Headers added:
+    - X-Content-Type-Options: nosniff — Prevents MIME-type sniffing
+    - X-Frame-Options: DENY — Prevents clickjacking via iframes
+    - Referrer-Policy: strict-origin-when-cross-origin — Limits referrer info
+    - Permissions-Policy: geolocation=(), microphone=(), camera=() — Disables features
+    - X-XSS-Protection: 0 — Disabled (legacy, can cause issues; rely on CSP instead)
+    """
+
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Response]
+    ) -> Response:
+        """Process request and add security headers to the response."""
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = (
+            "geolocation=(), microphone=(), camera=()"
+        )
+        # X-XSS-Protection disabled: legacy header that can introduce vulnerabilities
+        # Modern browsers use CSP instead
+        response.headers["X-XSS-Protection"] = "0"
+        return response
 
 
 # --- FastAPI App ---
@@ -299,6 +337,9 @@ Most endpoints require authentication. Use `POST /api/auth/token` to obtain a se
 # are redirected before CORS headers are processed)
 app.add_middleware(AuthMiddleware)
 
+# Security headers middleware — adds X-Content-Type-Options, X-Frame-Options, etc.
+app.add_middleware(SecurityHeadersMiddleware)
+
 # CSP nonce middleware — generates per-request nonces for inline scripts/styles
 app.add_middleware(CSPNonceMiddleware)
 
@@ -329,18 +370,19 @@ app.include_router(routes.router)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _serve_html(filename: str, request: Request):
+def _serve_html(filename: str, request: Request) -> HTMLResponse:
     """Serve an HTML file with no-cache headers and CSP nonce injection.
 
     Injects the CSP nonce (from CSPNonceMiddleware) into inline <style> and
     <script> tags so they pass the Content-Security-Policy checks.
+
+    Args:
+        filename: Name of the HTML file in the static directory.
+        request: The incoming request (needed for CSP nonce retrieval).
+
+    Returns:
+        HTMLResponse with injected nonce and cache-control headers.
     """
-    import re
-    import time
-
-    from fastapi.responses import HTMLResponse
-    from middleware import get_csp_nonce
-
     frontend_path = Path(__file__).parent / "static" / filename
     content = frontend_path.read_text(encoding="utf-8")
 
