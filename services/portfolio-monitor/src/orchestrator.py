@@ -96,6 +96,8 @@ class Orchestrator:
                 logger.info("Loaded state from disk")
         except json.JSONDecodeError as e:
             logger.warning(f"Invalid JSON in state file: {e}")
+        except ValueError as e:
+            logger.warning(f"Invalid data in state file: {e}")
         except OSError as e:
             logger.warning(f"Could not read state file: {e}")
 
@@ -109,7 +111,7 @@ class Orchestrator:
         """
         try:
             atomic_write_json(STATE_FILE, self._state.to_dict())
-        except OSError as e:
+        except (OSError, ValueError, TypeError) as e:
             logger.error(f"Could not save state: {e}")
 
     async def _save_state_async(self) -> None:
