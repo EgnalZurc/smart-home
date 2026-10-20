@@ -172,9 +172,41 @@ class GoogleCalendarClient:
         if self.token_path.exists():
             try:
                 token_data = json.loads(self.token_path.read_text())
+
+                # Validate token data structure and format
+                refresh_token = token_data.get("refresh_token")
+                access_token = token_data.get("token")
+
+                # Refresh token is required and must be non-empty string
+                if not refresh_token or not isinstance(refresh_token, str):
+                    logger.warning(
+                        "Invalid token file at %s: missing or malformed refresh_token",
+                        self.token_path,
+                    )
+                    self._credentials = None
+                    return False
+
+                # Access token is optional but if present must be string
+                if access_token is not None and not isinstance(access_token, str):
+                    logger.warning(
+                        "Invalid token file at %s: malformed access token",
+                        self.token_path,
+                    )
+                    self._credentials = None
+                    return False
+
+                # Tokens should look like OAuth tokens (min length, no whitespace)
+                if len(refresh_token) < 20 or " " in refresh_token:
+                    logger.warning(
+                        "Invalid token file at %s: refresh_token format invalid",
+                        self.token_path,
+                    )
+                    self._credentials = None
+                    return False
+
                 self._credentials = Credentials(
-                    token=token_data.get("token"),
-                    refresh_token=token_data.get("refresh_token"),
+                    token=access_token,
+                    refresh_token=refresh_token,
                     token_uri="https://oauth2.googleapis.com/token",
                     client_id=self.client_id,
                     client_secret=self.client_secret,
