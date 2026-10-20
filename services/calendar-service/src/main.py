@@ -49,8 +49,7 @@ from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse
 
 _LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
 if _LIBS_PATH not in sys.path:
@@ -81,31 +80,6 @@ logger = logging.getLogger(__name__)
 # Rate limiting
 # ═══════════════════════════════════════════════════════════════════════════════
 limiter = Limiter(key_func=get_remote_address)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Security headers middleware
-# ═══════════════════════════════════════════════════════════════════════════════
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Middleware that adds security headers to all responses.
-
-    Headers added:
-    - X-Content-Type-Options: nosniff - prevents MIME type sniffing
-    - X-Frame-Options: DENY - prevents clickjacking
-    - Content-Security-Policy: default-src 'self' - restricts resource loading
-    - Referrer-Policy: strict-origin-when-cross-origin - limits referrer info
-    - Cache-Control: no-store - prevents caching of sensitive data
-    """
-
-    async def dispatch(self, request: Request, call_next) -> Response:
-        """Process request and add security headers to response."""
-        response: Response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Content-Security-Policy"] = "default-src 'self'"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Cache-Control"] = "no-store"
-        return response
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -379,7 +353,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.state.limiter = limiter
-app.add_middleware(SecurityHeadersMiddleware)
 
 
 @app.exception_handler(RateLimitExceeded)
@@ -398,11 +371,6 @@ async def rate_limit_exceeded_handler(
 # Health
 # ═══════════════════════════════════════════════════════════════════════════════
 def _db_ok() -> bool:
-    """Check if the database connection is healthy.
-
-    Returns:
-        True if a simple count query succeeds, False otherwise.
-    """
     try:
         store.count()
         return True
@@ -412,36 +380,16 @@ def _db_ok() -> bool:
 
 
 def _google_auth_ok() -> bool:
-    """Check if Google Calendar client is authenticated.
-
-    Returns:
-        True if google_client is initialized and authenticated.
-    """
     return google_client is not None
 
 
 def _age_s(ts: float | None) -> float | None:
-    """Calculate age in seconds from a monotonic timestamp.
-
-    Args:
-        ts: Monotonic timestamp from time.monotonic(), or None.
-
-    Returns:
-        Seconds elapsed since ts, rounded to 1 decimal, or None if ts is None.
-    """
     if ts is None:
         return None
     return round(time.monotonic() - ts, 1)
 
 
 def _health_payload() -> HealthResponse:
-    """Build the health check response payload.
-
-    Aggregates status of database, Google auth, sync loop, and reminder loop.
-
-    Returns:
-        HealthResponse with current service status.
-    """
     return HealthResponse(
         online=True,
         service=SERVICE_NAME,
@@ -496,9 +444,7 @@ async def get_today(request: Request) -> dict:
 async def trigger_sync(request: Request) -> dict:
     """Trigger an immediate sync."""
     if google_client is None:
-        logger.warning("Manual sync requested but Google client not initialized")
         raise HTTPException(status_code=503, detail="Google client not initialized")
-    logger.info("Manual sync triggered via API")
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, _do_sync)
     return {"status": "sync_triggered"}
@@ -555,7 +501,7 @@ async def get_config() -> ConfigResponse:
 @app.post("/api/calendar/config", dependencies=[Depends(require_api_key)])
 async def update_config(update: ConfigUpdate) -> dict:
     """Update configuration."""
-    changes: list[str] = []
+    changes = []
     if update.calendars is not None:
         for cal in update.calendars:
             store.upsert_calendar(
@@ -575,8 +521,6 @@ async def update_config(update: ConfigUpdate) -> dict:
     if update.delete_rule_id is not None:
         store.delete_rule(update.delete_rule_id)
         changes.append(f"deleted rule {update.delete_rule_id}")
-    if changes:
-        logger.info("Config updated: %s", ", ".join(changes))
     return {"status": "ok", "changes": changes}
 
 
