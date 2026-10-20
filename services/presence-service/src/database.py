@@ -249,10 +249,18 @@ class PresenceStore:
         return int(row["n"]) if row else 0
 
     def db_ok(self) -> bool:
-        """Return True if the store answers a trivial query."""
+        """Check if the database is accessible and responding.
+
+        Executes a trivial query to verify the database connection is healthy.
+        This is used by the health check endpoint to report database status.
+
+        Returns:
+            True if the database responds to a simple count query, False if any
+            database-related error occurs (connection failure, corruption, etc.).
+        """
         try:
             self.count_transitions()
             return True
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("db health check failed: %s", exc)
+        except (sqlite3.Error, OSError) as exc:  # pragma: no cover - defensive
+            logger.warning("Database health check failed: %s", exc)
             return False
