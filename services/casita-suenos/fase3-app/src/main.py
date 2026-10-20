@@ -368,6 +368,77 @@ app = FastAPI(
 # ── Global rate limiting middleware ───────────────────────────────────────────
 
 
+# ── CSRF Protection via Origin Validation ────────────────────────────────────
+# Allowed origins for CSRF protection. Requests from these origins are trusted.
+# Internal API behind Tailscale VPN - only allow known hosts.
+_ALLOWED_ORIGINS: set[str] = {
+    "https://raspberrypi.tailaa37cd.ts.net",  # Tailscale hostname
+    "http://raspberrypi.local",  # Local network
+    "http://localhost",
+    "http://localhost:8001",
+    "http://127.0.0.1",
+    "http://127.0.0.1:8001",
+}
+
+
+def _validate_origin(request: Request) -> bool:
+    """Validate request Origin header for CSRF protection.
+
+    For POST/PUT/DELETE requests, validates that the Origin header matches
+    an allowed origin. This prevents CSRF attacks where a malicious site
+    tries to make requests on behalf of the user.
+
+    For internal APIs behind Tailscale VPN, Origin validation is sufficient
+    because browsers always send Origin for cross-origin requests.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        True if the request is allowed, False if it should be blocked.
+    """
+    # Only check state-changing methods
+    if request.method not in ("POST", "PUT", "DELETE", "PATCH"):
+        return True
+
+    origin = request.headers.get("origin")
+
+    # No Origin header - could be same-origin request or non-browser client
+    # For internal APIs, we allow requests without Origin (curl, scripts, etc.)
+    # Browsers ALWAYS send Origin for cross-origin POST requests
+    if not origin:
+        return True
+
+    # Check if origin is in the allowed list
+    return origin in _ALLOWED_ORIGINS
+
+
+@app.middleware("http")
+async def csrf_protection_middleware(request: Request, call_next):
+    """CSRF protection via Origin header validation.
+
+    Blocks POST/PUT/DELETE/PATCH requests with an Origin header that doesn't
+    match the allowed origins list. Requests without Origin header are allowed
+    to support non-browser clients (curl, scripts, internal services).
+
+    Returns:
+        403 Forbidden if Origin is present but not allowed.
+        Normal response otherwise.
+    """
+    if not _validate_origin(request):
+        origin = request.headers.get("origin", "unknown")
+        logger.warning(
+            "[http] CSRF protection: blocked request from origin %s to %s",
+            origin,
+            request.url.path,
+        )
+        return JSONResponse(
+            status_code=403,
+            content={"error": "Forbidden: invalid origin"},
+        )
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     """Add security headers to all responses.
