@@ -878,3 +878,66 @@ class TestClientIpExtraction:
         request.client = None
 
         assert main._get_client_ip(request) == "unknown"
+
+
+
+class TestCsrfProtection:
+    """Tests for CSRF protection via Origin validation."""
+
+    def test_post_without_origin_allowed(self, client, mock_scheduler):
+        """POST without Origin header should be allowed (non-browser clients)."""
+        response = client.post(f"{API}/dismiss", json={"uid": "idealista:12345"})
+        assert response.status_code == 200
+
+    def test_post_with_valid_origin_allowed(self, client, mock_scheduler):
+        """POST with allowed Origin should succeed."""
+        response = client.post(
+            f"{API}/dismiss",
+            json={"uid": "idealista:12345"},
+            headers={"Origin": "https://raspberrypi.tailaa37cd.ts.net"},
+        )
+        assert response.status_code == 200
+
+    def test_post_with_localhost_origin_allowed(self, client, mock_scheduler):
+        """POST with localhost Origin should succeed."""
+        response = client.post(
+            f"{API}/dismiss",
+            json={"uid": "idealista:12345"},
+            headers={"Origin": "http://localhost:8001"},
+        )
+        assert response.status_code == 200
+
+    def test_post_with_invalid_origin_blocked(self, client, mock_scheduler):
+        """POST with disallowed Origin should return 403."""
+        response = client.post(
+            f"{API}/dismiss",
+            json={"uid": "idealista:12345"},
+            headers={"Origin": "https://evil-site.com"},
+        )
+        assert response.status_code == 403
+        assert "invalid origin" in response.json()["error"].lower()
+
+    def test_get_with_any_origin_allowed(self, client, mock_scheduler):
+        """GET requests should be allowed regardless of Origin."""
+        response = client.get(
+            f"{API}/status",
+            headers={"Origin": "https://evil-site.com"},
+        )
+        assert response.status_code == 200
+
+    def test_manual_trigger_with_invalid_origin_blocked(self, client, mock_scheduler):
+        """Manual trigger endpoints should also be CSRF protected."""
+        response = client.post(
+            f"{API}/run-scraping",
+            headers={"Origin": "https://malicious-site.example"},
+        )
+        assert response.status_code == 403
+
+    def test_csrf_blocks_before_rate_limit(self, client, mock_scheduler):
+        """CSRF check should happen before rate limiting logic."""
+        # Make a request with invalid origin - should get 403, not 429
+        response = client.post(
+            f"{API}/run-scraping",
+            headers={"Origin": "https://attacker.com"},
+        )
+        assert response.status_code == 403
