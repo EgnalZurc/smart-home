@@ -35,6 +35,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict
 
+from config import CALENDAR_TOKEN_SECRET
+from cryptography.fernet import Fernet, InvalidToken
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -101,6 +103,51 @@ class GoogleAuthError(Exception):
     """Raised when OAuth2 authentication fails (missing/invalid credentials)."""
 
 
+def _get_fernet() -> Fernet | None:
+    """Return Fernet instance if CALENDAR_TOKEN_SECRET is configured."""
+    if not CALENDAR_TOKEN_SECRET:
+        return None
+    try:
+        return Fernet(CALENDAR_TOKEN_SECRET.encode())
+    except (ValueError, TypeError) as exc:
+        logger.warning("Invalid CALENDAR_TOKEN_SECRET: %s", exc)
+        return None
+
+
+def _encrypt_token_data(data: dict) -> str:
+    """Encrypt token data to base64 string, or return JSON if no secret."""
+    fernet = _get_fernet()
+    json_str = json.dumps(data)
+    if fernet is None:
+        return json_str
+    return fernet.encrypt(json_str.encode()).decode()
+
+
+def _decrypt_token_data(data: str) -> dict | None:
+    """Decrypt token data, supporting both encrypted and legacy plaintext.
+
+    Returns:
+        Decrypted token dict, or None if decryption fails.
+    """
+    # Try JSON first (legacy plaintext or no encryption configured)
+    try:
+        return json.loads(data)
+    except json.JSONDecodeError:
+        pass
+
+    # Try Fernet decryption
+    fernet = _get_fernet()
+    if fernet is None:
+        logger.warning("Encrypted token found but CALENDAR_TOKEN_SECRET not configured")
+        return None
+    try:
+        decrypted = fernet.decrypt(data.encode()).decode()
+        return json.loads(decrypted)
+    except (InvalidToken, json.JSONDecodeError) as exc:
+        logger.warning("Failed to decrypt token: %s", exc)
+        return None
+
+
 class GoogleCalendarClient:
     """Client for Google Calendar API with OAuth2 and incremental sync.
 
@@ -164,6 +211,9 @@ class GoogleCalendarClient:
         tokens. The initial token must be obtained externally (setup script or
         admin API) and written to token_path.
 
+        Supports both encrypted tokens (when CALENDAR_TOKEN_SECRET is set) and
+        legacy plaintext tokens for migration.
+
         Returns:
             True if credentials are valid and the API service is ready.
             False if no valid credentials exist (token_path missing or invalid).
@@ -171,7 +221,16 @@ class GoogleCalendarClient:
         # Attempt to load existing token
         if self.token_path.exists():
             try:
-                token_data = json.loads(self.token_path.read_text())
+                raw_data = self.token_path.read_text()
+                token_data = _decrypt_token_data(raw_data)
+
+                if token_data is None:
+                    logger.warning(
+                        "Failed to decrypt/parse token at %s",
+                        self.token_path,
+                    )
+                    self._credentials = None
+                    return False
 
                 # Validate token data structure and format
                 refresh_token = token_data.get("refresh_token")
@@ -213,7 +272,7 @@ class GoogleCalendarClient:
                     scopes=self.scopes,
                 )
                 logger.debug("Loaded credentials from %s", self.token_path)
-            except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            except (KeyError, TypeError) as exc:
                 logger.warning("Failed to load token from %s: %s", self.token_path, exc)
                 self._credentials = None
 
@@ -255,6 +314,7 @@ class GoogleCalendarClient:
 
         Only saves token data; client_id/client_secret come from environment.
         Uses atomic write (temp file + os.replace) to prevent corruption.
+        Encrypts token data if CALENDAR_TOKEN_SECRET is configured.
         """
         if self._credentials is None:
             return
@@ -266,14 +326,17 @@ class GoogleCalendarClient:
         }
         self.token_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self.token_path.with_suffix(".json.tmp")
-        tmp_path.write_text(json.dumps(token_data, indent=2))
+        encrypted_data = _encrypt_token_data(token_data)
+        tmp_path.write_text(encrypted_data)
         # Set restrictive permissions before moving to final location
         try:
             os.chmod(tmp_path, 0o600)
         except OSError:
             pass  # Windows doesn't support chmod the same way
         os.replace(tmp_path, self.token_path)
-        logger.debug("Saved token to %s", self.token_path)
+        logger.debug(
+            "Saved token to %s (encrypted=%s)", self.token_path, bool(_get_fernet())
+        )
 
     def list_calendars(self) -> list[CalendarInfo]:
         """List all calendars accessible by the authenticated account.
