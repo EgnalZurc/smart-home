@@ -131,7 +131,21 @@ class _BuiltinEmailSender:
                 s.sendmail(self._smtp_user, to_addr, msg.as_bytes())
             return NotificationResult(True, "Email sent")
         except Exception as e:
-            return NotificationResult(False, str(e))
+            # Sanitize exception to prevent password leakage in tracebacks
+            error_msg = str(e)
+            # Remove any occurrence of the password from the error message
+            password = self._smtp_password
+            if password and password in error_msg:
+                error_msg = error_msg.replace(password, "[REDACTED]")
+            # Also sanitize common SMTP auth error patterns
+            import re
+
+            error_msg = re.sub(
+                r"(AUTH|LOGIN|PLAIN)\s+[A-Za-z0-9+/=]+",
+                r"\1 [REDACTED]",
+                error_msg,
+            )
+            return NotificationResult(False, error_msg)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
