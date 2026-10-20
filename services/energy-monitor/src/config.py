@@ -51,6 +51,20 @@ HTTP_TIMEOUT_S = float(os.environ.get("ENERGY_HTTP_TIMEOUT_S", "4.0"))
 # Empty by default so the scaffold starts cleanly without hardware present.
 DEVICES_JSON = os.environ.get("ENERGY_DEVICES", "[]")
 
+# ── Shelly authentication (global defaults) ──────────────────────────────────
+# SECURITY: Default credentials for Shelly devices. Individual devices can
+# override these by specifying "username"/"password" in their ENERGY_DEVICES
+# entry. Never hardcode credentials in source code.
+#
+# Environment variables:
+#   SHELLY_USER     - Default username for all Shelly devices
+#   SHELLY_PASSWORD - Default password for all Shelly devices
+#
+# Per-device override in ENERGY_DEVICES JSON:
+#   [{"id": "em1", "ip": "192.168.1.50", "username": "admin", "password": "..."}]
+SHELLY_USER = os.environ.get("SHELLY_USER", "")
+SHELLY_PASSWORD = os.environ.get("SHELLY_PASSWORD", "")
+
 # ── Tariff / cost estimation (design §6) ─────────────────────────────────────
 TARIFF_MODE = os.environ.get("ENERGY_TARIFF_MODE", "flat")
 PRICE_EUR_KWH = float(os.environ.get("ENERGY_PRICE_EUR_KWH", "0.15"))
