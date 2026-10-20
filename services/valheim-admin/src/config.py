@@ -16,6 +16,52 @@ Environment Variables:
 """
 
 import os
+import re
+from urllib.parse import urlparse
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SSRF Mitigation - Internal URL Validation
+# ══════════════════════════════════════════════════════════════════════════════
+
+_INTERNAL_PATTERNS = [
+    re.compile(r"^localhost$", re.IGNORECASE),
+    re.compile(r"^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$"),
+    re.compile(r"^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$"),
+    re.compile(r"^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$"),
+    re.compile(r"^192\.168\.\d{1,3}\.\d{1,3}$"),
+]
+"""Regex patterns matching internal/private network addresses."""
+
+
+def is_internal_url(url: str) -> bool:
+    """Check if a URL points to an internal network address.
+
+    Validates that the hostname in the URL matches one of:
+    - localhost
+    - 127.x.x.x (loopback)
+    - 10.x.x.x (Class A private)
+    - 172.16-31.x.x (Class B private)
+    - 192.168.x.x (Class C private)
+
+    This prevents SSRF attacks by ensuring PC_AGENT_URL cannot be
+    configured to point to external services.
+
+    Args:
+        url: The URL to validate.
+
+    Returns:
+        True if the URL hostname is an internal address, False otherwise.
+
+    Example:
+        >>> is_internal_url("http://192.168.1.164:8090")
+        True
+        >>> is_internal_url("http://evil.com:8090")
+        False
+    """
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+    return any(p.match(hostname) for p in _INTERNAL_PATTERNS)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PC-Agent Connection Settings

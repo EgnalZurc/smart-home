@@ -66,6 +66,7 @@ from config import (
     SERVICE_VERSION,
     WORLD_NAME_MAX_LENGTH,
     WORLD_NAME_PATTERN,
+    is_internal_url,
 )
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -98,6 +99,11 @@ logger = logging.getLogger(__name__)
 
 if not PC_AGENT_TOKEN:
     raise RuntimeError("PC_AGENT_TOKEN environment variable is required")
+
+if not is_internal_url(PC_AGENT_URL):
+    raise RuntimeError(
+        f"PC_AGENT_URL must be internal network address, got: {PC_AGENT_URL}"
+    )
 
 # Create shared async client for pc-agent communication
 _client_config = ServiceClientConfig(
