@@ -309,6 +309,42 @@ Each entry follows this format:
 - **Fix Applied**: Added detailed docstrings with Args, Returns, Raises sections to all public functions and endpoints
 - **Verification**: All public functions in main.py have complete docstrings
 
+### [presence-service] Missing Security Headers
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: HTTP responses lacked security headers (X-Content-Type-Options, X-Frame-Options, CSP)
+- **Fix Applied**: Added SecurityHeadersMiddleware with X-Content-Type-Options: nosniff, X-Frame-Options: DENY, Content-Security-Policy, X-XSS-Protection, Referrer-Policy
+- **Verification**: `curl -I https://raspberrypi.tailaa37cd.ts.net/api/health/presence | grep -E "X-Content|X-Frame|Content-Security"`
+
+### [presence-service] Generic Exception Handling
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: database.py db_ok() used `except Exception` which catches too broadly
+- **Fix Applied**: Changed to specific exception types (sqlite3.Error, OSError) for database failures
+- **Verification**: Check database.py db_ok() uses specific exception types
+
+### [presence-service] Missing/Incomplete Docstrings
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: Functions, middleware and endpoints lacked comprehensive docstrings
+- **Fix Applied**: Added detailed docstrings with Args, Returns, Yields sections to all public functions and endpoints
+- **Verification**: All public functions in main.py have complete docstrings with Args/Returns/Yields
+
+### [presence-service] Incomplete Logging
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: Lifecycle events and health check failures were not logged
+- **Fix Applied**: Added logging for startup/shutdown with port info, health check debug logs, and database failure warnings
+- **Verification**: Check logs during startup show "Starting presence-service on port 8013..."
+
 ---
 
 ## Accepted Risks
