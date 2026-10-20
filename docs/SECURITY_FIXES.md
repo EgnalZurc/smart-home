@@ -210,6 +210,42 @@ Each entry follows this format:
 - **Fix Applied**: MAC addresses hashed with SHA256 before storage
 - **Verification**: Database/logs contain hashes, not raw MACs
 
+### [casita-suenos] Missing Security Headers
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: HTTP responses lacked security headers (X-Content-Type-Options, X-Frame-Options, CSP)
+- **Fix Applied**: Added security_headers_middleware with X-Content-Type-Options: nosniff, X-Frame-Options: DENY, Content-Security-Policy, X-XSS-Protection, Referrer-Policy
+- **Verification**: `curl -I https://raspberrypi.tailaa37cd.ts.net/api/casita/health | grep -E "X-Content|X-Frame|Content-Security"`
+
+### [casita-suenos] Generic Exception Handling
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: Several functions used `except Exception` which catches too broadly
+- **Fix Applied**: Replaced with specific exception types (ImportError, ConnectionError, OSError, ValueError, KeyError, TypeError, httpx.TimeoutException, httpx.HTTPError)
+- **Verification**: Check main.py for `except Exception` - should only remain in global_exception_handler
+
+### [casita-suenos] Missing/Incomplete Docstrings
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: Many functions and endpoints lacked comprehensive docstrings
+- **Fix Applied**: Added detailed docstrings with Args, Returns, and Raises sections to all public functions and endpoints
+- **Verification**: Run `pydoc services/casita-suenos/fase3-app/src/main.py` - all public functions documented
+
+### [casita-suenos] Incomplete Logging
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: Important operations (rate limit hits, manual triggers, config updates) not logged
+- **Fix Applied**: Added logging for rate limit violations, manual trigger invocations, configuration changes, lifecycle events
+- **Verification**: Check logs during operation - rate limit hits, manual triggers show in logs
+
 ---
 
 ## Accepted Risks

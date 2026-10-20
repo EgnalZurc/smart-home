@@ -43,10 +43,17 @@ logger = logging.getLogger(__name__)
 _REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 
 
-def _create_rate_limiters() -> tuple:
+def _create_rate_limiters() -> tuple[InMemoryRateLimiter, InMemoryRateLimiter]:
     """Create rate limiters, preferring Redis with fallback to in-memory.
 
-    Returns a tuple of (global_limiter, manual_trigger_limiter).
+    Attempts to connect to Redis for distributed rate limiting. If Redis is
+    unavailable (connection error, import error, or client initialization
+    failure), falls back to in-memory rate limiting.
+
+    Returns:
+        A tuple of (global_limiter, manual_trigger_limiter) where:
+        - global_limiter: 120 requests/minute for general API endpoints
+        - manual_trigger_limiter: 10 requests/minute for manual trigger endpoints
     """
     try:
         from smart_home_common.redis_rate_limiter import RedisRateLimiter
@@ -72,9 +79,17 @@ def _create_rate_limiters() -> tuple:
         logger.warning(
             "Redis connection not available, falling back to in-memory rate limiting"
         )
-    except Exception as e:
+    except ImportError:
         logger.warning(
-            "Redis unavailable (%s), falling back to in-memory rate limiting", e
+            "RedisRateLimiter not available, falling back to in-memory rate limiting"
+        )
+    except ConnectionError as e:
+        logger.warning(
+            "Redis connection failed (%s), falling back to in-memory rate limiting", e
+        )
+    except OSError as e:
+        logger.warning(
+            "Redis socket error (%s), falling back to in-memory rate limiting", e
         )
 
     return (
@@ -87,19 +102,46 @@ _global_rate_limiter, _manual_trigger_limiter = _create_rate_limiters()
 
 
 def _get_client_ip(request: Request) -> str:
-    """Extract client IP from request, respecting X-Forwarded-For if present."""
+    """Extract client IP from request, respecting X-Forwarded-For if present.
+
+    In a reverse proxy setup (nginx), the real client IP is in the
+    X-Forwarded-For header. This function extracts the first IP in that
+    chain, which is the original client.
+
+    Args:
+        request: The incoming FastAPI request object.
+
+    Returns:
+        The client IP address as a string. Returns "unknown" if the IP
+        cannot be determined.
+    """
     # Trust X-Forwarded-For from nginx reverse proxy
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         # Take the first IP in the chain (original client)
         return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    if request.client is not None:
+        return request.client.host
+    return "unknown"
 
 
 def _check_manual_trigger_rate_limit(request: Request) -> None:
-    """Check rate limit for manual trigger endpoints. Raises 429 if exceeded."""
+    """Check rate limit for manual trigger endpoints.
+
+    Manual trigger endpoints (run-scraping, run-gmail-check, etc.) have a
+    stricter rate limit (10/minute) to prevent abuse of expensive operations.
+
+    Args:
+        request: The incoming FastAPI request object.
+
+    Raises:
+        HTTPException: 429 status if rate limit exceeded.
+    """
     client_ip = _get_client_ip(request)
     if not _manual_trigger_limiter.is_allowed(client_ip):
+        logger.warning(
+            "[http] Manual trigger rate limit exceeded for client IP: %s", client_ip
+        )
         raise HTTPException(
             status_code=429,
             detail="Too many requests. Try again in a minute.",
@@ -149,8 +191,19 @@ except ValueError:
 
 
 def _validate_config() -> None:
-    """Valida que las variables críticas tengan valor."""
-    errors = []
+    """Validate that critical environment variables are set.
+
+    Checks for required variables (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
+    GMAIL_ADDRESS) and exits with error if any are missing.
+
+    Optional variables (APIFY_API_TOKEN, GMAIL_APP_PASSWORD) produce
+    warnings but don't prevent startup.
+
+    Raises:
+        SystemExit: If any required variable is missing.
+    """
+    logger.info("[main] Validating configuration...")
+    errors: list[str] = []
     if not TELEGRAM_BOT_TOKEN:
         errors.append("TELEGRAM_BOT_TOKEN no configurado")
     if not TELEGRAM_CHAT_ID:
@@ -160,6 +213,7 @@ def _validate_config() -> None:
     if errors:
         for e in errors:
             logger.error("[main] %s", e)
+        logger.error("[main] Configuration validation failed, exiting")
         sys.exit(1)
 
     # APIFY_API_TOKEN es opcional: el módulo Idealista/Apify está deshabilitado
@@ -178,6 +232,8 @@ def _validate_config() -> None:
             "El check de alertas de Idealista no funcionará. "
             "Genera una App Password en myaccount.google.com/apppasswords"
         )
+
+    logger.info("[main] Configuration validation passed")
 
 
 # ── Nombre del proceso ────────────────────────────────────────────────────────
@@ -209,13 +265,30 @@ _db_instance = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize scheduler and db on startup, clean up on shutdown."""
+    """Initialize scheduler and database on startup, clean up on shutdown.
+
+    This async context manager handles the application lifecycle:
+    - On startup: initializes Database, TelegramNotifier, ApifyUsageTracker,
+      IdealistaApifyClient, and CasitaScheduler instances
+    - Stores instances in app.state for access via request handlers
+    - Optionally sends startup notification to Telegram
+    - Starts the scheduler and Telegram polling background thread
+    - On shutdown: stops scheduler and closes database connection
+
+    Args:
+        app: The FastAPI application instance.
+
+    Yields:
+        Control back to the application after initialization.
+    """
     global _scheduler_instance, _db_instance
 
     from apify_client_wrapper import ApifyUsageTracker, IdealistaApifyClient
     from casita_scheduler import CasitaScheduler
     from database import Database
     from notifier import TelegramNotifier
+
+    logger.info("[main] Starting application lifecycle initialization")
 
     # Instanciar componentes
     db = Database(DB_PATH)
@@ -241,14 +314,20 @@ async def lifespan(app: FastAPI):
 
     # Notificar arranque
     if NOTIFY_ON_STARTUP:
-        radar_count = len(
-            db.get_radar_properties(min_score=_ALERT_THRESHOLD, limit=500).get(
-                "items", []
+        try:
+            radar_count = len(
+                db.get_radar_properties(min_score=_ALERT_THRESHOLD, limit=500).get(
+                    "items", []
+                )
             )
-        )
-        notifier.send_status(
-            f"🚀 Casita Sueños arrancado · {radar_count} casas en el radar"
-        )
+            notifier.send_status(
+                f"🚀 Casita Sueños arrancado · {radar_count} casas en el radar"
+            )
+            logger.info("[main] Startup notification sent to Telegram")
+        except (KeyError, TypeError) as e:
+            logger.warning(
+                "[main] Could not get radar count for startup message: %s", e
+            )
     else:
         logger.info(
             "[main] Notificación de arranque Telegram omitida "
@@ -263,6 +342,7 @@ async def lifespan(app: FastAPI):
     threading.Thread(
         target=_telegram_polling, args=(db,), daemon=True, name="telegram-polling"
     ).start()
+    logger.info("[main] Telegram polling thread started")
 
     yield
 
@@ -270,6 +350,7 @@ async def lifespan(app: FastAPI):
     logger.info("[main] Cerrando scheduler y base de datos")
     scheduler.stop()
     db.close()
+    logger.info("[main] Application shutdown complete")
 
 
 # ── FastAPI App ───────────────────────────────────────────────────────────────
@@ -288,8 +369,47 @@ app = FastAPI(
 
 
 @app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Add security headers to all responses.
+
+    Headers added:
+    - X-Content-Type-Options: nosniff - Prevents MIME type sniffing
+    - X-Frame-Options: DENY - Prevents clickjacking via iframe embedding
+    - Content-Security-Policy: default-src 'self' - Restricts resource loading
+    - X-XSS-Protection: 1; mode=block - Legacy XSS filter (for older browsers)
+    - Referrer-Policy: strict-origin-when-cross-origin - Controls referrer info
+
+    Returns:
+        Response with security headers added.
+    """
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; "
+        "connect-src 'self'"
+    )
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+@app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    """Apply global rate limiting to all API endpoints."""
+    """Apply global rate limiting to all API endpoints.
+
+    Exempts:
+    - /health endpoint (needed by Docker healthcheck and monitoring)
+    - /static/* paths (static file serving)
+
+    Args:
+        request: The incoming HTTP request.
+        call_next: The next middleware or route handler.
+
+    Returns:
+        Response from the next handler, or 429 if rate limited.
+    """
     path = request.url.path
 
     # Skip rate limiting for health check (needed by Docker/monitoring)
@@ -304,6 +424,11 @@ async def rate_limit_middleware(request: Request, call_next):
     if path.startswith("/api/"):
         client_ip = _get_client_ip(request)
         if not _global_rate_limiter.is_allowed(client_ip):
+            logger.warning(
+                "[http] Rate limit exceeded for client IP: %s on path: %s",
+                client_ip,
+                path,
+            )
             return JSONResponse(
                 status_code=429,
                 content={"error": "Too many requests. Try again later."},
@@ -339,8 +464,21 @@ class ScheduleConfig(BaseModel):
 
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.exception("[http] Unhandled exception: %s", exc)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Handle uncaught exceptions with a generic 500 response.
+
+    Logs the full exception traceback for debugging while returning
+    a sanitized error message to the client to avoid leaking internal
+    details.
+
+    Args:
+        request: The request that caused the exception.
+        exc: The uncaught exception.
+
+    Returns:
+        JSONResponse with 500 status and generic error message.
+    """
+    logger.exception("[http] Unhandled exception on %s: %s", request.url.path, exc)
     return JSONResponse(
         status_code=500,
         content={"error": "Internal server error"},
@@ -365,19 +503,27 @@ api = APIRouter(prefix="/api/casita")
 
 
 @app.get("/health")
-async def health(request: Request):
-    """Health check con detección de scheduler colgado.
+async def health(request: Request) -> dict[str, bool | str | None]:
+    """Health check endpoint with scheduler status detection.
 
-    Incluye:
-      - online: siempre True si el servidor HTTP responde.
-      - last_scheduler_tick: ISO timestamp del último tick del loop del
-        scheduler, o None si aún no ha ejecutado ninguno (o no está listo).
-      - scheduler_stale: True si han pasado más de 2h desde el último tick,
-        lo que indica que el loop del scheduler se ha quedado colgado.
+    Used by Docker healthcheck and monitoring systems to verify the
+    service is responsive. Includes scheduler liveness detection to
+    identify hung scheduler loops.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with:
+        - online: Always True if the HTTP server responds
+        - last_scheduler_tick: ISO timestamp of last scheduler loop tick,
+          or None if scheduler hasn't run yet
+        - scheduler_stale: True if >2 hours since last tick (indicates
+          scheduler may be hung)
     """
     scheduler = getattr(request.app.state, "scheduler", None)
 
-    last_tick = None
+    last_tick: str | None = None
     scheduler_stale = False
     if scheduler is not None:
         tick = scheduler.get_last_tick()
@@ -395,7 +541,28 @@ async def health(request: Request):
 
 
 @api.get("/status")
-async def status(request: Request):
+async def status(request: Request) -> dict:
+    """Get comprehensive service status information.
+
+    Returns operational status, scheduling information, statistics,
+    and top-scoring properties for the dashboard display.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with service status including:
+        - online/running state
+        - last operation timestamps (scraping, gmail check, summary)
+        - property counts (total, radar, dismissed)
+        - scraper error information
+        - scoring thresholds
+        - schedule configuration
+        - top 5 properties by score
+
+    Raises:
+        HTTPException: 503 if scheduler not initialized.
+    """
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Scheduler not ready")
@@ -527,7 +694,27 @@ async def get_radar(
     sort_dir: str = "desc",
     filter: str | None = None,
     portal: str | None = None,
-):
+) -> dict:
+    """Get paginated list of properties on the radar.
+
+    Returns properties that score above the alert threshold, with support
+    for pagination, sorting, and filtering.
+
+    Args:
+        request: The incoming HTTP request.
+        limit: Maximum number of properties to return (max 100).
+        offset: Number of properties to skip for pagination.
+        sort_by: Field to sort by (score, price, first_seen).
+        sort_dir: Sort direction (asc, desc).
+        filter: Optional text filter for title/zone.
+        portal: Optional portal filter (idealista, fotocasa, etc.).
+
+    Returns:
+        dict with items list, total count, pagination info, and has_more flag.
+
+    Raises:
+        HTTPException: 503 if scheduler not initialized.
+    """
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -546,7 +733,20 @@ async def get_radar(
 
 
 @api.get("/dismissed")
-async def get_dismissed(request: Request):
+async def get_dismissed(request: Request) -> dict[str, list]:
+    """Get list of dismissed properties.
+
+    Returns properties that the user has marked as dismissed (not interested).
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with 'properties' key containing list of dismissed properties.
+
+    Raises:
+        HTTPException: 503 if scheduler not initialized.
+    """
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -554,29 +754,69 @@ async def get_dismissed(request: Request):
 
 
 @api.post("/dismiss")
-async def dismiss_property(req: PropertyUid, request: Request):
+async def dismiss_property(req: PropertyUid, request: Request) -> dict[str, bool | str]:
+    """Mark a property as dismissed (not interested).
+
+    Args:
+        req: Request body with property UID.
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with ok=True and the dismissed UID.
+
+    Raises:
+        HTTPException: 404 if property not found, 503 if not ready.
+    """
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
     ok = scheduler.dismiss_property(req.uid)
     if not ok:
         raise HTTPException(status_code=404, detail="Property not found")
+    logger.info("[api] Property dismissed: %s", req.uid)
     return {"ok": True, "uid": req.uid}
 
 
 @api.post("/undismiss")
-async def undismiss_property(req: PropertyUid, request: Request):
+async def undismiss_property(
+    req: PropertyUid, request: Request
+) -> dict[str, bool | str]:
+    """Restore a dismissed property back to the radar.
+
+    Args:
+        req: Request body with property UID.
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with ok=True and the restored UID.
+
+    Raises:
+        HTTPException: 404 if property not found, 503 if not ready.
+    """
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
     ok = scheduler.undismiss_property(req.uid)
     if not ok:
         raise HTTPException(status_code=404, detail="Property not found")
+    logger.info("[api] Property undismissed: %s", req.uid)
     return {"ok": True, "uid": req.uid}
 
 
 @api.post("/mark-viewed")
-async def mark_viewed(req: PropertyUid, request: Request):
+async def mark_viewed(req: PropertyUid, request: Request) -> dict[str, bool | str]:
+    """Mark a property as viewed.
+
+    Args:
+        req: Request body with property UID.
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with ok=True and the marked UID.
+
+    Raises:
+        HTTPException: 404 if property not found, 503 if not ready.
+    """
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -587,13 +827,26 @@ async def mark_viewed(req: PropertyUid, request: Request):
 
 
 @api.post("/save-comment")
-async def save_comment(req: CommentRequest, request: Request):
+async def save_comment(req: CommentRequest, request: Request) -> dict[str, bool | str]:
+    """Save a user comment on a property.
+
+    Args:
+        req: Request body with property UID and comment text.
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with ok=True and the property UID.
+
+    Raises:
+        HTTPException: 404 if property not found, 503 if not ready.
+    """
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
     ok = scheduler.save_comment(req.uid, req.comment)
     if not ok:
         raise HTTPException(status_code=404, detail="Property not found")
+    logger.info("[api] Comment saved for property: %s", req.uid)
     return {"ok": True, "uid": req.uid}
 
 
@@ -601,7 +854,18 @@ async def save_comment(req: CommentRequest, request: Request):
 
 
 @api.get("/schedule")
-async def get_schedule(request: Request):
+async def get_schedule(request: Request) -> dict:
+    """Get current schedule configuration.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with schedule settings (scraping days/hour, gmail interval, etc.).
+
+    Raises:
+        HTTPException: 503 if scheduler not initialized.
+    """
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -609,7 +873,21 @@ async def get_schedule(request: Request):
 
 
 @api.post("/schedule")
-async def save_schedule(config: ScheduleConfig, request: Request):
+async def save_schedule(config: ScheduleConfig, request: Request) -> dict[str, bool]:
+    """Update schedule configuration.
+
+    Only updates fields that are provided (non-None). Allows partial updates.
+
+    Args:
+        config: Schedule configuration with optional fields.
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with ok=True on success.
+
+    Raises:
+        HTTPException: 503 if scheduler not initialized.
+    """
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -618,11 +896,24 @@ async def save_schedule(config: ScheduleConfig, request: Request):
     validated = {k: v for k, v in config.model_dump().items() if v is not None}
     if validated:
         scheduler.save_schedule_config(validated)
+        logger.info("[api] Schedule config updated: %s", list(validated.keys()))
     return {"ok": True}
 
 
 @api.get("/summary")
-async def get_summary(request: Request):
+async def get_summary(request: Request) -> dict[str, str | None]:
+    """Get the last weekly summary that was sent.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with 'content' (summary text) and 'sent_at' (ISO timestamp),
+        or both None if no summary has been sent yet.
+
+    Raises:
+        HTTPException: 503 if scheduler not initialized.
+    """
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -634,11 +925,25 @@ async def get_summary(request: Request):
 
 
 @api.post("/run-scraping")
-async def run_scraping(request: Request):
+async def run_scraping(request: Request) -> dict[str, bool | str]:
+    """Manually trigger a scraping run.
+
+    Starts scraping in a background thread. Rate limited to 10/minute.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with ok=True and confirmation message.
+
+    Raises:
+        HTTPException: 429 if rate limited, 503 if not ready.
+    """
     _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
+    logger.info("[api] Manual scraping triggered by %s", _get_client_ip(request))
     threading.Thread(
         target=scheduler.run_scraping_now,
         daemon=True,
@@ -648,11 +953,26 @@ async def run_scraping(request: Request):
 
 
 @api.post("/run-gmail-check")
-async def run_gmail_check(request: Request):
+async def run_gmail_check(request: Request) -> dict[str, bool | str]:
+    """Manually trigger a Gmail check.
+
+    Checks Gmail for Idealista alerts in a background thread.
+    Rate limited to 10/minute.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with ok=True and confirmation message.
+
+    Raises:
+        HTTPException: 429 if rate limited, 503 if not ready.
+    """
     _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
+    logger.info("[api] Manual Gmail check triggered by %s", _get_client_ip(request))
     threading.Thread(
         target=scheduler.run_gmail_check_now,
         daemon=True,
@@ -662,11 +982,26 @@ async def run_gmail_check(request: Request):
 
 
 @api.post("/run-fotocasa-check")
-async def run_fotocasa_check(request: Request):
+async def run_fotocasa_check(request: Request) -> dict[str, bool | str]:
+    """Manually trigger a Fotocasa email check.
+
+    Checks Gmail for Fotocasa alerts in a background thread.
+    Rate limited to 10/minute.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with ok=True and confirmation message.
+
+    Raises:
+        HTTPException: 429 if rate limited, 503 if not ready.
+    """
     _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
+    logger.info("[api] Manual Fotocasa check triggered by %s", _get_client_ip(request))
     threading.Thread(
         target=scheduler.run_fotocasa_check_now,
         daemon=True,
@@ -676,11 +1011,26 @@ async def run_fotocasa_check(request: Request):
 
 
 @api.post("/run-summary")
-async def run_summary(request: Request):
+async def run_summary(request: Request) -> dict[str, bool | str]:
+    """Manually trigger sending the weekly summary.
+
+    Generates and sends the weekly summary in a background thread.
+    Rate limited to 10/minute.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        dict with ok=True and confirmation message.
+
+    Raises:
+        HTTPException: 429 if rate limited, 503 if not ready.
+    """
     _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
+    logger.info("[api] Manual summary triggered by %s", _get_client_ip(request))
     threading.Thread(
         target=scheduler.run_summary_now,
         daemon=True,
@@ -693,7 +1043,18 @@ async def run_summary(request: Request):
 
 
 @api.post("/telegram-webhook")
-async def telegram_webhook(request: Request):
+async def telegram_webhook(request: Request) -> dict[str, bool | str]:
+    """Handle incoming Telegram webhook updates.
+
+    Processes /start commands to register new chat IDs for notifications.
+    Silently ignores other message types.
+
+    Args:
+        request: The incoming HTTP request with Telegram update payload.
+
+    Returns:
+        dict with ok=True, and optionally 'registered' with the chat_id.
+    """
     scheduler = request.app.state.scheduler
     if scheduler is None:
         return {"ok": True}
@@ -708,9 +1069,10 @@ async def telegram_webhook(request: Request):
 
         if chat_id and text.startswith("/start"):
             scheduler._notifier.register_chat(chat_id, username)
+            logger.info("[telegram] New chat registered via webhook: %s", chat_id)
             return {"ok": True, "registered": chat_id}
-    except Exception as e:
-        logger.debug("[telegram] Webhook error: %s", e)
+    except (ValueError, KeyError, TypeError) as e:
+        logger.debug("[telegram] Webhook parse error: %s", e)
 
     return {"ok": True}
 
@@ -725,7 +1087,18 @@ app.include_router(api)
 @app.get("/", response_class=HTMLResponse)
 @app.get("/smart-home/casita", response_class=HTMLResponse)
 @app.get("/smart-home/casita/", response_class=HTMLResponse)
-async def serve_frontend():
+async def serve_frontend() -> FileResponse:
+    """Serve the Casita Sueños frontend HTML.
+
+    Serves the single-page application from multiple routes to support
+    both direct access and nginx proxy routing.
+
+    Returns:
+        FileResponse with the casita.html file.
+
+    Raises:
+        HTTPException: 404 if frontend file not found.
+    """
     html_path = STATIC_DIR / "casita.html"
     if not html_path.exists():
         raise HTTPException(status_code=404, detail="Frontend not found")
@@ -756,6 +1129,9 @@ def _sanitize_telegram_error(exc: Exception) -> str:
 
 def _telegram_polling(db) -> None:
     """Background thread that polls Telegram for /start commands.
+
+    Continuously polls the Telegram API for updates, processing /start
+    commands to register new chat IDs. Runs indefinitely as a daemon thread.
 
     Args:
         db: Database instance for registering chat IDs.
@@ -796,16 +1172,28 @@ def _telegram_polling(db) -> None:
                             },
                             timeout=10,
                         )
-                    except Exception as send_err:
+                        logger.debug("[main] Welcome message sent to chat %s", chat_id)
+                    except httpx.TimeoutException as send_err:
                         logger.warning(
-                            "[main] Error enviando bienvenida a %s: %s",
+                            "[main] Timeout enviando bienvenida a %s: %s",
                             chat_id,
                             _sanitize_telegram_error(send_err),
                         )
-        except Exception as e:
+                    except httpx.HTTPError as send_err:
+                        logger.warning(
+                            "[main] HTTP error enviando bienvenida a %s: %s",
+                            chat_id,
+                            _sanitize_telegram_error(send_err),
+                        )
+        except httpx.TimeoutException:
+            # Timeout is expected with long-polling, just retry
+            pass
+        except httpx.HTTPError as e:
             logger.debug(
-                "[main] Telegram polling error: %s", _sanitize_telegram_error(e)
+                "[main] Telegram polling HTTP error: %s", _sanitize_telegram_error(e)
             )
+        except (ValueError, KeyError) as e:
+            logger.debug("[main] Telegram polling parse error: %s", e)
         time.sleep(1)
 
 
@@ -813,17 +1201,35 @@ def _telegram_polling(db) -> None:
 
 
 def main() -> None:
+    """Bootstrap and run the Casita Sueños service.
+
+    Performs startup sequence:
+    1. Validates required configuration
+    2. Creates data directory if needed
+    3. Sets process name for identification
+    4. Ensures singleton instance via lockfile
+    5. Starts uvicorn HTTP server
+
+    The lifespan context manager handles scheduler and database
+    initialization/cleanup.
+    """
+    logger.info("[main] ══════════════════════════════════════════════════════")
+    logger.info("[main] Starting %s bootstrap sequence", PROCESS_NAME)
+
     _validate_config()
     Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
+    logger.info("[main] Data directory ensured: %s", DATA_DIR)
 
     # ── Nombre del proceso ───────────────────────────────────────────────────
     _set_process_name()
+    logger.info("[main] Process name set to: %s", PROCESS_NAME)
 
     # ── Singleton: una sola instancia ────────────────────────────────────────
     from smart_home_common.singleton import ensure_singleton
 
     LOCK_PATH = os.environ.get("CASITA_LOCK_PATH", f"{DATA_DIR}/casita.lock")
     ensure_singleton(LOCK_PATH)
+    logger.info("[main] Singleton lock acquired: %s", LOCK_PATH)
 
     logger.info("[main] ── Iniciando %s ──────────────────────────", PROCESS_NAME)
 
