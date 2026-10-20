@@ -26,6 +26,7 @@ from config import (
     LOG_LEVEL,
     MAX_CONTAINER_NAME_LEN,
     MAX_METRIC_NAME_LEN,
+    MAX_RATE_LIMIT_ENTRIES,
     MAX_REQUESTS_PER_MINUTE,
     PORT,
     RATE_LIMIT_WINDOW_S,
@@ -86,10 +87,11 @@ if _LIBS_PATH not in sys.path:
 from collector import Collector  # noqa: E402
 from smart_home_common.rate_limiter import InMemoryRateLimiter  # noqa: E402
 
-# Rate limiter instance: configured via config.py
+# Rate limiter instance: configured via config.py with LRU eviction
 rate_limiter = InMemoryRateLimiter(
     max_requests=MAX_REQUESTS_PER_MINUTE,
     window_seconds=RATE_LIMIT_WINDOW_S,
+    max_entries=MAX_RATE_LIMIT_ENTRIES,
 )
 
 
