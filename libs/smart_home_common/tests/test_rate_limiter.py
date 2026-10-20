@@ -192,6 +192,99 @@ class TestInMemoryRateLimiter:
         assert sum(results) == 100
         assert len(results) == 200
 
+    def test_max_entries_default(self):
+        """InMemoryRateLimiter has default max_entries."""
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
+
+        limiter = InMemoryRateLimiter()
+        assert limiter.max_entries == 10_000
+
+    def test_max_entries_custom(self):
+        """InMemoryRateLimiter accepts custom max_entries."""
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
+
+        limiter = InMemoryRateLimiter(max_entries=500)
+        assert limiter.max_entries == 500
+
+    def test_eviction_when_max_entries_reached(self):
+        """Oldest entries are evicted when max_entries is reached."""
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
+
+        limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60, max_entries=10)
+
+        # Add 10 keys
+        for i in range(10):
+            limiter.is_allowed(f"ip_{i}")
+
+        # All 10 should be tracked
+        assert len(limiter._data) == 10
+
+        # Add one more key - should trigger eviction
+        limiter.is_allowed("ip_new")
+
+        # Should have evicted some entries (10% = 1 entry evicted)
+        assert len(limiter._data) <= 10
+
+    def test_eviction_preserves_recent_entries(self):
+        """LRU eviction preserves recently accessed entries."""
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
+
+        limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60, max_entries=5)
+
+        # Add 5 keys in order
+        for i in range(5):
+            limiter.is_allowed(f"ip_{i}")
+
+        # Access ip_0 again to make it recent
+        limiter.is_allowed("ip_0")
+
+        # Add new key - should trigger eviction
+        limiter.is_allowed("ip_new")
+
+        # ip_0 should still be tracked (was recently accessed)
+        assert "ip_0" in limiter._data
+
+    def test_cleanup_expired_removes_old_entries(self):
+        """cleanup_expired removes entries past their window."""
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
+
+        limiter = InMemoryRateLimiter(max_requests=5, window_seconds=1)
+
+        # Add some entries
+        limiter.is_allowed("ip_1")
+        limiter.is_allowed("ip_2")
+
+        # Wait for window to expire
+        time.sleep(1.1)
+
+        # Add a fresh entry
+        limiter.is_allowed("ip_3")
+
+        # Cleanup should remove ip_1 and ip_2
+        removed = limiter.cleanup_expired()
+        assert removed == 2
+        assert "ip_3" in limiter._data
+        assert "ip_1" not in limiter._data
+        assert "ip_2" not in limiter._data
+
+    def test_lru_access_moves_to_end(self):
+        """Accessing a key moves it to end (most recent)."""
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
+
+        limiter = InMemoryRateLimiter(max_requests=10, window_seconds=60, max_entries=5)
+
+        # Add keys in order: 0, 1, 2
+        limiter.is_allowed("ip_0")
+        limiter.is_allowed("ip_1")
+        limiter.is_allowed("ip_2")
+
+        # Access ip_0 again
+        limiter.is_allowed("ip_0")
+
+        # Order should now be: 1, 2, 0
+        keys = list(limiter._data.keys())
+        assert keys == ["ip_1", "ip_2", "ip_0"]
+
 
 class TestSqliteRateLimiter:
     """Tests for SqliteRateLimiter."""
