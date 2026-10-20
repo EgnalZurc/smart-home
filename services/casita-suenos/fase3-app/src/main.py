@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import sys
 import threading
 import time
@@ -24,7 +25,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -37,6 +38,49 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# ── CSRF Protection ──────────────────────────────────────────────────────────
+CSRF_TOKEN_COOKIE = "casita_csrf_token"
+CSRF_TOKEN_HEADER = "X-CSRF-Token"
+
+
+def generate_csrf_token() -> str:
+    """Generate a cryptographically secure CSRF token."""
+    return secrets.token_urlsafe(32)
+
+
+def set_csrf_cookie(response: Response, token: str) -> None:
+    """Set the CSRF token cookie with secure attributes."""
+    response.set_cookie(
+        key=CSRF_TOKEN_COOKIE,
+        value=token,
+        httponly=True,
+        samesite="strict",
+        secure=False,  # Set to True if using HTTPS
+        max_age=3600,  # 1 hour
+    )
+
+
+async def validate_csrf(request: Request) -> None:
+    """Validate CSRF token from cookie matches header.
+
+    Raises HTTPException 403 if validation fails.
+    """
+    cookie_token = request.cookies.get(CSRF_TOKEN_COOKIE)
+    header_token = request.headers.get(CSRF_TOKEN_HEADER)
+
+    if not cookie_token or not header_token:
+        raise HTTPException(
+            status_code=403,
+            detail="CSRF token missing",
+        )
+
+    if not secrets.compare_digest(cookie_token, header_token):
+        raise HTTPException(
+            status_code=403,
+            detail="CSRF validation failed",
+        )
+
 
 # ── Rate limiters ────────────────────────────────────────────────────────────
 # Redis URL from env or default to compose service name
@@ -309,7 +353,21 @@ async def rate_limit_middleware(request: Request, call_next):
                 content={"error": "Too many requests. Try again later."},
             )
 
-    return await call_next(request)
+    response = await call_next(request)
+
+    # Set CSRF cookie on API responses if not already set
+    if path.startswith("/api/") and CSRF_TOKEN_COOKIE not in request.cookies:
+        token = generate_csrf_token()
+        response.set_cookie(
+            key=CSRF_TOKEN_COOKIE,
+            value=token,
+            httponly=True,
+            samesite="strict",
+            secure=False,  # Set to True if using HTTPS
+            max_age=3600,  # 1 hour
+        )
+
+    return response
 
 
 # ── Pydantic Models ───────────────────────────────────────────────────────────
@@ -333,6 +391,10 @@ class ScheduleConfig(BaseModel):
     summary_enabled: bool | None = None
     summary_day: int | None = None
     summary_hour: int | None = None
+
+
+# ── CSRF dependency for state-changing endpoints ──────────────────────────────
+# Use as: Depends(validate_csrf) on POST/PUT/DELETE endpoints
 
 
 # ── Middleware de errores ─────────────────────────────────────────────────────
@@ -359,6 +421,26 @@ if STATIC_DIR.exists():
 # nginx hace proxy de /api/casita/* a casita-suenos:8001/api/casita/*
 
 api = APIRouter(prefix="/api/casita")
+
+
+# ── CSRF token endpoint ───────────────────────────────────────────────────────
+
+
+@api.get("/csrf-token")
+async def get_csrf_token(request: Request, response: Response):
+    """Get a CSRF token for use in subsequent POST/PUT/DELETE requests.
+
+    The token is returned in the response body and also set as an HttpOnly cookie.
+    Clients must include the token in the X-CSRF-Token header for state-changing
+    requests.
+    """
+    # Use existing token from cookie if available, otherwise generate new one
+    token = request.cookies.get(CSRF_TOKEN_COOKIE)
+    if not token:
+        token = generate_csrf_token()
+        set_csrf_cookie(response, token)
+
+    return {"csrf_token": token}
 
 
 # ── Health endpoint (sin prefijo, para Docker healthcheck) ────────────────────
@@ -554,7 +636,9 @@ async def get_dismissed(request: Request):
 
 
 @api.post("/dismiss")
-async def dismiss_property(req: PropertyUid, request: Request):
+async def dismiss_property(
+    req: PropertyUid, request: Request, _: None = Depends(validate_csrf)
+):
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -565,7 +649,9 @@ async def dismiss_property(req: PropertyUid, request: Request):
 
 
 @api.post("/undismiss")
-async def undismiss_property(req: PropertyUid, request: Request):
+async def undismiss_property(
+    req: PropertyUid, request: Request, _: None = Depends(validate_csrf)
+):
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -576,7 +662,9 @@ async def undismiss_property(req: PropertyUid, request: Request):
 
 
 @api.post("/mark-viewed")
-async def mark_viewed(req: PropertyUid, request: Request):
+async def mark_viewed(
+    req: PropertyUid, request: Request, _: None = Depends(validate_csrf)
+):
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -587,7 +675,9 @@ async def mark_viewed(req: PropertyUid, request: Request):
 
 
 @api.post("/save-comment")
-async def save_comment(req: CommentRequest, request: Request):
+async def save_comment(
+    req: CommentRequest, request: Request, _: None = Depends(validate_csrf)
+):
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -609,7 +699,9 @@ async def get_schedule(request: Request):
 
 
 @api.post("/schedule")
-async def save_schedule(config: ScheduleConfig, request: Request):
+async def save_schedule(
+    config: ScheduleConfig, request: Request, _: None = Depends(validate_csrf)
+):
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -634,7 +726,7 @@ async def get_summary(request: Request):
 
 
 @api.post("/run-scraping")
-async def run_scraping(request: Request):
+async def run_scraping(request: Request, _: None = Depends(validate_csrf)):
     _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
@@ -648,7 +740,7 @@ async def run_scraping(request: Request):
 
 
 @api.post("/run-gmail-check")
-async def run_gmail_check(request: Request):
+async def run_gmail_check(request: Request, _: None = Depends(validate_csrf)):
     _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
@@ -662,7 +754,7 @@ async def run_gmail_check(request: Request):
 
 
 @api.post("/run-fotocasa-check")
-async def run_fotocasa_check(request: Request):
+async def run_fotocasa_check(request: Request, _: None = Depends(validate_csrf)):
     _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
@@ -676,7 +768,7 @@ async def run_fotocasa_check(request: Request):
 
 
 @api.post("/run-summary")
-async def run_summary(request: Request):
+async def run_summary(request: Request, _: None = Depends(validate_csrf)):
     _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
