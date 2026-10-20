@@ -219,6 +219,33 @@ Each entry follows this format:
 - **Fix Applied**: Added security_headers_middleware with X-Content-Type-Options: nosniff, X-Frame-Options: DENY, Content-Security-Policy, X-XSS-Protection, Referrer-Policy
 - **Verification**: `curl -I https://raspberrypi.tailaa37cd.ts.net/api/casita/health | grep -E "X-Content|X-Frame|Content-Security"`
 
+### [metrics-service] Missing Security Headers
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: HTTP responses lacked security headers (X-Content-Type-Options, X-Frame-Options, CSP)
+- **Fix Applied**: Added security_headers_middleware with X-Content-Type-Options: nosniff, X-Frame-Options: DENY, Content-Security-Policy, X-XSS-Protection, Referrer-Policy
+- **Verification**: `curl -I https://raspberrypi.tailaa37cd.ts.net/api/health/metrics | grep -E "X-Content|X-Frame|Content-Security"`
+
+### [metrics-service] Generic Exception Handling
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: _db_ok() used `except Exception` which catches too broadly
+- **Fix Applied**: Changed to specific exception types (OSError, RuntimeError) for database failures
+- **Verification**: Check main.py _db_ok() uses specific exception types
+
+### [metrics-service] Incomplete Logging on Rate Limits
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: Rate limit violations were not logged, making abuse detection difficult
+- **Fix Applied**: Added logging.warning for rate limit hits with client IP and path
+- **Verification**: Trigger rate limit and check logs show "Rate limit exceeded for IP"
+
 ### [casita-suenos] Generic Exception Handling
 - **Severity**: MEDIUM
 - **Status**: FIXED

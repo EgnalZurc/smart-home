@@ -149,6 +149,33 @@ app = FastAPI(
 
 
 @app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Add security headers to all responses.
+
+    Headers added:
+        - X-Content-Type-Options: nosniff (prevent MIME sniffing)
+        - X-Frame-Options: DENY (prevent clickjacking)
+        - Content-Security-Policy: default-src 'self' (restrict resource loading)
+        - X-XSS-Protection: 1; mode=block (legacy XSS filter)
+        - Referrer-Policy: strict-origin-when-cross-origin
+
+    Args:
+        request: The incoming request.
+        call_next: The next middleware/handler in the chain.
+
+    Returns:
+        The response with security headers added.
+    """
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Content-Security-Policy"] = "default-src 'self'"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+@app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next) -> JSONResponse:
     """Apply rate limiting to all endpoints except health checks.
 
@@ -165,6 +192,11 @@ async def rate_limit_middleware(request: Request, call_next) -> JSONResponse:
 
     client_ip = _get_client_ip(request)
     if not rate_limiter.is_allowed(client_ip):
+        logger.warning(
+            "Rate limit exceeded for IP %s on %s",
+            client_ip,
+            request.url.path,
+        )
         return JSONResponse(
             status_code=429,
             content={"detail": "Rate limit exceeded. Try again later."},
@@ -189,8 +221,10 @@ def _db_ok() -> bool:
     try:
         collector.store.count()
         return True
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("[HealthCheck] Database query failed: %s", exc)
+    except (OSError, RuntimeError) as exc:  # pragma: no cover - defensive
+        logger.warning(
+            "[HealthCheck] Database query failed (%s): %s", type(exc).__name__, exc
+        )
         return False
 
 

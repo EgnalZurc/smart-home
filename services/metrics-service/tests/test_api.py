@@ -357,3 +357,28 @@ async def test_rate_limiter_reset_clears_key(client, monkeypatch):
     main.rate_limiter.reset("test-ip")
 
     assert "test-ip" not in main.rate_limiter._data
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Security headers tests (MEDIUM fixes)
+# ═══════════════════════════════════════════════════════════════════════════════
+async def test_security_headers_present(client):
+    """All responses should include security headers."""
+    async with client as c:
+        resp = await c.get("/health")
+    assert resp.status_code == 200
+    assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+    assert resp.headers.get("X-Frame-Options") == "DENY"
+    assert resp.headers.get("Content-Security-Policy") == "default-src 'self'"
+    assert resp.headers.get("X-XSS-Protection") == "1; mode=block"
+    assert resp.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+
+
+async def test_security_headers_on_api_endpoints(client):
+    """Security headers should be present on data endpoints too."""
+    async with client as c:
+        resp = await c.get("/api/metrics/latest")
+    assert resp.status_code == 200
+    assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+    assert resp.headers.get("X-Frame-Options") == "DENY"
