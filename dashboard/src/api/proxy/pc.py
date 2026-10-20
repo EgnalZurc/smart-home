@@ -1,11 +1,17 @@
 """PC control proxy routes.
 
 Proxies requests directly to pc-agent on Windows PC for power profile control.
+
+SECURITY: PC_AGENT_TOKEN is only sent over the internal network (localhost,
+172.x.x.x, 192.168.x.x, 10.x.x.x). The URL is validated at startup to prevent
+accidental exposure of the token to external hosts.
 """
 
 import logging
 import os
+import re
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -22,9 +28,61 @@ PC_AGENT_URL = os.environ.get("PC_AGENT_URL", "http://192.168.1.164:8090")
 PC_AGENT_TOKEN = os.environ.get("PC_AGENT_TOKEN", "")
 PC_AGENT_TIMEOUT = float(os.environ.get("PC_AGENT_TIMEOUT", "10.0"))
 
+# ── Internal network validation ───────────────────────────────────────────────
+# SECURITY: Patterns that match internal/private network addresses.
+# Token is ONLY sent to these destinations. External URLs are rejected.
+_INTERNAL_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^localhost$", re.IGNORECASE),
+    re.compile(r"^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$"),  # 127.0.0.0/8
+    re.compile(r"^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$"),  # 10.0.0.0/8
+    re.compile(r"^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$"),  # 172.16.0.0/12
+    re.compile(r"^192\.168\.\d{1,3}\.\d{1,3}$"),  # 192.168.0.0/16
+)
+
+
+def _is_internal_host(hostname: str) -> bool:
+    """Check if hostname is an internal/private network address.
+
+    SECURITY: Returns True only for localhost, 127.x.x.x, 10.x.x.x,
+    172.16-31.x.x, and 192.168.x.x addresses. All other addresses
+    (including DNS names that could resolve to external IPs) are rejected.
+    """
+    return any(pattern.match(hostname) for pattern in _INTERNAL_PATTERNS)
+
+
+def _validate_pc_agent_url() -> None:
+    """Validate that PC_AGENT_URL points to an internal network address.
+
+    SECURITY: Called at module load time. Raises RuntimeError if the URL
+    would send PC_AGENT_TOKEN to a non-internal address.
+    """
+    if not PC_AGENT_TOKEN:
+        # No token configured, no security concern
+        return
+    parsed = urlparse(PC_AGENT_URL)
+    hostname = parsed.hostname or ""
+    if not _is_internal_host(hostname):
+        raise RuntimeError(
+            f"SECURITY: PC_AGENT_URL host '{hostname}' is not an internal network "
+            f"address. PC_AGENT_TOKEN must only be sent over internal networks "
+            f"(localhost, 127.x, 10.x, 172.16-31.x, 192.168.x). "
+            f"Refusing to start with this configuration."
+        )
+    logger.info(
+        "PC agent URL validated as internal network: %s",
+        PC_AGENT_URL,
+    )
+
+
+# Validate URL at module load time
+_validate_pc_agent_url()
+
 
 def _get_auth_headers() -> dict[str, str]:
-    """Get authentication headers for pc-agent requests."""
+    """Get authentication headers for pc-agent requests.
+
+    SECURITY: Token only sent over internal network (validated at startup).
+    """
     if PC_AGENT_TOKEN:
         return {"X-Api-Token": PC_AGENT_TOKEN}
     return {}

@@ -34,6 +34,8 @@ from config import (
     PRUNE_INTERVAL_S,
     RING_BUFFER_MAXLEN,
     ROLLUP_INTERVAL_S,
+    SHELLY_PASSWORD,
+    SHELLY_USER,
 )
 from database import EnergyStore
 from shelly_client import GEN1, ShellyEMClient
@@ -50,6 +52,14 @@ def parse_devices(raw: str) -> list[dict]:
     Each entry must have ``id`` and ``ip``; ``gen`` defaults to 1 and
     ``channels`` to ``{}``. Malformed entries are dropped with a warning so one
     bad config line never takes the whole collector down.
+
+    SECURITY: Credentials are resolved in this order:
+    1. Per-device "username"/"password" in the JSON entry (highest priority)
+    2. Global SHELLY_USER/SHELLY_PASSWORD environment variables (fallback)
+    3. No authentication (if neither is set)
+
+    This allows setting a single credential pair for all devices via env vars,
+    while still permitting per-device overrides for mixed environments.
     """
     try:
         parsed = json.loads(raw)
@@ -64,14 +74,17 @@ def parse_devices(raw: str) -> list[dict]:
         if not isinstance(entry, dict) or not entry.get("id") or not entry.get("ip"):
             logger.warning("Skipping malformed device entry: %r", entry)
             continue
+        # SECURITY: Per-device credentials override global env vars
+        username = entry.get("username") or SHELLY_USER or None
+        password = entry.get("password") or SHELLY_PASSWORD or None
         devices.append(
             {
                 "id": str(entry["id"]),
                 "ip": str(entry["ip"]),
                 "gen": int(entry.get("gen", GEN1)),
                 "channels": entry.get("channels") or {},
-                "username": entry.get("username"),
-                "password": entry.get("password"),
+                "username": username,
+                "password": password,
             }
         )
     return devices
