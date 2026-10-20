@@ -35,10 +35,12 @@ def _load_alerts_state() -> dict[str, dict[str, Any]]:
     """Load persisted alerts state (completed, triggered)."""
     try:
         if ALERTS_STATE_FILE.exists():
-            with open(ALERTS_STATE_FILE) as f:
+            with ALERTS_STATE_FILE.open(encoding="utf-8") as f:
                 return json.load(f)
-    except Exception as e:
-        logger.warning(f"Could not load alerts state: {e}")
+    except json.JSONDecodeError as e:
+        logger.warning(f"Invalid JSON in alerts state file: {e}")
+    except OSError as e:
+        logger.warning(f"Could not read alerts state file: {e}")
     return {}
 
 

@@ -32,10 +32,11 @@ from typing import Any
 
 from api import router as api_router
 from config import LOG_LEVEL
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from orchestrator import get_orchestrator
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # Add libs to path for shared library import (mirrors monitors/crypto_monitor.py)
 _LIBS_PATH: str = os.environ.get("LIBS_PATH", "/app/libs")
@@ -52,6 +53,37 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logger: logging.Logger = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Security Headers Middleware
+# ─────────────────────────────────────────────────────────────────────────────
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Middleware that adds security headers to all responses.
+
+    Headers added:
+    - X-Content-Type-Options: Prevents MIME type sniffing
+    - X-Frame-Options: Prevents clickjacking
+    - X-XSS-Protection: Legacy XSS filter (for older browsers)
+    - Referrer-Policy: Controls referrer information
+    - Cache-Control: Prevents caching of sensitive API responses
+    """
+
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
+        """Process request and add security headers to response."""
+        response: Response = await call_next(request)
+
+        # Security headers
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+        # Cache control for API endpoints (not static files)
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store, max-age=0"
+
+        return response
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -84,6 +116,9 @@ app: FastAPI = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+# Add security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Include API routes
 app.include_router(api_router)
