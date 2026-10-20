@@ -13,6 +13,7 @@ Endpoints (served on :8014):
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import os
@@ -92,7 +93,9 @@ async def require_api_key(
             detail="Missing Authorization header",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if credentials.credentials != CALENDAR_API_KEY:
+    if not hmac.compare_digest(
+        credentials.credentials.encode(), CALENDAR_API_KEY.encode()
+    ):
         raise HTTPException(
             status_code=403,
             detail="Invalid API key",
