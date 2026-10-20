@@ -129,3 +129,112 @@ async def set_pc_mode(mode: str, request: Request):
     if mode not in ("gaming", "servidor", "balanced"):
         raise HTTPException(400, "Invalid mode. Use: gaming, servidor, balanced")
     return await _proxy_post(f"/system/mode/{mode}")
+
+
+# ── Power control (sleep/wake) ────────────────────────────────────────────────
+#
+# DANGEROUS OPERATIONS — require SUPER access + confirmation header.
+# Sleep: Proxies to pc-agent which suspends the Windows PC.
+# Wake: Executes etherwake locally on the Pi to send Wake-on-LAN magic packet.
+
+# MAC address of EgnalPC's WiFi adapter (Intel AX200)
+EGNALPC_MAC = os.environ.get("EGNALPC_MAC", "A4:B1:C1:92:76:B0")
+# Network interface on the Pi to send WoL packet from
+WOL_INTERFACE = os.environ.get("WOL_INTERFACE", "wlan0")
+
+
+@router.post("/sleep")
+async def pc_sleep(request: Request):
+    """Put EgnalPC into sleep mode.
+
+    DANGEROUS: The PC will become unreachable until woken via Wake-on-LAN.
+
+    Requires:
+    - SUPER access (level 0)
+    - X-Confirm-Action header set to "SLEEP"
+    """
+    require_super(request)
+
+    # Check confirmation header
+    confirm = request.headers.get("X-Confirm-Action")
+    if confirm != "SLEEP":
+        raise HTTPException(
+            400,
+            "Confirmation required: send X-Confirm-Action: SLEEP header",
+        )
+
+    logger.warning("PC SLEEP requested by user via dashboard")
+
+    # Proxy to pc-agent with the confirmation header
+    url = f"{PC_AGENT_URL.rstrip('/')}/system/sleep"
+    try:
+        async with httpx.AsyncClient(timeout=PC_AGENT_TIMEOUT) as client:
+            headers = _get_auth_headers()
+            headers["X-Confirm-Action"] = "SLEEP"
+            resp = await client.post(url, headers=headers)
+            if resp.status_code >= 400:
+                detail = _extract_detail(resp)
+                raise HTTPException(status_code=resp.status_code, detail=detail)
+            return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("PC sleep request failed: %s", e)
+        raise HTTPException(status_code=503, detail="PC agent unreachable")
+
+
+@router.post("/wake")
+async def pc_wake(request: Request):
+    """Wake EgnalPC from sleep using Wake-on-LAN magic packet.
+
+    Executes etherwake locally on the Pi to send the magic packet.
+    Only works if the PC is in sleep mode (S3) with Wake-on-WLAN enabled.
+
+    Requires:
+    - SUPER access (level 0)
+    - X-Confirm-Action header set to "WAKE"
+    """
+    import asyncio
+
+    require_super(request)
+
+    # Check confirmation header
+    confirm = request.headers.get("X-Confirm-Action")
+    if confirm != "WAKE":
+        raise HTTPException(
+            400,
+            "Confirmation required: send X-Confirm-Action: WAKE header",
+        )
+
+    logger.warning("PC WAKE requested by user via dashboard")
+
+    # Execute etherwake locally
+    cmd = ["sudo", "etherwake", "-i", WOL_INTERFACE, EGNALPC_MAC]
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+
+        if proc.returncode != 0:
+            error_msg = stderr.decode().strip() if stderr else "Unknown error"
+            logger.error("etherwake failed: %s", error_msg)
+            raise HTTPException(500, f"Wake-on-LAN failed: {error_msg}")
+
+        logger.info("Wake-on-LAN packet sent to %s via %s", EGNALPC_MAC, WOL_INTERFACE)
+        return {
+            "status": "ok",
+            "message": f"Magic packet sent to {EGNALPC_MAC}",
+            "interface": WOL_INTERFACE,
+        }
+
+    except asyncio.TimeoutError:
+        raise HTTPException(500, "etherwake command timed out")
+    except FileNotFoundError:
+        raise HTTPException(500, "etherwake not installed on this system")
+    except Exception as e:
+        logger.error("Wake-on-LAN error: %s", e)
+        raise HTTPException(500, f"Failed to send wake packet: {e}")

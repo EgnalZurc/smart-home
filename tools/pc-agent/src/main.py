@@ -700,6 +700,63 @@ def set_power_mode(
         raise HTTPException(500, f"Failed: {e}")
 
 
+# ── System power control (sleep/shutdown) ─────────────────────────────────────
+#
+# DANGEROUS OPERATIONS — require additional confirmation header.
+# These endpoints put the PC to sleep or shut it down, which means pc-agent
+# will become unreachable until the PC is woken/powered on again.
+
+
+@app.post("/system/sleep")
+def system_sleep(
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+    x_confirm_action: str | None = Header(None, alias="X-Confirm-Action"),
+) -> dict[str, str]:
+    """Put the PC into sleep mode (S3 suspend).
+
+    DANGEROUS: The PC will become unreachable until woken via Wake-on-LAN.
+
+    Requires both:
+    - X-Api-Token: Standard authentication
+    - X-Confirm-Action: Must be exactly "SLEEP" to confirm intent
+
+    Uses rundll32.exe powrprof.dll,SetSuspendState to enter sleep mode.
+    The command returns immediately but the PC suspends within ~1-2 seconds.
+    """
+    require_auth(x_api_token)
+
+    # Additional confirmation required for dangerous operation
+    if x_confirm_action != "SLEEP":
+        raise HTTPException(
+            400,
+            "Confirmation required: send X-Confirm-Action: SLEEP header",
+        )
+
+    logger.warning("SYSTEM SLEEP requested — PC will suspend in ~2 seconds")
+
+    try:
+        # SetSuspendState(hibernate, force, disable_wake_events)
+        # Args: 0=sleep (not hibernate), 1=force, 0=allow wake events
+        result: subprocess.CompletedProcess[str] = subprocess.run(
+            ["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        # Note: This may not return if sleep succeeds immediately
+        if result.returncode != 0 and result.stderr.strip():
+            raise HTTPException(500, f"Sleep command failed: {result.stderr.strip()}")
+
+        return {"status": "ok", "message": "Sleep command sent, PC suspending..."}
+
+    except subprocess.TimeoutExpired:
+        # Timeout likely means the PC is already asleep
+        return {"status": "ok", "message": "Sleep initiated (command timed out)"}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to initiate sleep: {e}")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

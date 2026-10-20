@@ -318,6 +318,25 @@
         .pc-mode-btn.active { background: rgba(34,197,94,.15); border-color: rgba(34,197,94,.6); color: #86efac; box-shadow: 0 0 8px rgba(34,197,94,.3); }
         .pc-mode-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+        /* PC Power control buttons */
+        .pc-power-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            gap: 6px; font-size: 11px; font-weight: 600;
+            padding: 8px 16px; border-radius: 8px;
+            border: 2px solid rgba(51,65,85,.5);
+            background: rgba(30,41,59,.5);
+            color: #94a3b8; cursor: pointer;
+            transition: all .15s ease;
+            white-space: nowrap;
+        }
+        .pc-power-btn:hover { transform: scale(1.02); }
+        .pc-power-btn:active { transform: scale(0.95); }
+        .pc-power-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .pc-power-btn.sleep { border-color: rgba(234,179,8,.4); }
+        .pc-power-btn.sleep:hover { background: rgba(234,179,8,.15); border-color: rgba(234,179,8,.6); color: #fde047; }
+        .pc-power-btn.wake { border-color: rgba(34,197,94,.4); }
+        .pc-power-btn.wake:hover { background: rgba(34,197,94,.15); border-color: rgba(34,197,94,.6); color: #86efac; }
+
         /* Resource/Services tabs */
         .res-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
         .res-tab {
@@ -916,6 +935,14 @@ const T = {
         babygifts_name: 'Lista Regalos Bebé', babygifts_desc: 'Lista de regalos para el bebé',
         portfolio_name: 'Monitor Cartera', portfolio_desc: 'Monitorización de ETFs y crypto',
         pc_online: 'Online', pc_offline: 'Offline',
+        pc_sleep: 'Suspender', pc_wake: 'Encender',
+        pc_power_control: 'Control de encendido',
+        pc_sleep_confirm: '¿Suspender Egnal PC? El PC entrará en modo de bajo consumo y solo podrá encenderse remotamente.',
+        pc_wake_confirm: '¿Encender Egnal PC? Se enviará un paquete Wake-on-LAN.',
+        pc_sleep_ok: 'Comando de suspensión enviado',
+        pc_wake_ok: 'Paquete Wake-on-LAN enviado',
+        pc_sleep_err: 'Error al suspender el PC',
+        pc_wake_err: 'Error al enviar Wake-on-LAN',
         core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
         external_services: 'Servicios externos', infrastructure: 'Infraestructura',
         ht_status: 'Estado', ht_latency: 'Latencia', ht_error: 'Error',
@@ -961,6 +988,14 @@ const T = {
         babygifts_name: 'Baby Gift List', babygifts_desc: 'Baby gift registry',
         portfolio_name: 'Portfolio Monitor', portfolio_desc: 'ETF and crypto monitoring',
         pc_online: 'Online', pc_offline: 'Offline',
+        pc_sleep: 'Sleep', pc_wake: 'Wake',
+        pc_power_control: 'Power control',
+        pc_sleep_confirm: 'Put Egnal PC to sleep? The PC will enter low-power mode and can only be woken remotely.',
+        pc_wake_confirm: 'Wake Egnal PC? A Wake-on-LAN packet will be sent.',
+        pc_sleep_ok: 'Sleep command sent',
+        pc_wake_ok: 'Wake-on-LAN packet sent',
+        pc_sleep_err: 'Failed to suspend PC',
+        pc_wake_err: 'Failed to send Wake-on-LAN',
         core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
         external_services: 'External services', infrastructure: 'Infrastructure',
         ht_status: 'Status', ht_latency: 'Latency', ht_error: 'Error',
@@ -1190,8 +1225,16 @@ function renderPiResources(d) {
 function renderPcResources() {
     const body = document.getElementById('res-body');
     document.getElementById('res-timestamp').textContent = new Date().toLocaleTimeString();
+    const showPowerBtns = isAdmin();  // Only admins see power control buttons
     if (!pcOnline) {
-        body.innerHTML = `<div class="text-center py-8"><div class="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-3"><span class="w-3 h-3 rounded-full bg-red-400"></span></div><p class="text-slate-400 text-sm mb-1">Egnal PC</p><p class="text-red-400 font-semibold">${t('pc_offline')}</p></div>`;
+        body.innerHTML = `<div class="text-center py-8">
+            <div class="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-3"><span class="w-3 h-3 rounded-full bg-red-400"></span></div>
+            <p class="text-slate-400 text-sm mb-1">Egnal PC</p>
+            <p class="text-red-400 font-semibold mb-4">${t('pc_offline')}</p>
+            ${showPowerBtns ? `<button id="pc-wake-btn" class="pc-power-btn wake" onclick="pcWake()">
+                <span>☀️</span><span>${t('pc_wake')}</span>
+            </button>` : ''}
+        </div>`;
         return;
     }
     const modes = ['balanced', 'gaming', 'servidor'];
@@ -1206,6 +1249,12 @@ function renderPcResources() {
             <div class="flex justify-center gap-3" id="pc-mode-btns">
                 ${modes.map(mode => `<button class="pc-mode-btn ${currentPcMode === mode ? 'active' : ''}" data-mode="${mode}"><span>${modeIcons[mode]}</span><span>${mode.charAt(0).toUpperCase() + mode.slice(1)}</span></button>`).join('')}
             </div>
+            ${showPowerBtns ? `<div class="mt-6 pt-4 border-t border-slate-700">
+                <p class="text-xs text-slate-500 uppercase tracking-wider mb-3">${t('pc_power_control')}</p>
+                <button id="pc-sleep-btn" class="pc-power-btn sleep" onclick="pcSleep()">
+                    <span>🌙</span><span>${t('pc_sleep')}</span>
+                </button>
+            </div>` : ''}
         </div>
     `;
 }
@@ -1236,6 +1285,69 @@ async function setPcMode(mode) {
     } catch {}
     await ensurePcStatus(true);
     if (currentResSource === 'pc') renderPcResources();
+}
+
+async function pcSleep() {
+    if (!isAdmin()) return;
+    if (!confirm(t('pc_sleep_confirm'))) return;
+
+    const btn = document.getElementById('pc-sleep-btn');
+    if (btn) btn.disabled = true;
+
+    try {
+        const r = await fetch('/api/pc/sleep', {
+            method: 'POST',
+            headers: { 'X-Confirm-Action': 'SLEEP' }
+        });
+        if (r.ok) {
+            showToast(t('pc_sleep_ok'), 'success');
+            // PC will be offline shortly, update status after a delay
+            setTimeout(async () => {
+                await ensurePcStatus(true);
+                if (currentResSource === 'pc') renderPcResources();
+            }, 3000);
+        } else {
+            const err = await r.json().catch(() => ({}));
+            showToast(err.detail || t('pc_sleep_err'), 'error');
+        }
+    } catch (e) {
+        showToast(t('pc_sleep_err'), 'error');
+    }
+    if (btn) btn.disabled = false;
+}
+
+async function pcWake() {
+    if (!isAdmin()) return;
+    if (!confirm(t('pc_wake_confirm'))) return;
+
+    const btn = document.getElementById('pc-wake-btn');
+    if (btn) btn.disabled = true;
+
+    try {
+        const r = await fetch('/api/pc/wake', {
+            method: 'POST',
+            headers: { 'X-Confirm-Action': 'WAKE' }
+        });
+        if (r.ok) {
+            showToast(t('pc_wake_ok'), 'success');
+            // Poll for PC coming online
+            let attempts = 0;
+            const pollInterval = setInterval(async () => {
+                attempts++;
+                await ensurePcStatus(true);
+                if (pcOnline || attempts >= 12) {  // ~60 seconds max
+                    clearInterval(pollInterval);
+                    if (currentResSource === 'pc') renderPcResources();
+                }
+            }, 5000);
+        } else {
+            const err = await r.json().catch(() => ({}));
+            showToast(err.detail || t('pc_wake_err'), 'error');
+        }
+    } catch (e) {
+        showToast(t('pc_wake_err'), 'error');
+    }
+    if (btn) btn.disabled = false;
 }
 
 function openResModal() {
