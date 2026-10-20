@@ -5,6 +5,7 @@ Downloads market data from Yahoo Finance and calculates technical signals.
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -57,6 +58,59 @@ _ohlc_cache = TTLCache(default_ttl_seconds=900)  # 15 min
 # much longer than price history. 1 hour collapses dashboard refresh bursts
 # while still picking up a newly declared distribution within the same day.
 _dividends_cache = TTLCache(default_ttl_seconds=3600)  # 1 hour
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Circuit Breaker — prevent cascading failures to Yahoo Finance
+# ─────────────────────────────────────────────────────────────────────────────
+class CircuitBreaker:
+    """Simple circuit breaker for external API calls.
+
+    When failures exceed max_failures, the circuit opens and calls fail fast
+    for reset_timeout seconds before allowing a retry.
+    """
+
+    def __init__(self, max_failures: int = 5, reset_timeout: float = 60.0):
+        self._max_failures = max_failures
+        self._reset_timeout = reset_timeout
+        self._failures = 0
+        self._last_failure_time: float | None = None
+        self._state = "closed"  # closed, open, half-open
+
+    def is_open(self) -> bool:
+        """Check if circuit is open (should fail fast)."""
+        if self._state == "closed":
+            return False
+
+        if self._state == "open" and self._last_failure_time:
+            elapsed = time.time() - self._last_failure_time
+            if elapsed >= self._reset_timeout:
+                self._state = "half-open"
+                return False
+
+        return self._state == "open"
+
+    def record_success(self) -> None:
+        """Record a successful call, resetting the circuit."""
+        self._failures = 0
+        self._state = "closed"
+        self._last_failure_time = None
+
+    def record_failure(self) -> None:
+        """Record a failed call, potentially opening the circuit."""
+        self._failures += 1
+        self._last_failure_time = time.time()
+
+        if self._failures >= self._max_failures:
+            self._state = "open"
+            logger.warning(
+                f"Yahoo Finance circuit breaker opened after {self._failures} failures. "
+                f"Will retry in {self._reset_timeout}s."
+            )
+
+
+# Circuit breaker for Yahoo Finance API
+_yahoo_circuit = CircuitBreaker(max_failures=5, reset_timeout=60.0)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -195,6 +249,13 @@ def fetch_etf_data(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
         logger.debug(f"Cache hit for ETF history: {ticker_sym}")
         return cached
 
+    # Check circuit breaker
+    if _yahoo_circuit.is_open():
+        logger.warning(
+            f"Yahoo Finance circuit breaker open, returning empty data for {ticker_sym}"
+        )
+        return pd.DataFrame(), {}
+
     return _fetch_etf_data_with_retry(ticker_sym)
 
 
@@ -224,8 +285,10 @@ def _fetch_etf_data_with_retry(ticker_sym: str) -> tuple[pd.DataFrame, dict[str,
 
         result = (hist, info)
         _history_cache.set(ticker_sym, result)
+        _yahoo_circuit.record_success()
         return result
     except Exception as e:
+        _yahoo_circuit.record_failure()
         logger.warning(
             f"Retry-able error fetching ETF data for {ticker_sym}: "
             f"{type(e).__name__}: {e}"
@@ -249,6 +312,13 @@ def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
     if cached is not None:
         logger.debug(f"Cache hit for OHLC: {cache_key}")
         return cached
+
+    # Check circuit breaker
+    if _yahoo_circuit.is_open():
+        logger.warning(
+            f"Yahoo Finance circuit breaker open, returning empty OHLC for {ticker_sym}"
+        )
+        return []
 
     return _fetch_ohlc_data_with_retry(ticker_sym, period, cache_key)
 
@@ -279,8 +349,10 @@ def _fetch_ohlc_data_with_retry(
             ohlc.append([ts, row["Open"], row["High"], row["Low"], row["Close"]])
 
         _ohlc_cache.set(cache_key, ohlc)
+        _yahoo_circuit.record_success()
         return ohlc
     except Exception as e:
+        _yahoo_circuit.record_failure()
         logger.warning(
             f"Retry-able error fetching OHLC for {ticker_sym} (period={period}): "
             f"{type(e).__name__}: {e}"
@@ -305,6 +377,13 @@ def fetch_dividends(ticker_sym: str) -> pd.Series:
         logger.debug(f"Cache hit for dividends: {ticker_sym}")
         return cached
 
+    # Check circuit breaker
+    if _yahoo_circuit.is_open():
+        logger.warning(
+            f"Yahoo Finance circuit breaker open, returning empty dividends for {ticker_sym}"
+        )
+        return pd.Series(dtype="float64")
+
     try:
         return _fetch_dividends_with_retry(ticker_sym)
     except Exception as e:
@@ -328,8 +407,10 @@ def _fetch_dividends_with_retry(ticker_sym: str) -> pd.Series:
         if divs is None:
             divs = pd.Series(dtype="float64")
         _dividends_cache.set(ticker_sym, divs)
+        _yahoo_circuit.record_success()
         return divs
     except Exception as e:
+        _yahoo_circuit.record_failure()
         logger.warning(f"Retry-able error fetching dividends for {ticker_sym}: {e}")
         raise
 

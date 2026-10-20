@@ -5,7 +5,9 @@ Fetches data from CoinGecko and tracks staking positions.
 
 import logging
 import os
+import re
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -67,6 +69,73 @@ _generic_client = RetryClient(config=_retry_config)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Error Sanitization — redact API keys from error messages
+# ─────────────────────────────────────────────────────────────────────────────
+_API_KEY_PATTERN = re.compile(
+    r"[?&](api_key|x_cg_[a-z_]+_api_key)=[^&\s]+", re.IGNORECASE
+)
+
+
+def _sanitize_error(msg: str) -> str:
+    """Remove API keys from error messages before logging."""
+    return _API_KEY_PATTERN.sub(r"\1=[REDACTED]", msg)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Circuit Breaker — prevent cascading failures to upstream APIs
+# ─────────────────────────────────────────────────────────────────────────────
+class CircuitBreaker:
+    """Simple circuit breaker for external API calls.
+
+    When failures exceed max_failures, the circuit opens and calls fail fast
+    for reset_timeout seconds before allowing a retry.
+    """
+
+    def __init__(self, max_failures: int = 5, reset_timeout: float = 60.0):
+        self._max_failures = max_failures
+        self._reset_timeout = reset_timeout
+        self._failures = 0
+        self._last_failure_time: float | None = None
+        self._state = "closed"  # closed, open, half-open
+
+    def is_open(self) -> bool:
+        """Check if circuit is open (should fail fast)."""
+        if self._state == "closed":
+            return False
+
+        if self._state == "open" and self._last_failure_time:
+            elapsed = time.time() - self._last_failure_time
+            if elapsed >= self._reset_timeout:
+                self._state = "half-open"
+                return False
+
+        return self._state == "open"
+
+    def record_success(self) -> None:
+        """Record a successful call, resetting the circuit."""
+        self._failures = 0
+        self._state = "closed"
+        self._last_failure_time = None
+
+    def record_failure(self) -> None:
+        """Record a failed call, potentially opening the circuit."""
+        self._failures += 1
+        self._last_failure_time = time.time()
+
+        if self._failures >= self._max_failures:
+            self._state = "open"
+            logger.warning(
+                f"Circuit breaker opened after {self._failures} failures. "
+                f"Will retry in {self._reset_timeout}s."
+            )
+
+
+# Circuit breakers for external APIs
+_coingecko_circuit = CircuitBreaker(max_failures=5, reset_timeout=60.0)
+_fear_greed_circuit = CircuitBreaker(max_failures=3, reset_timeout=60.0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # TTL Cache for API responses (shared implementation)
 # CoinGecko Demo plan: 30 calls/min, 10k/month — cache reduces rate limit risk
 # ─────────────────────────────────────────────────────────────────────────────
@@ -96,6 +165,11 @@ def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
         logger.debug(f"Cache hit for market data: {cache_key[:30]}...")
         return cached
 
+    # Check circuit breaker
+    if _coingecko_circuit.is_open():
+        logger.warning("CoinGecko circuit breaker open, returning cached/empty data")
+        return {}
+
     ids = ",".join(dict.fromkeys(coingecko_ids))
     try:
         rows = _cg_client.get(
@@ -115,9 +189,11 @@ def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
         }
         # Cache successful response
         _market_cache.set(cache_key, result)
+        _coingecko_circuit.record_success()
         return result
     except Exception as e:
-        logger.error(f"Error fetching prices: {e}")
+        _coingecko_circuit.record_failure()
+        logger.error(f"Error fetching prices: {_sanitize_error(str(e))}")
         return {}
 
 
@@ -131,15 +207,24 @@ def fetch_ohlc(coingecko_id: str, days: int = 30) -> list[list[float]]:
         logger.debug(f"Cache hit for OHLC: {cache_key}")
         return cached
 
+    # Check circuit breaker
+    if _coingecko_circuit.is_open():
+        logger.warning("CoinGecko circuit breaker open, returning empty OHLC")
+        return []
+
     try:
         result = _cg_client.get(
             _OHLC_URL.format(id=coingecko_id, days=days), headers=_get_cg_headers()
         ).json()
         # Cache successful response
         _ohlc_cache.set(cache_key, result)
+        _coingecko_circuit.record_success()
         return result
     except Exception as e:
-        logger.error(f"Error fetching OHLC for {coingecko_id}: {e}")
+        _coingecko_circuit.record_failure()
+        logger.error(
+            f"Error fetching OHLC for {coingecko_id}: {_sanitize_error(str(e))}"
+        )
         return []
 
 
@@ -153,14 +238,21 @@ def fetch_fear_greed() -> tuple[int | None, str | None]:
         logger.debug("Cache hit for Fear & Greed")
         return cached
 
+    # Check circuit breaker
+    if _fear_greed_circuit.is_open():
+        logger.warning("Fear & Greed circuit breaker open, returning None")
+        return None, None
+
     try:
         data = _generic_client.get(_FG_URL).json()
         result = int(data["data"][0]["value"]), data["data"][0]["value_classification"]
         # Cache successful response
         _fg_cache.set(cache_key, result)
+        _fear_greed_circuit.record_success()
         return result
     except Exception as e:
-        logger.error(f"Error fetching Fear & Greed: {e}")
+        _fear_greed_circuit.record_failure()
+        logger.error(f"Error fetching Fear & Greed: {_sanitize_error(str(e))}")
         return None, None
 
 
@@ -226,6 +318,11 @@ def fetch_exchange_trust_score(exchange: str) -> int | None:
         logger.debug(f"Cache hit for exchange trust: {exchange_id}")
         return cached
 
+    # Check circuit breaker
+    if _coingecko_circuit.is_open():
+        logger.warning("CoinGecko circuit breaker open, returning None for trust score")
+        return None
+
     url = f"https://api.coingecko.com/api/v3/exchanges/{exchange_id}"
     try:
         data = _cg_client.get(url, headers=_get_cg_headers()).json()
@@ -233,9 +330,13 @@ def fetch_exchange_trust_score(exchange: str) -> int | None:
         # Cache successful response
         if trust_score is not None:
             _exchange_trust_cache.set(cache_key, trust_score)
+        _coingecko_circuit.record_success()
         return trust_score
     except Exception as e:
-        logger.warning(f"Could not fetch trust score for {exchange}: {e}")
+        _coingecko_circuit.record_failure()
+        logger.warning(
+            f"Could not fetch trust score for {exchange}: {_sanitize_error(str(e))}"
+        )
         return None
 
 
@@ -592,7 +693,7 @@ class CryptoMonitor(BaseMonitor):
                 total_daily_gain += daily_gain
 
             except Exception as e:
-                logger.error(f"Error processing {symbol}: {e}")
+                logger.error(f"Error processing {symbol}: {_sanitize_error(str(e))}")
                 continue
 
         self._results = results
