@@ -299,6 +299,7 @@ class TestRouteRegistration:
             "/valheim/restart",
             "/system/mode",
             "/system/mode/{mode}",
+            "/system/sleep",
         ]:
             assert expected in paths
 
@@ -335,3 +336,56 @@ async def test_async_auth_rejected_without_token(main_module, monkeypatch):
     ) as ac:
         resp = await ac.get("/valheim/status")
     assert resp.status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# System sleep endpoint
+# --------------------------------------------------------------------------- #
+class TestSystemSleep:
+    """Tests for the dangerous /system/sleep endpoint."""
+
+    def test_sleep_requires_auth(self, client):
+        resp = client.post("/system/sleep")
+        assert resp.status_code == 401
+
+    def test_sleep_requires_confirmation_header(self, client, monkeypatch, main_module):
+        """Even with valid auth, must send X-Confirm-Action: SLEEP."""
+        monkeypatch.setattr(main_module, "API_TOKEN", TEST_TOKEN)
+        resp = client.post(
+            "/system/sleep",
+            headers={"X-Api-Token": TEST_TOKEN}
+        )
+        assert resp.status_code == 400
+        assert "Confirmation required" in resp.json()["detail"]
+
+    def test_sleep_with_wrong_confirmation_is_rejected(
+        self, client, monkeypatch, main_module
+    ):
+        monkeypatch.setattr(main_module, "API_TOKEN", TEST_TOKEN)
+        resp = client.post(
+            "/system/sleep",
+            headers={"X-Api-Token": TEST_TOKEN, "X-Confirm-Action": "WRONG"}
+        )
+        assert resp.status_code == 400
+
+    @patch("subprocess.run")
+    def test_sleep_with_correct_confirmation_succeeds(
+        self, mock_run, client, monkeypatch, main_module
+    ):
+        monkeypatch.setattr(main_module, "API_TOKEN", TEST_TOKEN)
+        mock_run.return_value = SimpleNamespace(returncode=0, stderr="", stdout="")
+        resp = client.post(
+            "/system/sleep",
+            headers={"X-Api-Token": TEST_TOKEN, "X-Confirm-Action": "SLEEP"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+        # Verify the correct command was called
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert "rundll32.exe" in cmd
+        assert "powrprof.dll" in cmd[1]
+
+    def test_sleep_endpoint_is_registered(self, main_module):
+        paths = {route.path for route in main_module.app.routes}
+        assert "/system/sleep" in paths
