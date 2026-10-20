@@ -6,6 +6,7 @@ requests must include `Authorization: Bearer <token>` header. When AUTH_TOKEN is
 empty or unset, authentication is disabled for backwards compatibility.
 """
 
+import hmac
 import logging
 import os
 from typing import Annotated
@@ -60,7 +61,8 @@ async def require_auth(
         )
 
     provided_token = parts[1]
-    if provided_token != token:
+    # Use constant-time comparison to prevent timing attacks
+    if not hmac.compare_digest(provided_token.encode(), token.encode()):
         logger.warning("Invalid auth token provided")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
