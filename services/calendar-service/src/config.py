@@ -67,9 +67,20 @@ CALENDAR_SEED = os.environ.get("CALENDAR_SEED", "")
 HTTP_TIMEOUT_S = float(os.environ.get("CALENDAR_HTTP_TIMEOUT_S", "10.0"))
 
 # ── API authentication ───────────────────────────────────────────────────────
-# Bearer token for protecting sensitive config endpoints. If empty, auth is
-# disabled (open access — useful for dev but NOT for production).
+# Bearer token for protecting sensitive config endpoints.
 CALENDAR_API_KEY = os.environ.get("CALENDAR_API_KEY", "")
+# Explicit opt-out flag for auth (must be set to 'true' to disable).
+# Auth is ENABLED by default — if enabled but no key configured, the service
+# returns HTTP 500 on protected endpoints (fail-secure).
+CALENDAR_AUTH_DISABLED = (
+    os.environ.get("CALENDAR_AUTH_DISABLED", "false").lower() == "true"
+)
+
+# ── Token encryption ─────────────────────────────────────────────────────────
+# Fernet key for encrypting OAuth tokens at rest. If empty, tokens are stored
+# in plaintext (legacy mode for migration). Generate with:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+CALENDAR_TOKEN_SECRET = os.environ.get("CALENDAR_TOKEN_SECRET", "")
 
 # Telegram delivery is driven by smart_home_common.telegram.TelegramNotifier
 # .from_env(), which reads TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_IDS. If unset, the
