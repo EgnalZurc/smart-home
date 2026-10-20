@@ -5,6 +5,8 @@ Downloads market data from Yahoo Finance and calculates technical signals.
 
 import asyncio
 import logging
+import os
+import sys
 from datetime import datetime, timezone
 from typing import Any
 
@@ -24,6 +26,16 @@ from tenacity import (
 
 from . import BaseMonitor, register_monitor
 
+# Add libs to path for shared library import
+_LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
+if _LIBS_PATH not in sys.path:
+    sys.path.insert(0, _LIBS_PATH)
+
+from service_proxy.circuit_breaker import (  # noqa: E402
+    CircuitBreaker,
+    CircuitBreakerConfig,
+)
+
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -38,6 +50,22 @@ YFINANCE_TIMEOUT_SECONDS = 5.0  # Per-call timeout (reduced for fast-fail)
 YFINANCE_MAX_RETRIES = 3
 YFINANCE_RETRY_MIN_WAIT = 1  # seconds
 YFINANCE_RETRY_MAX_WAIT = 4  # seconds
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Circuit Breaker for Yahoo Finance API
+#
+# Prevents cascading failures when Yahoo Finance is down or rate limiting.
+# Opens after 5 failures, waits 60s before retrying.
+# ─────────────────────────────────────────────────────────────────────────────
+_yahoo_breaker = CircuitBreaker(
+    name="yahoo_finance",
+    config=CircuitBreakerConfig(
+        failure_threshold=5,
+        success_threshold=2,
+        timeout=60.0,
+    ),
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -185,17 +213,29 @@ def fetch_etf_data(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
     instead of hitting Yahoo Finance again.
 
     Uses tenacity for retry with exponential backoff on transient failures.
+    Protected by circuit breaker to prevent cascading failures.
 
     Raises:
         RuntimeError: If Yahoo Finance returns empty data or the request fails
             after all retries are exhausted.
     """
+    # Check circuit breaker first
+    if not _yahoo_breaker.allow_request():
+        logger.warning("Yahoo Finance circuit breaker is OPEN, skipping ETF fetch")
+        return pd.DataFrame(), {}
+
     cached = _history_cache.get(ticker_sym)
     if cached is not None:
         logger.debug(f"Cache hit for ETF history: {ticker_sym}")
         return cached
 
-    return _fetch_etf_data_with_retry(ticker_sym)
+    try:
+        result = _fetch_etf_data_with_retry(ticker_sym)
+        _yahoo_breaker.record_success()
+        return result
+    except Exception as e:
+        _yahoo_breaker.record_failure(e)
+        raise
 
 
 @retry(
@@ -240,17 +280,30 @@ def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
     a single monitoring window.
 
     Uses tenacity for retry with exponential backoff on transient failures.
+    Protected by circuit breaker to prevent cascading failures.
 
     Returns:
         List of [timestamp, open, high, low, close] entries, or empty list on error.
     """
+    # Check circuit breaker first
+    if not _yahoo_breaker.allow_request():
+        logger.warning("Yahoo Finance circuit breaker is OPEN, skipping OHLC fetch")
+        return []
+
     cache_key = f"{ticker_sym}:{period}"
     cached = _ohlc_cache.get(cache_key)
     if cached is not None:
         logger.debug(f"Cache hit for OHLC: {cache_key}")
         return cached
 
-    return _fetch_ohlc_data_with_retry(ticker_sym, period, cache_key)
+    try:
+        result = _fetch_ohlc_data_with_retry(ticker_sym, period, cache_key)
+        _yahoo_breaker.record_success()
+        return result
+    except Exception as e:
+        _yahoo_breaker.record_failure(e)
+        logger.warning(f"Error fetching OHLC for {ticker_sym} after retries: {e}")
+        return []
 
 
 @retry(
@@ -299,15 +352,24 @@ def fetch_dividends(ticker_sym: str) -> pd.Series:
     callers can treat "no data" and "no dividends" uniformly.
 
     Uses tenacity for retry with exponential backoff on transient failures.
+    Protected by circuit breaker to prevent cascading failures.
     """
+    # Check circuit breaker first
+    if not _yahoo_breaker.allow_request():
+        logger.warning("Yahoo Finance circuit breaker is OPEN, skipping dividends fetch")
+        return pd.Series(dtype="float64")
+
     cached = _dividends_cache.get(ticker_sym)
     if cached is not None:
         logger.debug(f"Cache hit for dividends: {ticker_sym}")
         return cached
 
     try:
-        return _fetch_dividends_with_retry(ticker_sym)
+        result = _fetch_dividends_with_retry(ticker_sym)
+        _yahoo_breaker.record_success()
+        return result
     except Exception as e:
+        _yahoo_breaker.record_failure(e)
         logger.error(f"Error fetching dividends for {ticker_sym} after retries: {e}")
         return pd.Series(dtype="float64")
 

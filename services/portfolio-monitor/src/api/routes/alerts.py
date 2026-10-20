@@ -14,11 +14,11 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from models import AlertLevel
 
 from .auth import require_auth
-from .helpers import _safe_json, _serialize_alert
+from .helpers import _enforce_rate_limit, _public_read_limiter, _safe_json, _serialize_alert
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +35,11 @@ router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
 
 @router.get("/alerts")
-async def get_alerts():
+async def get_alerts(request: Request):
     """Get upcoming scheduled alerts (next 5 days + overdue)."""
     import api.routes as routes
 
+    _enforce_rate_limit(_public_read_limiter, request)
     orch = routes.get_orchestrator()
     summary = orch.get_summary()
 
@@ -51,7 +52,7 @@ async def get_alerts():
 
 
 @router.get("/alerts/active")
-async def get_active_alerts():
+async def get_active_alerts(request: Request):
     """Return current WARN/DANGER market alerts for the unified alerts system.
 
     Scans the latest per-asset analyses (ETF + crypto) in the orchestrator's
@@ -61,6 +62,7 @@ async def get_active_alerts():
     """
     import api.routes as routes
 
+    _enforce_rate_limit(_public_read_limiter, request)
     orch = routes.get_orchestrator()
     summary = orch.get_summary()
 

@@ -91,6 +91,39 @@ class _BuiltinEmailSender:
         # Note: _smtp_password is now a property (lazy loading) - see below
         self._recipient = os.environ.get("ALERT_EMAIL") or self._smtp_user
 
+    @staticmethod
+    def _sanitize_smtp_error(error: Exception) -> str:
+        """
+        Sanitize SMTP error messages to prevent password leakage.
+
+        Some SMTP exceptions (especially authentication failures) may include
+        the attempted credentials in the error message. This sanitizes them.
+        """
+        import re
+
+        error_str = str(error)
+        # Sanitize any string that looks like a password in common SMTP error patterns
+        # Pattern: "password", "passwd", "AUTH" followed by credentials
+        error_str = re.sub(
+            r"(password[=:\s]+)[^\s]+",
+            r"\1[REDACTED]",
+            error_str,
+            flags=re.IGNORECASE,
+        )
+        error_str = re.sub(
+            r"(AUTH\s+\w+\s+)[^\s]+",
+            r"\1[REDACTED]",
+            error_str,
+            flags=re.IGNORECASE,
+        )
+        # Sanitize base64-encoded credentials that might appear
+        error_str = re.sub(
+            r"([A-Za-z0-9+/]{20,}={0,2})",
+            "[REDACTED]",
+            error_str,
+        )
+        return error_str
+
     @property
     def _smtp_password(self) -> str:
         """
@@ -131,7 +164,9 @@ class _BuiltinEmailSender:
                 s.sendmail(self._smtp_user, to_addr, msg.as_bytes())
             return NotificationResult(True, "Email sent")
         except Exception as e:
-            return NotificationResult(False, str(e))
+            # Sanitize error to prevent password leakage in logs/responses
+            safe_error = self._sanitize_smtp_error(e)
+            return NotificationResult(False, safe_error)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -32,6 +32,8 @@ from smart_home_common.rate_limiter import InMemoryRateLimiter
 # Rate limiters for different endpoint groups
 _refresh_limiter = InMemoryRateLimiter(max_requests=5, window_seconds=60)
 _config_limiter = InMemoryRateLimiter(max_requests=2, window_seconds=60)
+# Public read endpoints: generous limits to allow dashboard polling
+_public_read_limiter = InMemoryRateLimiter(max_requests=30, window_seconds=60)
 
 
 def _retry_after_seconds(limiter: InMemoryRateLimiter, key: str) -> int:

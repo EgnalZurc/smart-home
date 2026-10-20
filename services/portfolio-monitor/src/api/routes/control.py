@@ -14,7 +14,12 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from .auth import require_auth
-from .helpers import _config_limiter, _enforce_rate_limit, _refresh_limiter
+from .helpers import (
+    _config_limiter,
+    _enforce_rate_limit,
+    _public_read_limiter,
+    _refresh_limiter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +93,11 @@ async def reload_config(request: Request):
 
 
 @router.get("/schedule")
-async def get_schedule():
+async def get_schedule(request: Request):
     """Get the monitoring schedule."""
     import api.routes as routes
 
+    _enforce_rate_limit(_public_read_limiter, request)
     orch = routes.get_orchestrator()
     schedule = orch.get_schedule()
     next_runs = orch.get_next_run_times()

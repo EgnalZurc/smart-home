@@ -9,18 +9,26 @@ helpers so a bad float from an upstream source can never 500 the endpoint.
 call time so tests patching ``api.routes.get_orchestrator`` take effect here.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
-from .helpers import _safe_float, _safe_json, _serialize_alert, _serialize_analysis
+from .helpers import (
+    _enforce_rate_limit,
+    _public_read_limiter,
+    _safe_float,
+    _safe_json,
+    _serialize_alert,
+    _serialize_analysis,
+)
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
 
 @router.get("/summary")
-async def get_summary():
+async def get_summary(request: Request):
     """Get the full portfolio summary."""
     import api.routes as routes
 
+    _enforce_rate_limit(_public_read_limiter, request)
     orch = routes.get_orchestrator()
     summary = orch.get_summary()
 
@@ -72,10 +80,11 @@ async def get_summary():
 
 
 @router.get("/etf")
-async def get_etf_summary():
+async def get_etf_summary(request: Request):
     """Get ETF portfolio summary."""
     import api.routes as routes
 
+    _enforce_rate_limit(_public_read_limiter, request)
     orch = routes.get_orchestrator()
     summary = orch.get_summary()
 
@@ -97,10 +106,11 @@ async def get_etf_summary():
 
 
 @router.get("/crypto")
-async def get_crypto_summary():
+async def get_crypto_summary(request: Request):
     """Get crypto staking summary."""
     import api.routes as routes
 
+    _enforce_rate_limit(_public_read_limiter, request)
     orch = routes.get_orchestrator()
     summary = orch.get_summary()
 
@@ -120,10 +130,11 @@ async def get_crypto_summary():
 
 
 @router.get("/savings")
-async def get_savings_summary():
+async def get_savings_summary(request: Request):
     """Get savings accounts summary."""
     import api.routes as routes
 
+    _enforce_rate_limit(_public_read_limiter, request)
     orch = routes.get_orchestrator()
     summary = orch.get_summary()
 
@@ -140,10 +151,11 @@ async def get_savings_summary():
 
 
 @router.get("/defi")
-async def get_defi_summary():
+async def get_defi_summary(request: Request):
     """Get DeFi yield positions (manual-APY, no external APIs)."""
     import api.routes as routes
 
+    _enforce_rate_limit(_public_read_limiter, request)
     orch = routes.get_orchestrator()
     summary = orch.get_summary()
 
