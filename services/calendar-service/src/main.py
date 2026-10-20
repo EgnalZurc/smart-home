@@ -27,7 +27,9 @@ from zoneinfo import ZoneInfo
 
 from config import (
     CALENDAR_API_KEY,
+    CALENDAR_AUTH_DISABLED,
     CALENDAR_SEED,
+    CALENDAR_TOKEN_SECRET,
     DEFAULT_OFFSETS,
     GOOGLE_OAUTH_CLIENT_ID,
     GOOGLE_OAUTH_CLIENT_SECRET,
@@ -42,9 +44,13 @@ from config import (
     TOKEN_PATH,
     TZ,
 )
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 _LIBS_PATH = os.environ.get("LIBS_PATH", "/app/libs")
 if _LIBS_PATH not in sys.path:
@@ -72,6 +78,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Rate limiting
+# ═══════════════════════════════════════════════════════════════════════════════
+limiter = Limiter(key_func=get_remote_address)
+
+
+def _rate_limit_exceeded_handler(
+    request: Request, exc: RateLimitExceeded
+) -> JSONResponse:
+    """Custom handler for rate limit exceeded errors."""
+    return JSONResponse(
+        status_code=429,
+        content={"detail": f"Rate limit exceeded: {exc.detail}"},
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Authentication
 # ═══════════════════════════════════════════════════════════════════════════════
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -82,11 +104,21 @@ async def require_api_key(
 ) -> None:
     """Dependency that enforces bearer token auth for protected endpoints.
 
-    If CALENDAR_API_KEY is not set (empty), authentication is disabled.
+    Auth is ENABLED by default. To disable for local development, set:
+        CALENDAR_AUTH_DISABLED=true
+
+    In production, CALENDAR_API_KEY must be set to a strong secret.
     """
-    if not CALENDAR_API_KEY:
-        # Auth disabled — allow request (dev mode)
+    if CALENDAR_AUTH_DISABLED:
+        # Auth explicitly disabled for development
+        logger.debug("Auth disabled via CALENDAR_AUTH_DISABLED=true")
         return
+    if not CALENDAR_API_KEY:
+        # Auth enabled but no key configured — reject all requests
+        raise HTTPException(
+            status_code=500,
+            detail="CALENDAR_API_KEY not configured; set it or disable auth with CALENDAR_AUTH_DISABLED=true",
+        )
     if credentials is None:
         raise HTTPException(
             status_code=401,
@@ -286,10 +318,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         and GoogleCalendarClient is not None
     ):
         try:
+            # Derive token encryption secret from CALENDAR_TOKEN_SECRET or CALENDAR_API_KEY
+            token_secret = CALENDAR_TOKEN_SECRET or CALENDAR_API_KEY or None
+            if not token_secret:
+                logger.warning(
+                    "No CALENDAR_TOKEN_SECRET or CALENDAR_API_KEY set; "
+                    "OAuth tokens will be stored in plaintext (not recommended)"
+                )
             google_client = GoogleCalendarClient(
                 client_id=GOOGLE_OAUTH_CLIENT_ID,
                 client_secret=GOOGLE_OAUTH_CLIENT_SECRET,
                 token_path=TOKEN_PATH,
+                token_secret=token_secret,
             )
             if google_client.authenticate():
                 logger.info("Google Calendar client authenticated")
@@ -333,6 +373,8 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -383,7 +425,9 @@ async def health_alias() -> HealthResponse:
 # Calendar read API
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/calendar/upcoming")
+@limiter.limit("60/minute")
 async def get_upcoming(
+    request: Request,
     limit: int = Query(5, ge=1, le=50),
 ) -> dict:
     """Return the next ``limit`` upcoming events."""
@@ -392,7 +436,8 @@ async def get_upcoming(
 
 
 @app.get("/api/calendar/today")
-async def get_today() -> dict:
+@limiter.limit("60/minute")
+async def get_today(request: Request) -> dict:
     """Return today's agenda."""
     tz = ZoneInfo(TZ)
     now_dt = datetime.now(tz)
@@ -405,7 +450,8 @@ async def get_today() -> dict:
 
 
 @app.post("/api/calendar/sync", dependencies=[Depends(require_api_key)])
-async def trigger_sync() -> dict:
+@limiter.limit("10/minute")
+async def trigger_sync(request: Request) -> dict:
     """Trigger an immediate sync."""
     if google_client is None:
         raise HTTPException(status_code=503, detail="Google client not initialized")
@@ -449,7 +495,8 @@ class ConfigUpdate(BaseModel):
     response_model=ConfigResponse,
     dependencies=[Depends(require_api_key)],
 )
-async def get_config() -> ConfigResponse:
+@limiter.limit("30/minute")
+async def get_config(request: Request) -> ConfigResponse:
     """Get current configuration."""
     calendars = [c.to_dict() for c in store.get_all_calendars()]
     rules = [r.to_dict() for r in store.get_all_rules()]
@@ -463,7 +510,8 @@ async def get_config() -> ConfigResponse:
 
 
 @app.post("/api/calendar/config", dependencies=[Depends(require_api_key)])
-async def update_config(update: ConfigUpdate) -> dict:
+@limiter.limit("10/minute")
+async def update_config(request: Request, update: ConfigUpdate) -> dict:
     """Update configuration."""
     changes = []
     if update.calendars is not None:

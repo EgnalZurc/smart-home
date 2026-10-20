@@ -180,7 +180,7 @@ class TestCheckAndSendReminders:
         now = int(time.time())
         event_start = now + 2000
         store.add_rule("global", None, 3600)  # 1h offset → defines window
-        store.add_rule("global", None, 900)   # 15 min offset → not due for this event
+        store.add_rule("global", None, 900)  # 15 min offset → not due for this event
         store.upsert_event(
             {
                 "uid": "cal1:evt1:123",

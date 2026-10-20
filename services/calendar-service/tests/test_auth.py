@@ -1,8 +1,8 @@
 """Tests for API key authentication on protected calendar-service endpoints.
 
 The service uses bearer token auth via the ``require_api_key`` dependency.
-When CALENDAR_API_KEY is set, protected endpoints require
-``Authorization: Bearer <key>``. When unset (empty), auth is disabled.
+Auth is ENABLED by default. To disable for development, set CALENDAR_AUTH_DISABLED=true.
+When enabled, CALENDAR_API_KEY must be set to a strong secret.
 """
 
 from __future__ import annotations
@@ -15,18 +15,30 @@ from database import CalendarStore
 
 @pytest.fixture
 def client_with_auth(tmp_path, monkeypatch):
-    """Client with CALENDAR_API_KEY set — auth is enforced."""
+    """Client with CALENDAR_API_KEY set and auth enabled — auth is enforced."""
     monkeypatch.setattr(main, "store", CalendarStore(str(tmp_path / "calendar.db")))
     monkeypatch.setattr(main, "CALENDAR_API_KEY", "test-secret-key")
+    monkeypatch.setattr(main, "CALENDAR_AUTH_DISABLED", False)
     transport = httpx.ASGITransport(app=main.app)
     return httpx.AsyncClient(transport=transport, base_url="http://test")
 
 
 @pytest.fixture
 def client_no_auth(tmp_path, monkeypatch):
-    """Client with CALENDAR_API_KEY empty — auth is disabled (dev mode)."""
+    """Client with CALENDAR_AUTH_DISABLED=true — auth is explicitly disabled."""
     monkeypatch.setattr(main, "store", CalendarStore(str(tmp_path / "calendar.db")))
     monkeypatch.setattr(main, "CALENDAR_API_KEY", "")
+    monkeypatch.setattr(main, "CALENDAR_AUTH_DISABLED", True)
+    transport = httpx.ASGITransport(app=main.app)
+    return httpx.AsyncClient(transport=transport, base_url="http://test")
+
+
+@pytest.fixture
+def client_auth_enabled_no_key(tmp_path, monkeypatch):
+    """Client with auth enabled but no API key set — should return 500."""
+    monkeypatch.setattr(main, "store", CalendarStore(str(tmp_path / "calendar.db")))
+    monkeypatch.setattr(main, "CALENDAR_API_KEY", "")
+    monkeypatch.setattr(main, "CALENDAR_AUTH_DISABLED", False)
     transport = httpx.ASGITransport(app=main.app)
     return httpx.AsyncClient(transport=transport, base_url="http://test")
 
@@ -107,7 +119,7 @@ class TestAuthEnabled:
 # Auth disabled — all requests allowed (dev mode)
 # ═══════════════════════════════════════════════════════════════════════════════
 class TestAuthDisabled:
-    """When CALENDAR_API_KEY is empty, protected endpoints are open."""
+    """When CALENDAR_AUTH_DISABLED=true, protected endpoints are open."""
 
     async def test_get_config_without_token_succeeds(self, client_no_auth):
         async with client_no_auth as c:
@@ -118,3 +130,21 @@ class TestAuthDisabled:
         async with client_no_auth as c:
             resp = await c.post("/api/calendar/config", json={})
         assert resp.status_code == 200
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Auth enabled but no key configured — misconfiguration error
+# ═══════════════════════════════════════════════════════════════════════════════
+class TestAuthEnabledNoKey:
+    """When auth is enabled but CALENDAR_API_KEY is empty, return 500."""
+
+    async def test_get_config_returns_500_when_no_key(self, client_auth_enabled_no_key):
+        async with client_auth_enabled_no_key as c:
+            resp = await c.get("/api/calendar/config")
+        assert resp.status_code == 500
+        assert "CALENDAR_API_KEY not configured" in resp.json()["detail"]
+
+    async def test_post_sync_returns_500_when_no_key(self, client_auth_enabled_no_key):
+        async with client_auth_enabled_no_key as c:
+            resp = await c.post("/api/calendar/sync")
+        assert resp.status_code == 500
