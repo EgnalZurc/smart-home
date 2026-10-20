@@ -421,18 +421,14 @@ The audit should NOT re-report these issues.
 - **Review Date**: 2026-10-20
 - **Next Review**: 2027-04-20
 
----
-
-## In Progress
-
 ### [casita-suenos] CSRF Protection
 - **Severity**: HIGH
-- **Status**: IN_PROGRESS
-- **PR**: Pending (tests need update)
-- **Description**: POST endpoints lack CSRF protection
-- **Fix Applied**: CSRF middleware added, but existing tests don't send X-CSRF-Token header
-- **Blocker**: Tests need to be updated to include CSRF tokens
-- **Assigned**: Next audit cycle
+- **Status**: FIXED
+- **PR**: #365
+- **Fixed Date**: 2026-10-20
+- **Description**: POST endpoints lacked CSRF protection, vulnerable to cross-site request forgery
+- **Fix Applied**: Origin header validation middleware that blocks requests from untrusted origins. Allowed origins: localhost, Tailscale hostname, local network IPs
+- **Verification**: `curl -X POST -H "Origin: https://evil.com" https://raspberrypi.tailaa37cd.ts.net/api/casita/run-scraping` should return 403
 
 ---
 
