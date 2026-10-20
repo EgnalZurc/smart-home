@@ -33,13 +33,17 @@ Port: 8002
 Depends on: mosquitto:1883 (MQTT broker, core infrastructure)
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+import httpx
 from ac_temp_scheduler import AcTempScheduler
 from config import (
     DEFAULT_CLEANUP_INTERVAL_SECONDS,
@@ -88,7 +92,12 @@ from smart_home_common.mqtt.subscription import SubscriptionConfig, Subscription
 from smart_home_common.rate_limiter import InMemoryRateLimiter
 from smart_home_common.utils.error_tracker import ErrorTracker
 from spa import serve_html
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 from thermal_analysis import ThermalBuffer, analyze
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logging.basicConfig(
     level=logging.INFO,
@@ -368,6 +377,34 @@ app = FastAPI(
     docs_url=None if _is_production else "/swagger",
     redoc_url=None if _is_production else "/redoc",
 )
+
+
+# ── Security Headers Middleware ───────────────────────────────────────────────
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses.
+
+    Headers added:
+        - X-Content-Type-Options: nosniff - Prevents MIME type sniffing
+        - X-Frame-Options: DENY - Prevents clickjacking via iframes
+        - X-XSS-Protection: 1; mode=block - Legacy XSS protection for older browsers
+        - Referrer-Policy: strict-origin-when-cross-origin - Controls referrer info
+    """
+
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Response]
+    ) -> Response:
+        """Process request and add security headers to response."""
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -525,13 +562,29 @@ def _log_command(
 
 @app.get("/health", tags=["Health"])
 def health() -> dict[str, object]:
-    """Internal health check for Docker/nginx."""
+    """Internal health check for Docker/nginx.
+
+    Returns:
+        Dictionary with service online status.
+
+    Note:
+        This endpoint is used by Docker HEALTHCHECK and nginx upstream health.
+        Always returns 200 OK if the service is running.
+    """
     return {"online": True, "service": "ac"}
 
 
 @app.get("/api/health/ac", tags=["Health"])
 def health_api() -> dict[str, object]:
-    """Public health check endpoint (matches dashboard pattern)."""
+    """Public health check endpoint (matches dashboard pattern).
+
+    Returns:
+        Dictionary with service online status.
+
+    Note:
+        Used by the dashboard to verify service availability.
+        Follows the /api/health/{service} pattern for consistency.
+    """
     return {"online": True, "service": "ac"}
 
 
@@ -722,7 +775,19 @@ def get_config() -> dict[str, object]:
 
 @app.post("/api/ac/config", tags=["AC Control"])
 def update_config(update: ConfigUpdate, request: Request) -> dict[str, object]:
-    """Update controller configuration."""
+    """Update controller configuration.
+
+    Args:
+        update: Configuration fields to update (partial update supported).
+        request: FastAPI request object for rate limiting.
+
+    Returns:
+        Dictionary with update status and applied changes.
+
+    Raises:
+        HTTPException: 400 if no changes or temperature out of range.
+        HTTPException: 429 if rate limit exceeded.
+    """
     _check_rate_limit("config", request)
     changes = update.model_dump(exclude_none=True)
     if not changes:
@@ -740,6 +805,7 @@ def update_config(update: ConfigUpdate, request: Request) -> dict[str, object]:
             )
             _log_command("config", changes, False, msg)
             raise HTTPException(400, msg)
+    logger.info("Config update requested: %s", changes)
     ac_controller.update_config(**changes)
     _log_command("config", changes, True)
     return {"status": "updated", "changes": changes}
@@ -747,8 +813,22 @@ def update_config(update: ConfigUpdate, request: Request) -> dict[str, object]:
 
 @app.post("/api/ac/control", tags=["AC Control"])
 def set_control_mode(req: ControlModeRequest, request: Request) -> dict[str, str]:
-    """Set control mode (auto/manual/off)."""
+    """Set control mode (auto/manual/off).
+
+    Args:
+        req: Control mode request with validated mode.
+        request: FastAPI request object for rate limiting.
+
+    Returns:
+        Dictionary with status and the applied control mode.
+
+    Raises:
+        HTTPException: 422 if mode is invalid (handled by Pydantic).
+        HTTPException: 429 if rate limit exceeded.
+    """
     _check_rate_limit("control", request)
+    client_ip = get_client_ip(request)
+    logger.info("Control mode change to '%s' requested from %s", req.mode, client_ip)
     # Pydantic validates mode and normalizes to lowercase
     if req.mode == "manual":
         state = ac_controller.current_state
@@ -869,13 +949,26 @@ def update_manual_param(req: ManualParamUpdate, request: Request) -> dict[str, o
 
 @app.get("/api/ac/real", tags=["AC Control"])
 def get_ac_real() -> dict[str, object]:
-    """Get real AC state from MELCloud."""
+    """Get real AC state from MELCloud.
+
+    Returns:
+        Dictionary with current AC state including:
+        - power: Whether AC is on/off
+        - mode: Current operation mode (HEAT/COOL/DRY/FAN/AUTO)
+        - fan_speed: Current fan speed setting
+        - set_temp: Target temperature
+        - room_temp: Current room temperature reading
+
+    Note:
+        Returns None values if MELCloud is unreachable or returns an error.
+    """
     try:
         state = ac_controller.melcloud.get_device_state(
             ac_controller.config.device_id,
             ac_controller.config.building_id,
         )
         if state is None:
+            logger.warning("MELCloud returned None for device state")
             return {
                 "power": None,
                 "mode": None,
@@ -885,6 +978,12 @@ def get_ac_real() -> dict[str, object]:
             }
         mode_names = MELCLOUD_MODE_NAMES
         fan_names = MELCLOUD_FAN_NAMES
+        logger.debug(
+            "MELCloud state fetched: power=%s, mode=%s, temp=%s",
+            state.get("Power"),
+            state.get("OperationMode"),
+            state.get("SetTemperature"),
+        )
         return {
             "power": state.get("Power", False),
             "mode": mode_names.get(state.get("OperationMode"), "?"),
@@ -892,8 +991,26 @@ def get_ac_real() -> dict[str, object]:
             "set_temp": state.get("SetTemperature"),
             "room_temp": state.get("RoomTemperature"),
         }
-    except Exception:
-        logger.exception("Error fetching real AC state from MELCloud")
+    except httpx.TimeoutException:
+        logger.warning("MELCloud request timed out")
+        return {
+            "power": None,
+            "mode": None,
+            "fan_speed": None,
+            "set_temp": None,
+            "room_temp": None,
+        }
+    except httpx.HTTPStatusError as e:
+        logger.warning("MELCloud returned HTTP error: %s", e.response.status_code)
+        return {
+            "power": None,
+            "mode": None,
+            "fan_speed": None,
+            "set_temp": None,
+            "room_temp": None,
+        }
+    except httpx.RequestError as e:
+        logger.warning("MELCloud request failed: %s", type(e).__name__)
         return {
             "power": None,
             "mode": None,
