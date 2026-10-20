@@ -327,15 +327,19 @@ def reserve_gift(gift_id: str, token: str, guest_name: str) -> dict[str, Any]:
     """Reserve a gift for a guest or authenticated user.
 
     Args:
-        gift_id: The gift to reserve
-        token: Either an invitation token or "user:username" for authenticated users
-        guest_name: Display name for the reservation
+        gift_id: The gift to reserve.
+        token: Either an invitation token or "user:username" for authenticated users.
+        guest_name: Display name for the reservation.
 
     Returns:
         Dict with status 'ok' and gift, or status 'error' with message.
     """
     # Validate gift_id format
     if not _validate_gift_id(gift_id):
+        logger.warning(
+            "reserve_gift failed: invalid gift_id format, "
+            f"gift_id={gift_id!r}, guest={guest_name}"
+        )
         return {"status": "error", "message": "Invalid gift_id format"}
 
     with _lock:
@@ -343,6 +347,10 @@ def reserve_gift(gift_id: str, token: str, guest_name: str) -> dict[str, Any]:
         for i, gift in enumerate(data.get("gifts", [])):
             if gift["id"] == gift_id:
                 if gift.get("reserved_by"):
+                    logger.info(
+                        f"reserve_gift rejected: already reserved, "
+                        f"gift_id={gift_id}, guest={guest_name}"
+                    )
                     return {
                         "status": "error",
                         "message": "Este regalo ya está reservado",
@@ -353,6 +361,10 @@ def reserve_gift(gift_id: str, token: str, guest_name: str) -> dict[str, Any]:
                 data["gifts"][i] = gift
                 _save_gifts(data)
                 return {"status": "ok", "gift": gift}
+        logger.warning(
+            f"reserve_gift failed: gift not found, "
+            f"gift_id={gift_id}, guest={guest_name}"
+        )
         return {"status": "error", "message": "Regalo no encontrado"}
 
 
@@ -369,6 +381,10 @@ def unreserve_gift(gift_id: str, token: str, is_admin: bool = False) -> dict[str
     """
     # Validate gift_id format
     if not _validate_gift_id(gift_id):
+        logger.warning(
+            f"unreserve_gift failed: invalid gift_id format, "
+            f"gift_id={gift_id!r}, is_admin={is_admin}"
+        )
         return {"status": "error", "message": "Invalid gift_id format"}
 
     with _lock:
@@ -376,12 +392,20 @@ def unreserve_gift(gift_id: str, token: str, is_admin: bool = False) -> dict[str
         for i, gift in enumerate(data.get("gifts", [])):
             if gift["id"] == gift_id:
                 if not gift.get("reserved_by"):
+                    logger.info(
+                        f"unreserve_gift rejected: not reserved, gift_id={gift_id}"
+                    )
                     return {
                         "status": "error",
                         "message": "Este regalo no está reservado",
                     }
                 # Check permission
                 if not is_admin and gift["reserved_by"] != token:
+                    logger.warning(
+                        f"unreserve_gift rejected: ownership mismatch, "
+                        f"gift_id={gift_id}, requester_token=redacted, "
+                        f"owner_token=redacted"
+                    )
                     return {
                         "status": "error",
                         "message": "No puedes cancelar la reserva de otro",
@@ -392,6 +416,7 @@ def unreserve_gift(gift_id: str, token: str, is_admin: bool = False) -> dict[str
                 data["gifts"][i] = gift
                 _save_gifts(data)
                 return {"status": "ok", "gift": gift}
+        logger.warning(f"unreserve_gift failed: gift not found, gift_id={gift_id}")
         return {"status": "error", "message": "Regalo no encontrado"}
 
 

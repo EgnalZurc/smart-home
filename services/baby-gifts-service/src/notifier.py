@@ -13,9 +13,11 @@ Configuration via environment variables (through libs/notifications):
 Example: TELEGRAM_CHAT_IDS=123456789,987654321
 """
 
+from __future__ import annotations
+
 import logging
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -29,7 +31,7 @@ except ImportError:
     from libs.notifications import TelegramNotifier
 
 if TYPE_CHECKING:
-    from libs.notifications import TelegramNotifier
+    from libs.notifications import NotificationResult, TelegramNotifier
 
 
 # Module-level notifier instance (lazy initialization)
@@ -37,23 +39,38 @@ _notifier: TelegramNotifier | None = None
 
 
 def _get_notifier() -> TelegramNotifier:
-    """Get or create the TelegramNotifier instance."""
+    """Get or create the TelegramNotifier instance.
+
+    Uses lazy initialization to avoid configuration errors at import time.
+    The notifier reads its configuration from environment variables.
+
+    Returns:
+        Configured TelegramNotifier instance.
+    """
     global _notifier
     if _notifier is None:
         _notifier = TelegramNotifier.from_env()
     return _notifier
 
 
-def send_gift_notification(gift_name: str, person_name: str, action: str) -> bool:
+def send_gift_notification(
+    gift_name: str,
+    person_name: str,
+    action: Literal["reserved", "unreserved"],
+) -> bool:
     """Send a notification to Telegram about a gift selection/deselection.
 
+    Formats a message with emoji and Markdown formatting, then sends it
+    to all configured Telegram chat IDs.
+
     Args:
-        gift_name: Name of the gift
-        person_name: Name of the person who performed the action
-        action: Either 'reserved' or 'unreserved'
+        gift_name: Name of the gift being acted upon.
+        person_name: Display name of the person performing the action.
+        action: The action performed - either 'reserved' or 'unreserved'.
 
     Returns:
-        True if all notifications were sent successfully, False otherwise
+        True if all notifications were sent successfully, False otherwise.
+        Returns False if Telegram is not configured (missing token/chat IDs).
     """
     notifier: TelegramNotifier = _get_notifier()
 
@@ -63,13 +80,14 @@ def send_gift_notification(gift_name: str, person_name: str, action: str) -> boo
         )
         return False
 
+    # Format message with emoji based on action
     message: str
     if action == "reserved":
         message = f"🎁 *{person_name}* ha seleccionado: _{gift_name}_"
     else:
         message = f"↩️ *{person_name}* ha deseleccionado: _{gift_name}_"
 
-    result = notifier.send(message, parse_mode="Markdown")
+    result: NotificationResult = notifier.send(message, parse_mode="Markdown")
 
     if result.success:
         logger.info(
@@ -82,6 +100,10 @@ def send_gift_notification(gift_name: str, person_name: str, action: str) -> boo
 
 
 def reset_notifier() -> None:
-    """Reset the notifier instance (for testing)."""
+    """Reset the notifier instance.
+
+    Primarily used in testing to ensure a fresh notifier configuration
+    between test cases.
+    """
     global _notifier
     _notifier = None
