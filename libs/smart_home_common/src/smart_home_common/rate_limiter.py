@@ -30,7 +30,6 @@ import logging
 import sqlite3
 import threading
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from datetime import datetime
 from typing import NamedTuple
 
@@ -108,24 +107,87 @@ class BaseRateLimiter(ABC):
 
 
 class InMemoryRateLimiter(BaseRateLimiter):
-    """Thread-safe in-memory rate limiter.
+    """Thread-safe in-memory rate limiter with LRU eviction.
 
     Data is lost on process restart. Use SqliteRateLimiter for persistence.
+
+    To prevent memory exhaustion attacks, this limiter enforces a maximum
+    number of tracked keys. When the limit is reached, the least recently
+    used (oldest access) entries are evicted.
     """
 
-    def __init__(self, max_requests: int = 20, window_seconds: int = 60):
+    #: Default maximum number of tracked keys (prevents memory exhaustion)
+    DEFAULT_MAX_ENTRIES = 10_000
+
+    def __init__(
+        self,
+        max_requests: int = 20,
+        window_seconds: int = 60,
+        max_entries: int | None = None,
+    ):
+        """Initialize rate limiter.
+
+        Args:
+            max_requests: Maximum requests allowed per window.
+            window_seconds: Window duration in seconds.
+            max_entries: Maximum number of tracked keys. When exceeded,
+                oldest entries are evicted. Defaults to 10,000.
+        """
         super().__init__(max_requests, window_seconds)
         self._lock = threading.Lock()
+        self._max_entries = max_entries or self.DEFAULT_MAX_ENTRIES
         # key -> {"count": int, "window_start": datetime}
-        self._data: dict[str, dict] = defaultdict(
-            lambda: {"count": 0, "window_start": datetime.now()}
-        )
+        # Using dict with insertion order (Python 3.7+) as pseudo-LRU
+        self._data: dict[str, dict] = {}
+
+    @property
+    def max_entries(self) -> int:
+        """Maximum number of tracked keys."""
+        return self._max_entries
+
+    def _evict_oldest(self, count: int = 1) -> None:
+        """Evict the oldest entries (LRU eviction).
+
+        Must be called while holding self._lock.
+        """
+        keys_to_remove = list(self._data.keys())[:count]
+        for key in keys_to_remove:
+            del self._data[key]
+
+    def _get_or_create_entry(self, key: str) -> dict:
+        """Get entry for key, creating if needed with LRU eviction.
+
+        Must be called while holding self._lock.
+        """
+        now = datetime.now()
+
+        if key in self._data:
+            # Move to end (most recent) by re-inserting
+            entry = self._data.pop(key)
+            self._data[key] = entry
+            return entry
+
+        # Need to create new entry — check capacity first
+        if len(self._data) >= self._max_entries:
+            # Evict oldest 10% to avoid frequent evictions
+            evict_count = max(1, self._max_entries // 10)
+            self._evict_oldest(evict_count)
+            logger.debug(
+                "Rate limiter evicted %d entries (max_entries=%d)",
+                evict_count,
+                self._max_entries,
+            )
+
+        # Create new entry
+        entry = {"count": 0, "window_start": now}
+        self._data[key] = entry
+        return entry
 
     def is_allowed(self, key: str) -> bool:
         """Check if request is allowed and record the attempt."""
         with self._lock:
             now = datetime.now()
-            entry = self._data[key]
+            entry = self._get_or_create_entry(key)
 
             # Check if window has expired
             elapsed = (now - entry["window_start"]).total_seconds()
@@ -147,8 +209,17 @@ class InMemoryRateLimiter(BaseRateLimiter):
         """Get current rate limit status."""
         with self._lock:
             now = datetime.now()
-            entry = self._data[key]
 
+            if key not in self._data:
+                from datetime import timedelta
+
+                return RateLimitStatus(
+                    allowed=True,
+                    remaining=self._max_requests,
+                    reset_at=now + timedelta(seconds=self._window_seconds),
+                )
+
+            entry = self._data[key]
             elapsed = (now - entry["window_start"]).total_seconds()
             if elapsed > self._window_seconds:
                 # Window expired, would reset on next request
@@ -176,6 +247,23 @@ class InMemoryRateLimiter(BaseRateLimiter):
         with self._lock:
             if key in self._data:
                 del self._data[key]
+
+    def cleanup_expired(self) -> int:
+        """Remove expired entries from memory.
+
+        Returns:
+            Number of entries removed.
+        """
+        with self._lock:
+            now = datetime.now()
+            expired_keys = [
+                key
+                for key, entry in self._data.items()
+                if (now - entry["window_start"]).total_seconds() > self._window_seconds
+            ]
+            for key in expired_keys:
+                del self._data[key]
+            return len(expired_keys)
 
 
 class SqliteRateLimiter(BaseRateLimiter):

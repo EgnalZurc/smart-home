@@ -137,7 +137,7 @@ class TestCreateUser:
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={
             "username": "",
-            "password": "secret"
+            "password": "securepass"
         })
         
         with patch("api.auth.admin.require_super"):
@@ -145,11 +145,11 @@ class TestCreateUser:
                 await create_user_endpoint(mock_request)
             
             assert exc.value.status_code == 400
-            assert "Username required" in exc.value.detail
+            assert "username" in exc.value.detail.lower()
 
     @pytest.mark.asyncio
     async def test_rejects_short_password(self):
-        """Raises 400 for password shorter than 4 chars."""
+        """Raises 400 for password shorter than 8 chars."""
         from api.auth.admin import create_user_endpoint
         
         mock_request = MagicMock()
@@ -163,7 +163,7 @@ class TestCreateUser:
                 await create_user_endpoint(mock_request)
             
             assert exc.value.status_code == 400
-            assert "Password too short" in exc.value.detail
+            assert "password" in exc.value.detail.lower()
 
 
 # ---------------------------------------------------------------------------

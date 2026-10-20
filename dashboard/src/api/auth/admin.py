@@ -10,7 +10,9 @@ import auth as auth_core
 import auth_users
 import user_profiles
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import ValidationError
 
+from api.auth.validation import CreateUserRequest, UpdateUserRequest
 from api.auth_helpers import require_super
 
 logger = logging.getLogger(__name__)
@@ -49,33 +51,43 @@ async def list_users(request: Request):
 
 @router.post("/users")
 async def create_user_endpoint(request: Request):
-    """Create a new user.
+    """Create a new user with input validation.
 
-    Body: {"username": str, "password": str, "display_name": str (optional)}
+    Body: {"username": str, "password": str, "display_name": str (optional), "email": str (optional)}
     Returns: {"id": str, "username": str, "display_name": str, "icon": null}
+
+    Validation:
+    - username: 3-32 chars, alphanumeric + underscore, must start with letter
+    - password: 8-128 chars, at least 3 different characters
+    - email: valid email format (optional)
     """
     require_super(request)
 
     body = await request.json()
-    username = body.get("username", "").strip().lower()
-    password = body.get("password", "")
-    display_name = body.get("display_name", "").strip()
 
-    if not username:
-        raise HTTPException(status_code=400, detail="Username required")
-    if not password:
-        raise HTTPException(status_code=400, detail="Password required")
-    if len(password) < 8:
-        raise HTTPException(status_code=400, detail="Password too short (min 8)")
+    # Validate input using Pydantic model
+    try:
+        validated = CreateUserRequest(**body)
+    except ValidationError as e:
+        # Extract first error message for user-friendly response
+        errors = e.errors()
+        if errors:
+            first_error = errors[0]
+            field = first_error.get("loc", ["input"])[0]
+            msg = first_error.get("msg", "Invalid input")
+            raise HTTPException(status_code=400, detail=f"{field}: {msg}") from e
+        raise HTTPException(status_code=400, detail="Invalid input") from e
 
     try:
-        user_id = auth_users.create_user(username, password, display_name)
+        user_id = auth_users.create_user(
+            validated.username, validated.password, validated.display_name
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     # Assign default profile
     default_profile = user_profiles.DEFAULT_PROFILE_ID
-    user_profiles.add_user_profile(username, default_profile)
+    user_profiles.add_user_profile(validated.username, default_profile)
 
     return auth_users.get_user_by_id(user_id)
 
@@ -86,6 +98,11 @@ async def update_user_endpoint(user_id: str, request: Request):
 
     Body: {"display_name": str, "icon": str|null, "password": str} (all optional)
     Returns: {"id": str, "username": str, "display_name": str, "icon": str|null}
+
+    Validation:
+    - password: 8-128 chars, at least 3 different characters (if provided)
+    - display_name: max 64 chars
+    - icon: max 256 chars (URL or emoji)
     """
     require_super(request)
 
@@ -94,19 +111,25 @@ async def update_user_endpoint(user_id: str, request: Request):
         raise HTTPException(status_code=404, detail=f"User not found: {user_id}")
 
     body = await request.json()
-    display_name = body.get("display_name")
-    icon = body.get("icon")
-    password = body.get("password")
 
-    if password is not None and len(password) < 8:
-        raise HTTPException(status_code=400, detail="Password too short (min 8)")
+    # Validate input using Pydantic model
+    try:
+        validated = UpdateUserRequest(**body)
+    except ValidationError as e:
+        errors = e.errors()
+        if errors:
+            first_error = errors[0]
+            field = first_error.get("loc", ["input"])[0]
+            msg = first_error.get("msg", "Invalid input")
+            raise HTTPException(status_code=400, detail=f"{field}: {msg}") from e
+        raise HTTPException(status_code=400, detail="Invalid input") from e
 
     try:
         auth_users.update_user(
             user_id,
-            display_name=display_name,
-            icon=icon,
-            password=password if password else None,
+            display_name=validated.display_name,
+            icon=validated.icon,
+            password=validated.password,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
