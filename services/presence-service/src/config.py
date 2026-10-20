@@ -157,6 +157,14 @@ ARP_SUBNET: str = _validate_subnet(
 )
 
 # ── MQTT (shared broker) ─────────────────────────────────────────────────────
+# SECURITY: MQTT credentials rotation policy
+#   - MQTT_USER / MQTT_PASSWORD are injected via environment variables from .env.
+#   - Rotate credentials at least every 90 days or immediately after a suspected
+#     compromise.
+#   - Use strong, randomly generated passwords (>=32 chars, mixed case + digits).
+#   - Update Mosquitto ACLs and all subscriber services simultaneously during
+#     rotation to avoid service disruption.
+#   - Keep a rotation log in infrastructure/mosquitto/docs/credential-rotation.md.
 MQTT_BROKER: str = os.environ.get("PRESENCE_MQTT_BROKER", "mosquitto")
 MQTT_PORT: int = int(os.environ.get("PRESENCE_MQTT_PORT", "1883"))
 # Subscription topics allow wildcards (#, +) for pattern matching.

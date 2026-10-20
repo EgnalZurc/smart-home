@@ -12,6 +12,7 @@ CRUD API build on top of it in later tasks.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import sqlite3
 import time
@@ -20,6 +21,34 @@ from typing import Any
 
 from config import DB_PATH, RETENTION_DAYS
 from models import PresenceEvent
+
+# ── PII Pseudonymization ─────────────────────────────────────────────────────
+# MAC addresses are personally identifiable information (PII) that can be used
+# to track individuals. To comply with privacy regulations and minimize data
+# exposure in case of a breach, we hash MACs before storing or logging them.
+#
+# The hash is truncated to 12 hex chars (48 bits) which provides:
+# - Sufficient uniqueness for device correlation within the household
+# - Irreversibility (cannot recover the original MAC)
+# - Consistent pseudonymization across the codebase
+
+
+def hash_mac(mac: str) -> str:
+    """Hash a MAC address for pseudonymized storage/logging.
+
+    Args:
+        mac: Raw MAC address in any format (AA:BB:CC:DD:EE:FF, aabbccddeeff, etc.)
+
+    Returns:
+        12-character hex string (first 48 bits of SHA-256 hash).
+
+    The hash is deterministic so the same MAC always produces the same
+    pseudonym, enabling device correlation without storing raw PII.
+    """
+    # Normalize: lowercase, remove separators
+    normalized: str = mac.lower().replace(":", "").replace("-", "").replace(".", "")
+    return hashlib.sha256(normalized.encode()).hexdigest()[:12]
+
 
 try:
     from smart_home_common.sqlite_helpers import SqliteHelper
@@ -47,7 +76,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS devices (
-            mac       TEXT PRIMARY KEY,
+            mac_hash  TEXT PRIMARY KEY,
             person_id TEXT NOT NULL REFERENCES people(id),
             label     TEXT
         )

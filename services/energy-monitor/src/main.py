@@ -27,7 +27,10 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from config import LOG_LEVEL, PORT, SERVICE_NAME
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request, Response
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 # Shared libs live at /app/libs in the container; add to path for imports.
 _LIBS_PATH: str = os.environ.get("LIBS_PATH", "/app/libs")
@@ -43,6 +46,21 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 _logger: logging.Logger = logging.getLogger(__name__)
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+limiter: Limiter = Limiter(key_func=get_remote_address)
+
+
+async def _rate_limit_exceeded_handler(
+    request: Request, exc: RateLimitExceeded
+) -> Response:
+    """Return 429 with Retry-After header on rate limit breach."""
+    return Response(
+        content=f"Rate limit exceeded: {exc.detail}",
+        status_code=429,
+        headers={"Retry-After": "60"},
+    )
+
 
 # ── Input validation constants (private) ──────────────────────────────────────
 _MAX_CHANNEL_LEN: int = 64
@@ -79,6 +97,8 @@ app: FastAPI = FastAPI(
     redoc_url="/redoc",
     lifespan=_lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -113,13 +133,15 @@ def _health_payload() -> dict[str, Any]:
 
 
 @app.get("/health")
-async def health() -> dict[str, Any]:
+@limiter.limit("60/minute")
+async def health(request: Request) -> dict[str, Any]:
     """Health check — exercises the DB and reports collector/meter liveness."""
     return _health_payload()
 
 
 @app.get("/api/health/energy")
-async def health_alias() -> dict[str, Any]:
+@limiter.limit("60/minute")
+async def health_alias(request: Request) -> dict[str, Any]:
     """Health check alias — matches the path expected by the dashboard/CI."""
     return _health_payload()
 
@@ -154,7 +176,8 @@ def _validate_channel(channel: str | None) -> str | None:
 # Energy read API
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/energy/current")
-async def get_current() -> dict[str, Any]:
+@limiter.limit("120/minute")
+async def get_current(request: Request) -> dict[str, Any]:
     """Return the newest power reading per channel.
 
     Served live from the collector's ring buffer. Before the first successful
@@ -165,7 +188,9 @@ async def get_current() -> dict[str, Any]:
 
 
 @app.get("/api/energy/history")
+@limiter.limit("60/minute")
 async def get_history(
+    request: Request,
     period: str = Query("day", description="Aggregation period"),
     count: int = Query(24, ge=1, le=1000, description="Number of periods"),
     channel: str | None = Query(
@@ -196,7 +221,8 @@ async def get_history(
 
 
 @app.get("/api/energy/stats")
-async def get_stats() -> dict[str, float | int | None]:
+@limiter.limit("60/minute")
+async def get_stats(request: Request) -> dict[str, float | int | None]:
     """Return month-to-date consumption statistics (whole-home total).
 
     Reports total, average daily, peak daily and peak instantaneous power for
@@ -206,7 +232,9 @@ async def get_stats() -> dict[str, float | int | None]:
 
 
 @app.get("/api/energy/alerts")
+@limiter.limit("60/minute")
 async def get_alerts(
+    request: Request,
     limit: int = Query(50, ge=1, le=500, description="Max events to return"),
 ) -> dict[str, Any]:
     """Return the most recent consumption-alert events (newest first)."""
