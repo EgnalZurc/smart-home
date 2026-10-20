@@ -57,11 +57,11 @@ class TestGiftsCRUD:
         assert updated["priority"] == 1
 
     def test_update_gift_returns_none_for_missing(self, tmp_data_dir):
-        """update_gift should return None for non-existent gift."""
+        """update_gift should return None for non-existent gift (valid format)."""
         from gifts_controller import update_gift
 
-        # Use a valid format that doesn't exist
-        result = update_gift("g_12345_abcd1234", {"name": "New"})
+        # Use a valid format (13+ digit timestamp + 8 hex chars) that doesn't exist
+        result = update_gift("g_9999999999999_abcd1234", {"name": "New"})
         assert result is None
 
     def test_update_gift_invalid_format_returns_400(self, tmp_data_dir):
@@ -84,7 +84,7 @@ class TestGiftsCRUD:
         assert isinstance(result, tuple)
         assert result[0] is None
         assert result[1] == 400
-        assert "non-empty string" in result[2]
+        assert "Invalid gift_id format" in result[2]
 
     def test_update_gift_none_id_returns_400(self, tmp_data_dir):
         """update_gift should return 400 for None gift_id."""
@@ -125,10 +125,25 @@ class TestGiftsCRUD:
         assert get_gift(gift["id"]) is None
 
     def test_delete_gift_returns_false_for_missing(self, tmp_data_dir):
-        """delete_gift should return False for non-existent gift."""
+        """delete_gift should return False for non-existent gift (valid format)."""
+        from gifts_controller import delete_gift
+
+        # Use valid format that doesn't exist
+        result = delete_gift("g_9999999999999_deadbeef")
+        assert result is False
+
+    def test_delete_gift_returns_false_for_invalid_id(self, tmp_data_dir):
+        """delete_gift should return False for invalid gift_id format."""
         from gifts_controller import delete_gift
 
         result = delete_gift("nonexistent")
+        assert result is False
+
+    def test_delete_gift_rejects_path_traversal(self, tmp_data_dir):
+        """delete_gift should reject path traversal attempts."""
+        from gifts_controller import delete_gift
+
+        result = delete_gift("../../../etc/passwd")
         assert result is False
 
 
@@ -142,12 +157,24 @@ class TestGiftIdValidation:
         assert _validate_gift_id("550e8400-e29b-41d4-a716-446655440000") is True
         assert _validate_gift_id("6ba7b810-9dad-11d1-80b4-00c04fd430c8") is True
 
+    def test_validate_gift_id_accepts_native_format(self, tmp_data_dir):
+        """_validate_gift_id should return True for native g_timestamp_hex format."""
+        from gifts_controller import _validate_gift_id
+
+        # Valid native format: g_<13+ digit timestamp>_<8 hex chars>
+        assert _validate_gift_id("g_1729432800000_a1b2c3d4") is True
+        assert _validate_gift_id("g_9999999999999_deadbeef") is True
+        assert _validate_gift_id("g_1234567890123_00000000") is True
+
     def test_validate_gift_id_rejects_invalid(self, tmp_data_dir):
-        """_validate_gift_id should return False for invalid UUID."""
+        """_validate_gift_id should return False for invalid formats."""
         from gifts_controller import _validate_gift_id
 
         assert _validate_gift_id("not-a-uuid") is False
+        # Short timestamp (less than 13 digits)
         assert _validate_gift_id("g_12345_abc") is False
+        # Short hex (less than 8 chars)
+        assert _validate_gift_id("g_1234567890123_abc") is False
         assert _validate_gift_id("") is False
 
     def test_validate_gift_id_handles_none(self, tmp_data_dir):
@@ -155,6 +182,24 @@ class TestGiftIdValidation:
         from gifts_controller import _validate_gift_id
 
         assert _validate_gift_id(None) is False
+
+    def test_validate_gift_id_rejects_path_traversal(self, tmp_data_dir):
+        """_validate_gift_id should reject path traversal attempts."""
+        from gifts_controller import _validate_gift_id
+
+        assert _validate_gift_id("../../../etc/passwd") is False
+        assert _validate_gift_id("g_1234567890123/../../../etc") is False
+        assert _validate_gift_id("..\\..\\windows\\system32") is False
+        assert _validate_gift_id("/etc/passwd") is False
+        assert _validate_gift_id("C:\\windows\\system32") is False
+
+    def test_validate_gift_id_rejects_too_long(self, tmp_data_dir):
+        """_validate_gift_id should reject excessively long IDs."""
+        from gifts_controller import _validate_gift_id
+
+        # Over 50 chars
+        assert _validate_gift_id("g_" + "1" * 60 + "_abcd1234") is False
+        assert _validate_gift_id("a" * 100) is False
 
 
 class TestGiftReservations:
@@ -184,13 +229,32 @@ class TestGiftReservations:
         assert "ya está reservado" in result["message"]
 
     def test_reserve_nonexistent_gift_fails(self, tmp_data_dir):
-        """reserve_gift should fail for non-existent gift."""
+        """reserve_gift should fail for non-existent gift with valid ID format."""
+        from gifts_controller import reserve_gift
+
+        # Use valid format that doesn't exist
+        result = reserve_gift("g_9999999999999_deadbeef", "token", "User")
+
+        assert result["status"] == "error"
+        assert "no encontrado" in result["message"]
+
+    def test_reserve_invalid_gift_id_fails(self, tmp_data_dir):
+        """reserve_gift should fail for invalid gift_id format."""
         from gifts_controller import reserve_gift
 
         result = reserve_gift("nonexistent", "token", "User")
 
         assert result["status"] == "error"
-        assert "no encontrado" in result["message"]
+        assert "Invalid gift_id" in result["message"]
+
+    def test_reserve_path_traversal_rejected(self, tmp_data_dir):
+        """reserve_gift should reject path traversal attempts."""
+        from gifts_controller import reserve_gift
+
+        result = reserve_gift("../../../etc/passwd", "token", "User")
+
+        assert result["status"] == "error"
+        assert "Invalid gift_id" in result["message"]
 
     def test_unreserve_own_reservation_succeeds(self, tmp_data_dir):
         """unreserve_gift should succeed for own reservation."""
@@ -234,6 +298,24 @@ class TestGiftReservations:
         assert result["status"] == "error"
         assert "no está reservado" in result["message"]
 
+    def test_unreserve_invalid_gift_id_fails(self, tmp_data_dir):
+        """unreserve_gift should fail for invalid gift_id format."""
+        from gifts_controller import unreserve_gift
+
+        result = unreserve_gift("nonexistent", "token", is_admin=False)
+
+        assert result["status"] == "error"
+        assert "Invalid gift_id" in result["message"]
+
+    def test_unreserve_path_traversal_rejected(self, tmp_data_dir):
+        """unreserve_gift should reject path traversal attempts."""
+        from gifts_controller import unreserve_gift
+
+        result = unreserve_gift("../../../etc/passwd", "token", is_admin=False)
+
+        assert result["status"] == "error"
+        assert "Invalid gift_id" in result["message"]
+
 
 class TestGiftVisibility:
     """Tests for gift visibility toggle."""
@@ -260,12 +342,32 @@ class TestGiftVisibility:
         assert result["hidden"] is False
 
     def test_toggle_nonexistent_fails(self, tmp_data_dir):
-        """toggle_gift_visibility should fail for non-existent gift."""
+        """toggle_gift_visibility should fail for non-existent gift (valid format)."""
+        from gifts_controller import toggle_gift_visibility
+
+        # Use valid format that doesn't exist
+        result = toggle_gift_visibility("g_9999999999999_deadbeef")
+
+        assert result["status"] == "error"
+        assert "no encontrado" in result["message"]
+
+    def test_toggle_invalid_gift_id_fails(self, tmp_data_dir):
+        """toggle_gift_visibility should fail for invalid gift_id format."""
         from gifts_controller import toggle_gift_visibility
 
         result = toggle_gift_visibility("nonexistent")
 
         assert result["status"] == "error"
+        assert "Invalid gift_id" in result["message"]
+
+    def test_toggle_path_traversal_rejected(self, tmp_data_dir):
+        """toggle_gift_visibility should reject path traversal attempts."""
+        from gifts_controller import toggle_gift_visibility
+
+        result = toggle_gift_visibility("../../../etc/passwd")
+
+        assert result["status"] == "error"
+        assert "Invalid gift_id" in result["message"]
 
 
 class TestFamiliaUsers:

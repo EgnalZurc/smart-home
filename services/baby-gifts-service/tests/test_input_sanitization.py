@@ -226,3 +226,46 @@ class TestApiEndpointsSanitization:
         data = response.json()
         assert "<b>" not in data["name"]
         assert "&lt;b&gt;" in data["name"]
+
+
+
+class TestTruncateToken:
+    """Tests for the _truncate_token helper function for safe logging."""
+
+    def test_truncates_long_token(self):
+        """Long tokens should show only first 4 chars + '...'."""
+        from main import _truncate_token
+
+        result = _truncate_token("abcdefghijklmnop")
+        assert result == "abcd..."
+
+    def test_short_token_unchanged(self):
+        """Tokens <= 4 chars should be returned unchanged."""
+        from main import _truncate_token
+
+        assert _truncate_token("abc") == "abc"
+        assert _truncate_token("abcd") == "abcd"
+
+    def test_exactly_5_chars_truncated(self):
+        """Token of exactly 5 chars should be truncated."""
+        from main import _truncate_token
+
+        result = _truncate_token("abcde")
+        assert result == "abcd..."
+
+    def test_empty_token(self):
+        """Empty token should return empty string."""
+        from main import _truncate_token
+
+        result = _truncate_token("")
+        assert result == ""
+
+    def test_typical_invitation_token(self):
+        """Typical 32-char invitation token should be truncated."""
+        from main import _truncate_token
+
+        # secrets.token_urlsafe(24) produces ~32 chars
+        token = "aBcDeFgHiJkLmNoPqRsTuVwXyZ012345"
+        result = _truncate_token(token)
+        assert result == "aBcD..."
+        assert len(result) == 7  # 4 chars + "..."
