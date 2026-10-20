@@ -75,7 +75,7 @@ from config import (
 )
 from controllers.ac_controller import ACController, ControlConfig
 from event_log import ACEventLog
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from learning import analyze_history
@@ -462,14 +462,34 @@ class ManualParamUpdate(BaseModel):
 # ── Rate limiting helper ──────────────────────────────────────────────────────
 
 
-def _check_rate_limit(endpoint: str) -> None:
+def get_client_ip(request: Request) -> str:
+    """Extract real client IP from request, handling reverse proxy headers.
+
+    Priority:
+    1. X-Forwarded-For (first IP in chain, set by nginx)
+    2. X-Real-IP (alternative header)
+    3. request.client.host (direct connection fallback)
+    """
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        # X-Forwarded-For can be "client, proxy1, proxy2" - take the first
+        return forwarded.split(",")[0].strip()
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip
+    return request.client.host if request.client else "unknown"
+
+
+def _check_rate_limit(endpoint: str, request: Request) -> None:
     """Check rate limit for control endpoints.
 
     Raises HTTPException 429 if rate limit is exceeded.
-    Uses endpoint name as the rate limit key (service-wide, not per-client).
+    Uses client IP + endpoint as the rate limit key (per-client limiting).
     """
-    if not control_rate_limiter.is_allowed(endpoint):
-        status = control_rate_limiter.get_status(endpoint)
+    client_ip = get_client_ip(request)
+    rate_key = f"{client_ip}:{endpoint}"
+    if not control_rate_limiter.is_allowed(rate_key):
+        status = control_rate_limiter.get_status(rate_key)
         raise HTTPException(
             status_code=429,
             detail={
@@ -701,9 +721,9 @@ def get_config() -> dict[str, object]:
 
 
 @app.post("/api/ac/config", tags=["AC Control"])
-def update_config(update: ConfigUpdate) -> dict[str, object]:
+def update_config(update: ConfigUpdate, request: Request) -> dict[str, object]:
     """Update controller configuration."""
-    _check_rate_limit("config")
+    _check_rate_limit("config", request)
     changes = update.model_dump(exclude_none=True)
     if not changes:
         _log_command("config", {}, False, "No changes")
@@ -726,9 +746,9 @@ def update_config(update: ConfigUpdate) -> dict[str, object]:
 
 
 @app.post("/api/ac/control", tags=["AC Control"])
-def set_control_mode(req: ControlModeRequest) -> dict[str, str]:
+def set_control_mode(req: ControlModeRequest, request: Request) -> dict[str, str]:
     """Set control mode (auto/manual/off)."""
-    _check_rate_limit("control")
+    _check_rate_limit("control", request)
     # Pydantic validates mode and normalizes to lowercase
     if req.mode == "manual":
         state = ac_controller.current_state
@@ -743,9 +763,9 @@ def set_control_mode(req: ControlModeRequest) -> dict[str, str]:
 
 
 @app.post("/api/ac/manual", tags=["AC Control"])
-def set_manual_params(req: ManualParamsRequest) -> dict[str, object]:
+def set_manual_params(req: ManualParamsRequest, request: Request) -> dict[str, object]:
     """Set manual control parameters."""
-    _check_rate_limit("manual")
+    _check_rate_limit("manual", request)
     # Pydantic validates temperature (16-31), fan_speed (0-3), and mode (cool/heat)
     params: dict[str, object] = {
         "mode": req.mode,
@@ -783,9 +803,9 @@ def set_manual_params(req: ManualParamsRequest) -> dict[str, object]:
 
 
 @app.post("/api/ac/manual/param", tags=["AC Control"])
-def update_manual_param(req: ManualParamUpdate) -> dict[str, object]:
+def update_manual_param(req: ManualParamUpdate, request: Request) -> dict[str, object]:
     """Update a single manual parameter."""
-    _check_rate_limit("manual_param")
+    _check_rate_limit("manual_param", request)
     state = ac_controller.current_state
     if state.control_mode != "manual":
         raise HTTPException(400, "Not in manual mode")
