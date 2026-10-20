@@ -16,6 +16,9 @@ from re import Pattern
 
 _NIGHT_WINDOW_RE: Pattern[str] = re.compile(r"^\d{2}:\d{2}-\d{2}:\d{2}$")
 _HOSTNAME_RE: Pattern[str] = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?$")
+# MQTT topic validation: alphanumeric, slashes, underscores, hyphens only.
+# Rejects wildcards (#, +) and special characters to prevent topic injection.
+_MQTT_TOPIC_RE: Pattern[str] = re.compile(r"^[a-zA-Z0-9/_-]+$")
 
 
 def _validate_subnet(value: str) -> str:
@@ -58,6 +61,47 @@ def _validate_night_window(value: str) -> str:
             raise ValueError(
                 f"NIGHT_WINDOW contains invalid time {time_str!r}: {value!r}"
             )
+    return value
+
+
+def validate_mqtt_topic(value: str, *, allow_wildcards: bool = False) -> str:
+    """Validate MQTT topic to prevent topic injection attacks.
+
+    Args:
+        value: The topic string to validate.
+        allow_wildcards: If True, allow # and + wildcards for subscriptions.
+                         If False, reject all wildcards (for publish topics).
+
+    Returns:
+        The validated topic string.
+
+    Raises:
+        ValueError: If the topic contains invalid characters.
+    """
+    if not value:
+        raise ValueError("MQTT topic cannot be empty")
+
+    # For subscription topics, temporarily strip trailing # wildcard for validation
+    check_value: str = value
+    if allow_wildcards:
+        # Allow trailing /# or standalone # for multi-level wildcard subscriptions
+        if check_value.endswith("/#"):
+            check_value = check_value[:-2]
+        elif check_value == "#":
+            return value
+        # Allow + as single-level wildcard in path segments
+        check_value = check_value.replace("/+", "/X").replace("+/", "X/")
+        if check_value == "+":
+            check_value = "X"
+
+    if not _MQTT_TOPIC_RE.match(check_value):
+        if not allow_wildcards and ("#" in value or "+" in value):
+            raise ValueError(
+                f"MQTT topic contains wildcards (not allowed for publish): {value!r}"
+            )
+        raise ValueError(
+            f"MQTT topic contains invalid characters (allowed: a-zA-Z0-9/_-): {value!r}"
+        )
     return value
 
 
@@ -115,9 +159,17 @@ ARP_SUBNET: str = _validate_subnet(
 # ── MQTT (shared broker) ─────────────────────────────────────────────────────
 MQTT_BROKER: str = os.environ.get("PRESENCE_MQTT_BROKER", "mosquitto")
 MQTT_PORT: int = int(os.environ.get("PRESENCE_MQTT_PORT", "1883"))
-BLE_TOPIC: str = os.environ.get("PRESENCE_BLE_TOPIC", "presence/ble/#")
-MOTION_TOPIC: str = os.environ.get("PRESENCE_MOTION_TOPIC", "zigbee2mqtt/+")
-MQTT_PUBLISH_PREFIX: str = os.environ.get("PRESENCE_MQTT_PUBLISH_PREFIX", "presence")
+# Subscription topics allow wildcards (#, +) for pattern matching.
+BLE_TOPIC: str = validate_mqtt_topic(
+    os.environ.get("PRESENCE_BLE_TOPIC", "presence/ble/#"), allow_wildcards=True
+)
+MOTION_TOPIC: str = validate_mqtt_topic(
+    os.environ.get("PRESENCE_MOTION_TOPIC", "zigbee2mqtt/+"), allow_wildcards=True
+)
+# Publish prefix must NOT contain wildcards (injection risk).
+MQTT_PUBLISH_PREFIX: str = validate_mqtt_topic(
+    os.environ.get("PRESENCE_MQTT_PUBLISH_PREFIX", "presence"), allow_wildcards=False
+)
 
 # ── Notifications ────────────────────────────────────────────────────────────
 # Delivery is driven by libs/notifications.TelegramNotifier.from_env(), which

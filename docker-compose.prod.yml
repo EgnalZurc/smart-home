@@ -450,6 +450,10 @@ services:
     restart: on-failure:5
     mem_limit: 96m
     memswap_limit: 96m
+    # ARP sweep mode requires raw socket access for network scanning.
+    # Alternative: run as root (not recommended for security reasons).
+    cap_add:
+      - NET_RAW
     expose:
       - 8013
     volumes:
