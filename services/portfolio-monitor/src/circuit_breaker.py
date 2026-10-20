@@ -191,15 +191,21 @@ def reset_all_circuits() -> None:
 
 COINGECKO_BREAKER = get_circuit_breaker(
     "coingecko",
-    CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60.0, success_threshold=2),
+    CircuitBreakerConfig(
+        failure_threshold=5, recovery_timeout=60.0, success_threshold=2
+    ),
 )
 
 YAHOO_BREAKER = get_circuit_breaker(
     "yahoo_finance",
-    CircuitBreakerConfig(failure_threshold=5, recovery_timeout=30.0, success_threshold=2),
+    CircuitBreakerConfig(
+        failure_threshold=5, recovery_timeout=30.0, success_threshold=2
+    ),
 )
 
 FEAR_GREED_BREAKER = get_circuit_breaker(
     "fear_greed",
-    CircuitBreakerConfig(failure_threshold=3, recovery_timeout=120.0, success_threshold=1),
+    CircuitBreakerConfig(
+        failure_threshold=3, recovery_timeout=120.0, success_threshold=1
+    ),
 )
