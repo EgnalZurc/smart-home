@@ -229,3 +229,35 @@ async def test_history_whitespace_channel_treated_as_none(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["channel"] is None
+
+
+# ── Security headers ──────────────────────────────────────────────────────────
+async def test_security_headers_present(client):
+    """Verify that security headers are added to all responses."""
+    async with client as c:
+        resp = await c.get("/health")
+    assert resp.status_code == 200
+    # Check all required security headers
+    assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+    assert resp.headers.get("X-Frame-Options") == "DENY"
+    assert resp.headers.get("Content-Security-Policy") == "default-src 'self'"
+    assert resp.headers.get("X-XSS-Protection") == "1; mode=block"
+    assert resp.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+
+
+async def test_security_headers_on_api_endpoints(client):
+    """Verify security headers on API endpoints, not just health."""
+    async with client as c:
+        resp = await c.get("/api/energy/current")
+    assert resp.status_code == 200
+    assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+    assert resp.headers.get("X-Frame-Options") == "DENY"
+
+
+async def test_security_headers_on_error_responses(client):
+    """Verify security headers are present even on error responses."""
+    async with client as c:
+        resp = await c.get("/api/energy/history?period=invalid")
+    assert resp.status_code == 422
+    assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+    assert resp.headers.get("X-Frame-Options") == "DENY"
