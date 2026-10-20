@@ -280,12 +280,13 @@ class TestRouteRegistration:
     def test_router_has_expected_routes(self):
         """All PC control routes are registered."""
         paths = {route.path for route in router.routes}
+        # Routes include the /api/pc prefix from the router
         expected = [
-            "/status",
-            "/mode",
-            "/mode/{mode}",
-            "/sleep",
-            "/wake",
+            "/api/pc/status",
+            "/api/pc/mode",
+            "/api/pc/mode/{mode}",
+            "/api/pc/sleep",
+            "/api/pc/wake",
         ]
         for path in expected:
             assert path in paths, f"Route {path} not found in router"
