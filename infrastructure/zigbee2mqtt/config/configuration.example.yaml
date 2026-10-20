@@ -1,18 +1,37 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Zigbee2MQTT Configuration
+# SECURITY: This file contains sensitive network credentials. Ensure:
+#   - File permissions are restricted (chmod 600 on the deployed copy)
+#   - Never commit real passwords/keys to version control
+#   - Use environment variables for secrets where supported
+# ══════════════════════════════════════════════════════════════════════════════
+
 # Security: explicitly disable device pairing by default.
 # Only enable temporarily via frontend when adding new devices.
+# WARNING: permit_join: true allows ANY Zigbee device to join your network.
 permit_join: false
 
 homeassistant:
   enabled: false
+
 mqtt:
   base_topic: zigbee2mqtt
   server: mqtt://mosquitto:1883
-  # Authentication (required - create user with mosquitto_passwd)
+  # ──────────────────────────────────────────────────────────────────────────
+  # MQTT Authentication (REQUIRED)
+  # Anonymous MQTT access is disabled in mosquitto. Authentication is
+  # configured in infrastructure/mosquitto/config/mosquitto.conf with:
+  #   allow_anonymous false
+  #   password_file /mosquitto/config/passwd
+  # Generate password: docker exec mosquitto mosquitto_passwd -b /mosquitto/config/passwd zigbee2mqtt <password>
+  # ──────────────────────────────────────────────────────────────────────────
   user: zigbee2mqtt
   password: CHANGE_ME  # Set the real password here after generating it
+
 serial:
   port: tcp://host.docker.internal:8282
   adapter: ember
+
 frontend:
   enabled: true
   port: 8081
@@ -20,9 +39,25 @@ frontend:
   # Reads from Z2M_FRONTEND_PASSWORD env var (passed via docker-compose).
   # Generate with: openssl rand -hex 32
   auth_token: '!env Z2M_FRONTEND_PASSWORD'
+
 advanced:
   log_level: info
-  network_key: GENERATE  # Generate a random network key - DO NOT share this key
+  # ──────────────────────────────────────────────────────────────────────────
+  # SECURITY: Zigbee Network Key
+  # This 128-bit key encrypts all Zigbee traffic on your network.
+  # - GENERATE: Zigbee2MQTT will generate a random key on first start
+  # - Once generated, the actual key is stored in coordinator_backup.json
+  # - NEVER share this key - it allows decryption of all Zigbee traffic
+  # - If compromised, all devices must be re-paired with a new key
+  # - Consider storing in environment variable for production deployments
+  # ──────────────────────────────────────────────────────────────────────────
+  network_key: GENERATE
+  cache_state: true
+  cache_state_send_on_startup: false
+  last_seen: epoch
+
+devices: {}  # Add your devices here after pairing
+version: 5
   cache_state: true
   cache_state_send_on_startup: false
   last_seen: epoch
