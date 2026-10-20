@@ -86,18 +86,20 @@ class Orchestrator:
             self._notifier = EmailNotifier()
         return self._notifier
 
-    def _load_state(self):
+    def _load_state(self) -> None:
         """Load persisted state from disk."""
         try:
             if STATE_FILE.exists():
-                with open(STATE_FILE) as f:
+                with STATE_FILE.open(encoding="utf-8") as f:
                     data = json.load(f)
                     self._state = MonitorState.from_dict(data)
                 logger.info("Loaded state from disk")
-        except Exception as e:
-            logger.warning(f"Could not load state: {e}")
+        except json.JSONDecodeError as e:
+            logger.warning(f"Invalid JSON in state file: {e}")
+        except OSError as e:
+            logger.warning(f"Could not read state file: {e}")
 
-    def _save_state(self):
+    def _save_state(self) -> None:
         """Persist state to disk (synchronous).
 
         Uses atomic_write_json so a crash mid-write cannot leave a truncated
@@ -107,10 +109,10 @@ class Orchestrator:
         """
         try:
             atomic_write_json(STATE_FILE, self._state.to_dict())
-        except Exception as e:
+        except OSError as e:
             logger.error(f"Could not save state: {e}")
 
-    async def _save_state_async(self):
+    async def _save_state_async(self) -> None:
         """Persist state without blocking the event loop.
 
         _save_state does synchronous file I/O; when called from an async code
@@ -118,7 +120,7 @@ class Orchestrator:
         """
         await asyncio.to_thread(self._save_state)
 
-    async def _init_monitors(self):
+    async def _init_monitors(self) -> None:
         """Initialize monitor instances if not injected."""
         if self._monitors:
             logger.info(f"Using {len(self._monitors)} injected monitors")
@@ -449,7 +451,7 @@ class Orchestrator:
         await self._save_state_async()
         logger.info("Orchestrator stopped")
 
-    def reload_config(self):
+    def reload_config(self) -> None:
         """Reload configuration from disk."""
         reload_config()
         logger.info("Configuration reloaded")

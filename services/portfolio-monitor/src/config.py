@@ -43,7 +43,7 @@ def _load_settings() -> dict[str, Any]:
     if not SETTINGS_PATH.exists():
         return _DEFAULT_CONFIG.copy()
 
-    with open(SETTINGS_PATH, "rb") as f:
+    with SETTINGS_PATH.open("rb") as f:
         return tomllib.load(f)
 
 
