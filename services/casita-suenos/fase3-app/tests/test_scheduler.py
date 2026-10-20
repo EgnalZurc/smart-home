@@ -231,7 +231,6 @@ class TestGmailCheck:
             scheduler._db.upsert_score.assert_called()
 
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Additional scheduler tests for coverage - SchedulerStatus and helpers
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -242,8 +241,9 @@ class TestSchedulerStatus:
 
     def test_scheduler_status_creation(self):
         """Test creating a SchedulerStatus object."""
-        from casita_scheduler import SchedulerStatus, ScraperError
         from datetime import datetime
+
+        from casita_scheduler import SchedulerStatus
 
         status = SchedulerStatus(
             running=True,
@@ -265,8 +265,9 @@ class TestSchedulerStatus:
 
     def test_scraper_error_creation(self):
         """Test creating a ScraperError object."""
-        from casita_scheduler import ScraperError
         from datetime import datetime
+
+        from casita_scheduler import ScraperError
 
         error = ScraperError(
             portal="pisos",
@@ -286,7 +287,6 @@ class TestSchedulerInferZone:
     def test_infer_zone_zamora_keywords(self):
         """Test inferring Zamora zone from URL."""
         from casita_scheduler import CasitaScheduler
-        from zones import ZONES
 
         # Create minimal scheduler for testing
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
@@ -329,8 +329,8 @@ class TestSchedulerConditions:
 
     def test_should_run_gmail_check_first_time(self):
         """Test gmail check runs immediately if never ran."""
+
         from casita_scheduler import CasitaScheduler
-        from datetime import datetime
 
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
         scheduler._last_gmail_check = None
@@ -340,8 +340,9 @@ class TestSchedulerConditions:
 
     def test_should_run_gmail_check_after_interval(self):
         """Test gmail check runs after interval passed."""
-        from casita_scheduler import CasitaScheduler
         from datetime import datetime, timedelta
+
+        from casita_scheduler import CasitaScheduler
 
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
         scheduler._last_gmail_check = datetime.now() - timedelta(minutes=35)
@@ -351,8 +352,9 @@ class TestSchedulerConditions:
 
     def test_should_not_run_gmail_check_before_interval(self):
         """Test gmail check doesn't run before interval."""
-        from casita_scheduler import CasitaScheduler
         from datetime import datetime, timedelta
+
+        from casita_scheduler import CasitaScheduler
 
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
         scheduler._last_gmail_check = datetime.now() - timedelta(minutes=10)
@@ -376,15 +378,14 @@ class TestSchedulerRadar:
 
     def test_get_radar_enriches_with_distance(self):
         """Test that get_radar adds distance_madrid_min to results."""
-        from casita_scheduler import CasitaScheduler
         from unittest.mock import MagicMock
+
+        from casita_scheduler import CasitaScheduler
 
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
         scheduler._db = MagicMock()
         scheduler._db.get_radar_properties.return_value = {
-            "items": [
-                {"zone_id": "zamora_meseta", "price": 100000}
-            ],
+            "items": [{"zone_id": "zamora_meseta", "price": 100000}],
             "total": 1,
         }
         scheduler._db.get_price_trend.return_value = {
@@ -404,15 +405,14 @@ class TestSchedulerRadar:
 
     def test_get_radar_enriches_with_price_trend(self):
         """Test that get_radar adds price trend fields to each item."""
-        from casita_scheduler import CasitaScheduler
         from unittest.mock import MagicMock
+
+        from casita_scheduler import CasitaScheduler
 
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
         scheduler._db = MagicMock()
         scheduler._db.get_radar_properties.return_value = {
-            "items": [
-                {"uid": "pisos:1", "zone_id": "zamora_meseta", "price": 160000}
-            ],
+            "items": [{"uid": "pisos:1", "zone_id": "zamora_meseta", "price": 160000}],
             "total": 1,
         }
         scheduler._db.get_price_trend.return_value = {
@@ -438,8 +438,9 @@ class TestSchedulerDelegation:
 
     def test_dismiss_property_delegates(self):
         """Test dismiss_property calls db.dismiss."""
-        from casita_scheduler import CasitaScheduler
         from unittest.mock import MagicMock
+
+        from casita_scheduler import CasitaScheduler
 
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
         scheduler._db = MagicMock()
@@ -452,8 +453,9 @@ class TestSchedulerDelegation:
 
     def test_undismiss_property_delegates(self):
         """Test undismiss_property calls db.undismiss."""
-        from casita_scheduler import CasitaScheduler
         from unittest.mock import MagicMock
+
+        from casita_scheduler import CasitaScheduler
 
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
         scheduler._db = MagicMock()
@@ -466,8 +468,9 @@ class TestSchedulerDelegation:
 
     def test_mark_viewed_delegates(self):
         """Test mark_viewed calls db.mark_viewed."""
-        from casita_scheduler import CasitaScheduler
         from unittest.mock import MagicMock
+
+        from casita_scheduler import CasitaScheduler
 
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
         scheduler._db = MagicMock()
@@ -480,8 +483,9 @@ class TestSchedulerDelegation:
 
     def test_save_comment_delegates(self):
         """Test save_comment calls db.save_comment."""
-        from casita_scheduler import CasitaScheduler
         from unittest.mock import MagicMock
+
+        from casita_scheduler import CasitaScheduler
 
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
         scheduler._db = MagicMock()
@@ -489,13 +493,16 @@ class TestSchedulerDelegation:
 
         result = scheduler.save_comment("idealista:123", "Nice house!")
 
-        scheduler._db.save_comment.assert_called_once_with("idealista:123", "Nice house!")
+        scheduler._db.save_comment.assert_called_once_with(
+            "idealista:123", "Nice house!"
+        )
         assert result is True
 
     def test_get_schedule_config_delegates(self):
         """Test get_schedule_config calls db."""
-        from casita_scheduler import CasitaScheduler
         from unittest.mock import MagicMock
+
+        from casita_scheduler import CasitaScheduler
 
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
         scheduler._db = MagicMock()
@@ -508,8 +515,9 @@ class TestSchedulerDelegation:
 
     def test_save_schedule_config_delegates(self):
         """Test save_schedule_config calls db."""
-        from casita_scheduler import CasitaScheduler
         from unittest.mock import MagicMock
+
+        from casita_scheduler import CasitaScheduler
 
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
         scheduler._db = MagicMock()
@@ -520,8 +528,9 @@ class TestSchedulerDelegation:
 
     def test_get_last_summary_delegates(self):
         """Test get_last_summary calls db."""
-        from casita_scheduler import CasitaScheduler
         from unittest.mock import MagicMock
+
+        from casita_scheduler import CasitaScheduler
 
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
         scheduler._db = MagicMock()
@@ -534,8 +543,9 @@ class TestSchedulerDelegation:
 
     def test_get_dismissed_delegates(self):
         """Test get_dismissed calls db."""
-        from casita_scheduler import CasitaScheduler
         from unittest.mock import MagicMock
+
+        from casita_scheduler import CasitaScheduler
 
         scheduler = CasitaScheduler.__new__(CasitaScheduler)
         scheduler._db = MagicMock()
@@ -545,7 +555,6 @@ class TestSchedulerDelegation:
 
         scheduler._db.get_dismissed.assert_called_once()
         assert result == [{"uid": "test:1"}]
-
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -591,11 +600,24 @@ def _make_property(zone_id: str = "zamora_meseta", price: int = 150_000) -> Prop
 def _high_score(prop: Property, zone) -> ScoredProperty:
     """A ScoredProperty guaranteed to pass the alert threshold (all 10s)."""
     breakdown = ScoreBreakdown(
-        r1_rooms=10, r2_terrain=10, r3_garage=10, r4_habitability=10,
-        r5_piscina=10, r6_ac=10, r7_price=10, r8_supermarket=10,
-        r9_health=10, r10_hospital=10, r11_internet=10, r12_madrid=10,
-        r13_beach=10, r14_pools=10, r15_fire=10, r16_flood=10,
-        r17_coast=10, r18_beach_plot=10,
+        r1_rooms=10,
+        r2_terrain=10,
+        r3_garage=10,
+        r4_habitability=10,
+        r5_piscina=10,
+        r6_ac=10,
+        r7_price=10,
+        r8_supermarket=10,
+        r9_health=10,
+        r10_hospital=10,
+        r11_internet=10,
+        r12_madrid=10,
+        r13_beach=10,
+        r14_pools=10,
+        r15_fire=10,
+        r16_flood=10,
+        r17_coast=10,
+        r18_beach_plot=10,
     )
     return ScoredProperty(prop=prop, zone=zone, score=breakdown)
 
@@ -768,7 +790,6 @@ class TestSchedulerTick:
         assert scheduler.get_last_tick() == fixed_now
 
 
-
 # ── run_scraping ──────────────────────────────────────────────────────────────
 
 
@@ -783,15 +804,9 @@ class TestRunScraping:
         scheduler._apify.scrape_zone.return_value = []
 
         with (
-            patch(
-                "casita_scheduler.pisos_scraper.scrape_zone", return_value=[prop]
-            ),
-            patch(
-                "casita_scheduler.fotocasa_scraper.scrape_zone", return_value=[]
-            ),
-            patch(
-                "casita_scheduler.habitaclia_scraper.scrape_zone", return_value=[]
-            ),
+            patch("casita_scheduler.pisos_scraper.scrape_zone", return_value=[prop]),
+            patch("casita_scheduler.fotocasa_scraper.scrape_zone", return_value=[]),
+            patch("casita_scheduler.habitaclia_scraper.scrape_zone", return_value=[]),
             patch("casita_scheduler.evaluate", return_value=_high_score(prop, zone)),
         ):
             scheduler.run_scraping_now()
@@ -1169,9 +1184,7 @@ class TestInferZoneNominatim:
         assert zone is None
 
     def test_nominatim_exception_returns_none(self, scheduler):
-        with patch(
-            "urllib.request.urlopen", side_effect=RuntimeError("network down")
-        ):
+        with patch("urllib.request.urlopen", side_effect=RuntimeError("network down")):
             zone = scheduler._infer_zone_nominatim("zamora")
         assert zone is None
 

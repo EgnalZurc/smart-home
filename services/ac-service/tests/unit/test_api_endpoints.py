@@ -1114,3 +1114,175 @@ class TestPydanticValidation:
         data = response.json()
         # Pydantic returns all validation errors
         assert len(data["detail"]) >= 2
+
+
+# ── Rate limiting tests ───────────────────────────────────────────────────────
+
+
+class TestRateLimitingByClientIP:
+    """Tests for rate limiting using client IP address."""
+
+    def test_rate_limit_uses_client_ip(self, client, mock_components):
+        """Rate limiter should use client IP, not endpoint name."""
+        import main
+
+        # Reset rate limiter
+        main.control_rate_limiter = main.InMemoryRateLimiter(
+            max_requests=2, window_seconds=60
+        )
+
+        # First two requests should succeed
+        response1 = client.post("/api/ac/control", json={"mode": "auto"})
+        response2 = client.post("/api/ac/control", json={"mode": "off"})
+
+        assert response1.status_code == 200
+        assert response2.status_code == 200
+
+        # Third request should be rate limited
+        response3 = client.post("/api/ac/control", json={"mode": "auto"})
+
+        assert response3.status_code == 429
+        data = response3.json()
+        assert "Rate limit exceeded" in data["detail"]["error"]
+
+        # Restore default rate limiter
+        main.control_rate_limiter = main.InMemoryRateLimiter(
+            max_requests=10, window_seconds=60
+        )
+
+    def test_rate_limit_includes_retry_after_header(self, client, mock_components):
+        """Rate limit response should include Retry-After header."""
+        import main
+
+        # Reset rate limiter with very low limit
+        main.control_rate_limiter = main.InMemoryRateLimiter(
+            max_requests=1, window_seconds=60
+        )
+
+        # First request succeeds
+        client.post("/api/ac/control", json={"mode": "auto"})
+
+        # Second request should be rate limited with Retry-After header
+        response = client.post("/api/ac/control", json={"mode": "off"})
+
+        assert response.status_code == 429
+        assert "retry-after" in response.headers
+
+        # Restore default rate limiter
+        main.control_rate_limiter = main.InMemoryRateLimiter(
+            max_requests=10, window_seconds=60
+        )
+
+    def test_rate_limit_respects_x_forwarded_for(self, client, mock_components):
+        """Rate limiter should use X-Forwarded-For header when present."""
+        import main
+
+        # Reset rate limiter
+        main.control_rate_limiter = main.InMemoryRateLimiter(
+            max_requests=1, window_seconds=60
+        )
+
+        # Request with X-Forwarded-For header
+        response1 = client.post(
+            "/api/ac/control",
+            json={"mode": "auto"},
+            headers={"X-Forwarded-For": "192.168.1.100"},
+        )
+        assert response1.status_code == 200
+
+        # Same "client IP" should be rate limited
+        response2 = client.post(
+            "/api/ac/control",
+            json={"mode": "off"},
+            headers={"X-Forwarded-For": "192.168.1.100"},
+        )
+        assert response2.status_code == 429
+
+        # Different client IP should not be rate limited
+        response3 = client.post(
+            "/api/ac/control",
+            json={"mode": "auto"},
+            headers={"X-Forwarded-For": "192.168.1.101"},
+        )
+        assert response3.status_code == 200
+
+        # Restore default rate limiter
+        main.control_rate_limiter = main.InMemoryRateLimiter(
+            max_requests=10, window_seconds=60
+        )
+
+    def test_x_forwarded_for_uses_first_ip(self, client, mock_components):
+        """Rate limiter should use first IP from X-Forwarded-For chain."""
+        import main
+
+        # Reset rate limiter
+        main.control_rate_limiter = main.InMemoryRateLimiter(
+            max_requests=1, window_seconds=60
+        )
+
+        # Request with multiple IPs in X-Forwarded-For
+        response1 = client.post(
+            "/api/ac/control",
+            json={"mode": "auto"},
+            headers={"X-Forwarded-For": "10.0.0.1, 10.0.0.2, 10.0.0.3"},
+        )
+        assert response1.status_code == 200
+
+        # Same first IP should be rate limited regardless of proxy chain
+        response2 = client.post(
+            "/api/ac/control",
+            json={"mode": "off"},
+            headers={"X-Forwarded-For": "10.0.0.1, 10.0.0.99"},
+        )
+        assert response2.status_code == 429
+
+        # Restore default rate limiter
+        main.control_rate_limiter = main.InMemoryRateLimiter(
+            max_requests=10, window_seconds=60
+        )
+
+
+class TestGetClientIPHelper:
+    """Tests for _get_client_ip helper function."""
+
+    def test_get_client_ip_with_forwarded_header(self):
+        """_get_client_ip should return first IP from X-Forwarded-For."""
+        from unittest.mock import MagicMock
+
+        import main
+
+        mock_request = MagicMock()
+        mock_request.headers.get.return_value = "192.168.1.50, 10.0.0.1"
+        mock_request.client.host = "127.0.0.1"
+
+        result = main._get_client_ip(mock_request)
+
+        assert result == "192.168.1.50"
+
+    def test_get_client_ip_without_forwarded_header(self):
+        """_get_client_ip should fallback to request.client.host."""
+        from unittest.mock import MagicMock
+
+        import main
+
+        mock_request = MagicMock()
+        mock_request.headers.get.return_value = None
+        mock_request.client.host = "192.168.1.100"
+
+        result = main._get_client_ip(mock_request)
+
+        assert result == "192.168.1.100"
+
+    def test_get_client_ip_no_client(self):
+        """_get_client_ip should return 'unknown' when client is None."""
+        from unittest.mock import MagicMock
+
+        import main
+
+        mock_request = MagicMock()
+        mock_request.headers.get.return_value = None
+        mock_request.client = None
+
+        result = main._get_client_ip(mock_request)
+
+        assert result == "unknown"

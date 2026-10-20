@@ -75,7 +75,7 @@ from config import (
 )
 from controllers.ac_controller import ACController, ControlConfig
 from event_log import ACEventLog
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from learning import analyze_history
@@ -462,14 +462,41 @@ class ManualParamUpdate(BaseModel):
 # ── Rate limiting helper ──────────────────────────────────────────────────────
 
 
-def _check_rate_limit(endpoint: str) -> None:
-    """Check rate limit for control endpoints.
+def _get_client_ip(request: Request) -> str:
+    """Extract real client IP from request, respecting X-Forwarded-For if present.
+
+    When running behind nginx reverse proxy, the original client IP is in
+    X-Forwarded-For header. We take the first IP in the chain (original client).
+
+    Args:
+        request: The FastAPI request object.
+
+    Returns:
+        The client IP address string, or "unknown" if not determinable.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        # Take the first IP in the chain (original client)
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _check_rate_limit(request: Request) -> None:
+    """Check rate limit for control endpoints using client IP.
 
     Raises HTTPException 429 if rate limit is exceeded.
-    Uses endpoint name as the rate limit key (service-wide, not per-client).
+    Uses client IP as the rate limit key to prevent abuse per-client.
+
+    Args:
+        request: The FastAPI request object (used to extract client IP).
+
+    Raises:
+        HTTPException: 429 status if rate limit exceeded.
     """
-    if not control_rate_limiter.is_allowed(endpoint):
-        status = control_rate_limiter.get_status(endpoint)
+    client_ip = _get_client_ip(request)
+    if not control_rate_limiter.is_allowed(client_ip):
+        status = control_rate_limiter.get_status(client_ip)
+        logger.warning("Rate limit exceeded for IP: %s", client_ip)
         raise HTTPException(
             status_code=429,
             detail={
@@ -478,6 +505,7 @@ def _check_rate_limit(endpoint: str) -> None:
                 "max_requests": control_rate_limiter.max_requests,
                 "window_seconds": control_rate_limiter.window_seconds,
             },
+            headers={"Retry-After": str(int(status.reset_at.timestamp()))},
         )
 
 
@@ -701,9 +729,9 @@ def get_config() -> dict[str, object]:
 
 
 @app.post("/api/ac/config", tags=["AC Control"])
-def update_config(update: ConfigUpdate) -> dict[str, object]:
+def update_config(request: Request, update: ConfigUpdate) -> dict[str, object]:
     """Update controller configuration."""
-    _check_rate_limit("config")
+    _check_rate_limit(request)
     changes = update.model_dump(exclude_none=True)
     if not changes:
         _log_command("config", {}, False, "No changes")
@@ -726,9 +754,9 @@ def update_config(update: ConfigUpdate) -> dict[str, object]:
 
 
 @app.post("/api/ac/control", tags=["AC Control"])
-def set_control_mode(req: ControlModeRequest) -> dict[str, str]:
+def set_control_mode(request: Request, req: ControlModeRequest) -> dict[str, str]:
     """Set control mode (auto/manual/off)."""
-    _check_rate_limit("control")
+    _check_rate_limit(request)
     # Pydantic validates mode and normalizes to lowercase
     if req.mode == "manual":
         state = ac_controller.current_state
@@ -743,9 +771,9 @@ def set_control_mode(req: ControlModeRequest) -> dict[str, str]:
 
 
 @app.post("/api/ac/manual", tags=["AC Control"])
-def set_manual_params(req: ManualParamsRequest) -> dict[str, object]:
+def set_manual_params(request: Request, req: ManualParamsRequest) -> dict[str, object]:
     """Set manual control parameters."""
-    _check_rate_limit("manual")
+    _check_rate_limit(request)
     # Pydantic validates temperature (16-31), fan_speed (0-3), and mode (cool/heat)
     params: dict[str, object] = {
         "mode": req.mode,
@@ -783,9 +811,9 @@ def set_manual_params(req: ManualParamsRequest) -> dict[str, object]:
 
 
 @app.post("/api/ac/manual/param", tags=["AC Control"])
-def update_manual_param(req: ManualParamUpdate) -> dict[str, object]:
+def update_manual_param(request: Request, req: ManualParamUpdate) -> dict[str, object]:
     """Update a single manual parameter."""
-    _check_rate_limit("manual_param")
+    _check_rate_limit(request)
     state = ac_controller.current_state
     if state.control_mode != "manual":
         raise HTTPException(400, "Not in manual mode")
