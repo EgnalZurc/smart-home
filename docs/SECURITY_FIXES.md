@@ -273,6 +273,42 @@ Each entry follows this format:
 - **Fix Applied**: Added logging for rate limit violations, manual trigger invocations, configuration changes, lifecycle events
 - **Verification**: Check logs during operation - rate limit hits, manual triggers show in logs
 
+### [energy-monitor] Missing Security Headers
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: HTTP responses lacked security headers (X-Content-Type-Options, X-Frame-Options, CSP)
+- **Fix Applied**: Added security_headers_middleware with X-Content-Type-Options: nosniff, X-Frame-Options: DENY, Content-Security-Policy, X-XSS-Protection, Referrer-Policy
+- **Verification**: `curl -I https://raspberrypi.tailaa37cd.ts.net/api/health/energy | grep -E "X-Content|X-Frame|Content-Security"`
+
+### [energy-monitor] Generic Exception Handling
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: _db_ok() and lifespan used `except Exception` which catches too broadly
+- **Fix Applied**: Changed to specific exception types (OSError, RuntimeError) for database/IO failures
+- **Verification**: Check main.py _db_ok() and _lifespan() use specific exception types
+
+### [energy-monitor] Incomplete Logging
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: Rate limit violations and lifecycle events were not logged
+- **Fix Applied**: Added logging for rate limit hits with client IP and path, lifecycle start/stop events
+- **Verification**: Trigger rate limit and check logs show "Rate limit exceeded for IP"
+
+### [energy-monitor] Missing/Incomplete Docstrings
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-20
+- **Description**: Functions and endpoints lacked comprehensive docstrings
+- **Fix Applied**: Added detailed docstrings with Args, Returns, Raises sections to all public functions and endpoints
+- **Verification**: All public functions in main.py have complete docstrings
+
 ---
 
 ## Accepted Risks
