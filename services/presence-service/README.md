@@ -52,6 +52,40 @@ The host dir `./data/presence-service` must exist and be owned by UID 1000
 **before** `docker compose up`, or the non-root container cannot create its
 SQLite DB (`db_ok=false`). The CI deploy step creates it with the right owner.
 
+### Network capabilities (ARP sweep mode)
+
+When `PRESENCE_ROUTER_MODE=arpsweep` (the default), the service performs active
+ARP scanning of the local subnet to detect device presence. This requires raw
+socket access.
+
+**Docker requirement:** The container must have `CAP_NET_RAW`:
+
+```yaml
+# docker-compose.prod.yml
+presence-service:
+  cap_add:
+    - NET_RAW
+```
+
+**Alternative (not recommended):** Running the container as root also works, but
+violates the principle of least privilege. The production compose uses `cap_add`
+instead.
+
+**Other router modes:** If using `openwrt_ssh`, `fritzbox`, or `mikrotik` modes,
+the service queries the router via SSH/API and does not need `NET_RAW`.
+
+### MQTT topic security
+
+The service validates all MQTT topics at startup to prevent topic injection:
+
+- **Subscription topics** (`BLE_TOPIC`, `MOTION_TOPIC`): Allow MQTT wildcards
+  (`#`, `+`) for pattern matching, but reject other special characters.
+- **Publish prefix** (`MQTT_PUBLISH_PREFIX`): Wildcards are **not** allowed to
+  prevent injection into arbitrary topics.
+
+Allowed characters: `a-zA-Z0-9/_-`. Invalid topics cause a startup failure with
+a clear error message.
+
 ## Privacy
 
 Presence is the most privacy-sensitive service on the platform (design §12):
