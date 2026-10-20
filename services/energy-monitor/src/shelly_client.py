@@ -27,6 +27,16 @@ inventory so labels resolve consistently across power + energy.
 The client is async (``httpx.AsyncClient``) because the collector runs inside
 the FastAPI event loop and polls several devices concurrently; a blocking client
 would stall the loop (same reasoning as metrics-service's collector).
+
+SECURITY NOTE — HTTP (plaintext) by design:
+    Shelly devices expose their local API over plain HTTP only (no TLS). This is
+    **intentional and acceptable** for this deployment because:
+    1. All traffic stays within the trusted home LAN (192.168.x.x / VLAN).
+    2. The devices do not support HTTPS and cannot be upgraded.
+    3. Data sensitivity is low (power readings, not credentials or PII).
+    4. Network segmentation (IoT VLAN) isolates meter traffic from untrusted hosts.
+    If the network perimeter changes (e.g., polling over WAN/VPN), wrap traffic in
+    a TLS tunnel or revisit device firmware capabilities.
 """
 
 from __future__ import annotations
