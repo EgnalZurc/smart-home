@@ -193,7 +193,9 @@ def fetch_ohlc(coingecko_id: str, days: int = 30) -> list[list[float]]:
         return result
     except Exception as e:
         _coingecko_breaker.record_failure(e)
-        logger.error(f"Error fetching OHLC for {coingecko_id}: {_sanitize_error(str(e))}")
+        logger.error(
+            f"Error fetching OHLC for {coingecko_id}: {_sanitize_error(str(e))}"
+        )
         return []
 
 

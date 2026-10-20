@@ -356,7 +356,9 @@ def fetch_dividends(ticker_sym: str) -> pd.Series:
     """
     # Check circuit breaker first
     if not _yahoo_breaker.allow_request():
-        logger.warning("Yahoo Finance circuit breaker is OPEN, skipping dividends fetch")
+        logger.warning(
+            "Yahoo Finance circuit breaker is OPEN, skipping dividends fetch"
+        )
         return pd.Series(dtype="float64")
 
     cached = _dividends_cache.get(ticker_sym)

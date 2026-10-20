@@ -18,7 +18,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from models import AlertLevel
 
 from .auth import require_auth
-from .helpers import _enforce_rate_limit, _public_read_limiter, _safe_json, _serialize_alert
+from .helpers import (
+    _enforce_rate_limit,
+    _public_read_limiter,
+    _safe_json,
+    _serialize_alert,
+)
 
 logger = logging.getLogger(__name__)
 
