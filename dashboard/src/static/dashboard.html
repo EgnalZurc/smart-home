@@ -1288,17 +1288,26 @@ async function setPcMode(mode) {
 }
 
 async function pcSleep() {
-    if (!isAdmin()) return;
-    if (!confirm(t('pc_sleep_confirm'))) return;
+    console.log('[pcSleep] called, isAdmin:', isAdmin());
+    if (!isAdmin()) {
+        showToast(t('forbidden'), 'error');
+        return;
+    }
+    if (!confirm(t('pc_sleep_confirm'))) {
+        console.log('[pcSleep] user cancelled confirm dialog');
+        return;
+    }
 
     const btn = document.getElementById('pc-sleep-btn');
     if (btn) btn.disabled = true;
 
     try {
+        console.log('[pcSleep] sending POST /api/pc/sleep');
         const r = await fetch('/api/pc/sleep', {
             method: 'POST',
             headers: { 'X-Confirm-Action': 'SLEEP' }
         });
+        console.log('[pcSleep] response status:', r.status);
         if (r.ok) {
             showToast(t('pc_sleep_ok'), 'success');
             // PC will be offline shortly, update status after a delay
@@ -1308,26 +1317,37 @@ async function pcSleep() {
             }, 3000);
         } else {
             const err = await r.json().catch(() => ({}));
+            console.error('[pcSleep] error response:', err);
             showToast(err.detail || t('pc_sleep_err'), 'error');
         }
     } catch (e) {
+        console.error('[pcSleep] fetch error:', e);
         showToast(t('pc_sleep_err'), 'error');
     }
     if (btn) btn.disabled = false;
 }
 
 async function pcWake() {
-    if (!isAdmin()) return;
-    if (!confirm(t('pc_wake_confirm'))) return;
+    console.log('[pcWake] called, isAdmin:', isAdmin());
+    if (!isAdmin()) {
+        showToast(t('forbidden'), 'error');
+        return;
+    }
+    if (!confirm(t('pc_wake_confirm'))) {
+        console.log('[pcWake] user cancelled confirm dialog');
+        return;
+    }
 
     const btn = document.getElementById('pc-wake-btn');
     if (btn) btn.disabled = true;
 
     try {
+        console.log('[pcWake] sending POST /api/pc/wake');
         const r = await fetch('/api/pc/wake', {
             method: 'POST',
             headers: { 'X-Confirm-Action': 'WAKE' }
         });
+        console.log('[pcWake] response status:', r.status);
         if (r.ok) {
             showToast(t('pc_wake_ok'), 'success');
             // Poll for PC coming online
@@ -1342,9 +1362,11 @@ async function pcWake() {
             }, 5000);
         } else {
             const err = await r.json().catch(() => ({}));
+            console.error('[pcWake] error response:', err);
             showToast(err.detail || t('pc_wake_err'), 'error');
         }
     } catch (e) {
+        console.error('[pcWake] fetch error:', e);
         showToast(t('pc_wake_err'), 'error');
     }
     if (btn) btn.disabled = false;
