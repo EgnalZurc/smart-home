@@ -31,19 +31,63 @@ from __future__ import annotations
 import json
 import logging
 import os
+import socket
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict
 
-from config import CALENDAR_TOKEN_SECRET
+from config import CALENDAR_TOKEN_SECRET, HTTP_TIMEOUT_S
 from cryptography.fernet import Fernet, InvalidToken
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from httplib2 import Http
 
 logger = logging.getLogger(__name__)
+
+
+def _redact_secret(value: str | None) -> str:
+    """Redact a secret value for safe logging.
+
+    Returns:
+        Redacted string showing only last 4 chars, or "(empty)" if blank.
+    """
+    if not value:
+        return "(empty)"
+    if len(value) <= 8:
+        return "****"
+    return f"****{value[-4:]}"
+
+
+class TimeoutHttp(Http):
+    """Http wrapper that enforces connection and read timeouts.
+
+    The Google API client uses httplib2 by default which has no timeout,
+    allowing sync operations to hang indefinitely on network issues.
+    This wrapper sets socket-level timeouts for all requests.
+    """
+
+    def __init__(self, timeout: float = HTTP_TIMEOUT_S, **kwargs):
+        """Initialize with specified timeout.
+
+        Args:
+            timeout: Timeout in seconds for connect and read operations.
+            **kwargs: Additional arguments passed to httplib2.Http.
+        """
+        super().__init__(**kwargs)
+        self._timeout = timeout
+
+    def request(self, *args, **kwargs):
+        """Make HTTP request with enforced timeout."""
+        # Set socket default timeout for this request
+        old_timeout = socket.getdefaulttimeout()
+        try:
+            socket.setdefaulttimeout(self._timeout)
+            return super().request(*args, **kwargs)
+        finally:
+            socket.setdefaulttimeout(old_timeout)
 
 
 class CalendarInfo(TypedDict):
@@ -156,10 +200,13 @@ class GoogleCalendarClient:
 
     Attributes:
         client_id: OAuth2 client ID from Google Cloud Console.
-        client_secret: OAuth2 client secret from Google Cloud Console.
         token_path: Path to the token.json file storing the refresh token.
         credentials: Loaded OAuth2 credentials (after authenticate()).
         service: Google Calendar API service object (after authenticate()).
+
+    Note:
+        client_secret is stored internally but NEVER logged or exposed in
+        error messages to prevent credential leakage.
     """
 
     def __init__(
@@ -168,6 +215,7 @@ class GoogleCalendarClient:
         client_secret: str,
         token_path: str | Path,
         scopes: list[str] | None = None,
+        timeout: float = HTTP_TIMEOUT_S,
     ) -> None:
         """Initialize the client.
 
@@ -176,13 +224,23 @@ class GoogleCalendarClient:
             client_secret: OAuth2 client secret from Google Cloud Console.
             token_path: Path to the token.json file for persisting refresh token.
             scopes: OAuth2 scopes to request. Defaults to calendar.readonly.
+            timeout: HTTP timeout in seconds for API calls.
         """
         self.client_id = client_id
-        self.client_secret = client_secret
+        # Store secret in private attribute to discourage accidental logging
+        self._client_secret = client_secret
         self.token_path = Path(token_path)
         self.scopes = scopes or [CALENDAR_SCOPE]
+        self._timeout = timeout
         self._credentials: Credentials | None = None
         self._service: Any = None
+
+    def __repr__(self) -> str:
+        """Return safe representation without exposing secrets."""
+        return (
+            f"GoogleCalendarClient(client_id={self.client_id!r}, "
+            f"token_path={self.token_path!r})"
+        )
 
     @property
     def credentials(self) -> Credentials | None:
@@ -268,7 +326,7 @@ class GoogleCalendarClient:
                     refresh_token=refresh_token,
                     token_uri="https://oauth2.googleapis.com/token",
                     client_id=self.client_id,
-                    client_secret=self.client_secret,
+                    client_secret=self._client_secret,
                     scopes=self.scopes,
                 )
                 logger.debug("Loaded credentials from %s", self.token_path)
@@ -290,22 +348,39 @@ class GoogleCalendarClient:
                 self._save_token()
                 logger.info("Refreshed expired OAuth2 token")
             except RefreshError as exc:
-                logger.error("Failed to refresh OAuth2 token: %s", exc)
+                # Sanitize error to avoid leaking secrets
+                error_msg = str(exc)
+                if self._client_secret and self._client_secret in error_msg:
+                    error_msg = error_msg.replace(
+                        self._client_secret, _redact_secret(self._client_secret)
+                    )
+                logger.error("Failed to refresh OAuth2 token: %s", error_msg)
                 self._credentials = None
                 return False
 
-        # Build the API service
+        # Build the API service with timeout-enabled HTTP transport
         try:
+            http = TimeoutHttp(timeout=self._timeout)
             self._service = build(
                 "calendar",
                 "v3",
                 credentials=self._credentials,
                 cache_discovery=False,
+                http=http,
             )
-            logger.info("Google Calendar API service initialized")
+            logger.info(
+                "Google Calendar API service initialized (timeout=%.1fs)",
+                self._timeout,
+            )
             return True
         except Exception as exc:
-            logger.error("Failed to build Calendar API service: %s", exc)
+            # Sanitize error to avoid leaking secrets
+            error_msg = str(exc)
+            if self._client_secret and self._client_secret in error_msg:
+                error_msg = error_msg.replace(
+                    self._client_secret, _redact_secret(self._client_secret)
+                )
+            logger.error("Failed to build Calendar API service: %s", error_msg)
             self._service = None
             return False
 
