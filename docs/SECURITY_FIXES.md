@@ -430,6 +430,18 @@ The audit should NOT re-report these issues.
 - **Fix Applied**: Origin header validation middleware that blocks requests from untrusted origins. Allowed origins: localhost, Tailscale hostname, local network IPs
 - **Verification**: `curl -X POST -H "Origin: https://evil.com" https://raspberrypi.tailaa37cd.ts.net/api/casita/run-scraping` should return 403
 
+### [presence-service] NET_RAW Capability
+- **Severity**: HIGH
+- **Status**: ACCEPTED_RISK
+- **Reason**: ARP sweep mode requires NET_RAW capability which expands attack surface, but this is an architectural requirement for raw ARP packet sending to detect devices on local network
+- **Mitigations**:
+  - Service runs in isolated Docker container
+  - Only accessible via Tailscale VPN (not exposed to internet)
+  - Alternative SSH-based modes available (openwrt_ssh, fritzbox, mikrotik) that don't require NET_RAW
+- **Documentation**: Comment added in `config.py` explaining ROUTER_MODE options
+- **Review Date**: 2026-10-21
+- **Next Review**: 2027-04-21 (6 months)
+
 ---
 
 ## Audit Markers

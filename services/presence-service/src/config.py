@@ -145,7 +145,11 @@ NIGHT_WINDOW: str = _validate_night_window(
 SLEEP_ZONE: str = os.environ.get("PRESENCE_SLEEP_ZONE", "bedroom")
 
 # ── Router access (one mode) ─────────────────────────────────────────────────
-# arpsweep | openwrt_ssh | fritzbox | mikrotik
+# SECURITY NOTE: arpsweep mode requires NET_RAW capability (see docs/SECURITY_FIXES.md).
+# This is an accepted risk - the container is isolated and only accessible via Tailscale.
+# Prefer SSH-based modes (openwrt_ssh, fritzbox, mikrotik) when available, as they
+# don't require elevated network privileges.
+# Available modes: arpsweep | openwrt_ssh | fritzbox | mikrotik
 ROUTER_MODE: str = os.environ.get("PRESENCE_ROUTER_MODE", "arpsweep")
 ROUTER_HOST: str = _validate_router_host(
     os.environ.get("PRESENCE_ROUTER_HOST", "192.168.1.1")
