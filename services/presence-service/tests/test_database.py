@@ -128,3 +128,89 @@ def test_prune_removes_old_transitions(store):
     deleted = store.prune(now=now, retention_days=365)
     assert deleted == 1
     assert store.count_transitions() == 1
+
+
+# ── Tests for hash_mac and validate_person_id ────────────────────────────────
+from database import hash_mac, validate_person_id
+
+
+def test_hash_mac_returns_16_char_hex():
+    """Hash should return 16 hex characters (64 bits)."""
+    result = hash_mac("AA:BB:CC:DD:EE:FF")
+    assert len(result) == 16
+    assert all(c in "0123456789abcdef" for c in result)
+
+
+def test_hash_mac_normalizes_formats():
+    """Different MAC formats should produce the same hash."""
+    mac1 = hash_mac("AA:BB:CC:DD:EE:FF")
+    mac2 = hash_mac("aa:bb:cc:dd:ee:ff")
+    mac3 = hash_mac("aabbccddeeff")
+    mac4 = hash_mac("aa-bb-cc-dd-ee-ff")
+    assert mac1 == mac2 == mac3 == mac4
+
+
+def test_hash_mac_is_deterministic():
+    """Same MAC should always produce same hash."""
+    mac = "11:22:33:44:55:66"
+    assert hash_mac(mac) == hash_mac(mac)
+
+
+def test_validate_person_id_accepts_valid():
+    """Valid person_ids should pass validation."""
+    assert validate_person_id("ana") == "ana"
+    assert validate_person_id("juan_perez") == "juan_perez"
+    assert validate_person_id("user-123") == "user-123"
+    assert validate_person_id("A1b2C3") == "A1b2C3"
+
+
+def test_validate_person_id_rejects_empty():
+    """Empty person_id should raise ValueError."""
+    with pytest.raises(ValueError, match="Invalid person_id"):
+        validate_person_id("")
+
+
+def test_validate_person_id_rejects_special_chars():
+    """person_id with special characters should raise ValueError."""
+    with pytest.raises(ValueError, match="Invalid person_id"):
+        validate_person_id("ana'; DROP TABLE--")
+    with pytest.raises(ValueError, match="Invalid person_id"):
+        validate_person_id("user/admin")
+    with pytest.raises(ValueError, match="Invalid person_id"):
+        validate_person_id("user@domain")
+
+
+def test_validate_person_id_rejects_too_long():
+    """person_id over 64 chars should raise ValueError."""
+    with pytest.raises(ValueError, match="Invalid person_id"):
+        validate_person_id("a" * 65)
+
+
+def test_upsert_current_rejects_invalid_person_id(store):
+    """upsert_current should reject invalid person_id."""
+    import time
+
+    now = int(time.time())
+    with pytest.raises(ValueError, match="Invalid person_id"):
+        store.upsert_current("'; DROP TABLE--", "home", 1.0, now)
+
+
+def test_record_transition_rejects_invalid_person_id(store):
+    """record_transition should reject invalid person_id."""
+    import time
+
+    now = int(time.time())
+    event = PresenceEvent(
+        ts=now,
+        person_id="user/../../etc",
+        from_state=PresenceState.AWAY,
+        to_state=PresenceState.HOME,
+    )
+    with pytest.raises(ValueError, match="Invalid person_id"):
+        store.record_transition(event)
+
+
+def test_history_rejects_invalid_person_id(store):
+    """history should reject invalid person_id filter."""
+    with pytest.raises(ValueError, match="Invalid person_id"):
+        store.history(person_id="<script>alert(1)</script>")

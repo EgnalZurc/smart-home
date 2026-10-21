@@ -27,10 +27,11 @@ from models import PresenceEvent
 # to track individuals. To comply with privacy regulations and minimize data
 # exposure in case of a breach, we hash MACs before storing or logging them.
 #
-# The hash is truncated to 12 hex chars (48 bits) which provides:
+# The hash is truncated to 16 hex chars (64 bits) which provides:
 # - Sufficient uniqueness for device correlation within the household
 # - Irreversibility (cannot recover the original MAC)
 # - Consistent pseudonymization across the codebase
+# - 64 bits of collision resistance (stronger than 48-bit truncation)
 
 
 def hash_mac(mac: str) -> str:
@@ -40,14 +41,39 @@ def hash_mac(mac: str) -> str:
         mac: Raw MAC address in any format (AA:BB:CC:DD:EE:FF, aabbccddeeff, etc.)
 
     Returns:
-        12-character hex string (first 48 bits of SHA-256 hash).
+        16-character hex string (first 64 bits of SHA-256 hash).
 
     The hash is deterministic so the same MAC always produces the same
     pseudonym, enabling device correlation without storing raw PII.
     """
     # Normalize: lowercase, remove separators
     normalized: str = mac.lower().replace(":", "").replace("-", "").replace(".", "")
-    return hashlib.sha256(normalized.encode()).hexdigest()[:12]
+    return hashlib.sha256(normalized.encode()).hexdigest()[:16]
+
+
+# ── Input Validation ─────────────────────────────────────────────────────────
+import re
+
+_PERSON_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
+
+def validate_person_id(person_id: str) -> str:
+    """Validate and return a sanitized person_id.
+
+    Args:
+        person_id: The identifier to validate.
+
+    Returns:
+        The validated person_id (unchanged if valid).
+
+    Raises:
+        ValueError: If person_id contains invalid characters or is too long.
+    """
+    if not person_id or not _PERSON_ID_PATTERN.match(person_id):
+        raise ValueError(
+            "Invalid person_id: must be 1-64 alphanumeric chars, hyphens or underscores"
+        )
+    return person_id
 
 
 try:
@@ -149,6 +175,7 @@ class PresenceStore:
         last_source: str | None = None,
     ) -> None:
         """Insert or replace the current-state snapshot for one person."""
+        validate_person_id(person_id)
         with self._db.connect() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO presence_current "
@@ -169,6 +196,7 @@ class PresenceStore:
     # ── Transition history ──────────────────────────────────────────────────
     def record_transition(self, event: PresenceEvent) -> int:
         """Persist one confirmed transition; return its row id."""
+        validate_person_id(event.person_id)
         with self._db.connect() as conn:
             cur: sqlite3.Cursor = conn.execute(
                 "INSERT INTO transitions "
@@ -196,6 +224,8 @@ class PresenceStore:
 
         Rows are returned newest-first.
         """
+        if person_id is not None:
+            validate_person_id(person_id)
         query: str = (
             "SELECT id, ts, person_id, from_state, to_state, confidence, source "
             "FROM transitions WHERE 1 = 1"
