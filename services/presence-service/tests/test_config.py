@@ -1,7 +1,6 @@
 """Tests for configuration validation, especially MQTT topic security."""
 
 import pytest
-
 from config import validate_mqtt_topic
 
 

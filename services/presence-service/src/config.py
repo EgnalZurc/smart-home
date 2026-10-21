@@ -205,3 +205,17 @@ PEOPLE_SEED: str = os.environ.get("PRESENCE_PEOPLE_SEED", "")
 # Transition audit trail retention (design §7.3: 1 year).
 RETENTION_DAYS: int = int(os.environ.get("PRESENCE_RETENTION_DAYS", "365"))
 PRUNE_INTERVAL_S: int = int(os.environ.get("PRESENCE_PRUNE_INTERVAL_S", str(24 * 3600)))
+
+# ── MQTT Credential Rotation Warning ─────────────────────────────────────────
+# Log a warning if MQTT credentials appear to be using defaults or are missing.
+import logging as _logging
+
+_config_logger = _logging.getLogger(__name__)
+_mqtt_user = os.environ.get("MQTT_USER", "")
+_mqtt_pass = os.environ.get("MQTT_PASSWORD", "")
+if not _mqtt_user or not _mqtt_pass:
+    _config_logger.warning(
+        "MQTT_USER and/or MQTT_PASSWORD not set. "
+        "MQTT authentication may be disabled. See security policy at "
+        "infrastructure/mosquitto/docs/credential-rotation.md"
+    )
