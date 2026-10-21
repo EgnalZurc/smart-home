@@ -19,6 +19,7 @@ from api.proxy.pc import (
     pc_sleep,
     pc_wake,
     EGNALPC_MAC,
+    WOL_BROADCAST,
 )
 
 
@@ -223,9 +224,11 @@ class TestPcWake:
                 result = await pc_wake(request)
                 assert result["status"] == "ok"
                 assert EGNALPC_MAC in result["message"]
+                # Verify broadcast address is returned
+                assert "broadcast" in result
 
-                # Verify wakeonlan was called with the MAC address
-                mock_wol.assert_called_once_with(EGNALPC_MAC)
+                # Verify wakeonlan was called with MAC and subnet broadcast
+                mock_wol.assert_called_once_with(EGNALPC_MAC, ip_address=WOL_BROADCAST)
 
     @pytest.mark.asyncio
     async def test_wake_invalid_mac_address(self):
