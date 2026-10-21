@@ -19,7 +19,6 @@ from api.proxy.pc import (
     pc_sleep,
     pc_wake,
     EGNALPC_MAC,
-    WOL_INTERFACE,
 )
 
 
@@ -220,58 +219,45 @@ class TestPcWake:
         )
 
         with patch("api.proxy.pc.require_super"):
-            with patch("asyncio.create_subprocess_exec") as mock_exec:
-                mock_proc = AsyncMock()
-                mock_proc.returncode = 0
-                mock_proc.communicate.return_value = (b"", b"")
-                mock_exec.return_value = mock_proc
-
+            with patch("wakeonlan.send_magic_packet") as mock_wol:
                 result = await pc_wake(request)
                 assert result["status"] == "ok"
                 assert EGNALPC_MAC in result["message"]
 
-                # Verify etherwake was called with correct args
-                call_args = mock_exec.call_args[0]
-                assert "sudo" in call_args
-                assert "etherwake" in call_args
-                assert "-i" in call_args
-                assert WOL_INTERFACE in call_args
-                assert EGNALPC_MAC in call_args
+                # Verify wakeonlan was called with the MAC address
+                mock_wol.assert_called_once_with(EGNALPC_MAC)
 
     @pytest.mark.asyncio
-    async def test_wake_etherwake_not_found(self):
-        """Returns 500 when etherwake is not installed."""
+    async def test_wake_invalid_mac_address(self):
+        """Returns 500 when MAC address is invalid."""
         request = make_mock_request(
             headers={"X-Confirm-Action": "WAKE"}, is_super=True
         )
 
         with patch("api.proxy.pc.require_super"):
-            with patch("asyncio.create_subprocess_exec") as mock_exec:
-                mock_exec.side_effect = FileNotFoundError("etherwake not found")
+            with patch("wakeonlan.send_magic_packet") as mock_wol:
+                mock_wol.side_effect = ValueError("Invalid MAC address")
 
                 with pytest.raises(HTTPException) as exc_info:
                     await pc_wake(request)
                 assert exc_info.value.status_code == 500
-                assert "etherwake not installed" in exc_info.value.detail
+                assert "Invalid MAC address" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_wake_etherwake_fails(self):
-        """Returns 500 when etherwake command fails."""
+    async def test_wake_send_packet_fails(self):
+        """Returns 500 when wake packet cannot be sent."""
         request = make_mock_request(
             headers={"X-Confirm-Action": "WAKE"}, is_super=True
         )
 
         with patch("api.proxy.pc.require_super"):
-            with patch("asyncio.create_subprocess_exec") as mock_exec:
-                mock_proc = AsyncMock()
-                mock_proc.returncode = 1
-                mock_proc.communicate.return_value = (b"", b"Permission denied")
-                mock_exec.return_value = mock_proc
+            with patch("wakeonlan.send_magic_packet") as mock_wol:
+                mock_wol.side_effect = OSError("Network unreachable")
 
                 with pytest.raises(HTTPException) as exc_info:
                     await pc_wake(request)
                 assert exc_info.value.status_code == 500
-                assert "Permission denied" in exc_info.value.detail
+                assert "Network unreachable" in exc_info.value.detail
 
 
 class TestRouteRegistration:
