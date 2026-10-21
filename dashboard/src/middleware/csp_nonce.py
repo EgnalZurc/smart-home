@@ -75,10 +75,13 @@ class CSPNonceMiddleware(BaseHTTPMiddleware):
 
         All inline scripts use nonce, and all event handlers use addEventListener,
         so 'unsafe-inline' is not needed. The nonce provides secure allowlisting.
+
+        Note: The sha256 hash is a fallback for browser-cached HTML that may not
+        have the nonce injected (e.g., stale service worker cache).
         """
         return {
             "default-src": "'self'",
-            "script-src": "'self' 'nonce-{nonce}'",
+            "script-src": "'self' 'nonce-{nonce}' 'sha256-9tNtSo+QG/qAg8Lu7LzUt+l7jTqjSxZ59ump2veyz14='",
             "style-src": "'self' 'nonce-{nonce}'",
             "img-src": "'self' data: https:",
             "font-src": "'self' data:",
