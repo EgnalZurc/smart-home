@@ -5,8 +5,80 @@ from __future__ import annotations
 import time
 
 import pytest
-from database import PresenceStore
+from database import PresenceStore, hash_mac, validate_person_id, _HASH_LENGTH
 from models import PresenceEvent, PresenceState
+
+
+# ── hash_mac tests ───────────────────────────────────────────────────────────
+
+
+def test_hash_mac_returns_correct_length():
+    """Hash should be exactly _HASH_LENGTH (16) hex chars for 64-bit security."""
+    result = hash_mac("AA:BB:CC:DD:EE:FF")
+    assert len(result) == _HASH_LENGTH
+    assert len(result) == 16  # Explicit check for security minimum
+
+
+def test_hash_mac_is_deterministic():
+    """Same MAC should always produce the same hash."""
+    mac = "11:22:33:44:55:66"
+    assert hash_mac(mac) == hash_mac(mac)
+
+
+def test_hash_mac_normalizes_formats():
+    """Different MAC formats should hash to the same value."""
+    expected = hash_mac("aabbccddeeff")
+    assert hash_mac("AA:BB:CC:DD:EE:FF") == expected
+    assert hash_mac("aa-bb-cc-dd-ee-ff") == expected
+    assert hash_mac("AABB.CCDD.EEFF") == expected
+
+
+def test_hash_mac_different_macs_differ():
+    """Different MACs should produce different hashes."""
+    assert hash_mac("AA:BB:CC:DD:EE:FF") != hash_mac("11:22:33:44:55:66")
+
+
+# ── validate_person_id tests ─────────────────────────────────────────────────
+
+
+def test_validate_person_id_accepts_valid_ids():
+    """Valid person_ids should pass validation unchanged."""
+    assert validate_person_id("ana") == "ana"
+    assert validate_person_id("juan_garcia") == "juan_garcia"
+    assert validate_person_id("user-123") == "user-123"
+    assert validate_person_id("User_Name-42") == "User_Name-42"
+
+
+def test_validate_person_id_rejects_empty():
+    """Empty person_id should raise ValueError."""
+    with pytest.raises(ValueError, match="cannot be empty"):
+        validate_person_id("")
+
+
+def test_validate_person_id_rejects_too_long():
+    """person_id over 64 chars should raise ValueError."""
+    long_id = "a" * 65
+    with pytest.raises(ValueError, match="exceeds maximum length"):
+        validate_person_id(long_id)
+
+
+def test_validate_person_id_rejects_invalid_chars():
+    """person_id with special characters should raise ValueError."""
+    invalid_ids = [
+        "user;drop table",  # SQL injection attempt
+        "user' OR '1'='1",  # SQL injection attempt
+        "../../../etc/passwd",  # Path traversal
+        "user@domain",  # Email-like
+        "user name",  # Spaces
+        "user\ttab",  # Tabs
+        "user\nnewline",  # Newlines
+    ]
+    for invalid_id in invalid_ids:
+        with pytest.raises(ValueError, match="invalid characters"):
+            validate_person_id(invalid_id)
+
+
+# ── PresenceStore tests ──────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -128,3 +200,32 @@ def test_prune_removes_old_transitions(store):
     deleted = store.prune(now=now, retention_days=365)
     assert deleted == 1
     assert store.count_transitions() == 1
+
+
+# ── person_id validation in store methods ────────────────────────────────────
+
+
+def test_upsert_current_validates_person_id(store):
+    """upsert_current should reject invalid person_id."""
+    now = int(time.time())
+    with pytest.raises(ValueError, match="invalid characters"):
+        store.upsert_current("user;drop", "home", 1.0, now)
+
+
+def test_record_transition_validates_person_id(store):
+    """record_transition should reject events with invalid person_id."""
+    now = int(time.time())
+    event = PresenceEvent(
+        ts=now,
+        person_id="../etc/passwd",
+        from_state=PresenceState.AWAY,
+        to_state=PresenceState.HOME,
+    )
+    with pytest.raises(ValueError, match="invalid characters"):
+        store.record_transition(event)
+
+
+def test_history_validates_person_id(store):
+    """history should reject invalid person_id filter."""
+    with pytest.raises(ValueError, match="invalid characters"):
+        store.history(person_id="user' OR '1'='1")

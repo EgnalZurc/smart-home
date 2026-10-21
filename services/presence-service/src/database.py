@@ -14,23 +14,63 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import sqlite3
 import time
 from pathlib import Path
+from re import Pattern
 from typing import Any
 
 from config import DB_PATH, RETENTION_DAYS
 from models import PresenceEvent
+
+# ── Input Validation ─────────────────────────────────────────────────────────
+# Validate person_id to prevent SQL injection and path traversal attacks.
+# Only alphanumeric characters, underscores, and hyphens are allowed.
+_PERSON_ID_RE: Pattern[str] = re.compile(r"^[a-zA-Z0-9_-]+$")
+_PERSON_ID_MAX_LENGTH: int = 64
+
+
+def validate_person_id(person_id: str) -> str:
+    """Validate person_id to ensure it contains only safe characters.
+
+    Args:
+        person_id: The identifier to validate.
+
+    Returns:
+        The validated person_id (unchanged if valid).
+
+    Raises:
+        ValueError: If person_id is empty, too long, or contains invalid characters.
+    """
+    if not person_id:
+        raise ValueError("person_id cannot be empty")
+    if len(person_id) > _PERSON_ID_MAX_LENGTH:
+        raise ValueError(
+            f"person_id exceeds maximum length of {_PERSON_ID_MAX_LENGTH}: "
+            f"{len(person_id)} chars"
+        )
+    if not _PERSON_ID_RE.match(person_id):
+        raise ValueError(
+            f"person_id contains invalid characters (allowed: a-zA-Z0-9_-): "
+            f"{person_id!r}"
+        )
+    return person_id
+
 
 # ── PII Pseudonymization ─────────────────────────────────────────────────────
 # MAC addresses are personally identifiable information (PII) that can be used
 # to track individuals. To comply with privacy regulations and minimize data
 # exposure in case of a breach, we hash MACs before storing or logging them.
 #
-# The hash is truncated to 12 hex chars (48 bits) which provides:
-# - Sufficient uniqueness for device correlation within the household
+# The hash is truncated to 16 hex chars (64 bits) which provides:
+# - Strong uniqueness for device correlation (birthday collision at ~4 billion)
 # - Irreversibility (cannot recover the original MAC)
 # - Consistent pseudonymization across the codebase
+
+# Minimum hash length in hex characters (64 bits = 16 chars).
+# Do not reduce below 16 to maintain collision resistance.
+_HASH_LENGTH: int = 16
 
 
 def hash_mac(mac: str) -> str:
@@ -40,14 +80,14 @@ def hash_mac(mac: str) -> str:
         mac: Raw MAC address in any format (AA:BB:CC:DD:EE:FF, aabbccddeeff, etc.)
 
     Returns:
-        12-character hex string (first 48 bits of SHA-256 hash).
+        16-character hex string (first 64 bits of SHA-256 hash).
 
     The hash is deterministic so the same MAC always produces the same
     pseudonym, enabling device correlation without storing raw PII.
     """
     # Normalize: lowercase, remove separators
     normalized: str = mac.lower().replace(":", "").replace("-", "").replace(".", "")
-    return hashlib.sha256(normalized.encode()).hexdigest()[:12]
+    return hashlib.sha256(normalized.encode()).hexdigest()[:_HASH_LENGTH]
 
 
 try:
@@ -149,6 +189,7 @@ class PresenceStore:
         last_source: str | None = None,
     ) -> None:
         """Insert or replace the current-state snapshot for one person."""
+        validate_person_id(person_id)
         with self._db.connect() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO presence_current "
@@ -169,6 +210,7 @@ class PresenceStore:
     # ── Transition history ──────────────────────────────────────────────────
     def record_transition(self, event: PresenceEvent) -> int:
         """Persist one confirmed transition; return its row id."""
+        validate_person_id(event.person_id)
         with self._db.connect() as conn:
             cur: sqlite3.Cursor = conn.execute(
                 "INSERT INTO transitions "
@@ -196,6 +238,8 @@ class PresenceStore:
 
         Rows are returned newest-first.
         """
+        if person_id is not None:
+            validate_person_id(person_id)
         query: str = (
             "SELECT id, ts, person_id, from_state, to_state, confidence, source "
             "FROM transitions WHERE 1 = 1"

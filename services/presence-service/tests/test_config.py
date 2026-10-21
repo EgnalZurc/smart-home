@@ -108,3 +108,47 @@ class TestMqttTopicValidation:
             validate_mqtt_topic("home/sensors/", allow_wildcards=False)
             == "home/sensors/"
         )
+
+
+
+class TestMqttCredentialsWarning:
+    """MQTT credentials rotation warning logging.
+
+    These tests verify that the module correctly detects missing MQTT credentials.
+    The actual warning is emitted at module load time via logger.warning().
+    We test the detection logic by examining the internal state variables.
+    """
+
+    def test_mqtt_credentials_detected_as_missing_when_not_set(
+        self, monkeypatch
+    ) -> None:
+        """Module should detect missing MQTT credentials."""
+        import importlib
+
+        # Clear any existing env vars
+        monkeypatch.delenv("MQTT_USER", raising=False)
+        monkeypatch.delenv("MQTT_PASSWORD", raising=False)
+
+        import config
+
+        importlib.reload(config)
+
+        # Verify the internal variables show credentials are missing
+        assert config._mqtt_user == ""
+        assert config._mqtt_password == ""
+
+    def test_mqtt_credentials_detected_when_set(self, monkeypatch) -> None:
+        """Module should detect when MQTT credentials are set."""
+        import importlib
+
+        # Set credentials
+        monkeypatch.setenv("MQTT_USER", "testuser")
+        monkeypatch.setenv("MQTT_PASSWORD", "testpassword")
+
+        import config
+
+        importlib.reload(config)
+
+        # Verify the internal variables show credentials are set
+        assert config._mqtt_user == "testuser"
+        assert config._mqtt_password == "testpassword"

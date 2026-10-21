@@ -8,9 +8,12 @@ a single source of truth. Defaults match the design document
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import re
 from re import Pattern
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 # ── Validation helpers ───────────────────────────────────────────────────────
 
@@ -171,6 +174,18 @@ ARP_SUBNET: str = _validate_subnet(
 #   - Keep a rotation log in infrastructure/mosquitto/docs/credential-rotation.md.
 MQTT_BROKER: str = os.environ.get("PRESENCE_MQTT_BROKER", "mosquitto")
 MQTT_PORT: int = int(os.environ.get("PRESENCE_MQTT_PORT", "1883"))
+
+# Emit a startup warning if MQTT credentials are not configured.
+# This serves as a reminder to set credentials and establish a rotation schedule.
+_mqtt_user: str = os.environ.get("MQTT_USER", "")
+_mqtt_password: str = os.environ.get("MQTT_PASSWORD", "")
+if not _mqtt_user or not _mqtt_password:
+    logger.warning(
+        "MQTT credentials not configured (MQTT_USER/MQTT_PASSWORD). "
+        "Ensure credentials are set and rotated every 90 days per security policy. "
+        "See infrastructure/mosquitto/docs/credential-rotation.md"
+    )
+
 # Subscription topics allow wildcards (#, +) for pattern matching.
 BLE_TOPIC: str = validate_mqtt_topic(
     os.environ.get("PRESENCE_BLE_TOPIC", "presence/ble/#"), allow_wildcards=True
