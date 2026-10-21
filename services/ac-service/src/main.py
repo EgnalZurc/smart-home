@@ -379,7 +379,63 @@ app = FastAPI(
 )
 
 
-# ── Security Headers Middleware ───────────────────────────────────────────────
+# ── CSRF Protection ───────────────────────────────────────────────────────────
+
+_ALLOWED_ORIGINS: set[str] = {
+    "https://raspberrypi.tailaa37cd.ts.net",
+    "http://raspberrypi.local",
+    "http://localhost",
+    "http://localhost:8002",
+    "http://127.0.0.1",
+    "http://127.0.0.1:8002",
+}
+
+
+def _validate_origin(request: Request) -> bool:
+    """Validate request origin for CSRF protection.
+
+    Rules:
+        - GET/HEAD/OPTIONS: always allowed (safe methods)
+        - POST/PUT/DELETE/PATCH without Origin header: allowed (non-browser client)
+        - POST/PUT/DELETE/PATCH with Origin header: must be in _ALLOWED_ORIGINS
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return True
+    origin = request.headers.get("Origin")
+    if origin is None:
+        # Non-browser clients (curl, httpx, etc.) don't send Origin
+        return True
+    return origin in _ALLOWED_ORIGINS
+
+
+# ── Security Middlewares ──────────────────────────────────────────────────────
+
+
+class CSRFProtectionMiddleware(BaseHTTPMiddleware):
+    """CSRF protection middleware that validates Origin header on state-changing requests."""
+
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Response]
+    ) -> Response:
+        """Check origin before processing request."""
+        if not _validate_origin(request):
+            logger.warning(
+                "CSRF: blocked request from origin %s to %s",
+                request.headers.get("Origin"),
+                request.url.path,
+            )
+            response = Response(
+                content='{"detail":"Invalid origin"}',
+                status_code=403,
+                media_type="application/json",
+            )
+            # Add security headers to CSRF rejection responses
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["X-XSS-Protection"] = "1; mode=block"
+            response.headers["Content-Security-Policy"] = "default-src 'self'"
+            return response
+        return await call_next(request)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -389,7 +445,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         - X-Content-Type-Options: nosniff - Prevents MIME type sniffing
         - X-Frame-Options: DENY - Prevents clickjacking via iframes
         - X-XSS-Protection: 1; mode=block - Legacy XSS protection for older browsers
-        - Referrer-Policy: strict-origin-when-cross-origin - Controls referrer info
+        - Content-Security-Policy: default-src 'self' - Restricts resource loading
     """
 
     async def dispatch(
@@ -400,11 +456,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = "default-src 'self'"
         return response
 
 
+# Middleware order matters: SecurityHeaders wraps everything (outermost),
+# then CSRF checks origin, then CORS handles preflight.
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CSRFProtectionMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
