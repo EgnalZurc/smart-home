@@ -643,3 +643,154 @@ class TestCSRFProtection:
         finally:
             os.environ["ALLOWED_ORIGINS"] = "*"
             importlib.reload(main)
+
+
+class TestSecurityHeaders:
+    """Tests for security headers middleware."""
+
+    def test_security_headers_present_on_get(self, tmp_data_file):
+        """Security headers should be present on GET responses."""
+        import importlib
+
+        import main
+
+        importlib.reload(main)
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(main.app)
+
+        response = client.get("/api/vacaciones")
+
+        assert response.status_code == 200
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert response.headers["X-Frame-Options"] == "DENY"
+        assert response.headers["X-XSS-Protection"] == "1; mode=block"
+        assert response.headers["Content-Security-Policy"] == "default-src 'self'"
+        assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+
+    def test_security_headers_present_on_post(self, tmp_data_file):
+        """Security headers should be present on POST responses."""
+        import importlib
+
+        import main
+
+        importlib.reload(main)
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(main.app)
+
+        response = client.post(
+            "/api/vacaciones/config",
+            json={"nucleos": [], "personas": []},
+        )
+
+        assert response.status_code == 200
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert response.headers["X-Frame-Options"] == "DENY"
+        assert response.headers["X-XSS-Protection"] == "1; mode=block"
+        assert response.headers["Content-Security-Policy"] == "default-src 'self'"
+        assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+
+    def test_security_headers_present_on_health(self, tmp_data_file):
+        """Security headers should be present on health endpoint."""
+        import importlib
+
+        import main
+
+        importlib.reload(main)
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(main.app)
+
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert response.headers["X-Frame-Options"] == "DENY"
+
+    def test_security_headers_present_on_error(self, tmp_data_file):
+        """Security headers should be present even on error responses."""
+        import importlib
+
+        import main
+
+        importlib.reload(main)
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(main.app)
+
+        response = client.post(
+            "/api/vacaciones/config",
+            json={
+                "nucleos": [{"id": "INVALID!", "nombre": "Test"}],
+                "personas": [],
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert response.headers["X-Frame-Options"] == "DENY"
+
+
+class TestRateLimitLogging:
+    """Tests for rate limit logging."""
+
+    def test_rate_limit_logs_warning(self, tmp_data_file):
+        """Rate limit should log warning with IP and path."""
+        import importlib
+        from unittest.mock import patch
+
+        import main
+        from smart_home_common.rate_limiter import InMemoryRateLimiter
+
+        importlib.reload(main)
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(main.app)
+
+        original_limiter = main._rate_limiter
+        main._rate_limiter = InMemoryRateLimiter(
+            max_requests=2, window_seconds=60, max_entries=100
+        )
+
+        try:
+            # Exhaust rate limit
+            for _ in range(2):
+                client.post(
+                    "/api/vacaciones/config",
+                    json={"nucleos": [], "personas": []},
+                    headers={"X-Forwarded-For": "10.20.30.40"},
+                )
+
+            # Next request should be rate limited and logged
+            with patch.object(main.logger, "warning") as mock_warning:
+                response = client.post(
+                    "/api/vacaciones/config",
+                    json={"nucleos": [], "personas": []},
+                    headers={"X-Forwarded-For": "10.20.30.40"},
+                )
+
+                assert response.status_code == 429
+                mock_warning.assert_called_once()
+                call_args = mock_warning.call_args
+                # Verify the log message format
+                assert "[rate-limit]" in call_args[0][0]
+                assert "10.20.30.40" in call_args[0][1]
+                assert "/api/vacaciones/config" in call_args[0][2]
+        finally:
+            main._rate_limiter = original_limiter
+
+    def test_rate_limiter_has_max_entries(self, tmp_data_file):
+        """Rate limiter should be configured with max_entries."""
+        import importlib
+
+        import main
+
+        importlib.reload(main)
+
+        assert main._rate_limiter.max_entries == 10000
