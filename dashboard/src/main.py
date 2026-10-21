@@ -213,6 +213,47 @@ class AuthMiddleware(BaseHTTPMiddleware):
         return StarletteRedirect(login_url, status_code=302)
 
 
+class CSRFProtectionMiddleware(BaseHTTPMiddleware):
+    """Validate Origin header on state-changing requests to prevent CSRF attacks.
+
+    For POST, PUT, DELETE requests:
+    - If Origin header is present, validate it matches the Host header
+    - Allow requests from Tailscale domains (*.ts.net) for internal access
+    - Reject mismatched origins with 403
+
+    GET/HEAD/OPTIONS are safe methods and always allowed.
+    Requests without Origin header are allowed (same-origin requests from older
+    browsers may not send Origin).
+    """
+
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Response]
+    ) -> Response:
+        """Validate CSRF for state-changing methods."""
+        if request.method in ("POST", "PUT", "DELETE"):
+            origin = request.headers.get("origin")
+            host = request.headers.get("host")
+
+            if origin:
+                # Extract hostname from origin (remove scheme and path)
+                origin_host = (
+                    origin.replace("https://", "").replace("http://", "").split("/")[0]
+                )
+
+                # Allow if origin matches host or is from Tailscale network
+                if origin_host != host and not origin_host.endswith(".ts.net"):
+                    logger.warning(
+                        "CSRF validation failed: origin=%s, host=%s", origin, host
+                    )
+                    from fastapi.responses import JSONResponse
+
+                    return JSONResponse(
+                        {"error": "CSRF validation failed"}, status_code=403
+                    )
+
+        return await call_next(request)
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses.
 
@@ -336,6 +377,9 @@ Most endpoints require authentication. Use `POST /api/auth/token` to obtain a se
 # AUTH middleware (must be added before CORS so unauthenticated requests
 # are redirected before CORS headers are processed)
 app.add_middleware(AuthMiddleware)
+
+# CSRF protection middleware — validates Origin header on state-changing requests
+app.add_middleware(CSRFProtectionMiddleware)
 
 # Security headers middleware — adds X-Content-Type-Options, X-Frame-Options, etc.
 app.add_middleware(SecurityHeadersMiddleware)
