@@ -1226,10 +1226,12 @@ function renderPcResources() {
             <div class="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-3"><span class="w-3 h-3 rounded-full bg-red-400"></span></div>
             <p class="text-slate-400 text-sm mb-1">Egnal PC</p>
             <p class="text-red-400 font-semibold mb-4">${t('pc_offline')}</p>
-            ${showPowerBtns ? `<button id="pc-wake-btn" class="pc-power-btn wake" onclick="pcWake()">
+            ${showPowerBtns ? `<button id="pc-wake-btn" class="pc-power-btn wake">
                 <span>☀️</span><span>${t('pc_wake')}</span>
             </button>` : ''}
         </div>`;
+        // Attach event listener after DOM update (CSP-compliant, no inline onclick)
+        document.getElementById('pc-wake-btn')?.addEventListener('click', pcWake);
         return;
     }
     const modes = ['balanced', 'gaming', 'servidor'];
@@ -1246,12 +1248,14 @@ function renderPcResources() {
             </div>
             ${showPowerBtns ? `<div class="mt-6 pt-4 border-t border-slate-700">
                 <p class="text-xs text-slate-500 uppercase tracking-wider mb-3">${t('pc_power_control')}</p>
-                <button id="pc-sleep-btn" class="pc-power-btn sleep" onclick="pcSleep()">
+                <button id="pc-sleep-btn" class="pc-power-btn sleep">
                     <span>🌙</span><span>${t('pc_sleep')}</span>
                 </button>
             </div>` : ''}
         </div>
     `;
+    // Attach event listener after DOM update (CSP-compliant, no inline onclick)
+    document.getElementById('pc-sleep-btn')?.addEventListener('click', pcSleep);
 }
 
 async function fetchAndRenderResources() {
