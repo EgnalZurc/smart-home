@@ -183,10 +183,14 @@ async def set_pc_mode(mode: str, request: Request):
 #
 # DANGEROUS OPERATIONS — require SUPER access + confirmation header.
 # Sleep: Proxies to pc-agent which suspends the Windows PC.
-# Wake: Executes etherwake locally on the Pi to send Wake-on-LAN magic packet.
+# Wake: Sends Wake-on-LAN magic packet using the wakeonlan Python library.
 
 # MAC address of EgnalPC's WiFi adapter (Intel AX200)
 EGNALPC_MAC = os.environ.get("EGNALPC_MAC", "A4:B1:C1:92:76:B0")
+# Broadcast address of the physical LAN subnet (NOT 255.255.255.255)
+# Required because the container is on a Docker bridge network (172.18.x.x)
+# and global broadcast doesn't reach the physical network.
+WOL_BROADCAST = os.environ.get("WOL_BROADCAST", "192.168.1.255")
 
 
 @router.post("/sleep")
@@ -255,14 +259,18 @@ async def pc_wake(request: Request):
     logger.warning("PC WAKE requested by user via dashboard")
 
     try:
-        # Send magic packet (UDP broadcast to port 9)
-        # The wakeonlan library handles the packet construction
-        send_magic_packet(EGNALPC_MAC)
+        # Send magic packet to the subnet broadcast address (NOT 255.255.255.255)
+        # The container is on a Docker bridge network, so global broadcast
+        # doesn't reach the physical LAN. We must target the subnet broadcast.
+        send_magic_packet(EGNALPC_MAC, ip_address=WOL_BROADCAST)
 
-        logger.info("Wake-on-LAN magic packet sent to %s", EGNALPC_MAC)
+        logger.info(
+            "Wake-on-LAN magic packet sent to %s via %s", EGNALPC_MAC, WOL_BROADCAST
+        )
         return {
             "status": "ok",
             "message": f"Magic packet sent to {EGNALPC_MAC}",
+            "broadcast": WOL_BROADCAST,
         }
 
     except ValueError as e:
