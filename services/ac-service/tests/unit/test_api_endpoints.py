@@ -1114,3 +1114,92 @@ class TestPydanticValidation:
         data = response.json()
         # Pydantic returns all validation errors
         assert len(data["detail"]) >= 2
+
+
+class TestCSRFProtection:
+    """Tests for CSRF protection middleware."""
+
+    def test_csrf_blocks_invalid_origin(self, client, mock_components):
+        """POST from unknown origin should be blocked with 403."""
+        response = client.post(
+            "/api/ac/control",
+            json={"mode": "auto"},
+            headers={"Origin": "https://malicious-site.com"},
+        )
+
+        assert response.status_code == 403
+        data = response.json()
+        assert data["detail"] == "Invalid origin"
+
+    def test_csrf_allows_valid_origin(self, client, mock_components):
+        """POST from allowed origin should succeed."""
+        response = client.post(
+            "/api/ac/control",
+            json={"mode": "auto"},
+            headers={"Origin": "https://raspberrypi.tailaa37cd.ts.net"},
+        )
+
+        assert response.status_code == 200
+
+    def test_csrf_allows_localhost_origin(self, client, mock_components):
+        """POST from localhost origin should succeed."""
+        response = client.post(
+            "/api/ac/control",
+            json={"mode": "auto"},
+            headers={"Origin": "http://localhost:8002"},
+        )
+
+        assert response.status_code == 200
+
+    def test_csrf_allows_no_origin(self, client, mock_components):
+        """POST without Origin header should succeed (non-browser client)."""
+        response = client.post(
+            "/api/ac/control",
+            json={"mode": "auto"},
+            # No Origin header
+        )
+
+        assert response.status_code == 200
+
+    def test_csrf_allows_get_with_any_origin(self, client, mock_components):
+        """GET requests should be allowed regardless of Origin."""
+        response = client.get(
+            "/api/ac/status",
+            headers={"Origin": "https://malicious-site.com"},
+        )
+
+        assert response.status_code == 200
+
+
+class TestSecurityHeaders:
+    """Tests for security headers middleware."""
+
+    def test_security_headers_present(self, client):
+        """All security headers should be present in response."""
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert response.headers["X-Frame-Options"] == "DENY"
+        assert response.headers["X-XSS-Protection"] == "1; mode=block"
+        assert response.headers["Content-Security-Policy"] == "default-src 'self'"
+
+    def test_security_headers_on_api_endpoint(self, client, mock_components):
+        """Security headers should be present on API endpoints."""
+        response = client.get("/api/ac/status")
+
+        assert response.status_code == 200
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert response.headers["X-Frame-Options"] == "DENY"
+
+    def test_security_headers_on_error_response(self, client, mock_components):
+        """Security headers should be present even on error responses."""
+        response = client.post(
+            "/api/ac/control",
+            json={"mode": "auto"},
+            headers={"Origin": "https://malicious-site.com"},
+        )
+
+        assert response.status_code == 403
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert response.headers["X-Frame-Options"] == "DENY"

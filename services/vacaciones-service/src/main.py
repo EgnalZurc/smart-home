@@ -40,13 +40,12 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request
 from fastapi import Path as PathParam
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from smart_home_common.rate_limiter import InMemoryRateLimiter
-from starlette.middleware.base import BaseHTTPMiddleware
 from vacaciones_controller import (
     MAX_NUCLEOS,
     MAX_PERSONAS,
@@ -159,12 +158,8 @@ def _check_csrf(request: Request) -> None:
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 
-# Rate limiter using smart_home_common for consistency across services.
-# max_entries=10000 bounds memory usage for single-container deployment;
-# when exceeded, oldest entries are evicted (LRU).
-_rate_limiter = InMemoryRateLimiter(
-    max_requests=30, window_seconds=60, max_entries=10000
-)
+# Rate limiter using smart_home_common for consistency across services
+_rate_limiter = InMemoryRateLimiter(max_requests=30, window_seconds=60)
 
 
 def _get_client_ip(request: Request) -> str:
@@ -197,9 +192,6 @@ def _check_rate_limit(request: Request) -> None:
     """
     client_ip = _get_client_ip(request)
     if not _rate_limiter.is_allowed(client_ip):
-        logger.warning(
-            "[rate-limit] IP %s exceeded limit for %s", client_ip, request.url.path
-        )
         raise HTTPException(status_code=429, detail="Too many requests")
 
 
@@ -227,34 +219,6 @@ app = FastAPI(
     docs_url="/swagger",
     redoc_url="/redoc",
 )
-
-
-# ── Security headers middleware ───────────────────────────────────────────────
-
-
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Middleware that adds security headers to all responses.
-
-    Headers added:
-    - X-Content-Type-Options: nosniff — prevents MIME type sniffing
-    - X-Frame-Options: DENY — prevents clickjacking
-    - X-XSS-Protection: 1; mode=block — legacy XSS protection
-    - Content-Security-Policy: default-src 'self' — restricts resource loading
-    - Referrer-Policy: strict-origin-when-cross-origin — controls referrer info
-    """
-
-    async def dispatch(self, request: Request, call_next) -> Response:
-        """Process request and add security headers to response."""
-        response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Content-Security-Policy"] = "default-src 'self'"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        return response
-
-
-app.add_middleware(SecurityHeadersMiddleware)
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
