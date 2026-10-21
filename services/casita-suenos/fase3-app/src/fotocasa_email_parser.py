@@ -2,10 +2,10 @@
 Parser de alertas de Fotocasa recibidas por Gmail.
 Autenticacion: IMAP con App Password de Google.
 
-Tipos de email de Fotocasa España manejados:
+Tipos de email de Fotocasa EspaÃƒÂ±a manejados:
   1. ALERTA_ZONA:   "Tienes N anuncio(s) en tu zona personalizada de Vivienda en Venta,
                      que no se te adelanten"
-                    → 1 o varios anuncios, municipio en la URL, precio en el body
+                    Ã¢â€ â€™ 1 o varios anuncios, municipio en la URL, precio en el body
 
 Formato de URL de anuncio:
   https://www.fotocasa.es/es/comprar/vivienda/{municipio}/{filtros}/{ID}/d?stc=...
@@ -14,22 +14,22 @@ Formato de URL de anuncio:
     .../santa-barbara/calefaccion-parking-terraza/190533055/d?stc=...
     .../amposta/grau-quintanes/190533053/d?stc=...
 
-Extracción de datos:
-  - property_id: dígitos antes de /d? en la URL
+ExtracciÃƒÂ³n de datos:
+  - property_id: dÃƒÂ­gitos antes de /d? en la URL
   - municipio:   segmento antes de los filtros y el ID
   - filtros:     segmento entre municipio e ID (infieren garage/jardin/ac)
-  - precio:      en el body, formato "60.000 €", contexto ±600 chars alrededor de la URL
+  - precio:      en el body, formato "60.000 Ã¢â€šÂ¬", contexto Ã‚Â±600 chars alrededor de la URL
   - habitaciones: "N hab" en el body
-  - tamaño:      "N m²" en el body
+  - tamaÃƒÂ±o:      "N mÃ‚Â²" en el body
 
 Inferencia has_garden / has_garage / has_ac desde filtros en la URL:
-  jardin, patio, terraza → has_garden=True
-  parking, garaje, cochera → has_garage=True
-  calefaccion, aire → has_ac=True (calor/frío infieren climatización)
+  jardin, patio, terraza Ã¢â€ â€™ has_garden=True
+  parking, garaje, cochera Ã¢â€ â€™ has_garage=True
+  calefaccion, aire Ã¢â€ â€™ has_ac=True (calor/frÃƒÂ­o infieren climatizaciÃƒÂ³n)
 
-Política de errores:
-  - Si un email falla al procesarse → NO se elimina del buzón → se notifica por Telegram
-  - Solo se eliminan los emails procesados con éxito
+PolÃƒÂ­tica de errores:
+  - Si un email falla al procesarse Ã¢â€ â€™ NO se elimina del buzÃƒÂ³n Ã¢â€ â€™ se notifica por Telegram
+  - Solo se eliminan los emails procesados con ÃƒÂ©xito
 """
 
 from __future__ import annotations
@@ -42,6 +42,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 import imap_base
+from config import sanitize_imap_error
 from imap_base import (
     ROOMS_PATTERN as _ROOMS_PATTERN,
 )
@@ -71,10 +72,10 @@ _URL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Precio estándar: compartido con el resto de parsers.
+# Precio estÃƒÂ¡ndar: compartido con el resto de parsers.
 _PRICE_PATTERN = imap_base.PRICE_PATTERN
 
-# Palabras en el segmento de filtros de la URL que indican características
+# Palabras en el segmento de filtros de la URL que indican caracterÃƒÂ­sticas
 _GARDEN_KEYWORDS = {"jardin", "patio", "terraza", "finca", "huerto", "parcela"}
 _GARAGE_KEYWORDS = {"parking", "garaje", "cochera", "garage"}
 _AC_KEYWORDS = {"calefaccion", "aire", "climatizacion", "ac", "aerotermia"}
@@ -83,13 +84,13 @@ _AC_KEYWORDS = {"calefaccion", "aire", "climatizacion", "ac", "aerotermia"}
 class FotocasaEmailType(str, Enum):
     # "Tienes N anuncio(s) en tu zona personalizada de Vivienda en Venta, que no se te adelanten"
     ALERTA_ZONA = "alerta_zona"
-    # "¡Precio reducido! Tu alerta de..." (bajada de precio en alerta)
+    # "Ã‚Â¡Precio reducido! Tu alerta de..." (bajada de precio en alerta)
     BAJADA_PRECIO = "bajada_precio"
-    # "Novedades de tus búsquedas guardadas" / "Nuevos anuncios en tu zona"
+    # "Novedades de tus bÃƒÂºsquedas guardadas" / "Nuevos anuncios en tu zona"
     RESUMEN = "resumen"
-    # "¡Nuevo anuncio que coincide con tu búsqueda!"  (anuncio individual directo)
+    # "Ã‚Â¡Nuevo anuncio que coincide con tu bÃƒÂºsqueda!"  (anuncio individual directo)
     NUEVO_ANUNCIO = "nuevo_anuncio"
-    # "Tu búsqueda guardada tiene actividad" / notificación genérica
+    # "Tu bÃƒÂºsqueda guardada tiene actividad" / notificaciÃƒÂ³n genÃƒÂ©rica
     OTRO = "otro"
 
 
@@ -99,7 +100,7 @@ class FotocasaAlert:
     property_id: str
     email_id: str
     folder: str
-    # Municipio extraído de la URL — se usa para inferir zona con _infer_zone_from_hint
+    # Municipio extraÃƒÂ­do de la URL Ã¢â‚¬â€ se usa para inferir zona con _infer_zone_from_hint
     location_hint: str
     email_type: FotocasaEmailType = FotocasaEmailType.OTRO
     price: int | None = None
@@ -122,7 +123,7 @@ def _connect_imap(email_address: str, app_password: str) -> imaplib.IMAP4_SSL:
     return connect_imap(email_address, app_password, log_prefix=_LOG_PREFIX)
 
 
-# Alias a los helpers compartidos (mantienen el nombre interno histórico).
+# Alias a los helpers compartidos (mantienen el nombre interno histÃƒÂ³rico).
 _decode_subject = decode_subject
 _get_body = get_body
 
@@ -131,20 +132,20 @@ def _classify_fotocasa_email(subject: str) -> FotocasaEmailType:
     """
     Clasifica el tipo de email de Fotocasa por su subject.
 
-    Tipos conocidos de Fotocasa España (a partir de casos reales):
+    Tipos conocidos de Fotocasa EspaÃƒÂ±a (a partir de casos reales):
       1. ALERTA_ZONA:   "Tienes N anuncio(s) en tu zona personalizada de Vivienda en Venta,
                          que no se te adelanten"
-      2. BAJADA_PRECIO: "¡Precio reducido! Tu alerta de Vivienda en Venta..."
+      2. BAJADA_PRECIO: "Ã‚Â¡Precio reducido! Tu alerta de Vivienda en Venta..."
                         "Bajada de precio en tu alerta"
-      3. RESUMEN:       "Novedades de tus búsquedas guardadas"
+      3. RESUMEN:       "Novedades de tus bÃƒÂºsquedas guardadas"
                         "Nuevos anuncios en tu zona personalizada"
                         "Resumen de tus alertas"
-      4. NUEVO_ANUNCIO: "¡Nuevo anuncio que coincide con tu búsqueda!"
-                        "Nuevo inmueble en tu búsqueda guardada"
-      5. OTRO:          Bienvenida, confirmación de alerta, marketing, etc.
+      4. NUEVO_ANUNCIO: "Ã‚Â¡Nuevo anuncio que coincide con tu bÃƒÂºsqueda!"
+                        "Nuevo inmueble en tu bÃƒÂºsqueda guardada"
+      5. OTRO:          Bienvenida, confirmaciÃƒÂ³n de alerta, marketing, etc.
     """
     sl = subject.lower()
-    # Bajada de precio — más específico primero
+    # Bajada de precio Ã¢â‚¬â€ mÃƒÂ¡s especÃƒÂ­fico primero
     if (
         "precio reducido" in sl
         or "bajada de precio" in sl
@@ -153,16 +154,16 @@ def _classify_fotocasa_email(subject: str) -> FotocasaEmailType:
         or "rebaja" in sl
     ):
         return FotocasaEmailType.BAJADA_PRECIO
-    # Alerta de zona — formato principal que llega
+    # Alerta de zona Ã¢â‚¬â€ formato principal que llega
     if "zona personalizada" in sl and ("anuncio" in sl or "inmueble" in sl):
         return FotocasaEmailType.ALERTA_ZONA
-    # Resumen / múltiples anuncios
+    # Resumen / mÃƒÂºltiples anuncios
     if (
         "novedades" in sl
         or "resumen" in sl
         or "nuevos anuncios" in sl
         or "busquedas guardadas" in sl
-        or "búsquedas guardadas" in sl
+        or "bÃƒÂºsquedas guardadas" in sl
     ):
         return FotocasaEmailType.RESUMEN
     # Nuevo anuncio individual
@@ -170,10 +171,10 @@ def _classify_fotocasa_email(subject: str) -> FotocasaEmailType:
         "nuevo anuncio" in sl
         or "nuevo inmueble" in sl
         or "coincide con tu busqueda" in sl
-        or "coincide con tu búsqueda" in sl
+        or "coincide con tu bÃƒÂºsqueda" in sl
     ):
         return FotocasaEmailType.NUEVO_ANUNCIO
-    # Fallback — si tiene URLs de anuncio se procesará igual
+    # Fallback Ã¢â‚¬â€ si tiene URLs de anuncio se procesarÃƒÂ¡ igual
     if "anuncio" in sl or "inmueble" in sl or "venta" in sl or "alerta" in sl:
         return FotocasaEmailType.ALERTA_ZONA
     return FotocasaEmailType.OTRO
@@ -182,8 +183,8 @@ def _classify_fotocasa_email(subject: str) -> FotocasaEmailType:
 def _infer_features_from_url(filtros_segment: str) -> tuple[bool, bool, bool]:
     """
     Infiere has_garden, has_garage, has_ac desde el segmento de filtros de la URL.
-    Ejemplo: 'jardin-patio-no-amueblado' → has_garden=True
-             'calefaccion-parking-terraza' → has_ac=True, has_garage=True, has_garden=True
+    Ejemplo: 'jardin-patio-no-amueblado' Ã¢â€ â€™ has_garden=True
+             'calefaccion-parking-terraza' Ã¢â€ â€™ has_ac=True, has_garage=True, has_garden=True
     """
     tokens = set(filtros_segment.lower().replace("-", " ").split())
     has_garden = bool(tokens & _GARDEN_KEYWORDS)
@@ -195,7 +196,7 @@ def _infer_features_from_url(filtros_segment: str) -> tuple[bool, bool, bool]:
 def _extract_price_near_url(
     body: str, url_match_start: int, url_match_end: int
 ) -> tuple[int | None, int | None, float | None]:
-    """Extrae precio, habitaciones y m² del body en contexto ±600 chars alrededor de la URL."""
+    """Extrae precio, habitaciones y mÃ‚Â² del body en contexto Ã‚Â±600 chars alrededor de la URL."""
     start = max(0, url_match_start - 600)
     end = min(len(body), url_match_end + 600)
     ctx = body[start:end]
@@ -206,7 +207,7 @@ def _extract_price_near_url(
 
     price = parse_price_value(price_m.group(1)) if price_m else None
 
-    # Fallback: buscar precio en todo el body si no está cerca de la URL
+    # Fallback: buscar precio en todo el body si no estÃƒÂ¡ cerca de la URL
     if not price:
         price_m2 = _PRICE_PATTERN.search(body)
         if price_m2:
@@ -254,7 +255,7 @@ def _extract_alerts_from_email(
                 body, match.start(), match.end()
             )
 
-            # URL canónica sin tracking params
+            # URL canÃƒÂ³nica sin tracking params
             url = f"https://www.fotocasa.es/es/comprar/vivienda/{municipio}/{filtros}/{pid}/d"
 
             alerts.append(
@@ -292,7 +293,7 @@ def _extract_alerts_from_email(
 
 
 # ---------------------------------------------------------------------------
-# API pública
+# API pÃƒÂºblica
 # ---------------------------------------------------------------------------
 
 
@@ -302,15 +303,17 @@ def fetch_new_fotocasa_alerts(
 ) -> tuple[list[FotocasaAlert], list[str], imaplib.IMAP4_SSL | None]:
     """
     Busca emails de Fotocasa en Gmail (INBOX y Todos).
-    Sin filtro UNSEEN — igual que Idealista, para no perder emails ya leídos.
+    Sin filtro UNSEEN Ã¢â‚¬â€ igual que Idealista, para no perder emails ya leÃƒÂ­dos.
     Devuelve (alertas_ok, errores_list, imap_conn).
     Los emails con error NO se eliminan.
     """
     try:
         imap = _connect_imap(email_address, app_password)
     except Exception as e:
-        logger.error("[fotocasa] Error conectando a IMAP: %s", e)
-        return [], [str(e)], None
+        # Sanitize error to prevent app_password from leaking in logs
+        safe_error = sanitize_imap_error(str(e), app_password)
+        logger.error("[fotocasa] Error conectando a IMAP: %s", safe_error)
+        return [], [safe_error], None
 
     all_alerts: list[FotocasaAlert] = []
     seen_pids: set[str] = set()
@@ -342,7 +345,7 @@ def delete_processed_fotocasa_emails(
     failed_ids: set[str] | None = None,
 ) -> None:
     """
-    Elimina SOLO los emails de Fotocasa procesados con éxito.
+    Elimina SOLO los emails de Fotocasa procesados con ÃƒÂ©xito.
     Los emails con error (en failed_ids) se conservan.
     """
     delete_processed(imap, alerts, failed_ids, log_prefix=_LOG_PREFIX)
