@@ -219,7 +219,7 @@ class TestPcWake:
         )
 
         with patch("api.proxy.pc.require_super"):
-            with patch("api.proxy.pc.send_magic_packet") as mock_wol:
+            with patch("wakeonlan.send_magic_packet") as mock_wol:
                 result = await pc_wake(request)
                 assert result["status"] == "ok"
                 assert EGNALPC_MAC in result["message"]
@@ -235,7 +235,7 @@ class TestPcWake:
         )
 
         with patch("api.proxy.pc.require_super"):
-            with patch("api.proxy.pc.send_magic_packet") as mock_wol:
+            with patch("wakeonlan.send_magic_packet") as mock_wol:
                 mock_wol.side_effect = ValueError("Invalid MAC address")
 
                 with pytest.raises(HTTPException) as exc_info:
@@ -251,7 +251,7 @@ class TestPcWake:
         )
 
         with patch("api.proxy.pc.require_super"):
-            with patch("api.proxy.pc.send_magic_packet") as mock_wol:
+            with patch("wakeonlan.send_magic_packet") as mock_wol:
                 mock_wol.side_effect = OSError("Network unreachable")
 
                 with pytest.raises(HTTPException) as exc_info:
