@@ -2,30 +2,30 @@
 Parser de alertas de Idealista recibidas por Gmail.
 Autenticacion: IMAP con App Password de Google.
 
-Tipos de email de Idealista España manejados:
-  1. NUEVO_ANUNCIO:    "¡Nuevo chalet en tu búsqueda: chalets en Burgos!"
-                       → 1 URL, zona en subject, precio junto a URL
-  2. BAJADA_PRECIO:    "¡Bajada de precio en tu búsqueda: chalets en León!"
-                       → 1 URL, precio puede estar lejos de la URL en el body
-  3. VISITA_3D:        "¡Ha incluido una Visita 3D!"
-                       → 1 URL, actualización de anuncio existente
-  4. RECOMENDADO:      "¡Nuevo chalet recomendado para ti!"
-                       → 1 URL, anuncio fuera de los filtros del usuario
-  5. PRECIO_REDUCIDO:  "¡Precio reducido!"
-                       → 1 URL, similar a bajada de precio
+Tipos de email de Idealista EspaÃ±a manejados:
+  1. NUEVO_ANUNCIO:    "Â¡Nuevo chalet en tu bÃºsqueda: chalets en Burgos!"
+                       â†’ 1 URL, zona en subject, precio junto a URL
+  2. BAJADA_PRECIO:    "Â¡Bajada de precio en tu bÃºsqueda: chalets en LeÃ³n!"
+                       â†’ 1 URL, precio puede estar lejos de la URL en el body
+  3. VISITA_3D:        "Â¡Ha incluido una Visita 3D!"
+                       â†’ 1 URL, actualizaciÃ³n de anuncio existente
+  4. RECOMENDADO:      "Â¡Nuevo chalet recomendado para ti!"
+                       â†’ 1 URL, anuncio fuera de los filtros del usuario
+  5. PRECIO_REDUCIDO:  "Â¡Precio reducido!"
+                       â†’ 1 URL, similar a bajada de precio
   6. RESUMEN_DIARIO:   "Resumen diario de nuevos anuncios"
-                       → Múltiples URLs, sin zona fija por anuncio
-  7. NOVEDADES:        "Te enviamos N novedades de tus búsquedas guardadas"
-                       → Múltiples URLs, similar al resumen
+                       â†’ MÃºltiples URLs, sin zona fija por anuncio
+  7. NOVEDADES:        "Te enviamos N novedades de tus bÃºsquedas guardadas"
+                       â†’ MÃºltiples URLs, similar al resumen
 
-Estrategia de extracción de precio:
-  1. Contexto ±600 chars alrededor de la URL
+Estrategia de extracciÃ³n de precio:
+  1. Contexto Â±600 chars alrededor de la URL
   2. Si no hay precio, buscar en TODO el body (para bajadas de precio)
-  3. Patrón específico de bajada: "de X a Y €" → captura Y (precio actual)
+  3. PatrÃ³n especÃ­fico de bajada: "de X a Y â‚¬" â†’ captura Y (precio actual)
 
-Política de errores:
-  - Si un email falla al procesarse → NO se elimina del buzón → se notifica por Telegram
-  - Solo se eliminan los emails procesados con éxito
+PolÃ­tica de errores:
+  - Si un email falla al procesarse â†’ NO se elimina del buzÃ³n â†’ se notifica por Telegram
+  - Solo se eliminan los emails procesados con Ã©xito
 """
 
 from __future__ import annotations
@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 import imap_base
+from config import sanitize_imap_error
 from imap_base import (
     ROOMS_PATTERN as _ROOMS_PATTERN,
 )
@@ -69,10 +70,10 @@ _ZONE_FROM_SUBJECT = re.compile(
     re.IGNORECASE,
 )
 
-# Precio estándar: compartido con el resto de parsers.
+# Precio estÃ¡ndar: compartido con el resto de parsers.
 _PRICE_PATTERN = imap_base.PRICE_PATTERN
 
-# Bajada de precio: "de 150.000 a 130.000 €" → captura 130.000
+# Bajada de precio: "de 150.000 a 130.000 â‚¬" â†’ captura 130.000
 _PRICE_DROP_CURRENT = re.compile(
     r"(?:ahora|actual|nuevo\s+precio|baj[ao]do?\s+a|precio\s+actual)[^\d]{0,20}"
     r"([\d]{2,3}[.\s]?\d{3})\s*(?:\u20ac|&euro;|&#8364;)",
@@ -104,14 +105,14 @@ class IdealistaAlert:
     title: str = ""
     is_price_drop: bool = False
     # Para control de errores
-    parse_error: str | None = None  # descripción del error si lo hay
+    parse_error: str | None = None  # descripciÃ³n del error si lo hay
 
 
 def _connect_imap(email_address: str, app_password: str) -> imaplib.IMAP4_SSL:
     return connect_imap(email_address, app_password, log_prefix=_LOG_PREFIX)
 
 
-# Alias a los helpers compartidos (mantienen el nombre interno histórico).
+# Alias a los helpers compartidos (mantienen el nombre interno histÃ³rico).
 _decode_subject = decode_subject
 _get_body = get_body
 
@@ -145,13 +146,13 @@ def _classify_email(subject: str) -> EmailType:
 
 def _parse_price(text: str) -> int | None:
     """Extrae precio. Para bajadas intenta capturar el precio ACTUAL (no el anterior)."""
-    # Intentar patrón específico de precio actual en bajada
+    # Intentar patrÃ³n especÃ­fico de precio actual en bajada
     m_current = _PRICE_DROP_CURRENT.search(text)
     m_std = _PRICE_PATTERN.search(text)
 
     match, group = None, 1
     if m_current and m_std:
-        # Si detectamos "precio actual X" explícito, preferirlo
+        # Si detectamos "precio actual X" explÃ­cito, preferirlo
         match = m_current if m_current.start() < m_std.start() + 50 else m_std
     elif m_current:
         match = m_current
@@ -168,8 +169,8 @@ def _extract_price_from_body(
     body: str, pid: str
 ) -> tuple[int | None, int | None, float | None]:
     """
-    Extrae precio, habitaciones y m² del body del email.
-    1. Contexto ±600 chars alrededor de la URL del anuncio
+    Extrae precio, habitaciones y mÂ² del body del email.
+    1. Contexto Â±600 chars alrededor de la URL del anuncio
     2. Si no hay precio, busca en todo el body (para bajadas de precio)
     """
     url_match = re.search(rf"inmueble/{re.escape(pid)}", body)
@@ -210,7 +211,7 @@ def _extract_alerts_from_email(
     """
     Extrae alertas de un email de Idealista.
     Retorna (lista_alertas, error_str_o_None).
-    Si hay error de parseo, devuelve lista vacía + descripción del error.
+    Si hay error de parseo, devuelve lista vacÃ­a + descripciÃ³n del error.
     """
     try:
         subject_raw = msg.get("Subject", "")
@@ -259,7 +260,7 @@ def _extract_alerts_from_email(
             )
 
         if not alerts:
-            # Email sin URLs — puede ser informativo, no es error
+            # Email sin URLs â€” puede ser informativo, no es error
             logger.info(
                 "[gmail] Email %s sin URLs de anuncios (tipo: %s, subject: %s)",
                 msg_id,
@@ -284,12 +285,18 @@ def fetch_new_alerts(
     Busca emails de Idealista. Sin UNSEEN. Individuales primero.
     Devuelve (alertas_ok, errores_list, imap_conn).
     Los emails con error NO se eliminan.
+
+    Note:
+        IMAP connection errors are sanitized to prevent the app_password
+        from appearing in logs.
     """
     try:
         imap = _connect_imap(email_address, app_password)
     except Exception as e:
-        logger.error("[gmail] Error conectando a IMAP: %s", e)
-        return [], [], None
+        # Sanitize error to prevent app_password from leaking in logs
+        safe_error = sanitize_imap_error(str(e), app_password)
+        logger.error("[gmail] Error conectando a IMAP: %s", safe_error)
+        return [], [safe_error], None
 
     all_alerts: list[IdealistaAlert] = []
     seen_property_ids: set[str] = set()
@@ -323,7 +330,7 @@ def fetch_new_alerts(
                 location_hint="",
                 parse_error=error,
             )
-            # No añadir al procesado — el email se conservará
+            # No aÃ±adir al procesado â€” el email se conservarÃ¡
             continue
 
         new_count = 0
@@ -355,7 +362,7 @@ def delete_processed_emails(
     failed_ids: set[str] | None = None,
 ) -> None:
     """
-    Elimina SOLO los emails procesados con éxito.
+    Elimina SOLO los emails procesados con Ã©xito.
     Los emails con error (en failed_ids) se conservan.
     """
     delete_processed(imap, alerts, failed_ids, log_prefix=_LOG_PREFIX)
