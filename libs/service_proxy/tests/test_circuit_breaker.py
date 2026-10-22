@@ -3,8 +3,6 @@
 import time
 from unittest.mock import MagicMock
 
-import pytest
-
 from service_proxy.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
@@ -166,9 +164,7 @@ class TestCircuitBreaker:
 
         breaker.record_failure()
 
-        callback.assert_called_once_with(
-            "test", CircuitState.CLOSED, CircuitState.OPEN
-        )
+        callback.assert_called_once_with("test", CircuitState.CLOSED, CircuitState.OPEN)
 
 
 class TestCircuitBreakerRegistry:

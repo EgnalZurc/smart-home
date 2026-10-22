@@ -132,7 +132,7 @@ class MqttHandler:
                 logger.info("Loaded %d sensors from disk (%s)", len(self.readings), PERSIST_FILE)
             else:
                 logger.info("No persisted data at %s (first boot)", PERSIST_FILE)
-        except Exception as e:
+        except (json.JSONDecodeError, KeyError, OSError) as e:
             logger.warning("Error loading data from disk: %s", e)
 
     def _save_to_disk(self):
@@ -148,7 +148,7 @@ class MqttHandler:
             for name, readings_list in self.history.items():
                 data[name] = [r.to_dict() for r in readings_list]
             path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-        except Exception as e:
+        except OSError as e:
             logger.warning("Error saving data to disk: %s", e)
 
     def start(self):
@@ -183,7 +183,7 @@ class MqttHandler:
                 self._client.connect(self.broker, self.port, self.keepalive)
                 self._client.loop_start()
                 return
-            except Exception as e:
+            except (ConnectionError, TimeoutError, OSError) as e:
                 logger.warning(
                     "MQTT connection attempt %d/%d: %s (retry in %ds)",
                     attempt + 1,
@@ -281,7 +281,7 @@ class MqttHandler:
                 path = Path(PERSIST_FILE)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(json.dumps(data_to_save, ensure_ascii=False), encoding="utf-8")
-            except Exception as e:
+            except OSError as e:
                 logger.warning("Error saving data to disk: %s", e)
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
@@ -314,7 +314,7 @@ class MqttHandler:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(data_to_save, ensure_ascii=False), encoding="utf-8")
             logger.info("AC room temp recorded: %.1f°C", room_temp)
-        except Exception as e:
+        except OSError as e:
             logger.warning("Error saving AC temp to disk: %s", e)
 
     def get_active_readings(self, max_age_seconds: int = 600) -> dict[str, SensorReading]:

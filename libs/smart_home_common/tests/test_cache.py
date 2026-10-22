@@ -93,7 +93,6 @@ def test_set_overwrites_existing_key():
     assert cache.get("k") == "new"
 
 
-
 def test_maxsize_evicts_oldest_when_full():
     cache = TTLCache(default_ttl_seconds=300, maxsize=3)
     cache.set("a", 1)

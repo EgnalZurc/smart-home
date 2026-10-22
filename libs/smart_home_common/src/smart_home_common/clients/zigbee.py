@@ -137,12 +137,14 @@ class Zigbee2MQTTClient:
                 elapsed += poll_interval
 
             if not self.response_received:
-                raise Exception(f"Timeout waiting for Zigbee2MQTT response after {self.timeout}s")
+                raise TimeoutError(
+                    f"Timeout waiting for Zigbee2MQTT response after {self.timeout}s"
+                )
 
             logger.info("Got %d devices from Zigbee2MQTT", len(self.devices))
             return self.devices
 
-        except Exception as e:
+        except (ConnectionError, TimeoutError, OSError) as e:
             logger.error("Error getting devices: %s", e)
             raise
         finally:
@@ -199,7 +201,7 @@ class Zigbee2MQTTClient:
             logger.info("Total temperature sensors discovered: %d", len(sensors))
             return sensors
 
-        except Exception as e:
+        except (ConnectionError, TimeoutError, OSError) as e:
             logger.error("Error discovering sensors: %s", e)
             # Return empty list instead of failing - system can work
             # with manual configuration if Zigbee2MQTT is not available

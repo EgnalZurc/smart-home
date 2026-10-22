@@ -192,7 +192,7 @@ class TestGetDevices:
         fake_client = mock_mqtt.Client.return_value
         client = Zigbee2MQTTClient("mosquitto", timeout=0.2)
 
-        with pytest.raises(Exception, match="Timeout"):
+        with pytest.raises(TimeoutError, match="Timeout"):
             client.get_devices()
 
         fake_client.loop_stop.assert_called_once()
@@ -270,7 +270,7 @@ class TestDiscoverTemperatureSensors:
 
     def test_get_devices_error_returns_empty_list(self):
         client = Zigbee2MQTTClient("mosquitto")
-        with patch.object(client, "get_devices", side_effect=Exception("broker down")):
+        with patch.object(client, "get_devices", side_effect=ConnectionError("broker down")):
             sensors = client.discover_temperature_sensors()
         # Discovery degrades gracefully so the system can fall back to manual config.
         assert sensors == []

@@ -5,17 +5,16 @@ All MQTT interaction is mocked; no real broker connection is made.
 
 import json
 import time
-from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from smart_home_common.mqtt.handler import MqttHandler, SensorReading, PERSIST_FILE
-
+from smart_home_common.mqtt.handler import MqttHandler, SensorReading
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sensor_names():
@@ -29,6 +28,7 @@ def handler(sensor_names, tmp_path, monkeypatch):
     monkeypatch.setenv("SENSOR_PERSIST_FILE", str(persist_file))
     # Reimport to pick up the env change
     import smart_home_common.mqtt.handler as handler_module
+
     monkeypatch.setattr(handler_module, "PERSIST_FILE", str(persist_file))
     return MqttHandler(
         broker="mosquitto",
@@ -44,6 +44,7 @@ def persist_file(tmp_path, monkeypatch):
     """Provides a temporary persistence file path and patches the module."""
     file_path = tmp_path / "sensor_readings.json"
     import smart_home_common.mqtt.handler as handler_module
+
     monkeypatch.setattr(handler_module, "PERSIST_FILE", str(file_path))
     return file_path
 
@@ -62,6 +63,7 @@ def _make_msg(topic: str, payload: dict | bytes) -> MagicMock:
 # ---------------------------------------------------------------------------
 # SensorReading tests
 # ---------------------------------------------------------------------------
+
 
 class TestSensorReading:
     """Tests for the SensorReading dataclass."""
@@ -130,6 +132,7 @@ class TestSensorReading:
 # MqttHandler initialization tests
 # ---------------------------------------------------------------------------
 
+
 class TestMqttHandlerInit:
     """Tests for MqttHandler initialization."""
 
@@ -185,6 +188,7 @@ class TestMqttHandlerInit:
 # Persistence tests
 # ---------------------------------------------------------------------------
 
+
 class TestPersistence:
     """Tests for disk load/save functionality."""
 
@@ -224,8 +228,12 @@ class TestPersistence:
     def test_load_from_disk_skips_unknown_sensors(self, persist_file):
         """Sensors not in sensor_names are skipped (except AC)."""
         data = {
-            "sensor1": [{"temperature": 20.0, "humidity": 50.0, "battery": 90, "timestamp": 1000.0}],
-            "unknown_sensor": [{"temperature": 25.0, "humidity": 60.0, "battery": 70, "timestamp": 1000.0}],
+            "sensor1": [
+                {"temperature": 20.0, "humidity": 50.0, "battery": 90, "timestamp": 1000.0}
+            ],
+            "unknown_sensor": [
+                {"temperature": 25.0, "humidity": 60.0, "battery": 70, "timestamp": 1000.0}
+            ],
         }
         persist_file.write_text(json.dumps(data), encoding="utf-8")
 
@@ -283,6 +291,7 @@ class TestPersistence:
 # Connection lifecycle tests
 # ---------------------------------------------------------------------------
 
+
 class TestConnectionLifecycle:
     """Tests for start/stop and connection callbacks."""
 
@@ -306,7 +315,9 @@ class TestConnectionLifecycle:
         mock_client_class.return_value = mock_client
 
         handler = MqttHandler(
-            "mosquitto", 1883, ["sensor1"],
+            "mosquitto",
+            1883,
+            ["sensor1"],
             connect_retries=1,
             username="testuser",
             password="testpass",
@@ -337,9 +348,7 @@ class TestConnectionLifecycle:
             None,
         ]
 
-        handler = MqttHandler(
-            "mosquitto", 1883, ["sensor1"], connect_retries=3, retry_delay=0.01
-        )
+        handler = MqttHandler("mosquitto", 1883, ["sensor1"], connect_retries=3, retry_delay=0.01)
         handler.start()
 
         assert mock_client.connect.call_count == 3
@@ -351,9 +360,7 @@ class TestConnectionLifecycle:
         mock_client_class.return_value = mock_client
         mock_client.connect.side_effect = ConnectionError("always fails")
 
-        handler = MqttHandler(
-            "mosquitto", 1883, ["sensor1"], connect_retries=3, retry_delay=0.01
-        )
+        handler = MqttHandler("mosquitto", 1883, ["sensor1"], connect_retries=3, retry_delay=0.01)
 
         with pytest.raises(ConnectionError, match="Could not connect"):
             handler.start()
@@ -375,9 +382,7 @@ class TestConnectionLifecycle:
             None,
         ]
 
-        handler = MqttHandler(
-            "mosquitto", 1883, ["sensor1"], connect_retries=5, retry_delay=1
-        )
+        handler = MqttHandler("mosquitto", 1883, ["sensor1"], connect_retries=5, retry_delay=1)
         handler.start()
 
         # Verify exponential backoff: 1s, 2s, 4s, 8s
@@ -387,16 +392,16 @@ class TestConnectionLifecycle:
 
     @patch("smart_home_common.mqtt.handler.time.sleep")
     @patch("smart_home_common.mqtt.handler.mqtt.Client")
-    def test_exponential_backoff_caps_at_60_seconds(self, mock_client_class, mock_sleep, persist_file):
+    def test_exponential_backoff_caps_at_60_seconds(
+        self, mock_client_class, mock_sleep, persist_file
+    ):
         """Backoff delay is capped at 60 seconds."""
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
         # Fail 8 times, succeed on 9th
         mock_client.connect.side_effect = [ConnectionError("fail")] * 8 + [None]
 
-        handler = MqttHandler(
-            "mosquitto", 1883, ["sensor1"], connect_retries=9, retry_delay=8
-        )
+        handler = MqttHandler("mosquitto", 1883, ["sensor1"], connect_retries=9, retry_delay=8)
         handler.start()
 
         # With initial delay=8: 8, 16, 32, 60, 60, 60, 60, 60 (capped at 60)
@@ -459,6 +464,7 @@ class TestConnectionLifecycle:
 # ---------------------------------------------------------------------------
 # Message handling tests
 # ---------------------------------------------------------------------------
+
 
 class TestOnMessage:
     """Tests for _on_message callback."""
@@ -574,6 +580,7 @@ class TestOnMessage:
 # AC temperature recording tests
 # ---------------------------------------------------------------------------
 
+
 class TestRecordAcTemp:
     """Tests for record_ac_temp method."""
 
@@ -611,6 +618,7 @@ class TestRecordAcTemp:
 # ---------------------------------------------------------------------------
 # Reading retrieval tests
 # ---------------------------------------------------------------------------
+
 
 class TestGetActiveReadings:
     """Tests for get_active_readings method."""
@@ -691,6 +699,7 @@ class TestGetAverageHumidity:
 # Property tests
 # ---------------------------------------------------------------------------
 
+
 class TestIsConnected:
     """Tests for is_connected property."""
 
@@ -707,6 +716,7 @@ class TestIsConnected:
 # ---------------------------------------------------------------------------
 # Error tracker tests
 # ---------------------------------------------------------------------------
+
 
 class TestSetErrorTracker:
     """Tests for set_error_tracker method."""

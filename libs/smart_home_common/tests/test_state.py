@@ -10,8 +10,6 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from smart_home_common.persistence.state import (
     STATE_FILE,
     PersistedState,
@@ -269,12 +267,15 @@ class TestSaveState:
         state_file = tmp_path / "readonly" / "state.json"
         state = make_default_state()
 
-        with patch(
-            "smart_home_common.persistence.state.STATE_FILE",
-            state_file,
-        ), patch(
-            "pathlib.Path.mkdir",
-            side_effect=PermissionError("Access denied"),
+        with (
+            patch(
+                "smart_home_common.persistence.state.STATE_FILE",
+                state_file,
+            ),
+            patch(
+                "pathlib.Path.mkdir",
+                side_effect=PermissionError("Access denied"),
+            ),
         ):
             result = save_state(state)
 
@@ -342,9 +343,12 @@ class TestLoadState:
         state_file = tmp_path / "controller_state.json"
         state_file.write_text("{}", encoding="utf-8")
 
-        with patch("smart_home_common.persistence.state.STATE_FILE", state_file), patch(
-            "pathlib.Path.read_text",
-            side_effect=PermissionError("Access denied"),
+        with (
+            patch("smart_home_common.persistence.state.STATE_FILE", state_file),
+            patch(
+                "pathlib.Path.read_text",
+                side_effect=PermissionError("Access denied"),
+            ),
         ):
             state = load_state()
 

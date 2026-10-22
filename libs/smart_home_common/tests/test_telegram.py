@@ -230,16 +230,16 @@ class TestSend:
             notifier.send("Hello")
         assert mock_post.call_args.kwargs["timeout"] == 30.0
 
-    def test_send_handles_generic_exception(self):
+    def test_send_handles_request_error(self):
         notifier = TelegramNotifier(bot_token="token", chat_ids=["123"])
         with patch("smart_home_common.telegram.httpx.post") as mock_post:
-            mock_post.side_effect = Exception("Network error")
+            mock_post.side_effect = httpx.RequestError("Network error")
             result = notifier.send("Hello")
         assert result.success is False
         assert result.failed_count == 1
         # Only the exception type is surfaced (never the message, which could
         # leak the bot token present in the request URL).
-        assert "Exception" in result.message
+        assert "RequestError" in result.message
         assert "Network error" not in result.message
 
 

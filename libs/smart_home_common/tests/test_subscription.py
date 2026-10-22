@@ -2,7 +2,7 @@
 
 import threading
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -208,7 +208,7 @@ class TestSubscriptionManager:
 
     def test_update_service_error_increments_count(self, manager):
         """_update_service increments error count on failure."""
-        fetcher = MagicMock(side_effect=Exception("Connection failed"))
+        fetcher = MagicMock(side_effect=ValueError("Connection failed"))
         sub = Subscription(name="failing", fetcher=fetcher, interval=30)
         manager.subscriptions["failing"] = sub
 
@@ -220,9 +220,7 @@ class TestSubscriptionManager:
     def test_update_service_resets_error_count(self, manager):
         """Successful update resets error count."""
         fetcher = MagicMock(return_value="data")
-        sub = Subscription(
-            name="recovering", fetcher=fetcher, interval=30, error_count=5
-        )
+        sub = Subscription(name="recovering", fetcher=fetcher, interval=30, error_count=5)
         manager.subscriptions["recovering"] = sub
 
         manager._update_service("recovering", sub)
@@ -324,9 +322,7 @@ class TestSubscriptionManager:
         fetcher1 = MagicMock(return_value="data1")
         fetcher2 = MagicMock(return_value="data2")
 
-        sub1 = Subscription(
-            name="due", fetcher=fetcher1, interval=30, last_update=0
-        )
+        sub1 = Subscription(name="due", fetcher=fetcher1, interval=30, last_update=0)
         sub2 = Subscription(
             name="not_due",
             fetcher=fetcher2,

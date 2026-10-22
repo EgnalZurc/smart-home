@@ -31,10 +31,9 @@ class TestRedisRateLimiter:
     @pytest.fixture
     def limiter_with_mock(self, mock_redis_client):
         """Create a RedisRateLimiter with mocked Redis."""
-        with patch(
-            "smart_home_common.redis_rate_limiter.redis"
-        ) as mock_redis_module, patch(
-            "smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True
+        with (
+            patch("smart_home_common.redis_rate_limiter.redis") as mock_redis_module,
+            patch("smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True),
         ):
             mock_redis_module.from_url.return_value = mock_redis_client
             mock_redis_module.RedisError = Exception
@@ -48,10 +47,9 @@ class TestRedisRateLimiter:
 
     def test_init_with_defaults(self, mock_redis_client):
         """RedisRateLimiter initializes with defaults."""
-        with patch(
-            "smart_home_common.redis_rate_limiter.redis"
-        ) as mock_redis_module, patch(
-            "smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True
+        with (
+            patch("smart_home_common.redis_rate_limiter.redis") as mock_redis_module,
+            patch("smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True),
         ):
             mock_redis_module.from_url.return_value = mock_redis_client
             mock_redis_module.RedisError = Exception
@@ -64,10 +62,9 @@ class TestRedisRateLimiter:
 
     def test_init_with_custom_values(self, mock_redis_client):
         """RedisRateLimiter initializes with custom values."""
-        with patch(
-            "smart_home_common.redis_rate_limiter.redis"
-        ) as mock_redis_module, patch(
-            "smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True
+        with (
+            patch("smart_home_common.redis_rate_limiter.redis") as mock_redis_module,
+            patch("smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True),
         ):
             mock_redis_module.from_url.return_value = mock_redis_client
             mock_redis_module.RedisError = Exception
@@ -198,10 +195,9 @@ class TestRedisRateLimiterFallback:
 
     def test_fallback_when_connection_fails(self):
         """Falls back gracefully when Redis connection fails."""
-        with patch(
-            "smart_home_common.redis_rate_limiter.redis"
-        ) as mock_redis_module, patch(
-            "smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True
+        with (
+            patch("smart_home_common.redis_rate_limiter.redis") as mock_redis_module,
+            patch("smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True),
         ):
             mock_client = MagicMock()
             mock_client.ping.side_effect = Exception("Connection refused")
@@ -217,10 +213,9 @@ class TestRedisRateLimiterFallback:
 
     def test_fallback_on_incr_error(self, mock_redis_client):
         """Falls back to allow on INCR error."""
-        with patch(
-            "smart_home_common.redis_rate_limiter.redis"
-        ) as mock_redis_module, patch(
-            "smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True
+        with (
+            patch("smart_home_common.redis_rate_limiter.redis") as mock_redis_module,
+            patch("smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True),
         ):
             mock_redis_module.from_url.return_value = mock_redis_client
             mock_redis_module.RedisError = Exception
@@ -238,10 +233,9 @@ class TestRedisRateLimiterFallback:
 
     def test_fallback_on_get_status_error(self, mock_redis_client):
         """Falls back to default status on get error."""
-        with patch(
-            "smart_home_common.redis_rate_limiter.redis"
-        ) as mock_redis_module, patch(
-            "smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True
+        with (
+            patch("smart_home_common.redis_rate_limiter.redis") as mock_redis_module,
+            patch("smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True),
         ):
             mock_redis_module.from_url.return_value = mock_redis_client
             mock_redis_module.RedisError = Exception
@@ -317,10 +311,9 @@ class TestRedisRateLimiterIntegration:
 
     def test_full_flow_with_stateful_mock(self, mock_redis_client):
         """Test full rate limiting flow with stateful mock."""
-        with patch(
-            "smart_home_common.redis_rate_limiter.redis"
-        ) as mock_redis_module, patch(
-            "smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True
+        with (
+            patch("smart_home_common.redis_rate_limiter.redis") as mock_redis_module,
+            patch("smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True),
         ):
             mock_redis_module.from_url.return_value = mock_redis_client
             mock_redis_module.RedisError = Exception
@@ -351,10 +344,9 @@ class TestRedisRateLimiterIntegration:
 
     def test_independent_keys(self, mock_redis_client):
         """Different keys have independent rate limits."""
-        with patch(
-            "smart_home_common.redis_rate_limiter.redis"
-        ) as mock_redis_module, patch(
-            "smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True
+        with (
+            patch("smart_home_common.redis_rate_limiter.redis") as mock_redis_module,
+            patch("smart_home_common.redis_rate_limiter.REDIS_AVAILABLE", True),
         ):
             mock_redis_module.from_url.return_value = mock_redis_client
             mock_redis_module.RedisError = Exception

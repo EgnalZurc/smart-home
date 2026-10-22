@@ -55,8 +55,8 @@ notifier = TelegramNotifier(
 notifier = TelegramNotifier.from_env()
 
 if notifier.enabled:
-    notifier.send("Plain text alert")          # no parse mode
-    notifier.send_markdown("*Bold* alert")      # Markdown parse mode
+    notifier.send("Plain text alert")  # no parse mode
+    notifier.send_markdown("*Bold* alert")  # Markdown parse mode
 
     result = notifier.send("Another alert")
     if result.success:
