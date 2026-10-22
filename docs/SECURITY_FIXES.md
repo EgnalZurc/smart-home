@@ -442,6 +442,105 @@ The audit should NOT re-report these issues.
 - **Review Date**: 2026-10-21
 - **Next Review**: 2027-04-21 (6 months)
 
+### [presence-service] Binding 0.0.0.0
+- **Severity**: HIGH
+- **Status**: ACCEPTED_RISK
+- **Reason**: Service binds to 0.0.0.0 which is required for Docker container networking; the service is only accessible via nginx reverse proxy with authentication
+- **Mitigations**:
+  - Docker network isolation (smart-home bridge network)
+  - nginx auth_request guards all endpoints
+  - Tailscale-only external access
+- **Documentation**: noqa comment in main.py explaining Docker requirement
+- **Review Date**: 2026-10-22
+- **Next Review**: 2027-04-22
+
+### [metrics-service] Docker Socket Proxy
+- **Severity**: HIGH
+- **Status**: ACCEPTED_RISK
+- **Reason**: metrics-service uses Docker socket to collect container metrics; this grants container inspection capabilities but the proxy is read-only and the network is isolated
+- **Mitigations**:
+  - Read-only socket mount (ro flag)
+  - Isolated Docker network
+  - No write operations exposed
+  - Only accessible via authenticated API
+- **Documentation**: Comment in docker-compose.prod.yml
+- **Review Date**: 2026-10-22
+- **Next Review**: 2027-04-22
+
+### [infrastructure] CSP unsafe-inline
+- **Severity**: HIGH
+- **Status**: ACCEPTED_RISK
+- **Reason**: Several SPAs (dashboard, valheim-admin) require unsafe-inline for inline scripts; migrating to nonce-based CSP is a major refactor
+- **Mitigations**:
+  - All other CSP directives are strict
+  - Applications served via Tailscale only
+  - nginx includes other security headers (X-Frame-Options, X-Content-Type-Options)
+- **Documentation**: Comment in nginx smart-home.conf
+- **Review Date**: 2026-10-22
+- **Next Review**: 2027-04-22 (consider nonce migration)
+
+### [vaultwarden] Container Runs as Root
+- **Severity**: HIGH
+- **Status**: IN_PROGRESS
+- **Reason**: Official vaultwarden image runs as root by default; adding user: directive requires permission fixes
+- **Next Action**: Add `user: "1000:1000"` to docker-compose.prod.yml after verifying data directory permissions
+- **Review Date**: 2026-10-22
+
+### [vaultwarden] No Automated Backup
+- **Severity**: HIGH
+- **Status**: IN_PROGRESS
+- **Reason**: Vaultwarden database contains all passwords; manual backup only
+- **Next Action**: Create backup script + cron job on Pi
+- **Review Date**: 2026-10-22
+
+---
+
+## Fixed Issues (2026-10-22)
+
+### [vacaciones-service] Security Headers Middleware Restored
+- **Severity**: HIGH
+- **Status**: FIXED
+- **PR**: #382
+- **Fixed Date**: 2026-10-22
+- **Description**: SecurityHeadersMiddleware was accidentally reverted by cross-contamination in PR #376
+- **Fix Applied**: Re-added SecurityHeadersMiddleware, rate limit logging, and max_entries=10000 bound
+- **Verification**: `curl -I .../api/vacaciones/config | grep -E "X-Content|X-Frame"`
+
+### [calendar-service] Rate Limit Logging
+- **Severity**: HIGH
+- **Status**: FIXED
+- **PR**: #383
+- **Fixed Date**: 2026-10-22
+- **Description**: Rate limit violations were not logged, making brute-force detection difficult
+- **Fix Applied**: Added logger.warning with IP and endpoint when rate limit exceeded
+- **Verification**: Trigger rate limit and check logs for "[rate-limit] IP x.x.x.x exceeded limit"
+
+### [dashboard] WebSocket Device Token Fallback
+- **Severity**: HIGH
+- **Status**: FIXED
+- **PR**: #384
+- **Fixed Date**: 2026-10-22
+- **Description**: WebSocket connections had no fallback auth when JWT expired
+- **Fix Applied**: Added device token fallback with IP validation for trusted devices
+- **Verification**: Connect WebSocket with expired JWT but valid device token
+
+### [casita-suenos] IMAP Error Sanitization
+- **Severity**: HIGH
+- **Status**: FIXED
+- **PR**: #385
+- **Fixed Date**: 2026-10-22
+- **Description**: IMAP errors could leak Gmail app password in logs/exceptions
+- **Fix Applied**: Added sanitize_imap_error() to redact passwords from all IMAP error messages
+- **Verification**: Force IMAP error and check logs for "[REDACTED]" instead of password
+
+### [vaultwarden] File Permissions
+- **Severity**: HIGH
+- **Status**: FIXED
+- **Fixed Date**: 2026-10-22
+- **Description**: RSA key and database had world-readable permissions (644)
+- **Fix Applied**: `chmod 600` on rsa_key.pem and db.sqlite3 on the Pi
+- **Verification**: `ls -la ~/smart-home-prod/data/vaultwarden/` shows -rw------- permissions
+
 ---
 
 ## Audit Markers
