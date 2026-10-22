@@ -379,13 +379,20 @@ def test_websocket_device_token_fallback_client_tracked(client):
 class _FakeWebSocketWithCookies:
     """WebSocket mock with configurable cookies and client IP."""
 
-    def __init__(self, cookies: dict | None = None, client_ip: str = "192.168.1.100"):
+    def __init__(
+        self, cookies: dict | None = None, client_ip: str | None = "192.168.1.100"
+    ):
         self.cookies = cookies or {}
         self._client_ip = client_ip
 
     @property
     def client(self):
-        """Mock client property with host attribute."""
+        """Mock client property with host attribute.
+
+        Returns None if _client_ip is None, simulating an unknown client.
+        """
+        if self._client_ip is None:
+            return None
 
         class ClientInfo:
             def __init__(self, ip):
@@ -464,8 +471,9 @@ def test_validate_device_token_recognized_ip():
 
 def test_validate_device_token_unknown_ip_rejected():
     """Returns None when client IP cannot be determined."""
-    ws_mock = _FakeWebSocketWithCookies(cookies={"smh_device": "series:token"})
-    ws_mock.client = None  # No client info
+    ws_mock = _FakeWebSocketWithCookies(
+        cookies={"smh_device": "series:token"}, client_ip=None  # No client info
+    )
 
     mock_result = ws.auth_devices.VerifyResult(
         ok=True, username="testuser", new_cookie_value="series:new_token"
@@ -484,8 +492,7 @@ def test_get_client_ip_with_client():
 
 def test_get_client_ip_without_client():
     """Returns 'unknown' when client info not available."""
-    ws_mock = _FakeWebSocketWithCookies()
-    ws_mock.client = None
+    ws_mock = _FakeWebSocketWithCookies(client_ip=None)
     result = ws._get_client_ip(ws_mock)
     assert result == "unknown"
 
