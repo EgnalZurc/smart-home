@@ -16,7 +16,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 # CONTRACT DEFINITIONS
 #
@@ -29,7 +28,14 @@ import pytest
 SERVICE_CONTRACTS = {
     "backend": {
         "required_fields": {"online"},
-        "optional_fields": {"db_accessible", "static_files", "db_error", "static_error", "latency_ms", "cached"},
+        "optional_fields": {
+            "db_accessible",
+            "static_files",
+            "db_error",
+            "static_error",
+            "latency_ms",
+            "cached",
+        },
         "field_types": {
             "online": bool,
             "db_accessible": bool,
@@ -134,10 +140,15 @@ SERVICE_CONTRACTS = {
             "cached": bool,
         },
     },
-
     "metrics": {
         "required_fields": {"online"},
-        "optional_fields": {"db_ok", "collector_last_tick_age_s", "error", "latency_ms", "cached"},
+        "optional_fields": {
+            "db_ok",
+            "collector_last_tick_age_s",
+            "error",
+            "latency_ms",
+            "cached",
+        },
         "field_types": {
             "online": bool,
             "db_ok": bool,
@@ -149,7 +160,14 @@ SERVICE_CONTRACTS = {
     },
     "energy": {
         "required_fields": {"online"},
-        "optional_fields": {"db_ok", "meter_online", "collector_last_tick_age_s", "error", "latency_ms", "cached"},
+        "optional_fields": {
+            "db_ok",
+            "meter_online",
+            "collector_last_tick_age_s",
+            "error",
+            "latency_ms",
+            "cached",
+        },
         "field_types": {
             "online": bool,
             "db_ok": bool,
@@ -209,7 +227,9 @@ SERVICE_CONTRACTS = {
 }
 
 
-def _validate_contract(response: dict[str, Any], contract: dict, service_name: str) -> list[str]:
+def _validate_contract(
+    response: dict[str, Any], contract: dict, service_name: str
+) -> list[str]:
     """Validate a response against its contract definition.
 
     Returns a list of validation errors (empty if valid).
@@ -240,7 +260,9 @@ def _validate_contract(response: dict[str, Any], contract: dict, service_name: s
     all_known_fields = contract["required_fields"] | contract["optional_fields"]
     for field in response:
         if field not in all_known_fields:
-            errors.append(f"{service_name}: unknown field '{field}' (consider adding to contract)")
+            errors.append(
+                f"{service_name}: unknown field '{field}' (consider adding to contract)"
+            )
 
     return errors
 
@@ -265,9 +287,16 @@ def _create_mock_service_response(service_key: str, online: bool = True) -> dict
     elif service_key == "casita":
         return {"online": online, "telegram_connected": online}
     elif service_key == "portfolio":
-        return {"online": online, "last_update": "2024-01-01T00:00:00Z" if online else None}
+        return {
+            "online": online,
+            "last_update": "2024-01-01T00:00:00Z" if online else None,
+        }
     elif service_key == "metrics":
-        return {"online": online, "db_ok": online, "collector_last_tick_age_s": 30 if online else None}
+        return {
+            "online": online,
+            "db_ok": online,
+            "collector_last_tick_age_s": 30 if online else None,
+        }
     elif service_key == "energy":
         return {
             "online": online,
@@ -323,7 +352,9 @@ class TestServiceContracts:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = _create_mock_service_response("zigbee", online=True)
+        mock_response.json.return_value = _create_mock_service_response(
+            "zigbee", online=True
+        )
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
@@ -342,7 +373,9 @@ class TestServiceContracts:
         from api.health import get_zigbee_health
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
+        mock_client.get = AsyncMock(
+            side_effect=httpx.ConnectError("Connection refused")
+        )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
@@ -361,7 +394,9 @@ class TestServiceContracts:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = _create_mock_service_response("ac", online=True)
+        mock_response.json.return_value = _create_mock_service_response(
+            "ac", online=True
+        )
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
@@ -380,7 +415,9 @@ class TestServiceContracts:
         from api.health import get_ac_health
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
+        mock_client.get = AsyncMock(
+            side_effect=httpx.ConnectError("Connection refused")
+        )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
@@ -408,7 +445,9 @@ class TestServiceContracts:
         with patch("httpx.AsyncClient", return_value=mock_client):
             result = await get_vacaciones_health()
 
-        errors = _validate_contract(result, SERVICE_CONTRACTS["vacaciones"], "vacaciones")
+        errors = _validate_contract(
+            result, SERVICE_CONTRACTS["vacaciones"], "vacaciones"
+        )
         assert not errors, f"Contract violations: {errors}"
 
     @pytest.mark.asyncio
@@ -439,7 +478,9 @@ class TestServiceContracts:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = _create_mock_service_response("casita", online=True)
+        mock_response.json.return_value = _create_mock_service_response(
+            "casita", online=True
+        )
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
@@ -469,7 +510,9 @@ class TestServiceContracts:
         with patch("httpx.AsyncClient", return_value=mock_client):
             result = await get_baby_gifts_health()
 
-        errors = _validate_contract(result, SERVICE_CONTRACTS["baby-gifts"], "baby-gifts")
+        errors = _validate_contract(
+            result, SERVICE_CONTRACTS["baby-gifts"], "baby-gifts"
+        )
         assert not errors, f"Contract violations: {errors}"
 
     @pytest.mark.asyncio
@@ -479,7 +522,9 @@ class TestServiceContracts:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = _create_mock_service_response("portfolio", online=True)
+        mock_response.json.return_value = _create_mock_service_response(
+            "portfolio", online=True
+        )
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
@@ -518,7 +563,9 @@ class TestServiceContracts:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = _create_mock_service_response("metrics", online=True)
+        mock_response.json.return_value = _create_mock_service_response(
+            "metrics", online=True
+        )
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
@@ -538,7 +585,9 @@ class TestServiceContracts:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = _create_mock_service_response("energy", online=True)
+        mock_response.json.return_value = _create_mock_service_response(
+            "energy", online=True
+        )
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
@@ -558,7 +607,9 @@ class TestServiceContracts:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = _create_mock_service_response("presence", online=True)
+        mock_response.json.return_value = _create_mock_service_response(
+            "presence", online=True
+        )
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
@@ -578,7 +629,9 @@ class TestServiceContracts:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = _create_mock_service_response("calendar", online=True)
+        mock_response.json.return_value = _create_mock_service_response(
+            "calendar", online=True
+        )
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
@@ -601,7 +654,9 @@ class TestContractCompleteness:
 
         # Get all health check functions
         health_functions = [
-            name for name in dir(health) if name.startswith("get_") and name.endswith("_health")
+            name
+            for name in dir(health)
+            if name.startswith("get_") and name.endswith("_health")
         ]
 
         # Map function names to contract keys
@@ -678,14 +733,18 @@ class TestErrorResponses:
             ("calendar", "get_calendar_health"),
         ],
     )
-    async def test_connection_error_matches_contract(self, service: str, health_func: str):
+    async def test_connection_error_matches_contract(
+        self, service: str, health_func: str
+    ):
         """Connection errors produce valid contract-compliant responses."""
         from api import health
 
         func = getattr(health, health_func)
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
+        mock_client.get = AsyncMock(
+            side_effect=httpx.ConnectError("Connection refused")
+        )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 

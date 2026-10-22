@@ -200,7 +200,7 @@ def _send_trust_email(username: str, user_agent: str, ip: str, token: str) -> No
             username,
             token[:8],
         )
-    except Exception as exc:
+    except (OSError, smtplib.SMTPException) as exc:
         logger.error("Failed to send trust request email: %s", exc)
 
 

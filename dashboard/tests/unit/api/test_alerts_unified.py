@@ -6,9 +6,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
-from httpx import Response
-
 from api import alert_reads_db
 from api.alerts import (
     _alert_identifier,
@@ -20,6 +17,8 @@ from api.alerts import (
     get_unified_alerts,
     router,
 )
+from fastapi import HTTPException
+from httpx import Response
 
 # ServiceProxy uses httpx under the hood; patch the shared client.
 HTTPX_PATCH = "libs.service_proxy.proxy.httpx.AsyncClient"
@@ -175,7 +174,9 @@ class TestFetchMemory:
     @pytest.mark.asyncio
     async def test_success(self):
         fake = {"alerts": [{"container": "x", "percent": 90}]}
-        with patch("api.monitoring.get_memory_alerts", new=AsyncMock(return_value=fake)):
+        with patch(
+            "api.monitoring.get_memory_alerts", new=AsyncMock(return_value=fake)
+        ):
             result = await _fetch_memory(days=7)
             assert len(result) == 1
             assert result[0]["source"] == "memory"

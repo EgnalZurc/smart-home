@@ -8,9 +8,8 @@ public surface to validate it behaves identically to the old hand-copied class.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
-
 from api.proxy.base import ServiceProxy
+from fastapi import HTTPException
 
 # Patch target: httpx lives inside the shared library's proxy module.
 PROXY_HTTPX = "libs.service_proxy.proxy.httpx.AsyncClient"

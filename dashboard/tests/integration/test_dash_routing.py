@@ -96,7 +96,8 @@ class TestDashboardAppCatalogue:
         assert (
             "!== 'zigbee'" in html
             or "key !== 'zigbee'" in html
-            or "'zigbee'" in html and ".includes(p.key)" in html
+            or "'zigbee'" in html
+            and ".includes(p.key)" in html
         )
 
 
@@ -279,12 +280,12 @@ class TestResourcesModal:
     def test_pi_tab_exists(self):
         """Pi tab must exist in resources modal."""
         html = _html()
-        assert "data-source=\"pi\"" in html or "data-source='pi'" in html
+        assert 'data-source="pi"' in html or "data-source='pi'" in html
 
     def test_pc_tab_exists(self):
         """PC tab must exist in resources modal."""
         html = _html()
-        assert "data-source=\"pc\"" in html or "data-source='pc'" in html
+        assert 'data-source="pc"' in html or "data-source='pc'" in html
 
     def test_render_pi_resources_function_exists(self):
         """Function to render Pi resources must exist."""

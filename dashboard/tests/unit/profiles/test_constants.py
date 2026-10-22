@@ -1,7 +1,5 @@
 """Tests for profiles/constants.py."""
 
-import pytest
-
 
 class TestBuiltinProfiles:
     """Tests for built-in profile definitions."""

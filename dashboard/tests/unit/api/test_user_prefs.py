@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, patch
 
 import auth_users
 import pytest
-
 from api.user_prefs import (
     Preferences,
     WidgetConfig,

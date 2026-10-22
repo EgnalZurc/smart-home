@@ -8,19 +8,18 @@ Tests cover:
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
-from httpx import Response
-
 from api.proxy.pc import (
-    router,
-    get_pc_status,
-    get_pc_mode,
-    set_pc_mode,
-    pc_sleep,
-    pc_wake,
     EGNALPC_MAC,
     WOL_BROADCAST,
+    get_pc_mode,
+    get_pc_status,
+    pc_sleep,
+    pc_wake,
+    router,
+    set_pc_mode,
 )
+from fastapi import HTTPException
+from httpx import Response
 
 
 def make_mock_response(data, status_code=200):
@@ -215,9 +214,7 @@ class TestPcWake:
     @pytest.mark.asyncio
     async def test_wake_success_with_correct_confirmation(self):
         """Wake succeeds with correct auth and confirmation."""
-        request = make_mock_request(
-            headers={"X-Confirm-Action": "WAKE"}, is_super=True
-        )
+        request = make_mock_request(headers={"X-Confirm-Action": "WAKE"}, is_super=True)
 
         with patch("api.proxy.pc.require_super"):
             with patch("wakeonlan.send_magic_packet") as mock_wol:
@@ -233,9 +230,7 @@ class TestPcWake:
     @pytest.mark.asyncio
     async def test_wake_invalid_mac_address(self):
         """Returns 500 when MAC address is invalid."""
-        request = make_mock_request(
-            headers={"X-Confirm-Action": "WAKE"}, is_super=True
-        )
+        request = make_mock_request(headers={"X-Confirm-Action": "WAKE"}, is_super=True)
 
         with patch("api.proxy.pc.require_super"):
             with patch("wakeonlan.send_magic_packet") as mock_wol:
@@ -249,9 +244,7 @@ class TestPcWake:
     @pytest.mark.asyncio
     async def test_wake_send_packet_fails(self):
         """Returns 500 when wake packet cannot be sent."""
-        request = make_mock_request(
-            headers={"X-Confirm-Action": "WAKE"}, is_super=True
-        )
+        request = make_mock_request(headers={"X-Confirm-Action": "WAKE"}, is_super=True)
 
         with patch("api.proxy.pc.require_super"):
             with patch("wakeonlan.send_magic_packet") as mock_wol:

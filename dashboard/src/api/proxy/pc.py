@@ -82,7 +82,7 @@ def _extract_detail(resp: httpx.Response) -> str:
     """Extract error detail from response."""
     try:
         return resp.json().get("detail", resp.text)
-    except Exception:
+    except (ValueError, KeyError):
         return resp.text
 
 
@@ -115,7 +115,7 @@ async def _proxy_get(
             return resp.json()
     except HTTPException:
         raise
-    except Exception as e:
+    except httpx.HTTPError as e:
         logger.warning("Proxy GET %s failed: %s", url, e)
         if default_on_error is not None:
             return default_on_error
@@ -144,7 +144,7 @@ async def _proxy_post(path: str) -> Any:
             return resp.json()
     except HTTPException:
         raise
-    except Exception as e:
+    except httpx.HTTPError as e:
         logger.warning("Proxy POST %s failed: %s", url, e)
         raise HTTPException(status_code=503, detail="PC agent unreachable")
 
@@ -228,7 +228,7 @@ async def pc_sleep(request: Request):
             return resp.json()
     except HTTPException:
         raise
-    except Exception as e:
+    except httpx.HTTPError as e:
         logger.warning("PC sleep request failed: %s", e)
         raise HTTPException(status_code=503, detail="PC agent unreachable")
 
@@ -277,6 +277,6 @@ async def pc_wake(request: Request):
         # Invalid MAC address format
         logger.error("Invalid MAC address: %s", e)
         raise HTTPException(500, f"Invalid MAC address: {e}")
-    except Exception as e:
+    except OSError as e:
         logger.error("Wake-on-LAN error: %s", e)
         raise HTTPException(500, f"Failed to send wake packet: {e}")

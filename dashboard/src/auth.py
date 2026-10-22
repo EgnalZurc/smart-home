@@ -44,7 +44,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     try:
         return apr_md5_crypt.verify(plain_password, hashed_password)
-    except Exception as exc:
+    except (ValueError, TypeError) as exc:
         logger.warning("Password verification error: %s", exc)
         return False
 

@@ -86,7 +86,7 @@ async def lifespan(app: FastAPI):
     # initialised the wrong (default) database file.
     try:
         auth_users._migrate_from_htpasswd()
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
         logger.warning("User migration from .htpasswd failed: %s", exc)
     profiles_db.init_database()
 

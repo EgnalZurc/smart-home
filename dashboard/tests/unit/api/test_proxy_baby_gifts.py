@@ -3,28 +3,27 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
-from httpx import Response
-
 from api.proxy.baby_gifts import (
-    router,
-    get_all_baby_gifts,
-    create_baby_gift,
-    update_baby_gift,
-    delete_baby_gift,
     admin_unreserve_baby_gift,
-    update_baby_gifts_categories,
-    get_baby_gifts_invitations,
+    create_baby_gift,
     create_baby_gifts_invitation,
+    delete_baby_gift,
     delete_baby_gifts_invitation,
-    revoke_baby_gifts_invitation,
-    get_baby_gifts_for_user,
-    user_reserve_baby_gift,
-    user_unreserve_baby_gift,
+    get_all_baby_gifts,
     get_baby_gifts_for_guest,
+    get_baby_gifts_for_user,
+    get_baby_gifts_invitations,
     guest_reserve_baby_gift,
     guest_unreserve_baby_gift,
+    revoke_baby_gifts_invitation,
+    router,
+    update_baby_gift,
+    update_baby_gifts_categories,
+    user_reserve_baby_gift,
+    user_unreserve_baby_gift,
 )
+from fastapi import HTTPException
+from httpx import Response
 
 
 def make_mock_response(data, status_code=200):
@@ -150,7 +149,9 @@ class TestAdminEndpoints:
         request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.delete.return_value = make_mock_response({"status": "deleted"})
+            mock_instance.delete.return_value = make_mock_response(
+                {"status": "deleted"}
+            )
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             result = await delete_baby_gift("1", request)
@@ -242,7 +243,9 @@ class TestInvitationEndpoints:
         request = make_mock_request()
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.delete.return_value = make_mock_response({"status": "deleted"})
+            mock_instance.delete.return_value = make_mock_response(
+                {"status": "deleted"}
+            )
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             result = await delete_baby_gifts_invitation("abc123", request)
@@ -410,7 +413,6 @@ class TestRouterConfiguration:
     def test_router_has_baby_gifts_tag(self):
         """Router is tagged as Baby Gifts."""
         assert "Baby Gifts" in router.tags
-
 
 
 class TestErrorHandlingPaths:

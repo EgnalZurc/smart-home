@@ -1,10 +1,8 @@
 """Unit tests for api/auth/validation.py — Input validation models."""
 
 import pytest
-from pydantic import ValidationError
-
 from api.auth.validation import CreateUserRequest, UpdateUserRequest
-
+from pydantic import ValidationError
 
 # ---------------------------------------------------------------------------
 # TestCreateUserRequest

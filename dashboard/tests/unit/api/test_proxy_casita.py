@@ -3,9 +3,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
-from httpx import Response
-
 from api.proxy.casita import (
     dismiss_casita_property,
     get_casita_dismissed,
@@ -14,13 +11,14 @@ from api.proxy.casita import (
     get_casita_status,
     get_casita_summary,
     mark_casita_viewed,
-    router,
     run_casita_scraping,
     run_casita_summary,
     save_casita_comment,
     save_casita_schedule,
     undismiss_casita_property,
 )
+from fastapi import HTTPException
+from httpx import Response
 
 
 def make_mock_response(data, status_code=200):

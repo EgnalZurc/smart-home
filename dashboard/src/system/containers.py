@@ -60,7 +60,7 @@ async def get_containers(request: Request) -> dict[str, Any]:
                 for name in c.get("Names", []):
                     clean: str = name.lstrip("/")
                     state_by_name[clean] = c.get("State", "unknown")
-    except Exception as e:
+    except httpx.HTTPError as e:
         raise HTTPException(status_code=503, detail=f"Docker proxy unreachable: {e}")
 
     for key, container_names in CONTROLLABLE_CONTAINERS.items():
@@ -96,7 +96,7 @@ async def stop_service(app_key: str, request: Request) -> dict[str, Any]:
                 results[name] = (
                     "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
                 )
-            except Exception as e:
+            except httpx.HTTPError as e:
                 results[name] = f"error: {e}"
 
     all_ok: bool = all(v == "ok" or v == "http_304" for v in results.values())
@@ -134,7 +134,7 @@ async def restart_service(app_key: str, request: Request) -> dict[str, Any]:
                 stop_results[name] = (
                     "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
                 )
-            except Exception as e:
+            except httpx.HTTPError as e:
                 stop_results[name] = f"error: {e}"
 
         # Short pause so containers release ports/locks before restarting.
@@ -149,7 +149,7 @@ async def restart_service(app_key: str, request: Request) -> dict[str, Any]:
                 start_results[name] = (
                     "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
                 )
-            except Exception as e:
+            except httpx.HTTPError as e:
                 start_results[name] = f"error: {e}"
 
     def _ok(v: str) -> bool:
@@ -189,7 +189,7 @@ async def start_service(app_key: str, request: Request) -> dict[str, Any]:
                 results[name] = (
                     "ok" if r.status_code in (204, 304) else f"http_{r.status_code}"
                 )
-            except Exception as e:
+            except httpx.HTTPError as e:
                 results[name] = f"error: {e}"
 
     all_ok: bool = all(v == "ok" or v == "http_304" for v in results.values())

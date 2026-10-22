@@ -66,7 +66,9 @@ def mock_require_super():
 
     # Stack multiple patches
     patches = [patch(target, return_value="test_admin") for target in super_targets]
-    patches += [patch(target, return_value="test_admin") for target in app_write_targets]
+    patches += [
+        patch(target, return_value="test_admin") for target in app_write_targets
+    ]
 
     for p in patches:
         p.start()
@@ -109,8 +111,6 @@ def temp_auth_db(monkeypatch):
             # Drop any connection objects the test left referenced so their
             # __del__ runs (and WAL handles close) before cleanup.
             gc.collect()
-
-
 
 
 @pytest.fixture(autouse=True)

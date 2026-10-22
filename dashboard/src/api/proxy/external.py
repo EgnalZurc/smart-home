@@ -60,7 +60,7 @@ async def proxy_flood(lat: float, lon: float):
                 r = await c.get(url)
             m = re.search(r"GRAY_INDEX\s*=\s*([-\d.]+)", r.text)
             return float(m.group(1)) if m else None
-        except Exception:
+        except (httpx.HTTPError, ValueError):
             return None
 
     async def _snczi_with_progressive_bbox() -> dict | None:
@@ -117,7 +117,7 @@ async def proxy_flood(lat: float, lon: float):
                 "lon_grid": d.get("longitude"),
                 "years": 30,
             }
-        except Exception:
+        except (httpx.HTTPError, KeyError, IndexError, ValueError):
             return None
 
     snczi_data, glofas_data = await asyncio.gather(
@@ -217,7 +217,7 @@ async def proxy_firms(lat: float, lon: float):
                         continue
                 count += 1
             return count
-        except Exception:
+        except httpx.HTTPError:
             return 0
 
     results = await asyncio.gather(*[_fetch_window(w) for w in windows])

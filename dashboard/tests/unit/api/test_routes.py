@@ -394,9 +394,7 @@ class TestACProxies:
                 return_value=mock_response
             )
 
-            response = client.post(
-                "/api/ac/config", json={"target_temperature": 24.0}
-            )
+            response = client.post("/api/ac/config", json={"target_temperature": 24.0})
             assert response.status_code == 200
 
     def test_ac_control(self, client):
@@ -519,4 +517,3 @@ class TestPCControl:
 
             response = client.post("/api/pc/mode/gaming")
             assert response.status_code == 200
-

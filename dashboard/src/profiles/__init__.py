@@ -92,5 +92,5 @@ __all__ = [
 # Run database initialization on module load
 try:
     init_database()
-except Exception as e:
+except (OSError, RuntimeError) as e:
     logger.warning("Profile initialization failed: %s", e)

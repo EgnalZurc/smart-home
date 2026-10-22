@@ -8,9 +8,8 @@ instead of issuing a fresh HTTP request.
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 import api.health as health
+import pytest
 
 
 # Override the root conftest's mock_require_super fixture which fails when
@@ -165,7 +164,6 @@ async def test_error_results_are_also_cached():
     assert second["online"] is False
     assert second["cached"] is True
     assert second["latency_ms"] == 0
-
 
 
 @pytest.mark.asyncio

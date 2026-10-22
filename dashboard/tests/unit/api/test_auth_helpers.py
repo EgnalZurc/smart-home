@@ -30,7 +30,7 @@ class TestRequireSuper:
             import importlib
 
             importlib.reload(auth_helpers)
-            
+
             result = auth_helpers.require_super(mock_request)
             assert result == "admin"
 
@@ -107,7 +107,6 @@ class TestRequireSuper:
             mock_is_super.assert_called_once_with("testuser")
 
 
-
 class TestRequireAppWrite:
     """Tests for require_app_write helper."""
 
@@ -121,7 +120,9 @@ class TestRequireAppWrite:
             "sys.modules",
             {
                 "auth": MagicMock(get_current_user=MagicMock(return_value="admin")),
-                "user_profiles": MagicMock(get_effective_level=MagicMock(return_value=0)),
+                "user_profiles": MagicMock(
+                    get_effective_level=MagicMock(return_value=0)
+                ),
             },
         ):
             import importlib
@@ -145,7 +146,9 @@ class TestRequireAppWrite:
             "sys.modules",
             {
                 "auth": MagicMock(get_current_user=MagicMock(return_value="familia")),
-                "user_profiles": MagicMock(get_effective_level=MagicMock(return_value=1)),
+                "user_profiles": MagicMock(
+                    get_effective_level=MagicMock(return_value=1)
+                ),
             },
         ):
             import importlib
@@ -166,7 +169,9 @@ class TestRequireAppWrite:
             "sys.modules",
             {
                 "auth": MagicMock(get_current_user=MagicMock(return_value="familia")),
-                "user_profiles": MagicMock(get_effective_level=MagicMock(return_value=1)),
+                "user_profiles": MagicMock(
+                    get_effective_level=MagicMock(return_value=1)
+                ),
             },
         ):
             import importlib
@@ -212,7 +217,9 @@ class TestRequireAppWrite:
             "sys.modules",
             {
                 "auth": MagicMock(get_current_user=MagicMock(return_value="familia")),
-                "user_profiles": MagicMock(get_effective_level=MagicMock(return_value=1)),
+                "user_profiles": MagicMock(
+                    get_effective_level=MagicMock(return_value=1)
+                ),
             },
         ):
             import importlib

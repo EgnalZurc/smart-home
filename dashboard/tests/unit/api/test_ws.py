@@ -16,11 +16,11 @@ to backend services are issued.
 
 from unittest.mock import AsyncMock, patch
 
+import api.ws as ws
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
-import api.ws as ws
+from starlette.websockets import WebSocketDisconnect
 
 
 # The root conftest's autouse mock_require_super fixture patches proxy modules
@@ -302,7 +302,7 @@ def test_websocket_unauthenticated_client_not_tracked(client):
                 try:
                     with client.websocket_connect("/api/ws/health"):
                         pass
-                except Exception:
+                except (WebSocketDisconnect, RuntimeError):
                     pass
 
                 # No client should remain tracked after rejection
@@ -433,7 +433,8 @@ def test_validate_device_token_theft_detected():
 def test_validate_device_token_unrecognized_ip():
     """Returns None when client IP doesn't match any device IP."""
     ws_mock = _FakeWebSocketWithCookies(
-        cookies={"smh_device": "series:token"}, client_ip="10.0.0.99"  # Unrecognized IP
+        cookies={"smh_device": "series:token"},
+        client_ip="10.0.0.99",  # Unrecognized IP
     )
 
     mock_result = ws.auth_devices.VerifyResult(
@@ -453,7 +454,8 @@ def test_validate_device_token_unrecognized_ip():
 def test_validate_device_token_recognized_ip():
     """Returns username when device token is valid and IP matches."""
     ws_mock = _FakeWebSocketWithCookies(
-        cookies={"smh_device": "series:token"}, client_ip="192.168.1.100"  # Matching IP
+        cookies={"smh_device": "series:token"},
+        client_ip="192.168.1.100",  # Matching IP
     )
 
     mock_result = ws.auth_devices.VerifyResult(
@@ -472,7 +474,8 @@ def test_validate_device_token_recognized_ip():
 def test_validate_device_token_unknown_ip_rejected():
     """Returns None when client IP cannot be determined."""
     ws_mock = _FakeWebSocketWithCookies(
-        cookies={"smh_device": "series:token"}, client_ip=None  # No client info
+        cookies={"smh_device": "series:token"},
+        client_ip=None,  # No client info
     )
 
     mock_result = ws.auth_devices.VerifyResult(
