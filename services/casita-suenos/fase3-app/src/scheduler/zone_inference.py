@@ -157,6 +157,9 @@ def infer_zone_nominatim(hint: str) -> Zone | None:
             return None
     except (httpx.HTTPError, httpx.TimeoutException, OSError, ValueError) as e:
         logger.warning("[casita] Nominatim fallback falló para '%s': %s", hint, e)
+    except Exception as e:
+        # Fallback for unexpected errors
+        logger.warning("[casita] Nominatim error inesperado para '%s': %s", hint, e)
     return None
 
 

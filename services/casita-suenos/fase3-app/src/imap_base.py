@@ -131,6 +131,13 @@ def connect_imap(
         safe_msg = sanitize_imap_error(str(e), app_password)
         logger.error("[%s] Error conectando a IMAP: %s", log_prefix, safe_msg)
         raise type(e)(safe_msg) from None
+    except Exception as e:
+        # Catch any other exception and sanitize password from message
+        safe_msg = sanitize_imap_error(str(e), app_password)
+        logger.error(
+            "[%s] Error inesperado conectando a IMAP: %s", log_prefix, safe_msg
+        )
+        raise type(e)(safe_msg) from None
 
 
 def decode_subject(subject_raw: str) -> str:
@@ -235,7 +242,18 @@ def collect_messages(
                     logger.warning("[%s] %s", log_prefix, err)
                     errors.append(err)
                     failed_ids.add(mid)
+                except Exception as e:
+                    # Fallback for any unexpected exception - still sanitize
+                    safe_err = sanitize_imap_error(str(e))
+                    err = f"Error leyendo email {mid}: {safe_err}"
+                    logger.warning("[%s] %s", log_prefix, err)
+                    errors.append(err)
+                    failed_ids.add(mid)
         except (imaplib.IMAP4.error, OSError) as e:
+            safe_err = sanitize_imap_error(str(e))
+            logger.warning("[%s] Error en carpeta %s: %s", log_prefix, folder, safe_err)
+        except Exception as e:
+            # Fallback for any unexpected exception - still sanitize
             safe_err = sanitize_imap_error(str(e))
             logger.warning("[%s] Error en carpeta %s: %s", log_prefix, folder, safe_err)
 
@@ -291,6 +309,12 @@ def delete_processed(
             logger.warning(
                 "[%s] Error eliminando de %s: %s", log_prefix, folder, safe_err
             )
+        except Exception as e:
+            # Fallback for any unexpected exception - still sanitize
+            safe_err = sanitize_imap_error(str(e))
+            logger.warning(
+                "[%s] Error eliminando de %s: %s", log_prefix, folder, safe_err
+            )
     for folder, ids in seen_folder.items():
         try:
             imap.select(folder)
@@ -303,6 +327,15 @@ def delete_processed(
                 folder,
             )
         except (imaplib.IMAP4.error, OSError) as e:
+            safe_err = sanitize_imap_error(str(e))
+            logger.warning(
+                "[%s] Error marcando como leídos en %s: %s",
+                log_prefix,
+                folder,
+                safe_err,
+            )
+        except Exception as e:
+            # Fallback for any unexpected exception - still sanitize
             safe_err = sanitize_imap_error(str(e))
             logger.warning(
                 "[%s] Error marcando como leídos en %s: %s",

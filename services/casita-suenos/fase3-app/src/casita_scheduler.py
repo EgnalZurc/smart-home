@@ -394,6 +394,19 @@ class CasitaScheduler:
                         portal=portal_name, zone_id=zone_id, error=err_msg
                     )
                     new_errors.append(error)
+                except Exception as e:
+                    # Fallback for unexpected errors - record and continue
+                    err_msg = str(e)
+                    logger.error(
+                        "[casita] Error inesperado %s zona %s: %s",
+                        portal_name,
+                        zone_id,
+                        err_msg,
+                    )
+                    error = ScraperError(
+                        portal=portal_name, zone_id=zone_id, error=err_msg
+                    )
+                    new_errors.append(error)
 
             # ── Apify — solo las 8 zonas top ───────────────────────────────
             if zone_id in _TOP_ZONES_FOR_APIFY:
@@ -409,6 +422,17 @@ class CasitaScheduler:
                 ) as e:
                     err_msg = str(e)
                     logger.error("[casita] Error apify zona %s: %s", zone_id, err_msg)
+                    new_errors.append(
+                        ScraperError(
+                            portal="idealista_apify", zone_id=zone_id, error=err_msg
+                        )
+                    )
+                except Exception as e:
+                    # Fallback for unexpected errors - record and continue
+                    err_msg = str(e)
+                    logger.error(
+                        "[casita] Error inesperado apify zona %s: %s", zone_id, err_msg
+                    )
                     new_errors.append(
                         ScraperError(
                             portal="idealista_apify", zone_id=zone_id, error=err_msg
@@ -568,6 +592,10 @@ class CasitaScheduler:
         except (imaplib.IMAP4.error, OSError) as e:
             logger.error("[casita] Error en check Gmail: %s", e)
             return
+        except Exception as e:
+            # Fallback for unexpected errors
+            logger.error("[casita] Error inesperado en check Gmail: %s", e)
+            return
         if errors:
             for err in errors:
                 logger.warning("[casita] Error parseo Idealista: %s", err)
@@ -684,6 +712,10 @@ class CasitaScheduler:
             )
         except (imaplib.IMAP4.error, OSError) as e:
             logger.error("[casita] Error en check Fotocasa: %s", e)
+            return
+        except Exception as e:
+            # Fallback for unexpected errors
+            logger.error("[casita] Error inesperado en check Fotocasa: %s", e)
             return
 
         if errors:
@@ -873,6 +905,9 @@ class CasitaScheduler:
             AttributeError,
         ) as e:
             logger.error("[casita] Error en resumen semanal: %s", e)
+        except Exception as e:
+            # Fallback for unexpected errors
+            logger.error("[casita] Error inesperado en resumen semanal: %s", e)
 
     # ------------------------------------------------------------------
     # Utilidades internas

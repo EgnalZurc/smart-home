@@ -966,7 +966,6 @@ class TestGetZoneTrends:
 
     def test_zone_name_fallback_to_id(self, db, sample_zone):
         """Si la zona no está en el catálogo, zone_name cae al zone_id."""
-        now = datetime.now()
         prop = _make_property(portal_id="zt_unknown", zone_id="zona_inexistente_xyz")
         self._insert(db, prop, sample_zone)
 

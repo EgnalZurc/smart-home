@@ -828,10 +828,12 @@ class TestRunScraping:
         assert scheduler._last_scraping_result == "error"
 
     def test_scraping_records_scraper_errors(self, scheduler):
+        import httpx
+
         with (
             patch(
                 "casita_scheduler.pisos_scraper.scrape_zone",
-                side_effect=RuntimeError("boom"),
+                side_effect=httpx.HTTPError("boom"),
             ),
             patch("casita_scheduler.fotocasa_scraper.scrape_zone", return_value=[]),
             patch("casita_scheduler.habitaclia_scraper.scrape_zone", return_value=[]),
@@ -844,12 +846,14 @@ class TestRunScraping:
         assert scheduler._last_scraping_result == "error"
 
     def test_scraping_handles_apify_error(self, scheduler):
+        import httpx
+
         with (
             patch("casita_scheduler.pisos_scraper.scrape_zone", return_value=[]),
             patch("casita_scheduler.fotocasa_scraper.scrape_zone", return_value=[]),
             patch("casita_scheduler.habitaclia_scraper.scrape_zone", return_value=[]),
         ):
-            scheduler._apify.scrape_zone.side_effect = RuntimeError("apify down")
+            scheduler._apify.scrape_zone.side_effect = httpx.HTTPError("apify down")
             scheduler.run_scraping_now()
 
         status = scheduler.get_status()
@@ -922,7 +926,7 @@ class TestRunGmailCheck:
     def test_do_gmail_check_fetch_error_returns_early(self, scheduler):
         with patch(
             "idealista_email_parser.fetch_new_alerts",
-            side_effect=RuntimeError("imap fail"),
+            side_effect=OSError("imap fail"),
         ):
             scheduler._do_gmail_check()
         scheduler._db.upsert_property.assert_not_called()
@@ -1018,7 +1022,7 @@ class TestRunFotocasaCheck:
     def test_do_fotocasa_fetch_error_returns_early(self, scheduler):
         with patch(
             "fotocasa_email_parser.fetch_new_fotocasa_alerts",
-            side_effect=RuntimeError("imap fail"),
+            side_effect=OSError("imap fail"),
         ):
             scheduler._do_fotocasa_check()
         scheduler._db.upsert_property.assert_not_called()
@@ -1184,7 +1188,7 @@ class TestInferZoneNominatim:
         assert zone is None
 
     def test_nominatim_exception_returns_none(self, scheduler):
-        with patch("urllib.request.urlopen", side_effect=RuntimeError("network down")):
+        with patch("urllib.request.urlopen", side_effect=OSError("network down")):
             zone = scheduler._infer_zone_nominatim("zamora")
         assert zone is None
 
@@ -1243,8 +1247,10 @@ class TestScrapeIdealistaProperty:
         assert prop is None
 
     def test_scrape_handles_request_exception(self, scheduler):
+        import httpx
+
         zone = ZONES["zamora_meseta"]
-        with patch("httpx.Client", side_effect=RuntimeError("conn error")):
+        with patch("httpx.Client", side_effect=httpx.HTTPError("conn error")):
             prop = scheduler._scrape_idealista_property(self._alert(), zone)
         # Falls back to email data despite the exception.
         assert prop is not None
@@ -1270,7 +1276,9 @@ class TestWeeklySummaryExtended:
         scheduler._db.save_weekly_summary.assert_called_once()
 
     def test_summary_handles_db_exception(self, scheduler):
-        scheduler._db.get_top_scored.side_effect = RuntimeError("db error")
+        import sqlite3
+
+        scheduler._db.get_top_scored.side_effect = sqlite3.Error("db error")
         # Should swallow the exception, not raise.
         scheduler.run_summary_now()
         scheduler._notifier.send_weekly_summary.assert_not_called()
