@@ -217,7 +217,7 @@ def _extract_listings(soup, base_url: str, zone: Zone, now: datetime) -> list[Pr
                 )
             )
 
-        except Exception as e:
+        except (ValueError, AttributeError, KeyError) as e:
             logger.debug("[pisos] Error parseando anuncio: %s", e)
             continue
 

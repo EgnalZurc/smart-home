@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import logging
 import re
+import sqlite3
 from datetime import datetime
 from typing import TYPE_CHECKING, Final
 
+import httpx
 import telegram
 from models import PriceEvent, ScoreBreakdown, ScoredProperty
 
@@ -219,7 +221,7 @@ class TelegramNotifier:
                 ids = self._db.get_telegram_chat_ids()
                 if ids:
                     return ids
-            except Exception as e:
+            except (sqlite3.Error, AttributeError) as e:
                 logger.warning(
                     "[telegram] Error leyendo chat_ids de BD: %s",
                     _sanitize_telegram_error(e),
@@ -239,7 +241,6 @@ class TelegramNotifier:
             return False
 
         # Usar httpx sincrono: mas robusto para envio masivo sin asyncio overhead
-        import httpx
 
         token = self._bot.token
         url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -262,7 +263,7 @@ class TelegramNotifier:
                         resp.text[:120],
                     )
                     success = False
-            except Exception as e:
+            except (httpx.HTTPError, httpx.TimeoutException, OSError) as e:
                 # Log sanitized error to prevent token leak in tracebacks
                 logger.error(
                     "[telegram] Error enviando a chat %s: %s",
@@ -278,7 +279,7 @@ class TelegramNotifier:
             try:
                 self._db.register_telegram_chat(chat_id, username)
                 logger.info("[telegram] Chat registrado: %s (%s)", chat_id, username)
-            except Exception as e:
+            except (sqlite3.Error, AttributeError) as e:
                 logger.error(
                     "[telegram] Error registrando chat %s: %s",
                     chat_id,

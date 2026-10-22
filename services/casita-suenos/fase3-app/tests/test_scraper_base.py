@@ -1,22 +1,21 @@
 """Tests for scraper_base.py inference functions."""
 
-import pytest
+from models import GarageType, Habitability, Internet, Piscina
 from scraper_base import (
+    infer_ac,
+    infer_ac_type,
+    infer_garage_type,
+    infer_habitability,
+    infer_habitable,
+    infer_has_garage,
+    infer_has_garden,
+    infer_internet,
+    infer_piscina,
+    infer_terrain_m2,
     parse_price,
     parse_rooms,
     parse_size,
-    infer_habitability,
-    infer_internet,
-    infer_garage_type,
-    infer_terrain_m2,
-    infer_ac_type,
-    infer_habitable,
-    infer_has_garden,
-    infer_has_garage,
-    infer_piscina,
-    infer_ac,
 )
-from models import Habitability, Internet, GarageType, Piscina
 
 
 class TestParsePrice:
@@ -83,19 +82,29 @@ class TestInferHabitability:
     """Tests for infer_habitability function."""
 
     def test_ruina_keywords(self):
-        assert infer_habitability("casa en ruinas para rehabilitar", "") == Habitability.REFORMA
+        assert (
+            infer_habitability("casa en ruinas para rehabilitar", "")
+            == Habitability.REFORMA
+        )
 
     def test_reforma_keywords(self):
-        assert infer_habitability("necesita reforma integral", "") == Habitability.REFORMA
+        assert (
+            infer_habitability("necesita reforma integral", "") == Habitability.REFORMA
+        )
 
     def test_reformado_keywords(self):
-        assert infer_habitability("recién reformado en 2024", "") == Habitability.REFORMADO
+        assert (
+            infer_habitability("recién reformado en 2024", "") == Habitability.REFORMADO
+        )
 
     def test_a_estrenar(self):
         assert infer_habitability("vivienda a estrenar", "") == Habitability.REFORMADO
 
     def test_pendiente_reforma(self):
-        assert infer_habitability("pequeña reforma en cocina", "") == Habitability.PENDIENTE
+        assert (
+            infer_habitability("pequeña reforma en cocina", "")
+            == Habitability.PENDIENTE
+        )
 
     def test_buen_estado_default(self):
         assert infer_habitability("casa amplia y luminosa", "") == Habitability.BUENO
@@ -136,7 +145,10 @@ class TestInferGarageType:
     """Tests for infer_garage_type function."""
 
     def test_garage_edificio(self):
-        assert infer_garage_type("plaza de garaje cerrado incluida", []) == GarageType.EDIFICIO
+        assert (
+            infer_garage_type("plaza de garaje cerrado incluida", [])
+            == GarageType.EDIFICIO
+        )
 
     def test_garage_cubierto(self):
         assert infer_garage_type("garaje cubierto", []) == GarageType.EDIFICIO
@@ -150,7 +162,9 @@ class TestInferGarageType:
     def test_no_garage(self):
         # "sin aparcamiento" still contains "aparcamiento" keyword
         # The function does keyword matching, not negative detection
-        assert infer_garage_type("casa sin garaje disponible", []) == GarageType.EXTERIOR
+        assert (
+            infer_garage_type("casa sin garaje disponible", []) == GarageType.EXTERIOR
+        )
 
     def test_extras_list(self):
         assert infer_garage_type("", ["Garaje incluido"]) == GarageType.EDIFICIO

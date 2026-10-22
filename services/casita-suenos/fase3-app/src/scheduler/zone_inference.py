@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+import httpx
 from zones import ZONE_COORDS, ZONES, Zone
 
 from scheduler.config import NOMINATIM_MAX_DIST_KM
@@ -154,8 +155,11 @@ def infer_zone_nominatim(hint: str) -> Zone | None:
                 best_zone.id,
             )
             return None
-    except Exception as e:
+    except (httpx.HTTPError, httpx.TimeoutException, OSError, ValueError) as e:
         logger.warning("[casita] Nominatim fallback falló para '%s': %s", hint, e)
+    except Exception as e:
+        # Fallback for unexpected errors
+        logger.warning("[casita] Nominatim error inesperado para '%s': %s", hint, e)
     return None
 
 

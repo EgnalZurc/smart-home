@@ -17,7 +17,9 @@ También expone get_status() para el endpoint HTTP del dashboard.
 
 from __future__ import annotations
 
+import imaplib
 import logging
+import sqlite3
 import threading
 import time
 from datetime import datetime
@@ -25,6 +27,7 @@ from typing import TYPE_CHECKING
 
 import fotocasa_scraper
 import habitaclia_scraper
+import httpx
 import pisos_scraper
 from scheduler import formatters, zone_inference
 from scheduler.config import GMAIL_CHECK_INTERVAL_SEC as _GMAIL_CHECK_INTERVAL_SEC
@@ -377,10 +380,28 @@ class CasitaScheduler:
                         zone_id,
                         len(props),
                     )
-                except Exception as e:
+                except (
+                    httpx.HTTPError,
+                    httpx.TimeoutException,
+                    OSError,
+                    ValueError,
+                ) as e:
                     err_msg = str(e)
                     logger.error(
                         "[casita] Error %s zona %s: %s", portal_name, zone_id, err_msg
+                    )
+                    error = ScraperError(
+                        portal=portal_name, zone_id=zone_id, error=err_msg
+                    )
+                    new_errors.append(error)
+                except Exception as e:
+                    # Fallback for unexpected errors - record and continue
+                    err_msg = str(e)
+                    logger.error(
+                        "[casita] Error inesperado %s zona %s: %s",
+                        portal_name,
+                        zone_id,
+                        err_msg,
                     )
                     error = ScraperError(
                         portal=portal_name, zone_id=zone_id, error=err_msg
@@ -392,9 +413,26 @@ class CasitaScheduler:
                 try:
                     props = self._apify.scrape_zone(zone)
                     all_props += props
-                except Exception as e:
+                except (
+                    httpx.HTTPError,
+                    httpx.TimeoutException,
+                    OSError,
+                    ValueError,
+                    KeyError,
+                ) as e:
                     err_msg = str(e)
                     logger.error("[casita] Error apify zona %s: %s", zone_id, err_msg)
+                    new_errors.append(
+                        ScraperError(
+                            portal="idealista_apify", zone_id=zone_id, error=err_msg
+                        )
+                    )
+                except Exception as e:
+                    # Fallback for unexpected errors - record and continue
+                    err_msg = str(e)
+                    logger.error(
+                        "[casita] Error inesperado apify zona %s: %s", zone_id, err_msg
+                    )
                     new_errors.append(
                         ScraperError(
                             portal="idealista_apify", zone_id=zone_id, error=err_msg
@@ -429,7 +467,7 @@ class CasitaScheduler:
                                 zone_name=zone.name,
                             )
                             total_price_drops += 1
-                except Exception as e:
+                except (sqlite3.Error, ValueError, TypeError, AttributeError) as e:
                     logger.error("[casita] Error procesando %s: %s", prop.unique_id, e)
 
         # ── Notificar errores de scraper nuevos ────────────────────────────
@@ -524,7 +562,7 @@ class CasitaScheduler:
                     "size_m2": prop.size_m2,
                 }
             )
-        except Exception as e:
+        except (httpx.HTTPError, httpx.TimeoutException, OSError, AttributeError) as e:
             logger.error(
                 "[casita] Error notificando high-scorer %s: %s",
                 prop.unique_id,
@@ -551,8 +589,12 @@ class CasitaScheduler:
                 app_password=self._gmail_app_password,
                 lookback_days=3,
             )
-        except Exception as e:
+        except (imaplib.IMAP4.error, OSError) as e:
             logger.error("[casita] Error en check Gmail: %s", e)
+            return
+        except Exception as e:
+            # Fallback for unexpected errors
+            logger.error("[casita] Error inesperado en check Gmail: %s", e)
             return
         if errors:
             for err in errors:
@@ -565,7 +607,7 @@ class CasitaScheduler:
                 try:
                     imap_conn.close()
                     imap_conn.logout()
-                except Exception:
+                except (imaplib.IMAP4.error, OSError):
                     logger.debug(
                         "[casita] IMAP logout failed (connection may be stale)"
                     )
@@ -610,7 +652,14 @@ class CasitaScheduler:
                         zone_name=zone.name,
                     )
                 processed_email_ids.append(alert.email_id)
-            except Exception as e:
+            except (
+                httpx.HTTPError,
+                httpx.TimeoutException,
+                OSError,
+                sqlite3.Error,
+                ValueError,
+                AttributeError,
+            ) as e:
                 logger.error("[casita] Error procesando alerta %s: %s", alert.url, e)
                 processed_email_ids.append(alert.email_id)
         # Pasar los alerts procesados (contienen folder) para eliminar correctamente
@@ -621,7 +670,7 @@ class CasitaScheduler:
             try:
                 imap_conn.close()
                 imap_conn.logout()
-            except Exception:
+            except (imaplib.IMAP4.error, OSError):
                 logger.debug("[casita] IMAP logout failed (connection may be stale)")
         # Solo notificar si hay casas nuevas en el radar
         if total_new > 0:
@@ -661,8 +710,12 @@ class CasitaScheduler:
                 email_address=self._gmail_address,
                 app_password=self._gmail_app_password,
             )
-        except Exception as e:
+        except (imaplib.IMAP4.error, OSError) as e:
             logger.error("[casita] Error en check Fotocasa: %s", e)
+            return
+        except Exception as e:
+            # Fallback for unexpected errors
+            logger.error("[casita] Error inesperado en check Fotocasa: %s", e)
             return
 
         if errors:
@@ -677,7 +730,7 @@ class CasitaScheduler:
                 try:
                     imap_conn.close()
                     imap_conn.logout()
-                except Exception:
+                except (imaplib.IMAP4.error, OSError):
                     logger.debug(
                         "[casita] IMAP logout failed (connection may be stale)"
                     )
@@ -775,7 +828,7 @@ class CasitaScheduler:
 
                 processed_email_ids.append(alert.email_id)
 
-            except Exception as e:
+            except (sqlite3.Error, ValueError, TypeError, AttributeError) as e:
                 err_msg = f"Error procesando alerta Fotocasa {alert.url}: {type(e).__name__}: {e}"
                 logger.error("[casita] %s", err_msg)
                 failed_ids.add(alert.email_id)
@@ -790,7 +843,7 @@ class CasitaScheduler:
             try:
                 imap_conn.close()
                 imap_conn.logout()
-            except Exception:
+            except (imaplib.IMAP4.error, OSError):
                 logger.debug("[casita] IMAP logout failed (connection may be stale)")
 
         if total_new > 0:
@@ -844,8 +897,17 @@ class CasitaScheduler:
             summary_lines.append("")
             summary_lines.append(status_msg)
             self._db.save_weekly_summary("\n".join(summary_lines))
-        except Exception as e:
+        except (
+            sqlite3.Error,
+            httpx.HTTPError,
+            httpx.TimeoutException,
+            OSError,
+            AttributeError,
+        ) as e:
             logger.error("[casita] Error en resumen semanal: %s", e)
+        except Exception as e:
+            # Fallback for unexpected errors
+            logger.error("[casita] Error inesperado en resumen semanal: %s", e)
 
     # ------------------------------------------------------------------
     # Utilidades internas

@@ -270,7 +270,7 @@ def _extract_alerts_from_email(
 
         return alerts, None
 
-    except Exception as e:
+    except (ValueError, AttributeError, KeyError, TypeError) as e:
         error_msg = f"Error parseando email {msg_id}: {type(e).__name__}: {e}"
         logger.error("[gmail] %s", error_msg)
         return [], error_msg
@@ -292,7 +292,7 @@ def fetch_new_alerts(
     """
     try:
         imap = _connect_imap(email_address, app_password)
-    except Exception as e:
+    except (imaplib.IMAP4.error, OSError) as e:
         # Sanitize error to prevent app_password from leaking in logs
         safe_error = sanitize_imap_error(str(e), app_password)
         logger.error("[gmail] Error conectando a IMAP: %s", safe_error)
@@ -376,6 +376,6 @@ def fetch_new_alert_urls(email_address, app_password, lookback_minutes=35, **kwa
         try:
             imap.close()
             imap.logout()
-        except Exception:
+        except (imaplib.IMAP4.error, OSError):
             logger.debug("[idealista_parser] IMAP logout failed (legacy)")
     return [a.url for a in alerts if a.property_id]

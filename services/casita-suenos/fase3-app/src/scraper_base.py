@@ -718,7 +718,7 @@ def get_html(
     except httpx.HTTPStatusError as e:
         logger.warning("[scraper] HTTP %s para %s", e.response.status_code, url)
         return None
-    except Exception as e:
+    except (httpx.HTTPError, httpx.TimeoutException, OSError) as e:
         logger.error("[scraper] Error descargando %s: %s", url, e)
         return None
 
