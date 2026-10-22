@@ -23,6 +23,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
+from sqlite3 import DatabaseError, OperationalError
 from zoneinfo import ZoneInfo
 
 from config import (
@@ -61,10 +62,21 @@ from models import HealthResponse  # noqa: E402
 from reminder_engine import check_and_send_reminders  # noqa: E402
 
 try:
-    from google_sync import GoogleAuthError, GoogleCalendarClient
+    from google_sync import GoogleAuthError, GoogleCalendarClient, InvalidSyncToken
 except ImportError:
     GoogleCalendarClient = None  # type: ignore[misc,assignment]
     GoogleAuthError = Exception  # type: ignore[misc,assignment]
+    InvalidSyncToken = Exception  # type: ignore[misc,assignment]
+
+try:
+    from googleapiclient.errors import HttpError as GoogleHttpError
+except ImportError:
+    GoogleHttpError = Exception  # type: ignore[misc,assignment]
+
+try:
+    from httplib2 import HttpLib2Error
+except ImportError:
+    HttpLib2Error = Exception  # type: ignore[misc,assignment]
 
 try:
     from smart_home_common.telegram import TelegramNotifier
@@ -173,7 +185,14 @@ def _sync_loop() -> None:
             else:
                 _do_sync()
                 _last_sync_ok = True
-        except Exception as exc:
+        except (
+            GoogleHttpError,
+            HttpLib2Error,
+            InvalidSyncToken,
+            DatabaseError,
+            OperationalError,
+            OSError,
+        ) as exc:
             logger.exception("Sync loop error: %s", exc)
             _last_sync_ok = False
         finally:
@@ -224,8 +243,14 @@ def _do_sync() -> None:
             if new_token:
                 store.update_sync_token(cal.id, new_token)
             logger.info("Synced %d events from %s", len(events), cal.label)
-        except Exception as exc:
+        except InvalidSyncToken:
+            # Sync token is stale, clear it and retry on next cycle
+            logger.warning("Sync token stale for %s, will do full sync", cal.id)
+            store.update_sync_token(cal.id, None)
+        except (GoogleHttpError, HttpLib2Error, OSError) as exc:
             logger.error("Error syncing calendar %s: %s", cal.id, exc)
+        except (DatabaseError, OperationalError) as exc:
+            logger.error("Database error syncing calendar %s: %s", cal.id, exc)
 
 
 def _parse_event_time_str(time_str: str | None) -> int:
@@ -272,8 +297,10 @@ def _reminder_loop() -> None:
                 result = check_and_send_reminders(store, telegram_notifier)
                 if result["sent"] > 0:
                     logger.info("Sent %d reminders", result["sent"])
-        except Exception as exc:
-            logger.exception("Reminder loop error: %s", exc)
+        except (DatabaseError, OperationalError) as exc:
+            logger.exception("Reminder loop DB error: %s", exc)
+        except OSError as exc:
+            logger.exception("Reminder loop network error: %s", exc)
         finally:
             _last_reminder_tick_ts = time.monotonic()
         _shutdown.wait(REMINDER_TICK_S)
@@ -288,7 +315,7 @@ def _prune_loop() -> None:
         try:
             store.prune()
             logger.debug("Prune completed")
-        except Exception as exc:
+        except (DatabaseError, OperationalError) as exc:
             logger.exception("Prune loop error: %s", exc)
         _shutdown.wait(PRUNE_INTERVAL_S)
     logger.info("Prune loop stopped")
@@ -306,7 +333,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     try:
         store.count()
-    except Exception as exc:
+    except (DatabaseError, OperationalError) as exc:
         logger.warning("Initial store check failed: %s", exc)
 
     store.seed_default_rules(offsets=DEFAULT_OFFSETS)
@@ -322,8 +349,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     enabled=cal.get("enabled", True),
                 )
             logger.info("Seeded %d calendars", len(seed_cals))
-        except Exception as exc:
-            logger.warning("Failed to parse CALENDAR_SEED: %s", exc)
+        except json.JSONDecodeError as exc:
+            logger.warning("Failed to parse CALENDAR_SEED JSON: %s", exc)
+        except (KeyError, TypeError) as exc:
+            logger.warning("Invalid CALENDAR_SEED structure: %s", exc)
 
     if (
         GOOGLE_OAUTH_CLIENT_ID
@@ -351,7 +380,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
             telegram_notifier = TelegramNotifier.from_env()
             logger.info("Telegram notifier initialized")
-        except Exception as exc:
+        except (ValueError, KeyError, OSError) as exc:
             logger.warning("Telegram notifier not available: %s", exc)
 
     _shutdown.clear()
@@ -427,7 +456,7 @@ def _db_ok() -> bool:
     try:
         store.count()
         return True
-    except Exception as exc:
+    except (DatabaseError, OperationalError) as exc:
         logger.warning("DB health check failed: %s", exc)
         return False
 

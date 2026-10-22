@@ -109,6 +109,8 @@ class TestSecretSanitizationInErrors:
         """Ensure client_secret is redacted if it appears in build() error."""
         import logging
 
+        from httplib2 import HttpLib2Error
+
         from google_sync import GoogleCalendarClient
 
         # Create a token file
@@ -117,9 +119,9 @@ class TestSecretSanitizationInErrors:
             '{"refresh_token": "valid-refresh-token-here-1234", "token": "access"}'
         )
 
-        # Mock build to raise an error containing the secret
+        # Mock build to raise an HttpLib2Error containing the secret
         secret = "GOCSPX-my-secret-value"
-        mock_build.side_effect = Exception(f"Invalid client_secret: {secret}")
+        mock_build.side_effect = HttpLib2Error(f"Invalid client_secret: {secret}")
 
         client = GoogleCalendarClient(
             client_id="test-client-id",
