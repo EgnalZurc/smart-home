@@ -526,7 +526,9 @@ class ACController:
         while self._running:
             try:
                 self._tick()
-            except Exception as e:
+            except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
+                # Known recoverable errors: network issues, sensor data parsing,
+                # state access errors. Log and continue to keep the control loop alive.
                 logger.exception("Error en loop de control: %s", e)
 
             time.sleep(self.config.loop_interval)

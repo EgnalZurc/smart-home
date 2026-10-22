@@ -121,7 +121,7 @@ def build_outdoor_fetcher(
                 "outdoor",
             )
             return None
-        except Exception as e:
+        except httpx.RequestError as e:
             logger.error("Failed to fetch outdoor data: %s", e)
             error_tracker.register(
                 "outdoor_fetch",

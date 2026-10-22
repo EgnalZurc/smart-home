@@ -127,7 +127,7 @@ class ACEventLog:
                     ),
                 )
             return True
-        except Exception:
+        except sqlite3.Error:
             logger.exception("Failed to log AC command event (command=%s)", command)
             return False
 
@@ -156,7 +156,7 @@ class ACEventLog:
                     """,
                     (cutoff,),
                 ).fetchall()
-        except Exception:
+        except sqlite3.Error:
             logger.exception("Failed to read AC command event history")
             return []
 
