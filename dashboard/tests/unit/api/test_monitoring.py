@@ -4,10 +4,7 @@ These tests import the monitoring module directly to avoid loading the full
 routes module which has many dependencies.
 """
 
-import json
-import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest

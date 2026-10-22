@@ -1,8 +1,9 @@
 """Tests for the batch health endpoint /api/health/all."""
 
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import httpx
+import pytest
 
 
 @pytest.mark.asyncio
@@ -16,7 +17,11 @@ async def test_get_all_health_all_services_online():
     mock_response.json.return_value = {"online": True}
 
     mock_zigbee_response = MagicMock()
-    mock_zigbee_response.json.return_value = {"online": True, "mqtt_connected": True, "active_sensors": 5}
+    mock_zigbee_response.json.return_value = {
+        "online": True,
+        "mqtt_connected": True,
+        "active_sensors": 5,
+    }
 
     mock_immich_response = MagicMock()
     mock_immich_response.status_code = 200
@@ -88,7 +93,11 @@ async def test_get_all_health_partial_failures():
             raise httpx.ConnectError("Service down")
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"online": True, "mqtt_connected": True, "res": "pong"}
+        mock_resp.json.return_value = {
+            "online": True,
+            "mqtt_connected": True,
+            "res": "pong",
+        }
         return mock_resp
 
     mock_client = AsyncMock()
@@ -121,8 +130,15 @@ async def test_get_all_health_returns_all_keys():
         result = await get_all_health()
 
     expected_keys = [
-        "backend", "zigbee", "ac", "vacaciones", "immich",
-        "casita", "baby-gifts", "portfolio", "passwords"
+        "backend",
+        "zigbee",
+        "ac",
+        "vacaciones",
+        "immich",
+        "casita",
+        "baby-gifts",
+        "portfolio",
+        "passwords",
     ]
 
     for key in expected_keys:

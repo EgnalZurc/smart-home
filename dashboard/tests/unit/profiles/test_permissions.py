@@ -2,8 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
 
 class TestGetEffectiveLevel:
     """Tests for effective level calculation."""
@@ -190,9 +188,7 @@ class TestLegacyCompatibility:
             patch("profiles.permissions.get_all_profiles") as mock_all,
         ):
             mock_profiles.return_value = ["profile-a"]
-            mock_all.return_value = {
-                "profile-a": {"name": "FAMILIA_ALL", "level": 1}
-            }
+            mock_all.return_value = {"profile-a": {"name": "FAMILIA_ALL", "level": 1}}
 
             from profiles.permissions import get_profile_key
 

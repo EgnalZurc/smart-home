@@ -3,9 +3,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
-from httpx import Response
-
 from api.proxy.portfolio import (
     get_portfolio_crypto,
     get_portfolio_etf,
@@ -15,9 +12,12 @@ from api.proxy.portfolio import (
     refresh_portfolio,
     refresh_portfolio_monitor,
     reload_portfolio_config,
-    router,
+)
+from api.proxy.portfolio import (
     test_portfolio_notification as send_test_notification,
 )
+from fastapi import HTTPException
+from httpx import Response
 
 
 def make_mock_response(data, status_code=200):

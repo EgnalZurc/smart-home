@@ -206,7 +206,10 @@ class TestCatalogueCoherence:
 
         not_controllable = []
         for key in self.app_catalogue:
-            if key not in self.controllable and key not in intentionally_not_controllable:
+            if (
+                key not in self.controllable
+                and key not in intentionally_not_controllable
+            ):
                 not_controllable.append(key)
 
         assert not not_controllable, (
@@ -269,7 +272,7 @@ class TestHealthRouteCoverage:
 
         keys_str = match.group(1)
         # Parse the list: ["backend", "zigbee", ...]
-        keys = [k.strip().strip('"\'') for k in keys_str.split(",") if k.strip()]
+        keys = [k.strip().strip("\"'") for k in keys_str.split(",") if k.strip()]
 
         controllable = _get_controllable_containers()
 

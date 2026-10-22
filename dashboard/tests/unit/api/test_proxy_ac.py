@@ -9,28 +9,27 @@ actual ``httpx`` calls inside ``libs.service_proxy.proxy``, so these tests patch
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
-from httpx import Response
-
 from api.proxy.ac import (
-    router,
-    get_ac_status,
-    get_ac_sensors,
-    get_ac_sensors_history,
-    get_ac_history,
     get_ac_config,
-    update_ac_config,
-    set_ac_control_mode,
-    set_ac_manual_params,
-    update_ac_manual_param,
-    get_ac_real,
-    get_ac_outdoor,
-    get_ac_errors,
     get_ac_energy_current,
     get_ac_energy_hourly,
     get_ac_energy_monthly,
+    get_ac_errors,
+    get_ac_history,
+    get_ac_outdoor,
+    get_ac_real,
+    get_ac_sensors,
+    get_ac_sensors_history,
+    get_ac_status,
     get_ac_subscriptions_stats,
+    router,
+    set_ac_control_mode,
+    set_ac_manual_params,
+    update_ac_config,
+    update_ac_manual_param,
 )
+from fastapi import HTTPException
+from httpx import Response
 
 # Patch target: the shared library's httpx client.
 PROXY_HTTPX = "libs.service_proxy.proxy.httpx.AsyncClient"

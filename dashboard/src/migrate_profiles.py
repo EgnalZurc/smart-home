@@ -36,7 +36,7 @@ def main() -> None:
         try:
             user_profiles.set_profile(username, profile_key)
             print(f"  ✓ {username} → {profile_key}")
-        except Exception as exc:
+        except (OSError, ValueError, RuntimeError) as exc:
             print(f"  ✗ {username}: {exc}", file=sys.stderr)
     print("Done.")
 

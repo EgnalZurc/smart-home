@@ -182,14 +182,14 @@ async def get_backend_health() -> dict[str, Any]:
             db_path = Path(profiles_db.AUTH_DB_PATH)
             if db_path.exists() or db_path.parent.exists():
                 checks["db_accessible"] = True
-        except Exception as e:
+        except (OSError, ImportError) as e:
             checks["db_error"] = str(e)
 
         # Check static files
         try:
             static_path = Path(__file__).parent.parent / "static" / "login.html"
             checks["static_files"] = static_path.exists()
-        except Exception as e:
+        except OSError as e:
             checks["static_error"] = str(e)
 
         return checks
@@ -242,7 +242,7 @@ async def get_zigbee_health() -> dict[str, Any]:
                 "active_sensors": 0,
                 "error": "Timeout connecting to ac-service",
             }
-        except Exception as e:
+        except httpx.HTTPError as e:
             return {
                 "online": False,
                 "mqtt_connected": False,
@@ -281,7 +281,7 @@ async def get_ac_health() -> dict[str, Any]:
             return {"online": False, "error": "Cannot connect to ac-service"}
         except httpx.TimeoutException:
             return {"online": False, "error": "Timeout"}
-        except Exception as e:
+        except httpx.HTTPError as e:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("ac", _check)
@@ -311,7 +311,7 @@ async def get_vacaciones_health() -> dict[str, Any]:
             return {"online": False, "error": "Cannot connect to vacaciones-service"}
         except httpx.TimeoutException:
             return {"online": False, "error": "Timeout"}
-        except Exception as e:
+        except httpx.HTTPError as e:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("vacaciones", _check)
@@ -342,7 +342,7 @@ async def get_immich_health() -> dict[str, Any]:
             return {"online": False, "error": "Cannot connect to immich_server"}
         except httpx.TimeoutException:
             return {"online": False, "error": "Timeout"}
-        except Exception as e:
+        except httpx.HTTPError as e:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("immich", _check)
@@ -376,7 +376,7 @@ async def get_casita_health() -> dict[str, Any]:
             return {"online": False, "error": "Cannot connect to casita-suenos"}
         except httpx.TimeoutException:
             return {"online": False, "error": "Timeout"}
-        except Exception as e:
+        except httpx.HTTPError as e:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("casita", _check)
@@ -406,7 +406,7 @@ async def get_baby_gifts_health() -> dict[str, Any]:
             return {"online": False, "error": "Cannot connect to baby-gifts-service"}
         except httpx.TimeoutException:
             return {"online": False, "error": "Timeout"}
-        except Exception as e:
+        except httpx.HTTPError as e:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("baby-gifts", _check)
@@ -440,7 +440,7 @@ async def get_portfolio_health() -> dict[str, Any]:
             return {"online": False, "error": "Cannot connect to portfolio-monitor"}
         except httpx.TimeoutException:
             return {"online": False, "error": "Timeout"}
-        except Exception as e:
+        except httpx.HTTPError as e:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("portfolio", _check)
@@ -472,7 +472,7 @@ async def get_passwords_health() -> dict[str, Any]:
             return {"online": False, "error": "Cannot connect to vaultwarden"}
         except httpx.TimeoutException:
             return {"online": False, "error": "Timeout"}
-        except Exception as e:
+        except httpx.HTTPError as e:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("passwords", _check)
@@ -496,7 +496,7 @@ async def get_valheim_health() -> dict[str, Any]:
             async with httpx.AsyncClient(timeout=3.0) as client:
                 r = await client.get("http://valheim-admin:8080/health")
                 return {"online": r.status_code == 200}
-        except Exception:
+        except httpx.HTTPError:
             return {"online": False}
 
     return await _cached_health_check("valheim", _check)
@@ -537,7 +537,7 @@ async def get_metrics_health() -> dict[str, Any]:
             return {"online": False, "error": "Cannot connect to metrics-service"}
         except httpx.TimeoutException:
             return {"online": False, "error": "Timeout"}
-        except Exception as e:
+        except httpx.HTTPError as e:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("metrics", _check)
@@ -581,7 +581,7 @@ async def get_energy_health() -> dict[str, Any]:
             return {"online": False, "error": "Cannot connect to energy-monitor"}
         except httpx.TimeoutException:
             return {"online": False, "error": "Timeout"}
-        except Exception as e:
+        except httpx.HTTPError as e:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("energy", _check)
@@ -626,7 +626,7 @@ async def get_presence_health() -> dict[str, Any]:
             return {"online": False, "error": "Cannot connect to presence-service"}
         except httpx.TimeoutException:
             return {"online": False, "error": "Timeout"}
-        except Exception as e:
+        except httpx.HTTPError as e:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("presence", _check)
@@ -666,7 +666,7 @@ async def get_calendar_health() -> dict[str, Any]:
             return {"online": False, "error": "Cannot connect to calendar-service"}
         except httpx.TimeoutException:
             return {"online": False, "error": "Timeout"}
-        except Exception as e:
+        except httpx.HTTPError as e:
             return {"online": False, "error": str(e)}
 
     return await _cached_health_check("calendar", _check)

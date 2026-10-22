@@ -3,9 +3,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
-from httpx import Response
-
 from api.proxy.vacaciones import (
     add_vacaciones_year,
     delete_vacaciones_year,
@@ -13,8 +10,9 @@ from api.proxy.vacaciones import (
     get_vacaciones_config,
     post_vacaciones_config,
     post_vacaciones_year,
-    router,
 )
+from fastapi import HTTPException
+from httpx import Response
 
 
 def make_mock_response(data, status_code=200):

@@ -11,7 +11,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from api import alert_reads_db
 from api.alerts import MarkReadRequest, get_read_status, mark_alert_read, router
 
@@ -70,10 +69,14 @@ class TestAlertReadsDb:
         import api.alert_reads_db as mod
 
         with patch.object(mod, "datetime") as mock_dt:
-            mock_dt.now.return_value.isoformat.return_value = "2020-01-01T00:00:00+00:00"
+            mock_dt.now.return_value.isoformat.return_value = (
+                "2020-01-01T00:00:00+00:00"
+            )
             alert_reads_db.mark_alert_read("alice", "ts")
         with patch.object(mod, "datetime") as mock_dt:
-            mock_dt.now.return_value.isoformat.return_value = "2021-06-06T00:00:00+00:00"
+            mock_dt.now.return_value.isoformat.return_value = (
+                "2021-06-06T00:00:00+00:00"
+            )
             alert_reads_db.mark_alert_read("alice", "ts")
 
         with alert_reads_db._db() as conn:
@@ -90,10 +93,14 @@ class TestAlertReadsDb:
         import api.alert_reads_db as mod
 
         with patch.object(mod, "datetime") as mock_dt:
-            mock_dt.now.return_value.isoformat.return_value = "2020-01-01T00:00:00+00:00"
+            mock_dt.now.return_value.isoformat.return_value = (
+                "2020-01-01T00:00:00+00:00"
+            )
             alert_reads_db.mark_alert_read("alice", "old")
         with patch.object(mod, "datetime") as mock_dt:
-            mock_dt.now.return_value.isoformat.return_value = "2022-01-01T00:00:00+00:00"
+            mock_dt.now.return_value.isoformat.return_value = (
+                "2022-01-01T00:00:00+00:00"
+            )
             alert_reads_db.mark_alert_read("alice", "new")
 
         assert alert_reads_db.get_read_alerts("alice") == ["new", "old"]

@@ -28,7 +28,7 @@ def _read_cpu_times() -> tuple[float, float]:
         idle: float = fields[3] + (fields[4] if len(fields) > 4 else 0)
         total: float = sum(fields)
         return total, idle
-    except Exception:
+    except (OSError, ValueError, IndexError):
         return 0.0, 0.0
 
 
@@ -81,7 +81,7 @@ async def get_system_stats(request: Request) -> dict[str, Any]:
             "used_mb": round(swap_used / 1024),
             "percent": round(swap_used / swap_total * 100, 1) if swap_total else 0.0,
         }
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         stats["ram"] = {"error": str(e)}
         stats["swap"] = {"error": str(e)}
 
@@ -94,7 +94,7 @@ async def get_system_stats(request: Request) -> dict[str, Any]:
         di: float = i2 - i1
         cpu_pct: float = round((1.0 - di / dt) * 100, 1) if dt > 0 else 0.0
         stats["cpu"] = {"percent": cpu_pct}
-    except Exception as e:
+    except (ZeroDivisionError, ValueError) as e:
         stats["cpu"] = {"error": str(e)}
 
     # ── Disk ─────────────────────────────────────────────────────────────────
@@ -110,14 +110,14 @@ async def get_system_stats(request: Request) -> dict[str, Any]:
             "free_gb": round(free_b / GB, 1),
             "percent": round(used_b / total_b * 100, 1) if total_b else 0.0,
         }
-    except Exception as e:
+    except OSError as e:
         stats["disk"] = {"error": str(e)}
 
     # ── Temperature ──────────────────────────────────────────────────────────
     try:
         raw: int = int(open("/sys/class/thermal/thermal_zone0/temp").read().strip())
         stats["temp"] = {"celsius": round(raw / 1000, 1)}
-    except Exception as e:
+    except (OSError, ValueError) as e:
         stats["temp"] = {"error": str(e)}
 
     return stats
