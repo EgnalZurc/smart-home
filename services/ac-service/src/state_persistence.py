@@ -98,7 +98,7 @@ def save_state(state: PersistedState) -> bool:
         atomic_write_json(STATE_FILE, data)
         logger.info("Controller state saved to %s", STATE_FILE)
         return True
-    except Exception as e:
+    except (OSError, TypeError, ValueError) as e:
         logger.exception("Error saving controller state: %s", e)
         return False
 
@@ -121,6 +121,6 @@ def load_state() -> PersistedState | None:
         logger.info("  - Target: %.1f°C", state.target_temperature)
         logger.info("  - Override: %s", state.override)
         return state
-    except Exception as e:
+    except (OSError, TypeError, ValueError, KeyError) as e:
         logger.exception("Error loading controller state: %s", e)
         return None

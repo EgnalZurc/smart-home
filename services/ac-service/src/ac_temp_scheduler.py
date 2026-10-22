@@ -63,6 +63,7 @@ class AcTempScheduler:
         while not self._stop_event.is_set():
             try:
                 self._run_once()
-            except Exception as e:
+            except (AttributeError, TypeError, ValueError) as e:
+                # Sensor state access or MQTT errors - log and continue
                 logger.warning("AcTempScheduler error: %s", e)
             self._stop_event.wait(30)  # check every 30s
