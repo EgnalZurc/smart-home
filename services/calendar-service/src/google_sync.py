@@ -373,8 +373,8 @@ class GoogleCalendarClient:
                 self._timeout,
             )
             return True
-        except (HttpLib2Error, TransportError, OSError) as exc:
-            # Network/transport errors during service build
+        except (HttpLib2Error, TransportError, OSError, ValueError) as exc:
+            # Network/transport errors during service build, or API validation errors
             # Sanitize error to avoid leaking secrets
             error_msg = str(exc)
             if self._client_secret and self._client_secret in error_msg:

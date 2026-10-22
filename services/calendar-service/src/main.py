@@ -456,7 +456,7 @@ def _db_ok() -> bool:
     try:
         store.count()
         return True
-    except (DatabaseError, OperationalError) as exc:
+    except (DatabaseError, OperationalError, RuntimeError) as exc:
         logger.warning("DB health check failed: %s", exc)
         return False
 
