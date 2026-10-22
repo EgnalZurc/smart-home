@@ -23,9 +23,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import sqlite3
 import time
 from collections import defaultdict, deque
 
+import httpx
 from config import (
     DEVICES_JSON,
     ENERGY_SNAPSHOT_INTERVAL_S,
@@ -254,8 +256,8 @@ class Collector:
         while True:
             try:
                 await self.tick()
-            except Exception:
-                logger.exception("collector tick failed")
+            except (httpx.HTTPError, asyncio.TimeoutError, OSError) as exc:
+                logger.warning("collector tick failed: %s", exc)
             await asyncio.sleep(POLL_INTERVAL_S)
 
     async def _rollup_loop(self) -> None:
@@ -263,24 +265,24 @@ class Collector:
             await asyncio.sleep(ROLLUP_INTERVAL_S)
             try:
                 await asyncio.to_thread(self.rollup)
-            except Exception:
-                logger.exception("rollup failed")
+            except (sqlite3.Error, OSError) as exc:
+                logger.warning("rollup failed: %s", exc)
 
     async def _energy_loop(self) -> None:
         while True:
             await asyncio.sleep(ENERGY_SNAPSHOT_INTERVAL_S)
             try:
                 await asyncio.to_thread(self.snapshot_energy)
-            except Exception:
-                logger.exception("energy snapshot failed")
+            except (sqlite3.Error, OSError) as exc:
+                logger.warning("energy snapshot failed: %s", exc)
 
     async def _prune_loop(self) -> None:
         while True:
             await asyncio.sleep(PRUNE_INTERVAL_S)
             try:
                 await asyncio.to_thread(self.store.prune)
-            except Exception:
-                logger.exception("prune failed")
+            except (sqlite3.Error, OSError) as exc:
+                logger.warning("prune failed: %s", exc)
 
     async def start(self) -> None:
         """Build the Shelly clients and spawn the background tasks."""
@@ -304,13 +306,13 @@ class Collector:
         for task in self._tasks:
             try:
                 await task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            except asyncio.CancelledError:
                 pass
         self._tasks = []
         for client in self.clients.values():
             try:
                 await client.aclose()
-            except Exception:  # pragma: no cover - best-effort cleanup
+            except httpx.HTTPError:  # pragma: no cover - best-effort cleanup
                 logger.warning("failed to close client %s", client.device_id)
         logger.info("Collector stopped")
 

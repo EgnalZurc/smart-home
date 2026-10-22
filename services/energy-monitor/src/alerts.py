@@ -167,5 +167,8 @@ class AlertEngine:
             return
         try:
             self.notifier.send(message)
-        except Exception as exc:  # pragma: no cover - defensive, delivery best-effort
+        except (
+            OSError,
+            RuntimeError,
+        ) as exc:  # pragma: no cover - defensive, delivery best-effort
             logger.warning("alert delivery failed: %s", exc)
