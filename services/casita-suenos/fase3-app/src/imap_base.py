@@ -126,7 +126,7 @@ def connect_imap(
         imap.login(email_address, app_password)
         logger.info("[%s] Conectado a IMAP como %s", log_prefix, email_address)
         return imap
-    except Exception as e:
+    except (imaplib.IMAP4.error, OSError) as e:
         # Sanitize before re-raising to prevent password leak in caller's logs
         safe_msg = sanitize_imap_error(str(e), app_password)
         logger.error("[%s] Error conectando a IMAP: %s", log_prefix, safe_msg)
@@ -158,7 +158,7 @@ def get_body(msg: email.message.Message) -> str:
     else:
         try:
             parts.append(msg.get_payload(decode=True).decode("utf-8", errors="ignore"))
-        except Exception:
+        except (AttributeError, UnicodeDecodeError):
             parts.append(str(msg.get_payload()))
     return "\n".join(parts)
 
@@ -229,13 +229,13 @@ def collect_messages(
                         continue
                     msg = email.message_from_bytes(msg_data[0][1])
                     collected.append((msg, mid, folder))
-                except Exception as e:
+                except (imaplib.IMAP4.error, OSError) as e:
                     safe_err = sanitize_imap_error(str(e))
                     err = f"Error leyendo email {mid}: {safe_err}"
                     logger.warning("[%s] %s", log_prefix, err)
                     errors.append(err)
                     failed_ids.add(mid)
-        except Exception as e:
+        except (imaplib.IMAP4.error, OSError) as e:
             safe_err = sanitize_imap_error(str(e))
             logger.warning("[%s] Error en carpeta %s: %s", log_prefix, folder, safe_err)
 
@@ -286,7 +286,7 @@ def delete_processed(
                 imap.store(msg_id.encode(), "+FLAGS", "\\Deleted")
             imap.expunge()
             logger.info("[%s] %d emails eliminados de %s", log_prefix, len(ids), folder)
-        except Exception as e:
+        except (imaplib.IMAP4.error, OSError) as e:
             safe_err = sanitize_imap_error(str(e))
             logger.warning(
                 "[%s] Error eliminando de %s: %s", log_prefix, folder, safe_err
@@ -302,7 +302,7 @@ def delete_processed(
                 len(ids),
                 folder,
             )
-        except Exception as e:
+        except (imaplib.IMAP4.error, OSError) as e:
             safe_err = sanitize_imap_error(str(e))
             logger.warning(
                 "[%s] Error marcando como leídos en %s: %s",
@@ -314,5 +314,5 @@ def delete_processed(
     try:
         imap.close()
         imap.logout()
-    except Exception:
+    except (imaplib.IMAP4.error, OSError):
         logger.debug("[%s] IMAP logout failed", log_prefix)

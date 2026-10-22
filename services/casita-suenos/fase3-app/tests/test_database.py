@@ -5,6 +5,7 @@ Usa una DB temporal para no tocar el disco.
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -1236,7 +1237,7 @@ class TestConcurrentWrites:
                         price=100_000 + thread_id * 1000 + i,
                     )
                     db.upsert_property(prop)
-            except Exception as e:
+            except (sqlite3.Error, ValueError, TypeError) as e:
                 errors.append(e)
 
         threads = [
@@ -1266,14 +1267,14 @@ class TestConcurrentWrites:
             try:
                 for prop in props:
                     db.dismiss(prop.unique_id)
-            except Exception as e:
+            except (sqlite3.Error, ValueError, TypeError) as e:
                 errors.append(e)
 
         def undismiss_worker() -> None:
             try:
                 for prop in props:
                     db.undismiss(prop.unique_id)
-            except Exception as e:
+            except (sqlite3.Error, ValueError, TypeError) as e:
                 errors.append(e)
 
         threads = [
@@ -1305,14 +1306,14 @@ class TestConcurrentWrites:
             try:
                 for _ in range(50):
                     db.mark_viewed(uid)
-            except Exception as e:
+            except (sqlite3.Error, ValueError, TypeError) as e:
                 errors.append(e)
 
         def comment_worker(comment_id: int) -> None:
             try:
                 for i in range(50):
                     db.save_comment(uid, f"Comment {comment_id}-{i}")
-            except Exception as e:
+            except (sqlite3.Error, ValueError, TypeError) as e:
                 errors.append(e)
 
         threads = [

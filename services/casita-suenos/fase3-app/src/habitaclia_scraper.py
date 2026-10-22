@@ -211,7 +211,7 @@ def _parse_listing_page(
                 )
             )
 
-        except Exception as e:
+        except (ValueError, AttributeError, KeyError) as e:
             logger.debug("[habitaclia] Error en articulo: %s", e)
             continue
 

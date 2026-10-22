@@ -426,14 +426,14 @@ def evaluate_from_email(prop: Property, zone: Zone) -> ScoredProperty:
 
     # R2/R3 — terreno y garaje: el portal ya los garantizó
     if not p.has_garden_or_plot:
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(AttributeError, TypeError):
             object.__setattr__(p, "has_garden_or_plot", True)
     current_gt = getattr(p, "garage_type", GarageType.NINGUNO)
     if current_gt == GarageType.NINGUNO and p.has_garage:
         gt_val = GarageType.EXTERIOR
         try:
             object.__setattr__(p, "garage_type", gt_val)
-        except Exception:
+        except (AttributeError, TypeError):
             p.garage_type = gt_val
 
     # R4 — habitabilidad: si desconocida, el portal no manda ruinas
@@ -441,7 +441,7 @@ def evaluate_from_email(prop: Property, zone: Zone) -> ScoredProperty:
     if hab is None or hab == Habitability.DESCONOCIDO:
         try:
             object.__setattr__(p, "habitability", Habitability.BUENO)
-        except Exception:
+        except (AttributeError, TypeError):
             p.habitability = Habitability.BUENO
 
     # Calcular score base con el scorer estándar

@@ -444,7 +444,7 @@ class Database:
         for row in rows:
             try:
                 config[row["key"]] = json.loads(row["value"])
-            except Exception:
+            except (json.JSONDecodeError, TypeError):
                 config[row["key"]] = row["value"]
         return config
 
@@ -725,7 +725,7 @@ class Database:
             from zones import ZONES
 
             zone_names = {zid: z.name for zid, z in ZONES.items()}
-        except Exception:  # pragma: no cover
+        except ImportError:  # pragma: no cover
             zone_names = {}
 
         rows = self._conn.execute(

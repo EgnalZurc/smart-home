@@ -1,9 +1,10 @@
 """Tests for FastAPI endpoints in main.py."""
 
+from datetime import datetime
+from unittest.mock import MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, patch
-from datetime import datetime
 
 # API prefix for all casita endpoints
 API = "/api/casita"
@@ -468,7 +469,8 @@ class TestViewedAndComments:
 
     def test_save_comment_success(self, client, mock_scheduler):
         response = client.post(
-            f"{API}/save-comment", json={"uid": "idealista:12345", "comment": "Nice house"}
+            f"{API}/save-comment",
+            json={"uid": "idealista:12345", "comment": "Nice house"},
         )
         assert response.status_code == 200
         mock_scheduler.save_comment.assert_called_with("idealista:12345", "Nice house")
@@ -595,7 +597,6 @@ class TestFrontendRoutes:
         assert response.status_code in (200, 404)
 
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Additional tests for main.py bootstrap and helpers
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -618,8 +619,9 @@ class TestConfigValidation:
 
     def test_validate_config_missing_apify_is_optional(self, monkeypatch, caplog):
         """Missing APIFY_API_TOKEN must NOT be fatal (Idealista/Apify is disabled)."""
-        import main as main_module
         import logging
+
+        import main as main_module
 
         monkeypatch.setattr(main_module, "TELEGRAM_BOT_TOKEN", "bot_token")
         monkeypatch.setattr(main_module, "TELEGRAM_CHAT_ID", "123")
@@ -631,9 +633,7 @@ class TestConfigValidation:
             # Should not raise SystemExit anymore
             main_module._validate_config()
 
-        assert any(
-            "APIFY_API_TOKEN" in record.message for record in caplog.records
-        )
+        assert any("APIFY_API_TOKEN" in record.message for record in caplog.records)
 
     def test_validate_config_missing_gmail(self, monkeypatch):
         """Test that missing GMAIL_ADDRESS is detected."""
@@ -649,8 +649,9 @@ class TestConfigValidation:
 
     def test_validate_config_warning_no_gmail_password(self, monkeypatch, caplog):
         """Test warning when GMAIL_APP_PASSWORD is missing."""
-        import main as main_module
         import logging
+
+        import main as main_module
 
         monkeypatch.setattr(main_module, "TELEGRAM_BOT_TOKEN", "bot_token")
         monkeypatch.setattr(main_module, "TELEGRAM_CHAT_ID", "123")
@@ -670,8 +671,9 @@ class TestProcessNaming:
 
     def test_set_process_name_fallback(self, monkeypatch):
         """Test process name setting with fallback."""
-        import main as main_module
         import sys
+
+        import main as main_module
 
         # Mock setproctitle import to fail
         def mock_import_error(*args):
@@ -792,7 +794,6 @@ class TestGlobalRateLimiting:
     def test_rate_limit_per_ip(self, mock_scheduler):
         """Rate limits should be tracked per IP address."""
         import importlib
-        from unittest.mock import patch
 
         import main
 
@@ -859,7 +860,9 @@ class TestClientIpExtraction:
         importlib.reload(main)
 
         request = MagicMock()
-        request.headers = {"x-forwarded-for": "203.0.113.50, 70.41.3.18, 150.172.238.178"}
+        request.headers = {
+            "x-forwarded-for": "203.0.113.50, 70.41.3.18, 150.172.238.178"
+        }
         request.client.host = "172.18.0.1"
 
         # Should return the first IP (original client)
@@ -878,7 +881,6 @@ class TestClientIpExtraction:
         request.client = None
 
         assert main._get_client_ip(request) == "unknown"
-
 
 
 class TestCsrfProtection:

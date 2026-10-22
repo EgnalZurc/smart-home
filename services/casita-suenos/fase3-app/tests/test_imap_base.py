@@ -108,9 +108,7 @@ class TestConnectImapSanitization:
         password = "mySecretAppPass"
         mock_imap = MagicMock()
         mock_imap_class.return_value = mock_imap
-        mock_imap.login.side_effect = Exception(
-            f"Authentication failed for {password}"
-        )
+        mock_imap.login.side_effect = Exception(f"Authentication failed for {password}")
 
         with pytest.raises(Exception) as exc_info:
             connect_imap("test@gmail.com", password)
@@ -177,9 +175,7 @@ class TestCollectMessagesSanitization:
 
         # Mock IMAP connection that fails on select
         mock_imap = MagicMock()
-        mock_imap.select.side_effect = Exception(
-            f"Folder access denied: {password}"
-        )
+        mock_imap.select.side_effect = Exception(f"Folder access denied: {password}")
 
         # The error is logged but not returned in errors list
         # (folder errors are just logged and skipped)
@@ -216,9 +212,7 @@ class TestDeleteProcessedSanitization:
         # Mock IMAP connection that fails on store
         mock_imap = MagicMock()
         mock_imap.select.return_value = ("OK", None)
-        mock_imap.store.side_effect = Exception(
-            f"Store failed: {password}"
-        )
+        mock_imap.store.side_effect = Exception(f"Store failed: {password}")
 
         with patch.dict(os.environ, {"GMAIL_APP_PASSWORD": password}):
             with patch("imap_base.logger") as mock_logger:

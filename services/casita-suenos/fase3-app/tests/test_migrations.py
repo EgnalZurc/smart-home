@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from migrations import (
     ALLOWED_TABLES,
     COLUMN_NAME_PATTERN,

@@ -13,6 +13,7 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+import httpx
 from models import GarageType, Piscina, Portal, Property
 from scraper_base import (
     infer_ac,
@@ -43,7 +44,6 @@ def scrape_idealista_property(alert: IdealistaAlert, zone: Zone) -> Property | N
     el scraping (403) o faltan datos, cae en los datos del correo. Devuelve
     ``None`` si no hay precio ni en la ficha ni en el correo.
     """
-    import httpx
     from bs4 import BeautifulSoup
 
     title: str = alert.title
@@ -100,7 +100,7 @@ def scrape_idealista_property(alert: IdealistaAlert, zone: Zone) -> Property | N
                     r.status_code,
                     alert.url,
                 )
-    except Exception as e:
+    except (httpx.HTTPError, httpx.TimeoutException, OSError) as e:
         logger.warning("[casita] Error scraping %s: %s", alert.url, e)
     # Fallback al precio del email si el scraping fue bloqueado (403)
     if not price and alert.price:

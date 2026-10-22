@@ -1,7 +1,5 @@
 """Unit tests for config module credential sanitization functions."""
 
-import pytest
-
 
 class TestSanitizeTelegramError:
     """Tests for sanitize_telegram_error function."""
@@ -196,7 +194,7 @@ class TestIntegrationNotifier:
 
     def test_notifier_sanitizes_telegram_errors(self):
         """Verify _sanitize_telegram_error in notifier redacts tokens.
-        
+
         Note: notifier.py has its own implementation of _sanitize_telegram_error
         which predates the config.py centralization. Both use the same logic.
         """
