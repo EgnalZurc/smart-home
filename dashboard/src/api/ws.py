@@ -32,8 +32,15 @@ Security
 --------
 WebSocket connections require a valid session cookie (``smh_session`` JWT).
 The HTTP auth middleware does not cover WebSocket upgrades, so validation
-happens during the handshake via ``_validate_session()``. Unauthenticated
-requests are rejected with close code 4001 (Unauthorized).
+happens during the handshake via ``_validate_session()``.
+
+If the JWT is expired or missing, the WebSocket handler falls back to device
+token authentication (``smh_device`` cookie). This allows trusted devices to
+maintain real-time connections without requiring a fresh JWT. Device token
+auth is only accepted if the client IP matches the IP stored when the device
+was registered.
+
+Unauthenticated requests are rejected with close code 4001 (Unauthorized).
 """
 
 import asyncio
@@ -41,6 +48,7 @@ import contextlib
 import logging
 
 import auth as auth_core
+import auth_devices
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from api.health import get_all_health
@@ -164,6 +172,16 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+def _get_client_ip(websocket: WebSocket) -> str:
+    """Extract client IP from WebSocket connection.
+
+    Returns the client host address, or 'unknown' if not available.
+    """
+    if websocket.client:
+        return websocket.client.host
+    return "unknown"
+
+
 def _validate_session(websocket: WebSocket) -> str | None:
     """Validate the session cookie from a WebSocket handshake request.
 
@@ -184,12 +202,89 @@ def _validate_session(websocket: WebSocket) -> str | None:
     return payload.get("sub")
 
 
+def _validate_device_token(websocket: WebSocket) -> str | None:
+    """Validate device token from WebSocket handshake as fallback auth.
+
+    When JWT auth fails (expired/missing), this function attempts to authenticate
+    using the device token cookie (smh_device). The device token is validated
+    using the same Jaspan pattern as HTTP requests.
+
+    Security: Device token auth is only accepted if the client IP matches an IP
+    address associated with device tokens for the user. This prevents a stolen
+    device token from being used from an unrecognized location.
+
+    Returns:
+        The authenticated username if valid, None otherwise.
+    """
+    device_cookie = websocket.cookies.get(auth_devices.DEVICE_COOKIE_NAME)
+    if not device_cookie:
+        return None
+
+    result = auth_devices.verify_and_rotate(device_cookie)
+
+    # Token theft detected — don't authenticate
+    if result.theft_detected:
+        logger.warning(
+            "Device token theft detected during WebSocket auth for user %r",
+            result.username,
+        )
+        return None
+
+    if not result.ok:
+        return None
+
+    # Verify client IP matches a known device IP for this user
+    client_ip = _get_client_ip(websocket)
+    if not _is_recognized_device_ip(result.username, client_ip):
+        logger.warning(
+            "Device token auth rejected for user %r: IP %s not recognized",
+            result.username,
+            client_ip,
+        )
+        return None
+
+    logger.debug(
+        "WebSocket authenticated via device token for user %r (IP: %s)",
+        result.username,
+        client_ip,
+    )
+    return result.username
+
+
+def _is_recognized_device_ip(username: str, client_ip: str) -> bool:
+    """Check if the client IP is associated with any device token for this user.
+
+    This provides an additional security layer for device token auth on WebSocket
+    connections. A valid device token from an unrecognized IP is rejected.
+
+    Args:
+        username: The authenticated user from the device token.
+        client_ip: The client's IP address.
+
+    Returns:
+        True if the IP is associated with any device token for this user.
+    """
+    if client_ip == "unknown":
+        # Can't verify IP — reject for safety
+        return False
+
+    devices = auth_devices.list_devices(username)
+    recognized_ips = {d.get("ip_address") for d in devices}
+    return client_ip in recognized_ips
+
+
 @router.websocket("/health")
 async def health_websocket(websocket: WebSocket) -> None:
     """Stream real-time health status to the dashboard.
 
-    Requires a valid session cookie (smh_session JWT). Unauthenticated requests
-    are rejected with close code 4001 (Unauthorized).
+    Requires authentication via one of:
+    1. Valid session cookie (smh_session JWT) — preferred
+    2. Valid device token cookie (smh_device) — fallback when JWT expires
+
+    Device token fallback is only accepted from recognized device IPs (IPs that
+    have previously been associated with a device token for the user).
+
+    Unauthenticated requests are rejected with close code 4001 (Unauthorized).
 
     On connect the client receives the current health snapshot immediately,
     then a fresh snapshot every ``BROADCAST_INTERVAL`` seconds. The server does
@@ -199,13 +294,18 @@ async def health_websocket(websocket: WebSocket) -> None:
     # Validate session before accepting the WebSocket connection.
     # The HTTP middleware doesn't cover WebSocket upgrades, so we check manually.
     user = _validate_session(websocket)
+
+    # Fallback to device token if JWT auth failed
+    if not user:
+        user = _validate_device_token(websocket)
+
     if not user:
         # Reject unauthenticated connections. Must call accept() first to send
         # a close frame with a custom code — calling close() on an unaccepted
         # WebSocket is a protocol error in some implementations.
         await websocket.accept()
         await websocket.close(code=WS_CLOSE_UNAUTHORIZED, reason="Unauthorized")
-        logger.debug("WebSocket connection rejected: no valid session")
+        logger.debug("WebSocket connection rejected: no valid session or device token")
         return
 
     logger.debug("WebSocket connection accepted for user %r", user)

@@ -7,6 +7,8 @@ Covers both layers:
   (initial snapshot on connect, broadcast message shape, clean disconnect).
 * **Authentication** (H-3 fix): WebSocket rejects unauthenticated connections
   with close code 4001.
+* **Device token fallback**: When JWT auth fails, WebSocket accepts valid
+  device tokens from recognized IPs.
 
 ``api.health.get_all_health`` is patched throughout so no real HTTP requests
 to backend services are issued.
@@ -248,7 +250,6 @@ def test_multiple_clients_tracked_independently(client, mock_auth):
         assert ws.manager.client_count == 0
 
 
-
 # ── WebSocket authentication tests (H-3 fix) ───────────────────────────────────
 
 
@@ -257,13 +258,15 @@ def test_websocket_rejects_unauthenticated_connection(client):
     with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
         # Patch _validate_session to return None (no valid session)
         with patch.object(ws, "_validate_session", return_value=None):
-            # Connect without valid auth — should be rejected with code 4001
-            with pytest.raises(Exception) as exc_info:
-                with client.websocket_connect("/api/ws/health") as websocket:
-                    websocket.receive_json()
+            # Patch _validate_device_token to also return None
+            with patch.object(ws, "_validate_device_token", return_value=None):
+                # Connect without valid auth — should be rejected with code 4001
+                with pytest.raises(Exception) as exc_info:
+                    with client.websocket_connect("/api/ws/health") as websocket:
+                        websocket.receive_json()
 
-            # WebSocketDisconnect is raised with our custom code
-            assert exc_info.value.code == ws.WS_CLOSE_UNAUTHORIZED
+                # WebSocketDisconnect is raised with our custom code
+                assert exc_info.value.code == ws.WS_CLOSE_UNAUTHORIZED
 
 
 def test_websocket_accepts_valid_session(client):
@@ -295,15 +298,16 @@ def test_websocket_unauthenticated_client_not_tracked(client):
     """Rejected unauthenticated connections must not be tracked."""
     with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
         with patch.object(ws, "_validate_session", return_value=None):
-            try:
-                with client.websocket_connect("/api/ws/health"):
+            with patch.object(ws, "_validate_device_token", return_value=None):
+                try:
+                    with client.websocket_connect("/api/ws/health"):
+                        pass
+                except Exception:
                     pass
-            except Exception:
-                pass
 
-            # No client should remain tracked after rejection
-            assert ws.manager.client_count == 0
-            assert ws.manager._broadcast_task is None
+                # No client should remain tracked after rejection
+                assert ws.manager.client_count == 0
+                assert ws.manager._broadcast_task is None
 
 
 def test_validate_session_called_with_websocket(client):
@@ -315,3 +319,216 @@ def test_validate_session_called_with_websocket(client):
                 websocket.receive_json()
             # _validate_session should have been called once with the WebSocket
             assert m.call_count == 1
+
+
+# ── WebSocket device token fallback tests ──────────────────────────────────────
+
+
+def test_websocket_device_token_fallback_when_jwt_expired(client):
+    """WebSocket accepts device token when JWT auth fails."""
+    with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
+        # JWT auth fails
+        with patch.object(ws, "_validate_session", return_value=None):
+            # Device token auth succeeds
+            with patch.object(ws, "_validate_device_token", return_value="device_user"):
+                with client.websocket_connect("/api/ws/health") as websocket:
+                    msg = websocket.receive_json()
+                    assert msg["type"] == "health"
+                    assert msg["data"] == SAMPLE_HEALTH
+
+
+def test_websocket_rejects_when_both_auth_methods_fail(client):
+    """WebSocket rejects when both JWT and device token auth fail."""
+    with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
+        with patch.object(ws, "_validate_session", return_value=None):
+            with patch.object(ws, "_validate_device_token", return_value=None):
+                with pytest.raises(Exception) as exc_info:
+                    with client.websocket_connect("/api/ws/health") as websocket:
+                        websocket.receive_json()
+                assert exc_info.value.code == ws.WS_CLOSE_UNAUTHORIZED
+
+
+def test_websocket_prefers_jwt_over_device_token(client):
+    """WebSocket uses JWT auth when available, doesn't call device token fallback."""
+    with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
+        with patch.object(ws, "_validate_session", return_value="jwt_user"):
+            mock_device = patch.object(
+                ws, "_validate_device_token", return_value="device_user"
+            )
+            with mock_device as m:
+                with client.websocket_connect("/api/ws/health") as websocket:
+                    websocket.receive_json()
+                # Device token validation should NOT be called when JWT succeeds
+                assert m.call_count == 0
+
+
+def test_websocket_device_token_fallback_client_tracked(client):
+    """Device token authenticated client should be tracked in ConnectionManager."""
+    with patch.object(ws, "get_all_health", AsyncMock(return_value=SAMPLE_HEALTH)):
+        with patch.object(ws, "_validate_session", return_value=None):
+            with patch.object(ws, "_validate_device_token", return_value="device_user"):
+                with client.websocket_connect("/api/ws/health") as websocket:
+                    websocket.receive_json()
+                    assert ws.manager.client_count == 1
+                assert ws.manager.client_count == 0
+
+
+# ── Device token validation unit tests ─────────────────────────────────────────
+
+
+class _FakeWebSocketWithCookies:
+    """WebSocket mock with configurable cookies and client IP."""
+
+    def __init__(
+        self, cookies: dict | None = None, client_ip: str | None = "192.168.1.100"
+    ):
+        self.cookies = cookies or {}
+        self._client_ip = client_ip
+
+    @property
+    def client(self):
+        """Mock client property with host attribute.
+
+        Returns None if _client_ip is None, simulating an unknown client.
+        """
+        if self._client_ip is None:
+            return None
+
+        class ClientInfo:
+            def __init__(self, ip):
+                self.host = ip
+
+        return ClientInfo(self._client_ip)
+
+
+def test_validate_device_token_no_cookie():
+    """Returns None when device cookie is missing."""
+    ws_mock = _FakeWebSocketWithCookies(cookies={})
+    result = ws._validate_device_token(ws_mock)
+    assert result is None
+
+
+def test_validate_device_token_invalid_token():
+    """Returns None when device token verification fails."""
+    ws_mock = _FakeWebSocketWithCookies(cookies={"smh_device": "invalid:token"})
+
+    mock_result = ws.auth_devices.VerifyResult(ok=False)
+    with patch.object(ws.auth_devices, "verify_and_rotate", return_value=mock_result):
+        result = ws._validate_device_token(ws_mock)
+    assert result is None
+
+
+def test_validate_device_token_theft_detected():
+    """Returns None when token theft is detected."""
+    ws_mock = _FakeWebSocketWithCookies(cookies={"smh_device": "series:token"})
+
+    mock_result = ws.auth_devices.VerifyResult(
+        ok=False, theft_detected=True, username="victim"
+    )
+    with patch.object(ws.auth_devices, "verify_and_rotate", return_value=mock_result):
+        result = ws._validate_device_token(ws_mock)
+    assert result is None
+
+
+def test_validate_device_token_unrecognized_ip():
+    """Returns None when client IP doesn't match any device IP."""
+    ws_mock = _FakeWebSocketWithCookies(
+        cookies={"smh_device": "series:token"}, client_ip="10.0.0.99"  # Unrecognized IP
+    )
+
+    mock_result = ws.auth_devices.VerifyResult(
+        ok=True, username="testuser", new_cookie_value="series:new_token"
+    )
+    # list_devices returns devices with different IPs
+    mock_devices = [
+        {"ip_address": "192.168.1.1"},
+        {"ip_address": "192.168.1.2"},
+    ]
+    with patch.object(ws.auth_devices, "verify_and_rotate", return_value=mock_result):
+        with patch.object(ws.auth_devices, "list_devices", return_value=mock_devices):
+            result = ws._validate_device_token(ws_mock)
+    assert result is None
+
+
+def test_validate_device_token_recognized_ip():
+    """Returns username when device token is valid and IP matches."""
+    ws_mock = _FakeWebSocketWithCookies(
+        cookies={"smh_device": "series:token"}, client_ip="192.168.1.100"  # Matching IP
+    )
+
+    mock_result = ws.auth_devices.VerifyResult(
+        ok=True, username="testuser", new_cookie_value="series:new_token"
+    )
+    mock_devices = [
+        {"ip_address": "192.168.1.100"},  # Matches client IP
+        {"ip_address": "192.168.1.2"},
+    ]
+    with patch.object(ws.auth_devices, "verify_and_rotate", return_value=mock_result):
+        with patch.object(ws.auth_devices, "list_devices", return_value=mock_devices):
+            result = ws._validate_device_token(ws_mock)
+    assert result == "testuser"
+
+
+def test_validate_device_token_unknown_ip_rejected():
+    """Returns None when client IP cannot be determined."""
+    ws_mock = _FakeWebSocketWithCookies(
+        cookies={"smh_device": "series:token"}, client_ip=None  # No client info
+    )
+
+    mock_result = ws.auth_devices.VerifyResult(
+        ok=True, username="testuser", new_cookie_value="series:new_token"
+    )
+    with patch.object(ws.auth_devices, "verify_and_rotate", return_value=mock_result):
+        result = ws._validate_device_token(ws_mock)
+    assert result is None
+
+
+def test_get_client_ip_with_client():
+    """Returns client host when available."""
+    ws_mock = _FakeWebSocketWithCookies(client_ip="10.20.30.40")
+    result = ws._get_client_ip(ws_mock)
+    assert result == "10.20.30.40"
+
+
+def test_get_client_ip_without_client():
+    """Returns 'unknown' when client info not available."""
+    ws_mock = _FakeWebSocketWithCookies(client_ip=None)
+    result = ws._get_client_ip(ws_mock)
+    assert result == "unknown"
+
+
+def test_is_recognized_device_ip_returns_true_for_match():
+    """_is_recognized_device_ip returns True when IP matches a device."""
+    mock_devices = [
+        {"ip_address": "192.168.1.1"},
+        {"ip_address": "192.168.1.100"},
+    ]
+    with patch.object(ws.auth_devices, "list_devices", return_value=mock_devices):
+        result = ws._is_recognized_device_ip("testuser", "192.168.1.100")
+    assert result is True
+
+
+def test_is_recognized_device_ip_returns_false_for_mismatch():
+    """_is_recognized_device_ip returns False when IP doesn't match any device."""
+    mock_devices = [
+        {"ip_address": "192.168.1.1"},
+        {"ip_address": "192.168.1.2"},
+    ]
+    with patch.object(ws.auth_devices, "list_devices", return_value=mock_devices):
+        result = ws._is_recognized_device_ip("testuser", "10.0.0.99")
+    assert result is False
+
+
+def test_is_recognized_device_ip_returns_false_for_unknown():
+    """_is_recognized_device_ip returns False for 'unknown' IP."""
+    mock_devices = [{"ip_address": "192.168.1.1"}]
+    with patch.object(ws.auth_devices, "list_devices", return_value=mock_devices):
+        result = ws._is_recognized_device_ip("testuser", "unknown")
+    assert result is False
+
+
+def test_is_recognized_device_ip_empty_devices():
+    """_is_recognized_device_ip returns False when user has no devices."""
+    with patch.object(ws.auth_devices, "list_devices", return_value=[]):
+        result = ws._is_recognized_device_ip("testuser", "192.168.1.100")
+    assert result is False
