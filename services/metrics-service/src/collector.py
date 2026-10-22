@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sqlite3
 import time
 from typing import Any
 
@@ -70,9 +71,9 @@ def _make_notifier() -> Any:
     return TelegramNotifier.from_env()
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Host sampler (ported from dashboard/src/system/stats.py)
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 def _read_cpu_times(path: str | None = None) -> tuple[float, float]:
     """Read CPU jiffies from /proc/stat for CPU usage calculation.
 
@@ -299,14 +300,14 @@ def sample_host(*, with_cpu: bool = True) -> list[Sample]:
     for fn in samplers:
         try:
             samples.extend(fn())
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
             logger.warning("[HostSampler] %s collection failed: %s", fn.__name__, exc)
     return samples
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Docker sampler (pull from docker-socket-proxy)
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 def _cpu_percent_from_stats(stats: dict[str, Any]) -> float:
     """Compute container CPU percentage from a Docker stats payload.
 
@@ -456,9 +457,9 @@ async def sample_docker(
     return samples
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Health sampler (pull from backend /api/health/all)
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 def parse_health(payload: dict[str, Any]) -> list[Sample]:
     """Translate /api/health/all response into latency and online samples.
 
@@ -466,7 +467,7 @@ def parse_health(payload: dict[str, Any]) -> list[Sample]:
     monitored service. Cached entries are excluded from latency samples to
     ensure trends reflect real request times.
 
-    CRITICAL (design §4/§7.2): Samples whose health entry has ``cached == true``
+    CRITICAL (design Â§4/Â§7.2): Samples whose health entry has ``cached == true``
     are discarded so latency trends reflect real requests only, not cache echoes.
 
     Args:
@@ -484,7 +485,7 @@ def parse_health(payload: dict[str, Any]) -> list[Sample]:
             continue
         online = 1.0 if entry.get("online") else 0.0
         samples.append((f"service.{key}.online", key, online))
-        # Discard cached echoes — they carry latency 0 and dilute the trend.
+        # Discard cached echoes â€” they carry latency 0 and dilute the trend.
         if entry.get("cached"):
             continue
         latency = entry.get("latency_ms")
@@ -521,9 +522,9 @@ async def sample_health(
         return []
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Collector loop
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class Collector:
     """Orchestrates metric collection, storage, and background processing.
 
@@ -569,7 +570,7 @@ class Collector:
         self._tasks: list[asyncio.Task[None]] = []
         self._client: httpx.AsyncClient | None = None
 
-    # ── Single tick ───────────────────────────────────────────────────────────
+    # â”€â”€ Single tick â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     async def tick(self) -> list[Sample]:
         """Execute one collection cycle and store all samples.
 
@@ -614,7 +615,7 @@ class Collector:
 
         return samples
 
-    # ── Rollup ──────────────────────────────────────────────────────────────────
+    # â”€â”€ Rollup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def rollup(self, now: int | None = None) -> int:
         """Aggregate the last completed window from ring buffer into SQLite.
 
@@ -644,7 +645,7 @@ class Collector:
         self._last_rollup_bucket = start
         return written
 
-    # ── Background loops ──────────────────────────────────────────────────────
+    # â”€â”€ Background loops â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     async def _collect_loop(self) -> None:
         """Background task: run tick() every COLLECT_INTERVAL_S."""
         while True:
@@ -660,7 +661,7 @@ class Collector:
             await asyncio.sleep(ROLLUP_INTERVAL_S)
             try:
                 self.rollup()
-            except Exception:
+            except sqlite3.Error:
                 logger.exception("[Collector] Rollup execution failed")
 
     async def _prune_loop(self) -> None:
@@ -669,14 +670,14 @@ class Collector:
             await asyncio.sleep(PRUNE_INTERVAL_S)
             try:
                 await asyncio.to_thread(self.store.prune)
-            except Exception:
+            except sqlite3.Error:
                 logger.exception("[Collector] Metrics prune failed")
             try:
                 await asyncio.to_thread(
                     self.alert_engine.store.prune_history,
                     ALERT_HISTORY_RETENTION_DAYS,
                 )
-            except Exception:
+            except sqlite3.Error:
                 logger.exception("[Collector] Alert history prune failed")
 
     async def start(self) -> None:
@@ -702,14 +703,14 @@ class Collector:
                 if not notifier.enabled:
                     logger.warning(
                         "[Collector] Alerts enabled but Telegram notifier is "
-                        "unconfigured (no TELEGRAM_BOT_TOKEN/CHAT_IDS) — alerts "
+                        "unconfigured (no TELEGRAM_BOT_TOKEN/CHAT_IDS) â€” alerts "
                         "will fire and persist but no message will be sent"
                     )
             except Exception:
                 logger.exception("[Collector] Telegram notifier initialization failed")
             try:
                 self.alert_engine.load_state()
-            except Exception:
+            except sqlite3.Error:
                 logger.exception("[Collector] Alert state load failed")
         self._tasks = [
             asyncio.create_task(self._collect_loop()),
@@ -742,7 +743,7 @@ class Collector:
             self._client = None
         logger.info("[Collector] Stopped")
 
-    # ── Diagnostics ─────────────────────────────────────────────────────────────
+    # â”€â”€ Diagnostics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def last_tick_age_s(self) -> float | None:
         """Return seconds since the last successful tick.
 

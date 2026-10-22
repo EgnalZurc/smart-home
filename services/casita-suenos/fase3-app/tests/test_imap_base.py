@@ -103,16 +103,18 @@ class TestConnectImapSanitization:
     @patch("imap_base.imaplib.IMAP4_SSL")
     def test_sanitizes_login_error(self, mock_imap_class):
         """Should sanitize password from login exception."""
+        import imaplib
+
         from imap_base import connect_imap
 
         password = "mySecretAppPass"
         mock_imap = MagicMock()
         mock_imap_class.return_value = mock_imap
-        mock_imap.login.side_effect = Exception(
+        mock_imap.login.side_effect = imaplib.IMAP4.error(
             f"Authentication failed for {password}"
         )
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(imaplib.IMAP4.error) as exc_info:
             connect_imap("test@gmail.com", password)
 
         # Password should not appear in the exception message
@@ -125,11 +127,11 @@ class TestConnectImapSanitization:
         from imap_base import connect_imap
 
         password = "connPassword789"
-        mock_imap_class.side_effect = Exception(
+        mock_imap_class.side_effect = OSError(
             f"Failed to connect with credentials {password}"
         )
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(OSError) as exc_info:
             connect_imap("test@gmail.com", password)
 
         assert password not in str(exc_info.value)
@@ -141,6 +143,8 @@ class TestCollectMessagesSanitization:
 
     def test_sanitizes_fetch_error(self):
         """Should sanitize password in fetch errors."""
+        import imaplib
+
         from imap_base import collect_messages
 
         password = "fetchPassSecret"
@@ -155,7 +159,7 @@ class TestCollectMessagesSanitization:
 
         mock_imap.select.side_effect = select_side_effect
         mock_imap.search.return_value = (None, [b"1"])
-        mock_imap.fetch.side_effect = Exception(
+        mock_imap.fetch.side_effect = imaplib.IMAP4.error(
             f"Fetch failed with credential {password}"
         )
 
@@ -171,13 +175,15 @@ class TestCollectMessagesSanitization:
 
     def test_sanitizes_folder_error(self):
         """Should sanitize password in folder access errors."""
+        import imaplib
+
         from imap_base import collect_messages
 
         password = "folderPassSecret"
 
         # Mock IMAP connection that fails on select
         mock_imap = MagicMock()
-        mock_imap.select.side_effect = Exception(
+        mock_imap.select.side_effect = imaplib.IMAP4.error(
             f"Folder access denied: {password}"
         )
 
@@ -203,6 +209,8 @@ class TestDeleteProcessedSanitization:
 
     def test_sanitizes_store_error(self):
         """Should sanitize password in store errors."""
+        import imaplib
+
         from imap_base import delete_processed
 
         password = "storePassSecret"
@@ -216,7 +224,7 @@ class TestDeleteProcessedSanitization:
         # Mock IMAP connection that fails on store
         mock_imap = MagicMock()
         mock_imap.select.return_value = ("OK", None)
-        mock_imap.store.side_effect = Exception(
+        mock_imap.store.side_effect = imaplib.IMAP4.error(
             f"Store failed: {password}"
         )
 
@@ -234,6 +242,8 @@ class TestDeleteProcessedSanitization:
 
     def test_sanitizes_expunge_error(self):
         """Should sanitize password in expunge errors."""
+        import imaplib
+
         from imap_base import delete_processed
 
         password = "expungePass"
@@ -246,7 +256,7 @@ class TestDeleteProcessedSanitization:
         mock_imap = MagicMock()
         mock_imap.select.return_value = ("OK", None)
         mock_imap.store.return_value = ("OK", None)
-        mock_imap.expunge.side_effect = Exception(
+        mock_imap.expunge.side_effect = imaplib.IMAP4.error(
             f"Expunge failed: credential {password}"
         )
 
