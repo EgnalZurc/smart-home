@@ -101,7 +101,7 @@ def _extract_origin(header_value: str | None) -> str | None:
             # Reconstruct origin without path
             origin = f"{parsed.scheme}://{parsed.netloc}"
             return origin.rstrip("/")
-    except Exception:
+    except (ValueError, TypeError):
         pass
     return None
 
