@@ -31,6 +31,7 @@ import imaplib
 import logging
 import os
 import re
+import socket
 
 logger = logging.getLogger(__name__)
 
