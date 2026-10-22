@@ -168,7 +168,7 @@ class SubscriptionManager:
         while self._running:
             try:
                 self._update_all_services()
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 logger.exception("Error in subscription update loop: %s", e)
 
             # Sleep for shortest interval (check more frequently)
@@ -213,7 +213,7 @@ class SubscriptionManager:
 
             logger.debug("✓ Updated cache for '%s' (%d bytes)", service, size)
 
-        except Exception as e:
+        except (OSError, ValueError, TypeError) as e:
             sub.error_count += 1
             logger.error("✗ Failed to update '%s' (error %d): %s", service, sub.error_count, e)
 

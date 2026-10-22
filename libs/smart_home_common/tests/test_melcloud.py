@@ -11,7 +11,6 @@ Covers:
 from unittest.mock import MagicMock, patch
 
 import httpx
-import pytest
 
 from smart_home_common.clients.melcloud import (
     AC_MODE_AUTO,

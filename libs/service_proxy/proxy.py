@@ -7,6 +7,7 @@ This is a framework-agnostic version that can be used with FastAPI, Starlette,
 or other ASGI frameworks.
 """
 
+import json
 import logging
 from typing import Any, Protocol
 
@@ -105,7 +106,12 @@ class ServiceProxy:
                 return resp.json()
         except HTTPException:
             raise
-        except Exception as e:
+        except httpx.HTTPStatusError as e:
+            logger.warning("Proxy GET %s failed: HTTP %d", url, e.response.status_code)
+            if raise_on_error:
+                raise HTTPException(status_code=e.response.status_code, detail=str(e))
+            return default_on_error
+        except (httpx.RequestError, httpx.TimeoutException) as e:
             logger.warning("Proxy GET %s failed: %s", url, e)
             if raise_on_error:
                 raise HTTPException(status_code=503, detail=str(e))
@@ -142,7 +148,10 @@ class ServiceProxy:
                 return resp.json()
         except HTTPException:
             raise
-        except Exception as e:
+        except httpx.HTTPStatusError as e:
+            logger.warning("Proxy POST %s failed: HTTP %d", url, e.response.status_code)
+            raise HTTPException(status_code=e.response.status_code, detail=str(e))
+        except (httpx.RequestError, httpx.TimeoutException) as e:
             logger.warning("Proxy POST %s failed: %s", url, e)
             raise HTTPException(status_code=503, detail=str(e))
 
@@ -175,7 +184,10 @@ class ServiceProxy:
                 return resp.json()
         except HTTPException:
             raise
-        except Exception as e:
+        except httpx.HTTPStatusError as e:
+            logger.warning("Proxy PUT %s failed: HTTP %d", url, e.response.status_code)
+            raise HTTPException(status_code=e.response.status_code, detail=str(e))
+        except (httpx.RequestError, httpx.TimeoutException) as e:
             logger.warning("Proxy PUT %s failed: %s", url, e)
             raise HTTPException(status_code=503, detail=str(e))
 
@@ -206,7 +218,10 @@ class ServiceProxy:
                 return resp.json()
         except HTTPException:
             raise
-        except Exception as e:
+        except httpx.HTTPStatusError as e:
+            logger.warning("Proxy DELETE %s failed: HTTP %d", url, e.response.status_code)
+            raise HTTPException(status_code=e.response.status_code, detail=str(e))
+        except (httpx.RequestError, httpx.TimeoutException) as e:
             logger.warning("Proxy DELETE %s failed: %s", url, e)
             raise HTTPException(status_code=503, detail=str(e))
 
@@ -253,7 +268,10 @@ class ServiceProxy:
                 return resp.json()
         except HTTPException:
             raise
-        except Exception as e:
+        except httpx.HTTPStatusError as e:
+            logger.warning("Proxy %s %s failed: HTTP %d", method, url, e.response.status_code)
+            raise HTTPException(status_code=e.response.status_code, detail=str(e))
+        except (httpx.RequestError, httpx.TimeoutException) as e:
             logger.warning("Proxy %s %s failed: %s", method, url, e)
             raise HTTPException(status_code=503, detail=str(e))
 
@@ -262,5 +280,5 @@ class ServiceProxy:
         """Extract error detail from response."""
         try:
             return resp.json().get("detail", resp.text)
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             return resp.text

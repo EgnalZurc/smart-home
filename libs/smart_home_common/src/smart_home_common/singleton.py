@@ -88,7 +88,7 @@ def _ensure_singleton_windows(lock_path: str) -> None:
                 os.remove(lock_path)
                 _ensure_singleton_windows(lock_path)
                 return
-        except Exception:
+        except (ValueError, OSError):
             logger.debug("[singleton] Could not read/validate existing lock file")
         logger.error(
             "[singleton] Another instance is already running (lock: %s). Terminating.",

@@ -96,7 +96,7 @@ def save_state(state: PersistedState) -> bool:
         STATE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         logger.info("Controller state saved to %s", STATE_FILE)
         return True
-    except Exception as e:
+    except (OSError, TypeError) as e:
         logger.exception("Error saving controller state: %s", e)
         return False
 
@@ -119,6 +119,6 @@ def load_state() -> PersistedState | None:
         logger.info("  - Target: %.1f°C", state.target_temperature)
         logger.info("  - Override: %s", state.override)
         return state
-    except Exception as e:
+    except (json.JSONDecodeError, KeyError, OSError) as e:
         logger.exception("Error loading controller state: %s", e)
         return None

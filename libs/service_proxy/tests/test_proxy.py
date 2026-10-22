@@ -1,8 +1,9 @@
 """Tests for service_proxy library."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import httpx
+import pytest
 
 from service_proxy import ServiceProxy
 from service_proxy.proxy import HTTPException

@@ -94,7 +94,7 @@ class RedisRateLimiter(BaseRateLimiter):
         try:
             self._client.ping()
             return True
-        except Exception as e:
+        except redis.RedisError as e:
             if not self._connection_warned:
                 logger.warning("Redis connection lost: %s. Allowing all requests.", e)
                 self._connection_warned = True
@@ -120,7 +120,7 @@ class RedisRateLimiter(BaseRateLimiter):
                 self._client.expire(redis_key, self._window_seconds)  # type: ignore[union-attr]
 
             return current <= self._max_requests
-        except Exception as e:
+        except redis.RedisError as e:
             logger.warning("Redis error during rate limit check: %s. Allowing request.", e)
             return True
 
@@ -164,7 +164,7 @@ class RedisRateLimiter(BaseRateLimiter):
                 remaining=remaining,
                 reset_at=reset_at,
             )
-        except Exception as e:
+        except redis.RedisError as e:
             logger.warning("Redis error getting status: %s. Returning default.", e)
             return RateLimitStatus(
                 allowed=True,
@@ -181,5 +181,5 @@ class RedisRateLimiter(BaseRateLimiter):
 
         try:
             self._client.delete(redis_key)  # type: ignore[union-attr]
-        except Exception as e:
+        except redis.RedisError as e:
             logger.warning("Redis error resetting key %s: %s", key, e)

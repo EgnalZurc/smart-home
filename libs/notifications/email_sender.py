@@ -156,12 +156,9 @@ class EmailSender:
         except smtplib.SMTPException as e:
             logger.error("[email] SMTP error: %s", e)
             return NotificationResult(success=False, message=f"SMTP error: {e}")
-        except (ConnectionError, TimeoutError) as e:
+        except (ConnectionError, TimeoutError, OSError) as e:
             logger.error("[email] Connection error: %s", e)
             return NotificationResult(success=False, message=f"Connection error: {e}")
-        except Exception as e:
-            logger.error("[email] Unexpected error sending email: %s", e)
-            return NotificationResult(success=False, message=str(e))
 
     def send_test(self) -> NotificationResult:
         """Send a test email to verify configuration."""

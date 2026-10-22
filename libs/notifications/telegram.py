@@ -26,6 +26,7 @@ Environment variable initialization:
     # Reads TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS (comma-separated), TELEGRAM_CHAT_ID (fallback)
 """
 
+import json
 import logging
 
 import httpx
@@ -174,7 +175,15 @@ else:  # pragma: no cover - standalone fallback without smart_home_common
                     logger.error("[telegram] Request timeout for chat %s", chat_id)
                     errors.append(f"{chat_id}: timeout")
                     failed += 1
-                except Exception as e:
+                except httpx.HTTPStatusError as e:
+                    logger.error(
+                        "[telegram] HTTP error for chat %s: %s",
+                        chat_id,
+                        e.response.status_code,
+                    )
+                    errors.append(f"{chat_id}: HTTP {e.response.status_code}")
+                    failed += 1
+                except (httpx.RequestError, json.JSONDecodeError) as e:
                     logger.error(
                         "[telegram] Error sending to chat %s: %s",
                         chat_id,
