@@ -183,7 +183,7 @@ class MqttHandler:
                 self._client.connect(self.broker, self.port, self.keepalive)
                 self._client.loop_start()
                 return
-            except (mqtt.MQTTException, ConnectionError, TimeoutError, OSError) as e:
+            except (ConnectionError, TimeoutError, OSError) as e:
                 logger.warning(
                     "MQTT connection attempt %d/%d: %s (retry in %ds)",
                     attempt + 1,

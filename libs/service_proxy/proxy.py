@@ -111,8 +111,19 @@ class ServiceProxy:
             if raise_on_error:
                 raise HTTPException(status_code=e.response.status_code, detail=str(e))
             return default_on_error
-        except (httpx.RequestError, httpx.TimeoutException) as e:
-            logger.warning("Proxy GET %s failed: %s", url, e)
+        except httpx.TimeoutException as e:
+            logger.warning("Proxy GET %s timeout: %s", url, e)
+            if raise_on_error:
+                raise HTTPException(status_code=503, detail=str(e))
+            return default_on_error
+        except httpx.RequestError as e:
+            logger.warning("Proxy GET %s request error: %s", url, e)
+            if raise_on_error:
+                raise HTTPException(status_code=503, detail=str(e))
+            return default_on_error
+        except Exception as e:
+            # Catch-all for unexpected errors (e.g., JSON decode failures)
+            logger.warning("Proxy GET %s failed: %s: %s", url, type(e).__name__, e)
             if raise_on_error:
                 raise HTTPException(status_code=503, detail=str(e))
             return default_on_error
@@ -151,8 +162,15 @@ class ServiceProxy:
         except httpx.HTTPStatusError as e:
             logger.warning("Proxy POST %s failed: HTTP %d", url, e.response.status_code)
             raise HTTPException(status_code=e.response.status_code, detail=str(e))
-        except (httpx.RequestError, httpx.TimeoutException) as e:
-            logger.warning("Proxy POST %s failed: %s", url, e)
+        except httpx.TimeoutException as e:
+            logger.warning("Proxy POST %s timeout: %s", url, e)
+            raise HTTPException(status_code=503, detail=str(e))
+        except httpx.RequestError as e:
+            logger.warning("Proxy POST %s request error: %s", url, e)
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            # Catch-all for unexpected errors
+            logger.warning("Proxy POST %s failed: %s: %s", url, type(e).__name__, e)
             raise HTTPException(status_code=503, detail=str(e))
 
     async def put(
@@ -187,8 +205,15 @@ class ServiceProxy:
         except httpx.HTTPStatusError as e:
             logger.warning("Proxy PUT %s failed: HTTP %d", url, e.response.status_code)
             raise HTTPException(status_code=e.response.status_code, detail=str(e))
-        except (httpx.RequestError, httpx.TimeoutException) as e:
-            logger.warning("Proxy PUT %s failed: %s", url, e)
+        except httpx.TimeoutException as e:
+            logger.warning("Proxy PUT %s timeout: %s", url, e)
+            raise HTTPException(status_code=503, detail=str(e))
+        except httpx.RequestError as e:
+            logger.warning("Proxy PUT %s request error: %s", url, e)
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            # Catch-all for unexpected errors
+            logger.warning("Proxy PUT %s failed: %s: %s", url, type(e).__name__, e)
             raise HTTPException(status_code=503, detail=str(e))
 
     async def delete(
@@ -219,10 +244,19 @@ class ServiceProxy:
         except HTTPException:
             raise
         except httpx.HTTPStatusError as e:
-            logger.warning("Proxy DELETE %s failed: HTTP %d", url, e.response.status_code)
+            logger.warning(
+                "Proxy DELETE %s failed: HTTP %d", url, e.response.status_code
+            )
             raise HTTPException(status_code=e.response.status_code, detail=str(e))
-        except (httpx.RequestError, httpx.TimeoutException) as e:
-            logger.warning("Proxy DELETE %s failed: %s", url, e)
+        except httpx.TimeoutException as e:
+            logger.warning("Proxy DELETE %s timeout: %s", url, e)
+            raise HTTPException(status_code=503, detail=str(e))
+        except httpx.RequestError as e:
+            logger.warning("Proxy DELETE %s request error: %s", url, e)
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            # Catch-all for unexpected errors
+            logger.warning("Proxy DELETE %s failed: %s: %s", url, type(e).__name__, e)
             raise HTTPException(status_code=503, detail=str(e))
 
     async def forward_request(
@@ -269,10 +303,21 @@ class ServiceProxy:
         except HTTPException:
             raise
         except httpx.HTTPStatusError as e:
-            logger.warning("Proxy %s %s failed: HTTP %d", method, url, e.response.status_code)
+            logger.warning(
+                "Proxy %s %s failed: HTTP %d", method, url, e.response.status_code
+            )
             raise HTTPException(status_code=e.response.status_code, detail=str(e))
-        except (httpx.RequestError, httpx.TimeoutException) as e:
-            logger.warning("Proxy %s %s failed: %s", method, url, e)
+        except httpx.TimeoutException as e:
+            logger.warning("Proxy %s %s timeout: %s", method, url, e)
+            raise HTTPException(status_code=503, detail=str(e))
+        except httpx.RequestError as e:
+            logger.warning("Proxy %s %s request error: %s", method, url, e)
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            # Catch-all for unexpected errors
+            logger.warning(
+                "Proxy %s %s failed: %s: %s", method, url, type(e).__name__, e
+            )
             raise HTTPException(status_code=503, detail=str(e))
 
     @staticmethod

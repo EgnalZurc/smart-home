@@ -208,7 +208,7 @@ class TestSubscriptionManager:
 
     def test_update_service_error_increments_count(self, manager):
         """_update_service increments error count on failure."""
-        fetcher = MagicMock(side_effect=Exception("Connection failed"))
+        fetcher = MagicMock(side_effect=ValueError("Connection failed"))
         sub = Subscription(name="failing", fetcher=fetcher, interval=30)
         manager.subscriptions["failing"] = sub
 
