@@ -6,7 +6,7 @@ lazily at request time, not at module load time, reducing security exposure.
 """
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 
 class TestCryptoMonitorLazyCredentials:
@@ -131,9 +131,7 @@ class TestEmailNotifierLazyCredentials:
         from email_notifier import _BuiltinEmailSender
 
         # Create sender with no password
-        with patch.dict(
-            os.environ, {"SMTP_USER": "test@example.com"}, clear=True
-        ):
+        with patch.dict(os.environ, {"SMTP_USER": "test@example.com"}, clear=True):
             os.environ.pop("SMTP_PASSWORD", None)
             sender = _BuiltinEmailSender()
 
@@ -162,9 +160,7 @@ class TestEmailNotifierLazyCredentials:
         """enabled property also uses lazy password check."""
         from email_notifier import _BuiltinEmailSender
 
-        with patch.dict(
-            os.environ, {"SMTP_USER": "test@example.com"}, clear=True
-        ):
+        with patch.dict(os.environ, {"SMTP_USER": "test@example.com"}, clear=True):
             os.environ.pop("SMTP_PASSWORD", None)
             sender = _BuiltinEmailSender()
 

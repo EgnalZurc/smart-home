@@ -118,7 +118,7 @@ class SavingsMonitor(BaseMonitor):
                 total_balance += balance
                 total_yearly += yearly
 
-            except Exception as e:
+            except (ValueError, TypeError, KeyError, AttributeError) as e:
                 logger.error(f"Error processing {account_id}: {e}")
                 continue
 

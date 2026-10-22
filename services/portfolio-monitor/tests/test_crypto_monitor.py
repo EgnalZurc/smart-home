@@ -444,12 +444,13 @@ class TestFetchHelpers:
 
     def test_fetch_fear_greed_error(self):
         """fetch_fear_greed handles errors gracefully."""
+        import requests
         from monitors.crypto_monitor import _fg_cache, fetch_fear_greed
 
         _fg_cache.clear()  # Clear cache to ensure API is called
 
         with patch("monitors.crypto_monitor._generic_client") as mock_client:
-            mock_client.get.side_effect = Exception("Network error")
+            mock_client.get.side_effect = requests.RequestException("Network error")
             value, label = fetch_fear_greed()
 
         assert value is None

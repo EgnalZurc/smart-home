@@ -610,9 +610,12 @@ class TestExternalHealthChecksFunctions:
 
     def test_check_yahoo_error_exception(self):
         """Yahoo Finance returns error on exception."""
+        import requests
         from api.routes import _check_yahoo_sync
 
-        with patch("yfinance.Ticker", side_effect=Exception("Network error")):
+        with patch(
+            "yfinance.Ticker", side_effect=requests.RequestException("Network error")
+        ):
             result = _check_yahoo_sync()
 
         assert result["status"] == "error"
@@ -722,9 +725,13 @@ class TestExternalHealthChecksFunctions:
     @pytest.mark.asyncio
     async def test_check_yahoo_finance_async_exception(self):
         """check_yahoo_finance async wrapper handles exceptions."""
+        import requests
         from api.routes import check_yahoo_finance
 
-        with patch("api.routes._check_yahoo_sync", side_effect=Exception("Error")):
+        with patch(
+            "api.routes._check_yahoo_sync",
+            side_effect=requests.RequestException("Error"),
+        ):
             result = await check_yahoo_finance()
 
         assert result["status"] == "error"
@@ -745,9 +752,13 @@ class TestExternalHealthChecksFunctions:
     @pytest.mark.asyncio
     async def test_check_coingecko_async_exception(self):
         """check_coingecko async wrapper handles exceptions."""
+        import requests
         from api.routes import check_coingecko
 
-        with patch("api.routes._check_coingecko_sync", side_effect=Exception("Error")):
+        with patch(
+            "api.routes._check_coingecko_sync",
+            side_effect=requests.RequestException("Error"),
+        ):
             result = await check_coingecko()
 
         assert result["status"] == "error"
@@ -769,9 +780,13 @@ class TestExternalHealthChecksFunctions:
     @pytest.mark.asyncio
     async def test_check_fear_greed_async_exception(self):
         """check_fear_greed async wrapper handles exceptions."""
+        import requests
         from api.routes import check_fear_greed
 
-        with patch("api.routes._check_fear_greed_sync", side_effect=Exception("Error")):
+        with patch(
+            "api.routes._check_fear_greed_sync",
+            side_effect=requests.RequestException("Error"),
+        ):
             result = await check_fear_greed()
 
         assert result["status"] == "error"
@@ -794,7 +809,7 @@ class TestExternalHealthChecksFunctions:
         from api.routes import check_smtp
 
         with patch.dict("os.environ", {"SMTP_USER": "user@test.com"}):
-            with patch("api.routes._check_smtp_sync", side_effect=Exception("Error")):
+            with patch("api.routes._check_smtp_sync", side_effect=OSError("Error")):
                 result = await check_smtp()
 
         assert result["status"] == "error"

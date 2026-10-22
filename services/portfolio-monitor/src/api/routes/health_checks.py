@@ -11,7 +11,11 @@ to simulate failures, and that late binding is what lets those patches take
 effect on the real wrapper.
 """
 
+import json
+import socket
 from typing import Any
+
+import requests
 
 
 async def check_yahoo_finance() -> dict[str, Any]:
@@ -25,7 +29,7 @@ async def check_yahoo_finance() -> dict[str, Any]:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, routes._check_yahoo_sync)
         return result
-    except Exception as e:
+    except (requests.RequestException, OSError, ValueError, RuntimeError) as e:
         return {"status": "error", "message": str(e)}
 
 
@@ -39,7 +43,7 @@ def _check_yahoo_sync() -> dict[str, Any]:
         if info and hasattr(info, "last_price"):
             return {"status": "ok", "test_ticker": "AAPL"}
         return {"status": "degraded", "message": "No price data"}
-    except Exception as e:
+    except (requests.RequestException, ValueError, AttributeError, KeyError) as e:
         return {"status": "error", "message": str(e)}
 
 
@@ -53,14 +57,12 @@ async def check_coingecko() -> dict[str, Any]:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, routes._check_coingecko_sync)
         return result
-    except Exception as e:
+    except (requests.RequestException, OSError, ValueError, RuntimeError) as e:
         return {"status": "error", "message": str(e)}
 
 
 def _check_coingecko_sync() -> dict[str, Any]:
     """Synchronous CoinGecko check."""
-    import requests
-
     try:
         r = requests.get(
             "https://api.coingecko.com/api/v3/ping",
@@ -73,7 +75,7 @@ def _check_coingecko_sync() -> dict[str, Any]:
         return {"status": "error", "http_code": r.status_code}
     except requests.Timeout:
         return {"status": "timeout"}
-    except Exception as e:
+    except (requests.RequestException, OSError, RuntimeError) as e:
         return {"status": "error", "message": str(e)}
 
 
@@ -87,14 +89,12 @@ async def check_fear_greed() -> dict[str, Any]:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, routes._check_fear_greed_sync)
         return result
-    except Exception as e:
+    except (requests.RequestException, OSError, ValueError, RuntimeError) as e:
         return {"status": "error", "message": str(e)}
 
 
 def _check_fear_greed_sync() -> dict[str, Any]:
     """Synchronous Fear & Greed check."""
-    import requests
-
     try:
         r = requests.get(
             "https://api.alternative.me/fng/?limit=1",
@@ -108,7 +108,13 @@ def _check_fear_greed_sync() -> dict[str, Any]:
                     "current_value": int(data["data"][0]["value"]),
                 }
         return {"status": "error", "http_code": r.status_code}
-    except Exception as e:
+    except (
+        requests.RequestException,
+        json.JSONDecodeError,
+        KeyError,
+        ValueError,
+        OSError,
+    ) as e:
         return {"status": "error", "message": str(e)}
 
 
@@ -132,14 +138,12 @@ async def check_smtp() -> dict[str, Any]:
             None, routes._check_smtp_sync, smtp_host, smtp_port
         )
         return result
-    except Exception as e:
+    except (OSError, RuntimeError) as e:
         return {"status": "error", "message": str(e)}
 
 
 def _check_smtp_sync(host: str, port: int) -> dict[str, Any]:
     """Synchronous SMTP check."""
-    import socket
-
     try:
         # Just check TCP connectivity, don't authenticate
         sock = socket.create_connection((host, port), timeout=10)
@@ -147,5 +151,5 @@ def _check_smtp_sync(host: str, port: int) -> dict[str, Any]:
         return {"status": "ok", "host": host, "port": port}
     except TimeoutError:
         return {"status": "timeout", "host": host, "port": port}
-    except Exception as e:
+    except OSError as e:
         return {"status": "error", "message": str(e)}

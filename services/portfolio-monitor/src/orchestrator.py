@@ -197,7 +197,7 @@ class Orchestrator:
 
             return result
 
-        except Exception as e:
+        except (ValueError, KeyError, TypeError, OSError, RuntimeError) as e:
             logger.error(f"Monitor {name} failed: {e}")
             raise
 
@@ -208,7 +208,7 @@ class Orchestrator:
         for name in self._monitors:
             try:
                 results[name] = await self.run_monitor(name)
-            except Exception as e:
+            except (ValueError, KeyError, TypeError, OSError, RuntimeError) as e:
                 logger.error(f"Failed to run {name}: {e}")
                 results[name] = {"error": str(e)}
 
@@ -403,7 +403,13 @@ class Orchestrator:
                     logger.info(f"Scheduled run for {monitor_name}")
                     try:
                         await self.run_monitor(monitor_name)
-                    except Exception as e:
+                    except (
+                        ValueError,
+                        KeyError,
+                        TypeError,
+                        OSError,
+                        RuntimeError,
+                    ) as e:
                         logger.error(f"Scheduled run failed for {monitor_name}: {e}")
 
                 # Floor the next wait so a monitor that overran its slot (making
@@ -414,7 +420,7 @@ class Orchestrator:
             except asyncio.CancelledError:
                 logger.info("Scheduler loop cancelled")
                 break
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 logger.error(f"Scheduler error: {e}")
                 await asyncio.sleep(self._MIN_SLEEP_SECONDS)
 
@@ -431,7 +437,7 @@ class Orchestrator:
             logger.info("No previous data — running initial monitor refresh...")
             try:
                 await self.run_all_monitors()
-            except Exception as e:
+            except (ValueError, KeyError, TypeError, OSError, RuntimeError) as e:
                 logger.error(f"Initial monitor run failed: {e}")
 
         # Start scheduler in background

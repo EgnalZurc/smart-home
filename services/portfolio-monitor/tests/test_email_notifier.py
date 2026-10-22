@@ -310,9 +310,10 @@ class TestBuiltinEmailSender:
 
             # Mock the SMTP connection to fail
             with patch.object(sender, "_smtplib") as mock_smtplib:
-                mock_smtplib.SMTP.return_value.__enter__.side_effect = Exception(
+                mock_smtplib.SMTP.return_value.__enter__.side_effect = OSError(
                     "Connection failed"
                 )
+                mock_smtplib.SMTPException = Exception  # For the except clause
 
                 result = sender.send("Test Subject", "<html>Test</html>")
 
