@@ -383,10 +383,31 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 
 @app.exception_handler(RateLimitExceeded)
+def _get_client_ip(request: Request) -> str:
+    """Extract real client IP from request, handling reverse proxy headers.
+
+    Priority:
+    1. X-Forwarded-For (first IP in chain, set by nginx)
+    2. X-Real-IP (alternative header)
+    3. request.client.host (direct connection fallback)
+    """
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip
+    return request.client.host if request.client else "unknown"
+
+
 async def rate_limit_exceeded_handler(
     request: Request, exc: RateLimitExceeded
 ) -> JSONResponse:
     """Return 429 with Retry-After header when rate limit is exceeded."""
+    client_ip = _get_client_ip(request)
+    logger.warning(
+        "[rate-limit] IP %s exceeded limit for %s", client_ip, request.url.path
+    )
     return JSONResponse(
         status_code=429,
         content={"detail": "Rate limit exceeded"},

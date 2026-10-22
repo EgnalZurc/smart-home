@@ -67,15 +67,17 @@ class TestRateLimiting:
 
     async def test_rate_limit_exceeded_response_format(self, client, monkeypatch):
         """Verify 429 response has correct format."""
-        # Test the exception handler directly
+        from unittest.mock import MagicMock
+
         from slowapi.errors import RateLimitExceeded
         from slowapi.wrappers import Limit
         from starlette.responses import JSONResponse
 
-        class MockRequest:
-            pass
+        mock_request = MagicMock()
+        mock_request.headers = {}
+        mock_request.client.host = "192.168.1.100"
+        mock_request.url.path = "/api/calendar/upcoming"
 
-        # Create a mock limit object for the exception
         mock_limit = Limit(
             limit="60/minute",
             key_func=lambda: "test",
@@ -88,8 +90,66 @@ class TestRateLimiting:
             override_defaults=False,
         )
         exc = RateLimitExceeded(mock_limit)
-        response = await main.rate_limit_exceeded_handler(MockRequest(), exc)
+        response = await main.rate_limit_exceeded_handler(mock_request, exc)
 
         assert isinstance(response, JSONResponse)
         assert response.status_code == 429
         assert response.headers.get("Retry-After") == "60"
+
+    async def test_rate_limit_exceeded_logs_warning(self, client, monkeypatch, caplog):
+        """Verify rate limit exceeded logs warning with IP and endpoint."""
+        import logging
+        from unittest.mock import MagicMock
+
+        from slowapi.errors import RateLimitExceeded
+        from slowapi.wrappers import Limit
+
+        mock_request = MagicMock()
+        mock_request.headers = {"X-Forwarded-For": "10.0.0.42"}
+        mock_request.client.host = "192.168.1.100"
+        mock_request.url.path = "/api/calendar/sync"
+
+        mock_limit = Limit(
+            limit="10/minute",
+            key_func=lambda: "test",
+            scope=None,
+            per_method=False,
+            methods=None,
+            error_message=None,
+            exempt_when=None,
+            cost=1,
+            override_defaults=False,
+        )
+        exc = RateLimitExceeded(mock_limit)
+
+        with caplog.at_level(logging.WARNING):
+            await main.rate_limit_exceeded_handler(mock_request, exc)
+
+        assert any(
+            "[rate-limit]" in record.message
+            and "10.0.0.42" in record.message
+            and "/api/calendar/sync" in record.message
+            for record in caplog.records
+        ), f"Expected rate-limit log, got: {[r.message for r in caplog.records]}"
+
+    async def test_rate_limit_logging_uses_forwarded_ip(self, client, monkeypatch):
+        """Verify _get_client_ip prefers X-Forwarded-For over client IP."""
+        from unittest.mock import MagicMock
+
+        # Test with X-Forwarded-For
+        mock_request = MagicMock()
+        mock_request.headers = {"X-Forwarded-For": "203.0.113.50, 10.0.0.1"}
+        mock_request.client.host = "127.0.0.1"
+        assert main._get_client_ip(mock_request) == "203.0.113.50"
+
+        # Test with X-Real-IP (no X-Forwarded-For)
+        mock_request.headers = {"X-Real-IP": "198.51.100.25"}
+        assert main._get_client_ip(mock_request) == "198.51.100.25"
+
+        # Test fallback to client.host
+        mock_request.headers = {}
+        assert main._get_client_ip(mock_request) == "127.0.0.1"
+
+        # Test with no client
+        mock_request.client = None
+        assert main._get_client_ip(mock_request) == "unknown"
