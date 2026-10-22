@@ -38,12 +38,12 @@ from typing import Any, TypedDict
 
 from config import CALENDAR_TOKEN_SECRET, HTTP_TIMEOUT_S
 from cryptography.fernet import Fernet, InvalidToken
-from google.auth.exceptions import RefreshError
+from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from httplib2 import Http
+from httplib2 import Http, HttpLib2Error
 
 logger = logging.getLogger(__name__)
 
@@ -373,7 +373,8 @@ class GoogleCalendarClient:
                 self._timeout,
             )
             return True
-        except Exception as exc:
+        except (HttpLib2Error, TransportError, OSError, ValueError) as exc:
+            # Network/transport errors during service build, or API validation errors
             # Sanitize error to avoid leaking secrets
             error_msg = str(exc)
             if self._client_secret and self._client_secret in error_msg:
