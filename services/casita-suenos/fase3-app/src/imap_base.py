@@ -29,6 +29,7 @@ import email.header
 import email.message
 import imaplib
 import logging
+import os
 import re
 
 logger = logging.getLogger(__name__)
@@ -71,16 +72,65 @@ PRICE_MAX = 10_000_000
 
 
 # ---------------------------------------------------------------------------
+# Error sanitization
+# ---------------------------------------------------------------------------
+def _get_app_password() -> str | None:
+    """Retrieve GMAIL_APP_PASSWORD from environment for sanitization."""
+    return os.environ.get("GMAIL_APP_PASSWORD")
+
+
+def sanitize_imap_error(msg: str, app_password: str | None = None) -> str:
+    """Remove app_password from error messages to prevent credential leaks.
+
+    This function ensures that IMAP error messages (which may contain the
+    app password in authentication failures) do not leak the password in
+    logs or exception messages.
+
+    Args:
+        msg: The error message to sanitize.
+        app_password: The password to redact. If None, uses GMAIL_APP_PASSWORD
+            from environment.
+
+    Returns:
+        Sanitized message with password replaced by <REDACTED>.
+
+    Example:
+        >>> sanitize_imap_error("LOGIN failed: 'mypassword'", "mypassword")
+        "LOGIN failed: '<REDACTED>'"
+    """
+    if app_password is None:
+        app_password = _get_app_password()
+
+    if not app_password or len(app_password) < 4:
+        return msg
+
+    # Escape for regex in case password has special chars
+    escaped = re.escape(app_password)
+    return re.sub(escaped, "<REDACTED>", msg, flags=re.IGNORECASE)
+
+
+# ---------------------------------------------------------------------------
 # Conexión / lectura
 # ---------------------------------------------------------------------------
 def connect_imap(
     email_address: str, app_password: str, log_prefix: str = "gmail"
 ) -> imaplib.IMAP4_SSL:
-    """Conecta y autentica contra Gmail por IMAP con un App Password."""
-    imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
-    imap.login(email_address, app_password)
-    logger.info("[%s] Conectado a IMAP como %s", log_prefix, email_address)
-    return imap
+    """Conecta y autentica contra Gmail por IMAP con un App Password.
+
+    Note:
+        Any connection or authentication errors are sanitized to prevent
+        the app_password from appearing in logs or error messages.
+    """
+    try:
+        imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
+        imap.login(email_address, app_password)
+        logger.info("[%s] Conectado a IMAP como %s", log_prefix, email_address)
+        return imap
+    except Exception as e:
+        # Sanitize before re-raising to prevent password leak in caller's logs
+        safe_msg = sanitize_imap_error(str(e), app_password)
+        logger.error("[%s] Error conectando a IMAP: %s", log_prefix, safe_msg)
+        raise type(e)(safe_msg) from None
 
 
 def decode_subject(subject_raw: str) -> str:
@@ -143,6 +193,10 @@ def collect_messages(
       * ``collected`` es una lista de ``(msg, email_id, folder)``,
       * ``errors`` son descripciones de fallos de lectura,
       * ``failed_ids`` son los email_id que fallaron (no deben borrarse).
+
+    Note:
+        All error messages are sanitized to prevent GMAIL_APP_PASSWORD
+        from appearing in logs.
     """
     collected: list[tuple[email.message.Message, str, str]] = []
     errors: list[str] = []
@@ -176,12 +230,14 @@ def collect_messages(
                     msg = email.message_from_bytes(msg_data[0][1])
                     collected.append((msg, mid, folder))
                 except Exception as e:
-                    err = f"Error leyendo email {mid}: {e}"
+                    safe_err = sanitize_imap_error(str(e))
+                    err = f"Error leyendo email {mid}: {safe_err}"
                     logger.warning("[%s] %s", log_prefix, err)
                     errors.append(err)
                     failed_ids.add(mid)
         except Exception as e:
-            logger.warning("[%s] Error en carpeta %s: %s", log_prefix, folder, e)
+            safe_err = sanitize_imap_error(str(e))
+            logger.warning("[%s] Error en carpeta %s: %s", log_prefix, folder, safe_err)
 
     return collected, errors, failed_ids
 
@@ -202,6 +258,10 @@ def delete_processed(
 
     Cada elemento de ``alerts`` debe exponer ``property_id``, ``email_id`` y
     ``folder``. Al final cierra la conexión IMAP.
+
+    Note:
+        All error messages are sanitized to prevent GMAIL_APP_PASSWORD
+        from appearing in logs.
     """
     if not imap or not alerts:
         return
@@ -227,7 +287,10 @@ def delete_processed(
             imap.expunge()
             logger.info("[%s] %d emails eliminados de %s", log_prefix, len(ids), folder)
         except Exception as e:
-            logger.warning("[%s] Error eliminando de %s: %s", log_prefix, folder, e)
+            safe_err = sanitize_imap_error(str(e))
+            logger.warning(
+                "[%s] Error eliminando de %s: %s", log_prefix, folder, safe_err
+            )
     for folder, ids in seen_folder.items():
         try:
             imap.select(folder)
@@ -240,8 +303,12 @@ def delete_processed(
                 folder,
             )
         except Exception as e:
+            safe_err = sanitize_imap_error(str(e))
             logger.warning(
-                "[%s] Error marcando como leídos en %s: %s", log_prefix, folder, e
+                "[%s] Error marcando como leídos en %s: %s",
+                log_prefix,
+                folder,
+                safe_err,
             )
 
     try:
