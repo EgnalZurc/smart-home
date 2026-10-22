@@ -4,6 +4,7 @@ Tests the SQLite-backed command event logging: persisting commands and
 reading back the history window.
 """
 
+import sqlite3
 import time
 
 from event_log import ACEventLog
@@ -72,7 +73,7 @@ class TestLogCommand:
         log = _make_log(tmp_path)
 
         def boom(*_args, **_kwargs):
-            raise RuntimeError("db down")
+            raise sqlite3.OperationalError("db down")
 
         monkeypatch.setattr(log._db, "connect", boom)
 
@@ -135,7 +136,7 @@ class TestGetHistory:
         log.log_command("control", {"mode": "auto"}, True)
 
         def boom(*_args, **_kwargs):
-            raise RuntimeError("db down")
+            raise sqlite3.OperationalError("db down")
 
         monkeypatch.setattr(log._db, "connect", boom)
 

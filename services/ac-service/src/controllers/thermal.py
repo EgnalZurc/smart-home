@@ -270,7 +270,7 @@ class ThermalSampleRecorder:
 
         try:
             return self._outdoor_provider()
-        except (TypeError, ValueError, AttributeError, OSError):
+        except (TypeError, ValueError, AttributeError, OSError, ZeroDivisionError):
             logger.debug("Outdoor temp provider failed for thermal sample")
             return None
 

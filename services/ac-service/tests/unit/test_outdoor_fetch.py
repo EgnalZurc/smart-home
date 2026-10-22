@@ -131,7 +131,7 @@ class TestFetchOutdoorTemp:
             mock_client = MagicMock()
             mock_client.__enter__ = MagicMock(return_value=mock_client)
             mock_client.__exit__ = MagicMock(return_value=False)
-            mock_client.get.side_effect = Exception("Network unreachable")
+            mock_client.get.side_effect = httpx.RequestError("Network unreachable")
             mock_client_class.return_value = mock_client
 
             result = fetch_fn()
