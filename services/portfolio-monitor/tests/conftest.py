@@ -20,7 +20,10 @@ try:
     import smart_home_common  # noqa: F401
 except ModuleNotFoundError:
     _common_src = (
-        Path(__file__).parent.parent.parent.parent / "libs" / "smart_home_common" / "src"
+        Path(__file__).parent.parent.parent.parent
+        / "libs"
+        / "smart_home_common"
+        / "src"
     )
     if _common_src.exists():
         sys.path.insert(0, str(_common_src))

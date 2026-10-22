@@ -32,9 +32,7 @@ class TestFetchDividends:
     def test_returns_series_from_yfinance(self):
         from monitors.etf_monitor import fetch_dividends
 
-        series = _make_dividend_series(
-            [("2024-03-01", 0.5), ("2024-06-01", 0.6)]
-        )
+        series = _make_dividend_series([("2024-03-01", 0.5), ("2024-06-01", 0.6)])
         mock_ticker = MagicMock()
         mock_ticker.dividends = series
 
@@ -133,9 +131,7 @@ class TestCalculateDividendInfo:
     def test_yield_and_income(self):
         from monitors.etf_monitor import calculate_dividend_info
 
-        series = _make_dividend_series(
-            [("2024-01-01", 1.0), ("2024-07-01", 1.0)]
-        )
+        series = _make_dividend_series([("2024-01-01", 1.0), ("2024-07-01", 1.0)])
         with patch("monitors.etf_monitor.fetch_dividends", return_value=series):
             info = calculate_dividend_info("TEST.L", 100.0, 50.0)
 

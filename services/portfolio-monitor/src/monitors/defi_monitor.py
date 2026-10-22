@@ -103,7 +103,7 @@ class DeFiMonitor(BaseMonitor):
                 total_value += amount
                 total_yearly += yearly
 
-            except Exception as e:
+            except (ValueError, TypeError, KeyError, AttributeError) as e:
                 logger.error(f"Error processing {position_id}: {e}")
                 continue
 

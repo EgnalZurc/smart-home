@@ -621,9 +621,7 @@ class TestNonBlockingRun:
                     "monitors.etf_monitor.fetch_etf_data",
                     return_value=(mock_hist, {}),
                 ):
-                    with patch(
-                        "monitors.etf_monitor.fetch_ohlc_data", return_value=[]
-                    ):
+                    with patch("monitors.etf_monitor.fetch_ohlc_data", return_value=[]):
                         with patch(
                             "monitors.etf_monitor.asyncio.to_thread",
                             new_callable=AsyncMock,

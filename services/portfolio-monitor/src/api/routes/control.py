@@ -35,7 +35,7 @@ async def refresh_all(request: Request, background_tasks: BackgroundTasks):
         try:
             await orch.run_all_monitors()
             logger.info("All monitors refresh completed")
-        except Exception as e:
+        except (OSError, ValueError, TypeError, RuntimeError, ConnectionError) as e:
             logger.error(f"Error during refresh all monitors: {type(e).__name__}: {e}")
 
     background_tasks.add_task(run_refresh)
@@ -63,7 +63,7 @@ async def refresh_monitor(
         try:
             await orch.run_monitor(monitor_name)
             logger.info(f"Monitor {monitor_name} refresh completed")
-        except Exception as e:
+        except (OSError, ValueError, TypeError, RuntimeError, ConnectionError) as e:
             logger.error(
                 f"Error during refresh of {monitor_name}: {type(e).__name__}: {e}"
             )

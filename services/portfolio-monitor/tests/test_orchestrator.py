@@ -215,9 +215,7 @@ class TestRunMonitor:
         assert orch._summary.savings_total_balance == 20000
 
     @pytest.mark.asyncio
-    async def test_run_defi_monitor(
-        self, temp_data_dir, mock_notifier, mock_monitors
-    ):
+    async def test_run_defi_monitor(self, temp_data_dir, mock_notifier, mock_monitors):
         """Running the DeFi monitor updates summary state."""
         from orchestrator import Orchestrator
 
@@ -270,7 +268,7 @@ class TestRunAllMonitors:
         """All monitors run even if one fails."""
         from orchestrator import Orchestrator
 
-        mock_monitors["etf"].run = AsyncMock(side_effect=Exception("ETF error"))
+        mock_monitors["etf"].run = AsyncMock(side_effect=RuntimeError("ETF error"))
 
         with patch("alerts.get_upcoming_alerts", return_value=[]):
             with patch("alerts.check_and_trigger_alerts", return_value=[]):
@@ -447,7 +445,7 @@ class TestSchedulerLoop:
 
         from orchestrator import Orchestrator
 
-        mock_monitors["etf"].run = AsyncMock(side_effect=Exception("ETF failed"))
+        mock_monitors["etf"].run = AsyncMock(side_effect=RuntimeError("ETF failed"))
 
         orch = Orchestrator(notifier=mock_notifier, monitors=mock_monitors)
         orch._running = True
@@ -584,7 +582,6 @@ class TestDeterministicScheduler:
         self, temp_data_dir, mock_notifier, mock_monitors
     ):
         """The loop sleeps the computed delta, not a fixed 60s interval."""
-        import asyncio
         from datetime import timedelta
 
         from orchestrator import Orchestrator
@@ -616,7 +613,6 @@ class TestDeterministicScheduler:
         self, temp_data_dir, mock_notifier, mock_monitors
     ):
         """A monitor overrunning its slot does not busy-loop (min-sleep floor)."""
-        import asyncio
 
         from orchestrator import Orchestrator
 
@@ -634,9 +630,7 @@ class TestDeterministicScheduler:
                 orch._running = False
 
         # Slot is in the past -> due immediately -> sleep 0 before run, then floor.
-        with patch.object(
-            orch, "get_next_run_times", return_value={"etf": now}
-        ):
+        with patch.object(orch, "get_next_run_times", return_value={"etf": now}):
             with patch("orchestrator.asyncio.sleep", side_effect=fake_sleep):
                 await orch._schedule_loop()
 

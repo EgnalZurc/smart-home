@@ -130,7 +130,7 @@ class _BuiltinEmailSender:
                 s.login(self._smtp_user, self._smtp_password)
                 s.sendmail(self._smtp_user, to_addr, msg.as_bytes())
             return NotificationResult(True, "Email sent")
-        except Exception as e:
+        except (OSError, self._smtplib.SMTPException) as e:
             # Sanitize exception to prevent password leakage in tracebacks
             error_msg = str(e)
             # Remove any occurrence of the password from the error message

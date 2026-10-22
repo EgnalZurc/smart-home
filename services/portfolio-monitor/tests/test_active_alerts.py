@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-
 from models import (
     AlertLevel,
     CryptoAnalysis,
@@ -84,7 +83,11 @@ class TestActiveAlertsEndpoint:
                 _make_etf(
                     "VWCE",
                     AlertLevel.WARN,
-                    signals=[Signal(title="Drawdown", body="Down 12% from high", level="WARN")],
+                    signals=[
+                        Signal(
+                            title="Drawdown", body="Down 12% from high", level="WARN"
+                        )
+                    ],
                 )
             ],
         )
@@ -108,7 +111,9 @@ class TestActiveAlertsEndpoint:
                 _make_crypto(
                     "ETH",
                     AlertLevel.DANGER,
-                    signals=[Signal(title="Crash", body="Down 40% in 24h", level="DANGER")],
+                    signals=[
+                        Signal(title="Crash", body="Down 40% in 24h", level="DANGER")
+                    ],
                 )
             ],
         )

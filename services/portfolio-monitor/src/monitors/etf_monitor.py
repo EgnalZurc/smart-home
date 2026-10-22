@@ -260,7 +260,7 @@ def fetch_etf_data(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
 
 
 @retry(
-    retry=retry_if_exception_type((Exception,)),
+    retry=retry_if_exception_type((OSError, ValueError, RuntimeError)),
     stop=stop_after_attempt(YFINANCE_MAX_RETRIES),
     wait=wait_exponential(
         multiplier=1, min=YFINANCE_RETRY_MIN_WAIT, max=YFINANCE_RETRY_MAX_WAIT
@@ -287,7 +287,7 @@ def _fetch_etf_data_with_retry(ticker_sym: str) -> tuple[pd.DataFrame, dict[str,
         _history_cache.set(ticker_sym, result)
         _yahoo_circuit.record_success()
         return result
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         _yahoo_circuit.record_failure()
         logger.warning(
             f"Retry-able error fetching ETF data for {ticker_sym}: "
@@ -324,7 +324,7 @@ def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
 
 
 @retry(
-    retry=retry_if_exception_type((Exception,)),
+    retry=retry_if_exception_type((OSError, ValueError, RuntimeError)),
     stop=stop_after_attempt(YFINANCE_MAX_RETRIES),
     wait=wait_exponential(
         multiplier=1, min=YFINANCE_RETRY_MIN_WAIT, max=YFINANCE_RETRY_MAX_WAIT
@@ -351,7 +351,7 @@ def _fetch_ohlc_data_with_retry(
         _ohlc_cache.set(cache_key, ohlc)
         _yahoo_circuit.record_success()
         return ohlc
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         _yahoo_circuit.record_failure()
         logger.warning(
             f"Retry-able error fetching OHLC for {ticker_sym} (period={period}): "
@@ -386,13 +386,13 @@ def fetch_dividends(ticker_sym: str) -> pd.Series:
 
     try:
         return _fetch_dividends_with_retry(ticker_sym)
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         logger.error(f"Error fetching dividends for {ticker_sym} after retries: {e}")
         return pd.Series(dtype="float64")
 
 
 @retry(
-    retry=retry_if_exception_type((Exception,)),
+    retry=retry_if_exception_type((OSError, ValueError, RuntimeError)),
     stop=stop_after_attempt(YFINANCE_MAX_RETRIES),
     wait=wait_exponential(
         multiplier=1, min=YFINANCE_RETRY_MIN_WAIT, max=YFINANCE_RETRY_MAX_WAIT
@@ -409,7 +409,7 @@ def _fetch_dividends_with_retry(ticker_sym: str) -> pd.Series:
         _dividends_cache.set(ticker_sym, divs)
         _yahoo_circuit.record_success()
         return divs
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         _yahoo_circuit.record_failure()
         logger.warning(f"Retry-able error fetching dividends for {ticker_sym}: {e}")
         raise
@@ -916,7 +916,7 @@ class ETFMonitor(BaseMonitor):
                 total_value += current_value
                 total_invested += cost_basis
 
-            except Exception as e:
+            except (ValueError, TypeError, KeyError, AttributeError, OSError) as e:
                 logger.error(
                     f"Error processing ETF {fund_id} ({ticker}): "
                     f"{type(e).__name__}: {e}"

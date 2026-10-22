@@ -5,8 +5,8 @@ The module is pure (no I/O), so these tests build analyses and config entries
 directly and assert on the returned dict.
 """
 
-from monitors.rebalance import DEFAULT_THRESHOLD_PCT, compute_rebalance
 from models import CryptoAnalysis, ETFAnalysis
+from monitors.rebalance import DEFAULT_THRESHOLD_PCT, compute_rebalance
 
 
 def _etf(fund_id, value, target):

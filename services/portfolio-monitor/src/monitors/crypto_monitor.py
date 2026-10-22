@@ -3,6 +3,7 @@ Portfolio Monitor — Crypto Staking Monitor.
 Fetches data from CoinGecko and tracks staking positions.
 """
 
+import json
 import logging
 import os
 import re
@@ -12,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import config
+import requests
 from i18n import t
 from models import AlertLevel, CryptoAnalysis, Signal
 from smart_home_common.cache import TTLCache
@@ -191,7 +193,7 @@ def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
         _market_cache.set(cache_key, result)
         _coingecko_circuit.record_success()
         return result
-    except Exception as e:
+    except (requests.RequestException, KeyError, ValueError, json.JSONDecodeError) as e:
         _coingecko_circuit.record_failure()
         logger.error(f"Error fetching prices: {_sanitize_error(str(e))}")
         return {}
@@ -220,7 +222,7 @@ def fetch_ohlc(coingecko_id: str, days: int = 30) -> list[list[float]]:
         _ohlc_cache.set(cache_key, result)
         _coingecko_circuit.record_success()
         return result
-    except Exception as e:
+    except (requests.RequestException, json.JSONDecodeError, KeyError) as e:
         _coingecko_circuit.record_failure()
         logger.error(
             f"Error fetching OHLC for {coingecko_id}: {_sanitize_error(str(e))}"
@@ -250,7 +252,7 @@ def fetch_fear_greed() -> tuple[int | None, str | None]:
         _fg_cache.set(cache_key, result)
         _fear_greed_circuit.record_success()
         return result
-    except Exception as e:
+    except (requests.RequestException, json.JSONDecodeError, KeyError, ValueError) as e:
         _fear_greed_circuit.record_failure()
         logger.error(f"Error fetching Fear & Greed: {_sanitize_error(str(e))}")
         return None, None
@@ -332,7 +334,7 @@ def fetch_exchange_trust_score(exchange: str) -> int | None:
             _exchange_trust_cache.set(cache_key, trust_score)
         _coingecko_circuit.record_success()
         return trust_score
-    except Exception as e:
+    except (requests.RequestException, json.JSONDecodeError, KeyError) as e:
         _coingecko_circuit.record_failure()
         logger.warning(
             f"Could not fetch trust score for {exchange}: {_sanitize_error(str(e))}"
@@ -692,7 +694,7 @@ class CryptoMonitor(BaseMonitor):
                 total_value += current_value
                 total_daily_gain += daily_gain
 
-            except Exception as e:
+            except (ValueError, TypeError, KeyError, AttributeError) as e:
                 logger.error(f"Error processing {symbol}: {_sanitize_error(str(e))}")
                 continue
 
