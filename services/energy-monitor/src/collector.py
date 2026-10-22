@@ -1,6 +1,6 @@
 """Collector: polls every Shelly EM device and persists power/energy.
 
-Mirrors ``metrics-service``'s collector pattern (design §3.3): a long-lived
+Mirrors ``metrics-service``'s collector pattern (design Â§3.3): a long-lived
 :class:`Collector` owns the per-channel ring buffer, the SQLite store and three
 asyncio loops started/stopped by the FastAPI lifespan.
 
@@ -23,8 +23,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import sqlite3
 import time
 from collections import defaultdict, deque
+
+import httpx
 
 from config import (
     DEVICES_JSON,
@@ -119,7 +122,7 @@ class Collector:
         self.meter_online: bool | None = None
         self._tasks: list[asyncio.Task] = []
 
-    # ── Setup ─────────────────────────────────────────────────────────────────
+    # â”€â”€ Setup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def _build_clients(self) -> None:
         """Instantiate one ShellyEMClient per inventory entry."""
         for dev in self.devices:
@@ -135,7 +138,7 @@ class Collector:
             for ch, label in dev["channels"].items():
                 self.labels[_global_channel(dev["id"], ch)] = label
 
-    # ── Single tick ───────────────────────────────────────────────────────────
+    # â”€â”€ Single tick â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     async def tick(self) -> int:
         """Poll every device once; append power to the ring buffer.
 
@@ -180,7 +183,7 @@ class Collector:
         self.last_tick_ts = time.monotonic()
         return channels_seen
 
-    # ── Rollup ──────────────────────────────────────────────────────────────────
+    # â”€â”€ Rollup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def rollup(self, now: int | None = None) -> int:
         """Average the last completed minute of ring data into SQLite.
 
@@ -218,7 +221,7 @@ class Collector:
         rows = [(ch, wh) for ch, wh in self.latest_energy.items()]
         return self.store.write_energy(now, rows)
 
-    # ── Read API support ──────────────────────────────────────────────────────
+    # â”€â”€ Read API support â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def current(self) -> dict:
         """Return the newest power reading per channel for ``/api/energy/current``.
 
@@ -249,12 +252,12 @@ class Collector:
             "meter_online": self.meter_online,
         }
 
-    # ── Background loops ──────────────────────────────────────────────────────
+    # â”€â”€ Background loops â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     async def _poll_loop(self) -> None:
         while True:
             try:
                 await self.tick()
-            except Exception:
+            except (httpx.RequestError, httpx.TimeoutException, ValueError):
                 logger.exception("collector tick failed")
             await asyncio.sleep(POLL_INTERVAL_S)
 
@@ -263,7 +266,7 @@ class Collector:
             await asyncio.sleep(ROLLUP_INTERVAL_S)
             try:
                 await asyncio.to_thread(self.rollup)
-            except Exception:
+            except sqlite3.Error:
                 logger.exception("rollup failed")
 
     async def _energy_loop(self) -> None:
@@ -271,7 +274,7 @@ class Collector:
             await asyncio.sleep(ENERGY_SNAPSHOT_INTERVAL_S)
             try:
                 await asyncio.to_thread(self.snapshot_energy)
-            except Exception:
+            except sqlite3.Error:
                 logger.exception("energy snapshot failed")
 
     async def _prune_loop(self) -> None:
@@ -279,7 +282,7 @@ class Collector:
             await asyncio.sleep(PRUNE_INTERVAL_S)
             try:
                 await asyncio.to_thread(self.store.prune)
-            except Exception:
+            except sqlite3.Error:
                 logger.exception("prune failed")
 
     async def start(self) -> None:
@@ -314,7 +317,7 @@ class Collector:
                 logger.warning("failed to close client %s", client.device_id)
         logger.info("Collector stopped")
 
-    # ── Diagnostics ─────────────────────────────────────────────────────────────
+    # â”€â”€ Diagnostics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def last_tick_age_s(self) -> float | None:
         """Seconds since the last tick, or None if the loop never ran."""
         if self.last_tick_ts is None:
