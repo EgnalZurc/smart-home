@@ -299,7 +299,7 @@ def sample_host(*, with_cpu: bool = True) -> list[Sample]:
     for fn in samplers:
         try:
             samples.extend(fn())
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
             logger.warning("[HostSampler] %s collection failed: %s", fn.__name__, exc)
     return samples
 
@@ -609,7 +609,7 @@ class Collector:
         if ALERTS_ENABLED:
             try:
                 self.alert_engine.evaluate_tick(now=ts)
-            except Exception:
+            except Exception:  # noqa: BLE001 - defensive catch-all for loop safety
                 logger.exception("[Collector] Alert evaluation failed")
 
         return samples
@@ -650,7 +650,7 @@ class Collector:
         while True:
             try:
                 await self.tick()
-            except Exception:
+            except Exception:  # noqa: BLE001 - defensive catch-all for loop safety
                 logger.exception("[Collector] Tick execution failed")
             await asyncio.sleep(COLLECT_INTERVAL_S)
 
@@ -660,7 +660,7 @@ class Collector:
             await asyncio.sleep(ROLLUP_INTERVAL_S)
             try:
                 self.rollup()
-            except Exception:
+            except Exception:  # noqa: BLE001 - defensive catch-all for loop safety
                 logger.exception("[Collector] Rollup execution failed")
 
     async def _prune_loop(self) -> None:
@@ -669,14 +669,14 @@ class Collector:
             await asyncio.sleep(PRUNE_INTERVAL_S)
             try:
                 await asyncio.to_thread(self.store.prune)
-            except Exception:
+            except Exception:  # noqa: BLE001 - defensive catch-all for loop safety
                 logger.exception("[Collector] Metrics prune failed")
             try:
                 await asyncio.to_thread(
                     self.alert_engine.store.prune_history,
                     ALERT_HISTORY_RETENTION_DAYS,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 - defensive catch-all for loop safety
                 logger.exception("[Collector] Alert history prune failed")
 
     async def start(self) -> None:
@@ -705,11 +705,11 @@ class Collector:
                         "unconfigured (no TELEGRAM_BOT_TOKEN/CHAT_IDS) — alerts "
                         "will fire and persist but no message will be sent"
                     )
-            except Exception:
+            except Exception:  # noqa: BLE001 - notifier failures are non-fatal
                 logger.exception("[Collector] Telegram notifier initialization failed")
             try:
                 self.alert_engine.load_state()
-            except Exception:
+            except Exception:  # noqa: BLE001 - state load failures are non-fatal
                 logger.exception("[Collector] Alert state load failed")
         self._tasks = [
             asyncio.create_task(self._collect_loop()),
