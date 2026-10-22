@@ -63,10 +63,12 @@ class TestProxyFlood:
     @pytest.mark.asyncio
     async def test_flood_sin_datos_when_no_sources(self):
         """Returns sin_datos when both sources fail."""
+        import httpx
+
         with patch("api.proxy.external.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value.__aenter__.return_value = mock_instance
-            mock_instance.get.side_effect = Exception("Network error")
+            mock_instance.get.side_effect = httpx.HTTPError("Network error")
 
             result = await proxy_flood(lat=40.0, lon=-3.0)
 
@@ -164,7 +166,16 @@ class TestProxyFlood:
         with patch("api.proxy.external.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value.__aenter__.return_value = mock_instance
-            mock_instance.get.return_value = _make_json_response(glofas_response)
+
+            # Create responses based on URL
+            async def mock_get(url):
+                if "flood-api.open-meteo.com" in url:
+                    return _make_json_response(glofas_response)
+                else:
+                    # SNCZI returns fill values
+                    return _make_response("GRAY_INDEX = -9999.0")
+
+            mock_instance.get = mock_get
 
             result = await proxy_flood(lat=40.0, lon=-3.0)
 
@@ -296,6 +307,8 @@ class TestProxyFirms:
     @pytest.mark.asyncio
     async def test_firms_handles_network_exceptions(self):
         """Network exceptions result in zero count."""
+        import httpx
+
         original_key = module.FIRMS_MAP_KEY
         module.FIRMS_MAP_KEY = "test_api_key"
 
@@ -303,7 +316,7 @@ class TestProxyFirms:
             with patch("api.proxy.external.httpx.AsyncClient") as mock_client:
                 mock_instance = AsyncMock()
                 mock_client.return_value.__aenter__.return_value = mock_instance
-                mock_instance.get.side_effect = Exception("Connection timeout")
+                mock_instance.get.side_effect = httpx.HTTPError("Connection timeout")
 
                 result = await proxy_firms(lat=40.0, lon=-3.0)
 

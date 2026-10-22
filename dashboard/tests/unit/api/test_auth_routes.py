@@ -103,10 +103,12 @@ class TestSendTrustEmail:
     @patch("api.auth_routes.smtplib.SMTP")
     @patch("api.auth_routes.auth_users")
     def test_logs_error_on_failure(self, mock_users, mock_smtp):
+        import smtplib
+
         from api.auth_routes import _send_trust_email
 
         mock_users.make_action_url.return_value = "http://test"
-        mock_smtp.side_effect = Exception("SMTP error")
+        mock_smtp.side_effect = smtplib.SMTPException("SMTP error")
 
         with (
             patch("api.auth_routes.SMTP_USER", "test@test.com"),

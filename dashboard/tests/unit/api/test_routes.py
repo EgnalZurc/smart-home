@@ -60,9 +60,11 @@ class TestHealthEndpoints:
             assert response.status_code == 200
 
     def test_zigbee_health_failure(self, client):
+        import httpx
+
         with patch("api.health.httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                side_effect=Exception("Connection failed")
+                side_effect=httpx.HTTPError("Connection failed")
             )
 
             response = client.get("/api/health/zigbee")
@@ -86,9 +88,11 @@ class TestHealthEndpoints:
             assert response.json()["online"] is True
 
     def test_ac_health_failure(self, client):
+        import httpx
+
         with patch("api.health.httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                side_effect=Exception("Connection failed")
+                side_effect=httpx.HTTPError("Connection failed")
             )
 
             response = client.get("/api/health/ac")
@@ -123,9 +127,11 @@ class TestHealthEndpoints:
             assert response.json()["online"] is True
 
     def test_casita_health_failure(self, client):
+        import httpx
+
         with patch("api.health.httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                side_effect=Exception("Timeout")
+                side_effect=httpx.HTTPError("Timeout")
             )
 
             response = client.get("/api/health/casita")
@@ -479,9 +485,11 @@ class TestPortfolioProxies:
 
 class TestPCControl:
     def test_pc_status_offline(self, client):
+        import httpx
+
         with patch("libs.service_proxy.proxy.httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                side_effect=Exception("Timeout")
+                side_effect=httpx.HTTPError("Timeout")
             )
 
             response = client.get("/api/pc/status")

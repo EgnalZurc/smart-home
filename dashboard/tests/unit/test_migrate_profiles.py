@@ -47,7 +47,7 @@ class TestMigrateProfiles:
     @patch("migrate_profiles.user_profiles")
     def test_main_handles_errors_gracefully(self, mock_user_profiles):
         """Test that errors don't crash the migration."""
-        mock_user_profiles.set_profile.side_effect = Exception("Database error")
+        mock_user_profiles.set_profile.side_effect = RuntimeError("Database error")
 
         captured_out = StringIO()
         captured_err = StringIO()

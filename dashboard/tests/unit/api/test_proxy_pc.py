@@ -68,9 +68,11 @@ class TestPcStatus:
     @pytest.mark.asyncio
     async def test_get_status_offline_returns_default(self):
         """Returns offline status when PC unreachable."""
+        import httpx
+
         with patch(HTTPX_PATCH) as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.get.side_effect = Exception("Connection refused")
+            mock_instance.get.side_effect = httpx.HTTPError("Connection refused")
             mock_client.return_value.__aenter__.return_value = mock_instance
 
             result = await get_pc_status()
