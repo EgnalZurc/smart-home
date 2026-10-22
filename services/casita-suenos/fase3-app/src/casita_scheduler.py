@@ -17,6 +17,7 @@ También expone get_status() para el endpoint HTTP del dashboard.
 
 from __future__ import annotations
 
+import imaplib
 import logging
 import threading
 import time
@@ -524,7 +525,7 @@ class CasitaScheduler:
                     "size_m2": prop.size_m2,
                 }
             )
-        except Exception as e:
+        except (OSError, ConnectionError, TimeoutError) as e:
             logger.error(
                 "[casita] Error notificando high-scorer %s: %s",
                 prop.unique_id,
@@ -565,7 +566,7 @@ class CasitaScheduler:
                 try:
                     imap_conn.close()
                     imap_conn.logout()
-                except Exception:
+                except (imaplib.IMAP4.error, OSError):
                     logger.debug(
                         "[casita] IMAP logout failed (connection may be stale)"
                     )
@@ -621,7 +622,7 @@ class CasitaScheduler:
             try:
                 imap_conn.close()
                 imap_conn.logout()
-            except Exception:
+            except (imaplib.IMAP4.error, OSError):
                 logger.debug("[casita] IMAP logout failed (connection may be stale)")
         # Solo notificar si hay casas nuevas en el radar
         if total_new > 0:
@@ -677,7 +678,7 @@ class CasitaScheduler:
                 try:
                     imap_conn.close()
                     imap_conn.logout()
-                except Exception:
+                except (imaplib.IMAP4.error, OSError):
                     logger.debug(
                         "[casita] IMAP logout failed (connection may be stale)"
                     )
@@ -790,7 +791,7 @@ class CasitaScheduler:
             try:
                 imap_conn.close()
                 imap_conn.logout()
-            except Exception:
+            except (imaplib.IMAP4.error, OSError):
                 logger.debug("[casita] IMAP logout failed (connection may be stale)")
 
         if total_new > 0:
