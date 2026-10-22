@@ -163,7 +163,7 @@ def _load_gifts() -> dict[str, Any]:
         return {"gifts": []}
     try:
         return json.loads(GIFTS_FILE.read_text(encoding="utf-8"))
-    except Exception as e:
+    except (json.JSONDecodeError, OSError) as e:
         logger.error(f"Error loading gifts: {e}")
         return {"gifts": []}
 
@@ -546,7 +546,7 @@ def list_invitations() -> list[dict[str, Any]]:
                 try:
                     expires_at: datetime = datetime.fromisoformat(row["expires_at"])
                     expired = now > expires_at
-                except Exception:
+                except ValueError:
                     pass
             result.append(
                 {
@@ -713,5 +713,5 @@ def is_healthy() -> bool:
     try:
         _get_db().close()
         return True
-    except Exception:
+    except sqlite3.Error:
         return False
