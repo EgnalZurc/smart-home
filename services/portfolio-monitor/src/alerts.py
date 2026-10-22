@@ -53,7 +53,7 @@ def _save_alerts_state(state: dict[str, dict[str, Any]]) -> None:
     """
     try:
         atomic_write_json(ALERTS_STATE_FILE, state)
-    except Exception as e:
+    except (OSError, ValueError, TypeError) as e:
         logger.error(f"Could not save alerts state: {e}")
 
 
@@ -81,7 +81,7 @@ def get_all_alerts() -> list[ScheduledAlert]:
                 completed_at=alert_state.get("completed_at"),
             )
             alerts.append(alert)
-        except Exception as e:
+        except (KeyError, TypeError, ValueError) as e:
             logger.warning(f"Invalid alert config: {e}")
     return alerts
 

@@ -191,7 +191,7 @@ def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
         _market_cache.set(cache_key, result)
         _coingecko_circuit.record_success()
         return result
-    except Exception as e:
+    except (OSError, ValueError, KeyError, TypeError) as e:
         _coingecko_circuit.record_failure()
         logger.error(f"Error fetching prices: {_sanitize_error(str(e))}")
         return {}
@@ -220,7 +220,7 @@ def fetch_ohlc(coingecko_id: str, days: int = 30) -> list[list[float]]:
         _ohlc_cache.set(cache_key, result)
         _coingecko_circuit.record_success()
         return result
-    except Exception as e:
+    except (OSError, ValueError, KeyError, TypeError) as e:
         _coingecko_circuit.record_failure()
         logger.error(
             f"Error fetching OHLC for {coingecko_id}: {_sanitize_error(str(e))}"
@@ -250,7 +250,7 @@ def fetch_fear_greed() -> tuple[int | None, str | None]:
         _fg_cache.set(cache_key, result)
         _fear_greed_circuit.record_success()
         return result
-    except Exception as e:
+    except (OSError, ValueError, KeyError, IndexError) as e:
         _fear_greed_circuit.record_failure()
         logger.error(f"Error fetching Fear & Greed: {_sanitize_error(str(e))}")
         return None, None
@@ -332,7 +332,7 @@ def fetch_exchange_trust_score(exchange: str) -> int | None:
             _exchange_trust_cache.set(cache_key, trust_score)
         _coingecko_circuit.record_success()
         return trust_score
-    except Exception as e:
+    except (OSError, ValueError, KeyError, TypeError) as e:
         _coingecko_circuit.record_failure()
         logger.warning(
             f"Could not fetch trust score for {exchange}: {_sanitize_error(str(e))}"

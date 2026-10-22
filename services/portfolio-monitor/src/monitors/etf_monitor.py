@@ -386,7 +386,7 @@ def fetch_dividends(ticker_sym: str) -> pd.Series:
 
     try:
         return _fetch_dividends_with_retry(ticker_sym)
-    except Exception as e:
+    except (OSError, ValueError, KeyError, AttributeError) as e:
         logger.error(f"Error fetching dividends for {ticker_sym} after retries: {e}")
         return pd.Series(dtype="float64")
 

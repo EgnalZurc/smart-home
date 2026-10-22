@@ -11,7 +11,10 @@ to simulate failures, and that late binding is what lets those patches take
 effect on the real wrapper.
 """
 
+import socket
 from typing import Any
+
+import requests
 
 
 async def check_yahoo_finance() -> dict[str, Any]:
