@@ -49,6 +49,7 @@ import logging
 
 import auth as auth_core
 import auth_devices
+import httpx
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from api.health import get_all_health
@@ -100,7 +101,7 @@ class ConnectionManager:
         # disconnect path will clean up.
         try:
             await websocket.send_json(await self._build_message())
-        except Exception:  # noqa: BLE001 - best-effort initial push
+        except (WebSocketDisconnect, asyncio.CancelledError, OSError, RuntimeError):
             logger.debug("Initial health push failed for a client", exc_info=True)
 
     async def disconnect(self, websocket: WebSocket) -> None:
@@ -121,7 +122,7 @@ class ConnectionManager:
         for client in list(self._clients):
             try:
                 await client.send_json(message)
-            except Exception:  # noqa: BLE001 - a broken client must not stop the fan-out
+            except (WebSocketDisconnect, asyncio.CancelledError, OSError, RuntimeError):
                 dead.append(client)
 
         if dead:
@@ -159,7 +160,7 @@ class ConnectionManager:
                     break
                 try:
                     message = await self._build_message()
-                except Exception:  # noqa: BLE001 - a transient check error must not kill the loop
+                except (httpx.HTTPError, OSError, RuntimeError):
                     logger.warning("Health broadcast build failed", exc_info=True)
                     continue
                 await self.broadcast(message)
@@ -224,9 +225,11 @@ def _validate_device_token(websocket: WebSocket) -> str | None:
 
     # Token theft detected — don't authenticate
     if result.theft_detected:
+        client_ip = _get_client_ip(websocket)
         logger.warning(
-            "Device token theft detected during WebSocket auth for user %r",
+            "Device token theft detected during WebSocket auth for user %r from IP %s",
             result.username,
+            client_ip,
         )
         return None
 
@@ -318,8 +321,8 @@ async def health_websocket(websocket: WebSocket) -> None:
             await websocket.receive_text()
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
-    except Exception:  # noqa: BLE001 - any transport error ends this connection
+    except (asyncio.CancelledError, OSError, RuntimeError):
         logger.debug("WebSocket connection ended with error", exc_info=True)
         await manager.disconnect(websocket)
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(OSError, RuntimeError):
             await websocket.close()

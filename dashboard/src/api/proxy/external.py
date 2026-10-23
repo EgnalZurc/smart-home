@@ -33,6 +33,12 @@ async def proxy_flood(lat: float, lon: float):
         calado_m: float | null,
       }
     """
+    # Validate coordinate bounds
+    if not (-90 <= lat <= 90):
+        return {"error": "lat must be between -90 and 90", "status": "invalid_input"}
+    if not (-180 <= lon <= 180):
+        return {"error": "lon must be between -180 and 180", "status": "invalid_input"}
+
     WMS_BASE = "https://servicios.idee.es/wms-inspire/riesgos-naturales/inundaciones"
     LAYERS = ["NZ.Flood.FluvialT10", "NZ.Flood.FluvialT100", "NZ.Flood.FluvialT500"]
     DELTAS = [0.0005, 0.001, 0.002, 0.005, 0.01, 0.02]
@@ -166,6 +172,12 @@ async def proxy_firms(lat: float, lon: float):
 
     Queries high-risk months (June-October) in 5-day blocks.
     """
+    # Validate coordinate bounds
+    if not (-90 <= lat <= 90):
+        return {"error": "lat must be between -90 and 90", "status": "invalid_input"}
+    if not (-180 <= lon <= 180):
+        return {"error": "lon must be between -180 and 180", "status": "invalid_input"}
+
     if not FIRMS_MAP_KEY:
         return {"status": "no_key", "focos": None}
 

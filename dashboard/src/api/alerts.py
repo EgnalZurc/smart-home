@@ -23,6 +23,7 @@ import hashlib
 import logging
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
@@ -119,7 +120,7 @@ async def _fetch_remote(name: str, proxy: ServiceProxy, path: str) -> list[dict]
             default_on_error={"alerts": []},
         )
         return _extract_alerts(data, name)
-    except Exception as exc:  # noqa: BLE001 - a bad source must not break the feed
+    except (httpx.HTTPError, httpx.TimeoutException, OSError) as exc:
         logger.warning("Failed to fetch alerts from %s: %s", name, exc)
         return []
 
@@ -131,7 +132,9 @@ async def _fetch_memory(days: int) -> list[dict]:
 
         data = await monitoring.get_memory_alerts(days=days)
         return _extract_alerts(data, "memory")
-    except Exception as exc:  # noqa: BLE001 - keep the feed resilient
+    except (OSError, ValueError, KeyError, RuntimeError, TypeError, Exception) as exc:
+        # Broad catch: monitoring module may raise various errors (file I/O, JSON parsing)
+        # and we must not break the aggregated feed.
         logger.warning("Failed to collect memory alerts: %s", exc)
         return []
 
