@@ -76,6 +76,7 @@ from config import (
     HISTORY_LIMIT_MIN,
     MELCLOUD_FAN_NAMES,
     MELCLOUD_MODE_NAMES,
+    SENSOR_HISTORY_LIMIT_MAX,
 )
 from controllers.ac_controller import ACController, ControlConfig
 from event_log import ACEventLog
@@ -738,7 +739,17 @@ def get_sensors() -> dict[str, list[dict[str, object]]]:
 def get_sensors_history(
     start: float | None = None, end: float | None = None, last: int | None = None
 ) -> dict[str, list[dict[str, object]]]:
-    """Get sensor reading history."""
+    """Get sensor reading history.
+
+    Args:
+        start: Unix timestamp to filter readings from (inclusive).
+        end: Unix timestamp to filter readings until (inclusive).
+        last: Number of most recent readings per sensor to return.
+
+    Note:
+        Results are capped at SENSOR_HISTORY_LIMIT_MAX records per sensor
+        to prevent unbounded responses.
+    """
     result: dict[str, list[dict[str, object]]] = {}
     with mqtt_handler._lock:
         for name, readings_list in mqtt_handler.history.items():
@@ -749,11 +760,14 @@ def get_sensors_history(
                     if (start is None or r.timestamp >= start)
                     and (end is None or r.timestamp <= end)
                 ]
-                entries = filtered
+                entries = filtered[:SENSOR_HISTORY_LIMIT_MAX]
             elif last is not None:
-                entries = readings_list[-last:]
+                # Clamp last to max limit
+                clamped_last = min(last, SENSOR_HISTORY_LIMIT_MAX)
+                entries = readings_list[-clamped_last:]
             else:
-                entries = readings_list
+                # Default: return up to max limit
+                entries = readings_list[-SENSOR_HISTORY_LIMIT_MAX:]
             result[name] = [
                 {
                     "temperature": r.temperature,
@@ -810,6 +824,11 @@ def get_thermal_curves() -> dict[str, object]:
     Returns heating/cooling rates (°C/min), average time to reach the target
     setpoint, and an efficiency breakdown bucketed by outdoor temperature.
     Returns empty/None metrics until enough samples have accumulated.
+
+    Note:
+        Response size is bounded by ThermalBuffer's ring buffer capacity
+        (DEFAULT_BUFFER_SIZE = 2000 samples). Oldest samples are automatically
+        discarded when the buffer is full.
     """
     return analyze(thermal_buffer.snapshot())
 

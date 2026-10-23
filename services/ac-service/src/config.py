@@ -209,6 +209,9 @@ HISTORY_LIMIT_MAX: int = 1000
 HISTORY_LIMIT_MIN: int = 1
 """Minimum limit for history queries."""
 
+SENSOR_HISTORY_LIMIT_MAX: int = 10000
+"""Maximum number of records per sensor for history queries."""
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MQTT Configuration Defaults
