@@ -88,6 +88,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # ── Check Z2M example has placeholders (prevent credential leaks) ──
+      - name: Check Z2M example has placeholders
+        run: |
+          if ! grep -q 'CHANGE_ME' infrastructure/zigbee2mqtt/configuration.example.yaml; then
+            echo '::error::configuration.example.yaml must contain CHANGE_ME placeholders'
+            exit 1
+          fi
+          echo "✅ Z2M example file has required placeholders"
+
       # ── Detect changes ──
       - uses: dorny/paths-filter@v4
         id: filter
