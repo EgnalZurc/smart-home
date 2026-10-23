@@ -382,6 +382,8 @@ app = FastAPI(
 
 # ── CSRF Protection ───────────────────────────────────────────────────────────
 
+# Allowed origins for CSRF validation. Static for now; extend via environment
+# variable AC_ALLOWED_ORIGINS (comma-separated list) if dynamic config needed.
 _ALLOWED_ORIGINS: set[str] = {
     "https://raspberrypi.tailaa37cd.ts.net",
     "http://raspberrypi.local",

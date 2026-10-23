@@ -94,7 +94,9 @@ class MelCloudOperationMode(IntEnum):
     AUTO = 8
 
 
-# Mapping from MELCloud API values to human-readable names
+# Mapping from MELCloud API values to human-readable names.
+# Mode names use short English labels that mirror the AC remote/display.
+# Fan names use Spanish labels for the dashboard UI (user-facing).
 MELCLOUD_MODE_NAMES: dict[int, str] = {
     MelCloudOperationMode.HEAT: "HOT",
     MelCloudOperationMode.DRY: "DRY",
@@ -103,7 +105,6 @@ MELCLOUD_MODE_NAMES: dict[int, str] = {
     MelCloudOperationMode.AUTO: "AUTO",
 }
 
-# Mapping from MELCloud API fan values to human-readable names (Spanish)
 MELCLOUD_FAN_NAMES: dict[int, str] = {
     FanSpeed.AUTO: "Auto",
     FanSpeed.LOW: "Bajo",

@@ -16,10 +16,14 @@ Thread Safety:
     MELCloud API calls are serialized with _melcloud_lock to prevent races.
 """
 
+from __future__ import annotations
+
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Protocol
 
 import httpx
 from config import (
@@ -51,7 +55,26 @@ from controllers.thermal import (
     ThermalSampleRecorder,
 )
 
+if TYPE_CHECKING:
+    from thermal_analysis import ThermalBuffer
+
 logger = logging.getLogger(__name__)
+
+
+class ErrorTrackerProtocol(Protocol):
+    """Protocol for error tracking interface.
+
+    Defines the minimal interface expected by the controller for error
+    registration and clearing. Used for dependency injection typing.
+    """
+
+    def register(self, key: str, severity: str, message: str, category: str) -> None:
+        """Register an error."""
+        ...
+
+    def clear(self, key: str) -> None:
+        """Clear a previously registered error."""
+        ...
 
 
 @dataclass
@@ -288,14 +311,15 @@ class ACController:
             for r in records
         ]
 
-    def update_config(self, **kwargs) -> None:
+    def update_config(self, **kwargs: Any) -> None:
         """Update configuration parameters on the fly.
 
         Any keyword argument that matches a ControlConfig attribute will
         be updated. Changes are persisted to disk.
 
         Args:
-            **kwargs: Configuration parameters to update.
+            **kwargs: Configuration parameters to update. Accepts any attribute
+                name from ControlConfig (e.g., target_temperature, hysteresis_on).
 
         Example:
             >>> controller.update_config(target_temperature=25.0)
@@ -343,12 +367,13 @@ class ACController:
         )
         self._persist_state()
 
-    def update_manual_param(self, param: str, value) -> None:
+    def update_manual_param(self, param: str, value: float | int | str) -> None:
         """Update a single manual parameter for real-time UI updates.
 
         Args:
             param: Parameter name ("temperature", "fan_speed", or "mode").
-            value: New value for the parameter.
+            value: New value for the parameter (float for temperature, int for
+                fan_speed, str for mode).
         """
         with self._lock:
             if self.state.manual_params is None:
@@ -395,7 +420,7 @@ class ACController:
         self._persist_state()
         logger.info("AC controller stopped")
 
-    def set_error_tracker(self, tracker) -> None:
+    def set_error_tracker(self, tracker: ErrorTrackerProtocol | None) -> None:
         """Inject error tracker for centralized error reporting.
 
         Args:
@@ -403,7 +428,11 @@ class ACController:
         """
         self._error_tracker = tracker
 
-    def set_thermal_buffer(self, buffer, outdoor_temp_provider=None) -> None:
+    def set_thermal_buffer(
+        self,
+        buffer: ThermalBuffer,
+        outdoor_temp_provider: Callable[[], float | None] | None = None,
+    ) -> None:
         """Inject thermal buffer and optional outdoor temperature provider.
 
         When set, the controller appends one ThermalSample per tick so the
