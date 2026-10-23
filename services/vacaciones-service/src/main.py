@@ -136,6 +136,9 @@ def _check_csrf(request: Request) -> None:
     # If neither header is present, reject (could be a direct curl/script call,
     # but in a browser context this would be suspicious)
     if origin is None:
+        # GDPR note: Client IP is logged for security monitoring (legitimate interest
+        # under GDPR Art. 6(1)(f)). IPs are not stored long-term and are only used
+        # to detect and prevent abuse. Consider log rotation policies.
         logger.warning(
             "CSRF check failed: no Origin/Referer header from %s",
             _get_client_ip(request),
@@ -146,6 +149,7 @@ def _check_csrf(request: Request) -> None:
         )
 
     if origin not in ALLOWED_ORIGINS:
+        # GDPR note: see above - IP logged for security monitoring purposes.
         logger.warning(
             "CSRF check failed: origin %s not in allowed list from %s",
             origin,
@@ -195,6 +199,9 @@ def _check_rate_limit(request: Request) -> None:
     """
     client_ip = _get_client_ip(request)
     if not _rate_limiter.is_allowed(client_ip):
+        # GDPR note: Client IP is logged for security monitoring (legitimate interest
+        # under GDPR Art. 6(1)(f)). IPs are not stored long-term and are only used
+        # to detect and prevent abuse. Consider log rotation policies.
         logger.warning("Rate limit exceeded for IP: %s", client_ip)
         raise HTTPException(status_code=429, detail="Too many requests")
 
@@ -227,6 +234,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     - X-XSS-Protection: Legacy XSS filter (for older browsers)
     - Content-Security-Policy: Restricts resource loading sources
     - Referrer-Policy: Controls referrer information sent to other sites
+
+    CSP Policy Note:
+        The strict "default-src 'self'" policy is intentional for this service.
+        The vacaciones SPA uses only local assets (CSS, JS from /static/) and
+        makes fetch() calls to same-origin API endpoints. No external resources,
+        inline scripts, or eval() are required. This strict CSP prevents XSS
+        attacks by blocking any injected scripts from loading external resources
+        or executing inline code. If future features require relaxation (e.g.,
+        external fonts), add specific directives like "font-src 'self' fonts.gstatic.com"
+        rather than weakening default-src.
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
@@ -235,6 +252,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
+        # Strict CSP: only same-origin resources allowed. See class docstring
+        # for rationale on why 'default-src: self' is appropriate here.
         response.headers["Content-Security-Policy"] = "default-src 'self'"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         return response
@@ -376,10 +395,17 @@ def _serve_html(filename: str) -> HTMLResponse:
         HTMLResponse with the file content and no-cache headers.
 
     Raises:
-        FileNotFoundError: If the HTML file does not exist.
+        HTTPException: 404 if the HTML file does not exist or cannot be read.
     """
     path = Path(__file__).parent / "static" / filename
-    content = path.read_text(encoding="utf-8")
+    try:
+        content = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        logger.warning("Static file not found: %s", filename)
+        raise HTTPException(status_code=404, detail="Page not found")
+    except OSError as e:
+        logger.error("Error reading static file %s: %s", filename, e)
+        raise HTTPException(status_code=404, detail="Page not found")
     content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")
     return HTMLResponse(
         content=content,

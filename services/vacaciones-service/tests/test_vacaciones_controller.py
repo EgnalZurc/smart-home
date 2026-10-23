@@ -488,3 +488,15 @@ class TestResourceLimits:
         config = get_config()
         assert len(config["nucleos"]) == MAX_NUCLEOS
         assert len(config["personas"]) == MAX_PERSONAS
+
+
+
+# TODO: Add edge case tests for the following scenarios:
+# - _generate_inicial with unicode/emoji characters in names
+# - _generate_inicial hitting max_attempts limit (pathological input)
+# - _load_data with permission errors (not just missing/corrupt file)
+# - _save_data with disk full / permission denied scenarios
+# - Concurrent access to data file (race conditions)
+# - Year plans with invalid momento IDs
+# - Very long strings near validation limits (boundary testing)
+# - Empty string edge cases for all string fields

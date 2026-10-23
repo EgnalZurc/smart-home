@@ -198,7 +198,9 @@ class VacacionesData:
         }
 
 
-MOMENTOS = [
+# MOMENTOS is a tuple (immutable) to prevent accidental modification at runtime.
+# Each momento represents a meal during the Christmas gathering period.
+MOMENTOS = (
     {
         "id": "cena_24",
         "label": "Cena 24",
@@ -247,7 +249,7 @@ MOMENTOS = [
         "tipo": "comida",
         "importante": False,
     },
-]
+)
 
 
 def _generate_inicial(nombre: str, existing_iniciales: list[str]) -> str:
@@ -272,6 +274,11 @@ def _generate_inicial(nombre: str, existing_iniciales: list[str]) -> str:
         'AN'
         >>> _generate_inicial("Angel", ["ANGEL"])
         'ANGEL2'
+
+    Note:
+        The numeric suffix loop is bounded to MAX_PERSONAS iterations to
+        prevent infinite loops in pathological cases (e.g., if existing_iniciales
+        somehow contains all possible suffixes).
     """
     nombre_clean = nombre.strip().upper()
     if not nombre_clean:
@@ -282,8 +289,13 @@ def _generate_inicial(nombre: str, existing_iniciales: list[str]) -> str:
             return candidate
     base = nombre_clean
     counter = 2
-    while f"{base}{counter}" in existing_iniciales:
+    # Guard against infinite loop: limit iterations to MAX_PERSONAS.
+    # In practice, we'll never hit this limit since we cap personas at MAX_PERSONAS,
+    # but this provides defense-in-depth against pathological input.
+    max_attempts = MAX_PERSONAS
+    while f"{base}{counter}" in existing_iniciales and max_attempts > 0:
         counter += 1
+        max_attempts -= 1
     return f"{base}{counter}"
 
 

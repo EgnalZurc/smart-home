@@ -643,3 +643,15 @@ class TestCSRFProtection:
         finally:
             os.environ["ALLOWED_ORIGINS"] = "*"
             importlib.reload(main)
+
+
+
+# TODO: Add edge case tests for the following API scenarios:
+# - Rate limiting with X-Forwarded-For header (proxy client IP extraction)
+# - Malformed JSON payloads (should return 422, not 500)
+# - Very large payloads near/at size limits
+# - _serve_html with missing static file (404 response)
+# - Unicode edge cases in nucleo/persona names via API
+# - Concurrent API requests (race conditions in save operations)
+# - CSRF with malformed Origin/Referer headers (invalid URLs)
+# - Year validation boundaries (MIN_YEAR, MAX_YEAR edge cases)
