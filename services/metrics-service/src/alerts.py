@@ -26,8 +26,12 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from storage import RingBuffer
+
+if TYPE_CHECKING:
+    from alert_store import AlertStore
 
 logger = logging.getLogger(__name__)
 
@@ -251,7 +255,7 @@ class AlertEngine:
     def __init__(
         self,
         ring: RingBuffer,
-        store,  # AlertStore (duck-typed to avoid an import cycle in tests)
+        store: AlertStore,  # Duck-typed: any object with load_active/upsert_active/etc.
         notifier=None,
         thresholds: dict[str, Threshold] | None = None,
     ) -> None:

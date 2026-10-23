@@ -17,8 +17,12 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
+from typing import TYPE_CHECKING
 
 from config import DB_PATH
+
+if TYPE_CHECKING:
+    from alerts import ActiveAlert
 
 try:
     from smart_home_common.sqlite_helpers import SqliteHelper
@@ -74,7 +78,7 @@ class AlertStore:
         self._db = SqliteHelper(db_path, init=_ensure_alert_schema)
 
     # ── Active set ────────────────────────────────────────────────────────────
-    def load_active(self) -> list:
+    def load_active(self) -> list[ActiveAlert]:
         """Return all currently-firing alerts (``resolved_at IS NULL``).
 
         Imports :class:`alerts.ActiveAlert` lazily to avoid a circular import
@@ -101,7 +105,7 @@ class AlertStore:
             for r in rows
         ]
 
-    def upsert_active(self, alert) -> None:
+    def upsert_active(self, alert: ActiveAlert) -> None:
         """Insert or update an active alert row (fingerprint is the PK)."""
         with self._db.connect() as conn:
             conn.execute(
@@ -130,7 +134,7 @@ class AlertStore:
             conn.execute("DELETE FROM alerts WHERE fingerprint = ?", (fingerprint,))
 
     # ── History ────────────────────────────────────────────────────────────────
-    def record_history(self, alert, event: str, ts: int) -> None:
+    def record_history(self, alert: ActiveAlert, event: str, ts: int) -> None:
         """Append a ``fired``/``resolved`` event to the audit trail."""
         with self._db.connect() as conn:
             conn.execute(
