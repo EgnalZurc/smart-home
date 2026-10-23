@@ -24,7 +24,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from sqlite3 import DatabaseError, OperationalError
-from zoneinfo import ZoneInfo
 
 from config import (
     CALENDAR_API_KEY,
@@ -33,6 +32,7 @@ from config import (
     DEFAULT_OFFSETS,
     GOOGLE_OAUTH_CLIENT_ID,
     GOOGLE_OAUTH_CLIENT_SECRET,
+    LOCAL_TZ,
     LOG_LEVEL,
     NOTIFY_ENABLED,
     PORT,
@@ -42,7 +42,7 @@ from config import (
     SYNC_HORIZON_DAYS,
     SYNC_INTERVAL_S,
     TOKEN_PATH,
-    TZ,
+    UTC_TZ,
 )
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -218,8 +218,8 @@ def _do_sync() -> None:
             events, new_token = google_client.sync_events(
                 calendar_id=cal.id,
                 sync_token=cal.sync_token,
-                time_min=datetime.fromtimestamp(now, tz=ZoneInfo("UTC")),
-                time_max=datetime.fromtimestamp(horizon, tz=ZoneInfo("UTC")),
+                time_min=datetime.fromtimestamp(now, tz=UTC_TZ),
+                time_max=datetime.fromtimestamp(horizon, tz=UTC_TZ),
             )
             for ev in events:
                 # google_sync returns event_id, summary, start/end as ISO strings
@@ -248,6 +248,7 @@ def _do_sync() -> None:
             logger.warning("Sync token stale for %s, will do full sync", cal.id)
             store.update_sync_token(cal.id, None)
         except (GoogleHttpError, HttpLib2Error, OSError) as exc:
+            # OSError covers network-level failures (DNS, connection refused, etc.)
             logger.error("Error syncing calendar %s: %s", cal.id, exc)
         except (DatabaseError, OperationalError) as exc:
             logger.error("Database error syncing calendar %s: %s", cal.id, exc)
@@ -258,6 +259,8 @@ def _parse_event_time_str(time_str: str | None) -> int:
 
     google_sync returns start/end as ISO strings (e.g. '2026-10-15T10:00:00+02:00'
     or '2026-10-15' for all-day events).
+
+    Returns 0 and logs a warning if parsing fails.
     """
     if not time_str:
         return 0
@@ -268,9 +271,10 @@ def _parse_event_time_str(time_str: str | None) -> int:
             return int(dt.timestamp())
         # Fall back to date-only (all-day events)
         dt = datetime.strptime(time_str, "%Y-%m-%d")
-        dt = dt.replace(tzinfo=ZoneInfo(TZ))
+        dt = dt.replace(tzinfo=LOCAL_TZ)
         return int(dt.timestamp())
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as exc:
+        logger.warning("Failed to parse event time '%s': %s", time_str, exc)
         return 0
 
 
@@ -281,7 +285,7 @@ def _parse_event_time(time_obj: dict) -> int:
         return int(dt.timestamp())
     elif "date" in time_obj:
         dt = datetime.strptime(time_obj["date"], "%Y-%m-%d")
-        dt = dt.replace(tzinfo=ZoneInfo(TZ))
+        dt = dt.replace(tzinfo=LOCAL_TZ)
         return int(dt.timestamp())
     return 0
 
@@ -341,7 +345,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if CALENDAR_SEED:
         try:
             seed_cals = json.loads(CALENDAR_SEED)
+            # Validate structure: must be a list of dicts with 'id' key
+            if not isinstance(seed_cals, list):
+                raise TypeError("CALENDAR_SEED must be a JSON array")
             for cal in seed_cals:
+                if not isinstance(cal, dict):
+                    raise TypeError("Each calendar entry must be a JSON object")
                 store.upsert_calendar(
                     id=cal["id"],
                     label=cal.get("label", cal["id"]),
@@ -351,7 +360,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.info("Seeded %d calendars", len(seed_cals))
         except json.JSONDecodeError as exc:
             logger.warning("Failed to parse CALENDAR_SEED JSON: %s", exc)
-        except (KeyError, TypeError) as exc:
+        except KeyError as exc:
+            logger.warning("Invalid CALENDAR_SEED structure, missing key: %s", exc)
+        except TypeError as exc:
             logger.warning("Invalid CALENDAR_SEED structure: %s", exc)
 
     if (
@@ -531,8 +542,7 @@ async def get_upcoming(
 @limiter.limit("60/minute")
 async def get_today(request: Request) -> dict:
     """Return today's agenda."""
-    tz = ZoneInfo(TZ)
-    now_dt = datetime.now(tz)
+    now_dt = datetime.now(LOCAL_TZ)
     start_of_day = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
     end_of_day = start_of_day.replace(hour=23, minute=59, second=59)
     events = store.get_events_in_window(

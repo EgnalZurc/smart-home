@@ -282,8 +282,13 @@ class CalendarStore:
                 },
             )
 
-    def update_sync_token(self, calendar_id: str, sync_token: str) -> None:
-        """Update the sync_token and last_sync timestamp for a calendar."""
+    def update_sync_token(self, calendar_id: str, sync_token: str | None) -> None:
+        """Update the sync_token and last_sync timestamp for a calendar.
+
+        Args:
+            calendar_id: The calendar ID to update.
+            sync_token: New sync token, or None to clear it (triggers full sync).
+        """
         with self._db.connect() as conn:
             conn.execute(
                 """
