@@ -59,6 +59,11 @@ PRUNE_INTERVAL_S = int(os.environ.get("CALENDAR_PRUNE_INTERVAL_S", str(24 * 3600
 # ── Timezone ─────────────────────────────────────────────────────────────────
 # Local timezone for "today" windows and all-day event boundaries (design §7.1).
 TZ = os.environ.get("CALENDAR_TZ", "Europe/Madrid")
+# Pre-built ZoneInfo for local and UTC to avoid repeated instantiation.
+from zoneinfo import ZoneInfo
+
+LOCAL_TZ = ZoneInfo(TZ)
+UTC_TZ = ZoneInfo("UTC")
 
 # ── Optional seed of calendars on first run (JSON, empty → manage via API) ───
 CALENDAR_SEED = os.environ.get("CALENDAR_SEED", "")
