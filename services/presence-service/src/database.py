@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import sqlite3
 import time
 from pathlib import Path
@@ -43,8 +44,9 @@ def hash_mac(mac: str) -> str:
     Returns:
         16-character hex string (first 64 bits of SHA-256 hash).
 
-    The hash is deterministic so the same MAC always produces the same
-    pseudonym, enabling device correlation without storing raw PII.
+    Note:
+        The hash is deterministic so the same MAC always produces the same
+        pseudonym, enabling device correlation without storing raw PII.
     """
     # Normalize: lowercase, remove separators
     normalized: str = mac.lower().replace(":", "").replace("-", "").replace(".", "")
@@ -52,9 +54,7 @@ def hash_mac(mac: str) -> str:
 
 
 # ── Input Validation ─────────────────────────────────────────────────────────
-import re
-
-_PERSON_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+_PERSON_ID_PATTERN: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 
 def validate_person_id(person_id: str) -> str:
