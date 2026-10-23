@@ -39,6 +39,44 @@ class TestInterestCalculation:
         assert monthly == 0
         assert yearly == 0
 
+    def test_calculate_interest_negative_balance(self):
+        """Negative balance produces negative interest (debt scenario)."""
+        from monitors.savings_monitor import calculate_interest
+
+        monthly, yearly = calculate_interest(balance=-5000, apy=5.0)
+
+        assert yearly == -250  # -5000 * 0.05
+        assert abs(monthly - (-250 / 12)) < 0.01
+
+    def test_calculate_interest_high_precision(self):
+        """High precision values are handled correctly."""
+        from monitors.savings_monitor import calculate_interest
+
+        monthly, yearly = calculate_interest(balance=12345.67, apy=3.75)
+
+        # 12345.67 * 0.0375 = 462.962625
+        assert abs(yearly - 462.962625) < 0.0001
+        assert abs(monthly - (yearly / 12)) < 0.0001
+
+    def test_calculate_interest_very_small_apy(self):
+        """Very small APY (fractional percent) works correctly."""
+        from monitors.savings_monitor import calculate_interest
+
+        monthly, yearly = calculate_interest(balance=100000, apy=0.01)
+
+        # 100000 * 0.0001 = 10
+        assert abs(yearly - 10) < 0.01
+        assert abs(monthly - (10 / 12)) < 0.01
+
+    def test_calculate_interest_very_high_apy(self):
+        """Very high APY (promotional rates) works correctly."""
+        from monitors.savings_monitor import calculate_interest
+
+        monthly, yearly = calculate_interest(balance=10000, apy=10.0)
+
+        assert abs(yearly - 1000) < 0.01  # 10000 * 0.10
+        assert abs(monthly - (1000 / 12)) < 0.01
+
 
 class TestDaysUntilPayment:
     """Tests for payment date calculation."""

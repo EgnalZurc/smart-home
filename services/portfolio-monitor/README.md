@@ -13,6 +13,20 @@ Portfolio monitoring service with ETF, crypto staking, and savings tracking.
 - **Email Notifications**: Alert emails for significant changes
 - **Scheduled Alerts**: Recurring reminders (contributions, distributions)
 
+## Data Refresh Frequency
+
+| Data Source | Refresh Schedule | Cache TTL |
+|-------------|------------------|-----------|
+| ETF prices (Yahoo Finance) | Daily at 18:00 (after EU markets close) | 5 min |
+| ETF OHLC sparklines | On demand | 15 min |
+| Dividend history | On demand | 1 hour |
+| Crypto prices (CoinGecko) | Daily at 09:00 | 5 min |
+| Fear & Greed Index | Daily at 09:00 | 15 min |
+| Savings/DeFi | Instant (local config) | N/A |
+
+Manual refresh: `POST /api/portfolio/refresh` (rate-limited to 1 request per 60s).
+Config reload: `POST /api/portfolio/reload-config` (no rate limit).
+
 ## Configuration
 
 Copy `settings.example.toml` to `data/settings.toml` and configure your positions.

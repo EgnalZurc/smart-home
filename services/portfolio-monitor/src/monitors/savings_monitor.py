@@ -16,16 +16,38 @@ from . import BaseMonitor, register_monitor
 
 logger: logging.Logger = logging.getLogger(__name__)
 
+# Divisor to convert percentage (e.g., 5.0 for 5%) to decimal (0.05)
+PERCENT_DIVISOR: float = 100.0
+
 
 def calculate_interest(balance: float, apy: float) -> tuple[float, float]:
-    """Calculate monthly and yearly interest."""
-    yearly = balance * (apy / 100)
+    """Calculate monthly and yearly interest from account balance and APY.
+
+    Args:
+        balance: Account balance in EUR.
+        apy: Annual Percentage Yield as a percentage (e.g., 5.0 for 5%).
+
+    Returns:
+        A tuple of (monthly_interest, yearly_interest) in EUR.
+        Uses simple interest calculation (non-compounding).
+    """
+    yearly = balance * (apy / PERCENT_DIVISOR)
     monthly = yearly / 12
     return monthly, yearly
 
 
 def days_until_next_payment(payment_day: int = 25) -> int:
-    """Return days until next interest payment (default: day 25 of month)."""
+    """Calculate the number of days until the next interest payment.
+
+    Args:
+        payment_day: Day of month when interest is paid (1-31). If the day
+            exceeds the number of days in a given month, the last day of
+            that month is used.
+
+    Returns:
+        Number of days until the next payment date. Returns 0 if today is
+        the payment day.
+    """
     today = datetime.now(timezone.utc).date()
 
     # This month's payment day
