@@ -3,6 +3,8 @@
 Proxies requests to the baby-gifts-service for gift registry.
 """
 
+from typing import Any
+
 from fastapi import APIRouter, Request
 
 from api.auth_helpers import require_app_write
@@ -16,7 +18,7 @@ SERVICE_URL = "http://baby-gifts-service:8004"
 _proxy = ServiceProxy(SERVICE_URL)
 
 
-def _forward_headers(request: Request, *names: str) -> dict | None:
+def _forward_headers(request: Request, *names: str) -> dict[str, str] | None:
     """Collect the subset of inbound headers that must reach the service.
 
     Returns ``None`` when none of the requested headers are present so the
@@ -30,14 +32,14 @@ def _forward_headers(request: Request, *names: str) -> dict | None:
 
 
 @router.get("")
-async def get_all_baby_gifts(request: Request):
+async def get_all_baby_gifts(request: Request) -> dict[str, Any]:
     """Get all gifts with full reservation details (admin only)."""
     require_app_write(request, "babygifts")
     return await _proxy.get("/api/baby-gifts")
 
 
 @router.post("")
-async def create_baby_gift(request: Request):
+async def create_baby_gift(request: Request) -> dict[str, Any]:
     """Add a new gift (admin only)."""
     require_app_write(request, "babygifts")
     body = await request.json()
@@ -45,7 +47,7 @@ async def create_baby_gift(request: Request):
 
 
 @router.put("/{gift_id}")
-async def update_baby_gift(gift_id: str, request: Request):
+async def update_baby_gift(gift_id: str, request: Request) -> dict[str, Any]:
     """Update a gift (admin only)."""
     require_app_write(request, "babygifts")
     body = await request.json()
@@ -53,21 +55,21 @@ async def update_baby_gift(gift_id: str, request: Request):
 
 
 @router.delete("/{gift_id}")
-async def delete_baby_gift(gift_id: str, request: Request):
+async def delete_baby_gift(gift_id: str, request: Request) -> dict[str, Any]:
     """Delete a gift (admin only)."""
     require_app_write(request, "babygifts")
     return await _proxy.delete(f"/api/baby-gifts/{gift_id}")
 
 
 @router.post("/{gift_id}/unreserve")
-async def admin_unreserve_baby_gift(gift_id: str, request: Request):
+async def admin_unreserve_baby_gift(gift_id: str, request: Request) -> dict[str, Any]:
     """Admin can unreserve any gift."""
     require_app_write(request, "babygifts")
     return await _proxy.post(f"/api/baby-gifts/{gift_id}/unreserve")
 
 
 @router.put("/categories")
-async def update_baby_gifts_categories(request: Request):
+async def update_baby_gifts_categories(request: Request) -> dict[str, Any]:
     """Update gift categories (admin only)."""
     require_app_write(request, "babygifts")
     body = await request.json()
@@ -78,14 +80,14 @@ async def update_baby_gifts_categories(request: Request):
 
 
 @router.get("/invitations")
-async def get_baby_gifts_invitations(request: Request):
+async def get_baby_gifts_invitations(request: Request) -> dict[str, Any]:
     """List all invitations (admin only)."""
     require_app_write(request, "babygifts")
     return await _proxy.get("/api/baby-gifts/invitations")
 
 
 @router.post("/invitations")
-async def create_baby_gifts_invitation(request: Request):
+async def create_baby_gifts_invitation(request: Request) -> dict[str, Any]:
     """Create a new invitation (admin only)."""
     require_app_write(request, "babygifts")
     body = await request.json()
@@ -93,14 +95,14 @@ async def create_baby_gifts_invitation(request: Request):
 
 
 @router.delete("/invitations/{token}")
-async def delete_baby_gifts_invitation(token: str, request: Request):
+async def delete_baby_gifts_invitation(token: str, request: Request) -> dict[str, Any]:
     """Delete an invitation (admin only)."""
     require_app_write(request, "babygifts")
     return await _proxy.delete(f"/api/baby-gifts/invitations/{token}")
 
 
 @router.post("/invitations/{token}/revoke")
-async def revoke_baby_gifts_invitation(token: str, request: Request):
+async def revoke_baby_gifts_invitation(token: str, request: Request) -> dict[str, Any]:
     """Revoke an invitation without deleting it (admin only)."""
     require_app_write(request, "babygifts")
     return await _proxy.post(f"/api/baby-gifts/invitations/{token}/revoke")
@@ -110,21 +112,21 @@ async def revoke_baby_gifts_invitation(token: str, request: Request):
 
 
 @router.get("/user")
-async def get_baby_gifts_for_user(request: Request):
+async def get_baby_gifts_for_user(request: Request) -> dict[str, Any]:
     """Get gifts for an authenticated user."""
     headers = _forward_headers(request, "X-Auth-User")
     return await _proxy.get("/api/baby-gifts/user", headers=headers)
 
 
 @router.post("/user/reserve/{gift_id}")
-async def user_reserve_baby_gift(gift_id: str, request: Request):
+async def user_reserve_baby_gift(gift_id: str, request: Request) -> dict[str, Any]:
     """Reserve a gift as an authenticated user."""
     headers = _forward_headers(request, "X-Auth-User")
     return await _proxy.post(f"/api/baby-gifts/user/reserve/{gift_id}", headers=headers)
 
 
 @router.post("/user/unreserve/{gift_id}")
-async def user_unreserve_baby_gift(gift_id: str, request: Request):
+async def user_unreserve_baby_gift(gift_id: str, request: Request) -> dict[str, Any]:
     """Cancel own reservation as an authenticated user."""
     headers = _forward_headers(request, "X-Auth-User")
     return await _proxy.post(
@@ -136,14 +138,16 @@ async def user_unreserve_baby_gift(gift_id: str, request: Request):
 
 
 @router.get("/guest/{token}")
-async def get_baby_gifts_for_guest(token: str, request: Request):
+async def get_baby_gifts_for_guest(token: str, request: Request) -> dict[str, Any]:
     """Get gifts for a guest."""
     headers = _forward_headers(request, "X-Forwarded-For")
     return await _proxy.get(f"/api/baby-gifts/guest/{token}", headers=headers)
 
 
 @router.post("/guest/{token}/reserve/{gift_id}")
-async def guest_reserve_baby_gift(token: str, gift_id: str, request: Request):
+async def guest_reserve_baby_gift(
+    token: str, gift_id: str, request: Request
+) -> dict[str, Any]:
     """Reserve a gift as a guest."""
     headers = _forward_headers(request, "X-Forwarded-For")
     return await _proxy.post(
@@ -152,7 +156,9 @@ async def guest_reserve_baby_gift(token: str, gift_id: str, request: Request):
 
 
 @router.post("/guest/{token}/unreserve/{gift_id}")
-async def guest_unreserve_baby_gift(token: str, gift_id: str, request: Request):
+async def guest_unreserve_baby_gift(
+    token: str, gift_id: str, request: Request
+) -> dict[str, Any]:
     """Cancel own reservation as a guest."""
     headers = _forward_headers(request, "X-Forwarded-For")
     return await _proxy.post(

@@ -3,6 +3,8 @@
 Proxies requests to the portfolio-monitor service.
 """
 
+from typing import Any
+
 from fastapi import APIRouter, Request
 
 from api.auth_helpers import require_app_write
@@ -15,58 +17,60 @@ _proxy = ServiceProxy("http://portfolio-monitor:8010")
 
 
 @router.get("/summary")
-async def get_portfolio_summary():
+async def get_portfolio_summary() -> dict[str, Any]:
     """Get full portfolio summary (ETF + crypto)."""
     return await _proxy.get("/api/portfolio/summary")
 
 
 @router.get("/etf")
-async def get_portfolio_etf():
+async def get_portfolio_etf() -> dict[str, Any]:
     """Get ETF portfolio summary."""
     return await _proxy.get("/api/portfolio/etf")
 
 
 @router.get("/crypto")
-async def get_portfolio_crypto():
+async def get_portfolio_crypto() -> dict[str, Any]:
     """Get crypto staking summary."""
     return await _proxy.get("/api/portfolio/crypto")
 
 
 @router.post("/refresh")
-async def refresh_portfolio(request: Request):
+async def refresh_portfolio(request: Request) -> dict[str, Any]:
     """Trigger a refresh of all monitors."""
     require_app_write(request, "portfolio")
     return await _proxy.post("/api/portfolio/refresh")
 
 
 @router.post("/refresh/{monitor_name}")
-async def refresh_portfolio_monitor(monitor_name: str, request: Request):
+async def refresh_portfolio_monitor(
+    monitor_name: str, request: Request
+) -> dict[str, Any]:
     """Trigger a refresh of a specific monitor (etf or crypto)."""
     require_app_write(request, "portfolio")
     return await _proxy.post(f"/api/portfolio/refresh/{monitor_name}")
 
 
 @router.get("/schedule")
-async def get_portfolio_schedule():
+async def get_portfolio_schedule() -> dict[str, Any]:
     """Get the monitoring schedule."""
     return await _proxy.get("/api/portfolio/schedule")
 
 
 @router.post("/reload-config")
-async def reload_portfolio_config(request: Request):
+async def reload_portfolio_config(request: Request) -> dict[str, Any]:
     """Reload portfolio configuration from disk."""
     require_app_write(request, "portfolio")
     return await _proxy.post("/api/portfolio/reload-config")
 
 
 @router.get("/notifications/status")
-async def get_portfolio_notification_status():
+async def get_portfolio_notification_status() -> dict[str, Any]:
     """Get the notification system status."""
     return await _proxy.get("/api/portfolio/notifications/status")
 
 
 @router.post("/notifications/test")
-async def test_portfolio_notification(request: Request):
+async def test_portfolio_notification(request: Request) -> dict[str, Any]:
     """Send a test notification to verify Telegram setup."""
     require_app_write(request, "portfolio")
     return await _proxy.post("/api/portfolio/notifications/test")

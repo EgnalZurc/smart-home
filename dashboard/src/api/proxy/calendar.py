@@ -4,6 +4,8 @@ Proxies requests to the calendar-service for Google Calendar sync
 and reminder configuration. SUPER-only access.
 """
 
+from typing import Any
+
 from fastapi import APIRouter, Request
 
 from api.auth_helpers import require_super
@@ -16,14 +18,14 @@ _proxy = ServiceProxy("http://calendar-service:8014")
 
 
 @router.get("/config")
-async def get_calendar_config(request: Request):
+async def get_calendar_config(request: Request) -> dict[str, Any]:
     """Returns calendar configuration (sync interval, offsets, calendars, rules)."""
     require_super(request)
     return await _proxy.get("/api/calendar/config")
 
 
 @router.post("/config")
-async def post_calendar_config(request: Request):
+async def post_calendar_config(request: Request) -> dict[str, Any]:
     """Save calendar configuration."""
     require_super(request)
     body = await request.json()
@@ -31,14 +33,14 @@ async def post_calendar_config(request: Request):
 
 
 @router.post("/sync")
-async def trigger_calendar_sync(request: Request):
+async def trigger_calendar_sync(request: Request) -> dict[str, Any]:
     """Trigger an immediate calendar sync."""
     require_super(request)
     return await _proxy.post("/api/calendar/sync")
 
 
 @router.get("/today")
-async def get_today_events(request: Request):
+async def get_today_events(request: Request) -> dict[str, Any]:
     """Get today's events."""
     require_super(request)
     return await _proxy.get("/api/calendar/today")

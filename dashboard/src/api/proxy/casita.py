@@ -3,6 +3,8 @@
 Proxies requests to the casita-suenos property search service.
 """
 
+from typing import Any
+
 from fastapi import APIRouter, Request
 
 from api.auth_helpers import require_app_write
@@ -15,7 +17,7 @@ _proxy = ServiceProxy("http://casita-suenos:8001")
 
 
 @router.get("/status")
-async def get_casita_status():
+async def get_casita_status() -> dict[str, Any]:
     """Get full status of Casita Sueños property monitor."""
     return await _proxy.get(
         "/status",
@@ -31,7 +33,7 @@ async def get_casita_status():
 
 
 @router.get("/radar")
-async def get_casita_radar(request: Request):
+async def get_casita_radar(request: Request) -> dict[str, Any]:
     """Get properties above alert threshold (radar view)."""
     # Forward query string for pagination
     params = dict(request.query_params)
@@ -51,7 +53,7 @@ async def get_casita_radar(request: Request):
 
 
 @router.get("/dismissed")
-async def get_casita_dismissed():
+async def get_casita_dismissed() -> dict[str, Any]:
     """Get list of dismissed properties."""
     return await _proxy.get(
         "/dismissed",
@@ -61,7 +63,7 @@ async def get_casita_dismissed():
 
 
 @router.get("/schedule")
-async def get_casita_schedule():
+async def get_casita_schedule() -> dict[str, Any]:
     """Get scraping schedule configuration."""
     return await _proxy.get(
         "/schedule",
@@ -71,7 +73,7 @@ async def get_casita_schedule():
 
 
 @router.post("/schedule")
-async def save_casita_schedule(request: Request):
+async def save_casita_schedule(request: Request) -> dict[str, Any]:
     """Update scraping schedule configuration."""
     require_app_write(request, "casita")
     body = await request.json()
@@ -79,7 +81,7 @@ async def save_casita_schedule(request: Request):
 
 
 @router.post("/dismiss")
-async def dismiss_casita_property(request: Request):
+async def dismiss_casita_property(request: Request) -> dict[str, Any]:
     """Dismiss a property from radar."""
     require_app_write(request, "casita")
     body = await request.json()
@@ -87,7 +89,7 @@ async def dismiss_casita_property(request: Request):
 
 
 @router.post("/undismiss")
-async def undismiss_casita_property(request: Request):
+async def undismiss_casita_property(request: Request) -> dict[str, Any]:
     """Restore a dismissed property to radar."""
     require_app_write(request, "casita")
     body = await request.json()
@@ -95,7 +97,7 @@ async def undismiss_casita_property(request: Request):
 
 
 @router.post("/mark-viewed")
-async def mark_casita_viewed(request: Request):
+async def mark_casita_viewed(request: Request) -> dict[str, Any]:
     """Mark a property as viewed."""
     require_app_write(request, "casita")
     body = await request.json()
@@ -103,7 +105,7 @@ async def mark_casita_viewed(request: Request):
 
 
 @router.post("/save-comment")
-async def save_casita_comment(request: Request):
+async def save_casita_comment(request: Request) -> dict[str, Any]:
     """Save a comment on a property."""
     require_app_write(request, "casita")
     body = await request.json()
@@ -112,7 +114,7 @@ async def save_casita_comment(request: Request):
 
 
 @router.get("/summary")
-async def get_casita_summary():
+async def get_casita_summary() -> dict[str, Any]:
     """Get AI-generated summary of interesting properties."""
     return await _proxy.get(
         "/summary",
@@ -126,14 +128,14 @@ async def get_casita_summary():
 
 
 @router.post("/run-scraping")
-async def run_casita_scraping(request: Request):
+async def run_casita_scraping(request: Request) -> dict[str, Any]:
     """Trigger manual property scraping."""
     require_app_write(request, "casita")
     return await _proxy.post("/run-scraping")
 
 
 @router.post("/run-summary")
-async def run_casita_summary(request: Request):
+async def run_casita_summary(request: Request) -> dict[str, Any]:
     """Trigger AI summary generation."""
     require_app_write(request, "casita")
     return await _proxy.post("/run-summary")

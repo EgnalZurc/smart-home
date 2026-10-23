@@ -115,6 +115,19 @@ async def trust_reject(token: str, sig: str):
 
 
 def _result_page(title: str, message: str, success: bool) -> str:
+    """Generate an HTML confirmation page for trust request actions.
+
+    Renders a simple styled page shown to the admin after clicking the
+    approve/reject link in the email notification.
+
+    Args:
+        title: Page title and heading (e.g., "Solicitud aprobada").
+        message: HTML-safe message body to display.
+        success: True for approval (green checkmark), False for rejection (red X).
+
+    Returns:
+        Complete HTML document as a string.
+    """
     icon = "✅" if success else "❌"
     color = "#4f46e5" if success else "#dc2626"
     return f"""<!DOCTYPE html>

@@ -7,6 +7,7 @@ import asyncio
 import re
 import statistics
 from datetime import date
+from typing import Any
 
 import httpx
 from fastapi import APIRouter
@@ -18,7 +19,7 @@ FIRMS_MAP_KEY: str = ""
 
 
 @router.get("/flood")
-async def proxy_flood(lat: float, lon: float):
+async def proxy_flood(lat: float, lon: float) -> dict[str, Any]:
     """Flood risk analysis for a coordinate.
 
     Source 1: SNCZI MITECO (official Spain) — fluvial hazard T=10/100/500 years.
@@ -167,7 +168,7 @@ async def proxy_flood(lat: float, lon: float):
 
 
 @router.get("/firms")
-async def proxy_firms(lat: float, lon: float):
+async def proxy_firms(lat: float, lon: float) -> dict[str, Any]:
     """NASA FIRMS fire hotspot proxy — VIIRS SNPP last 3 years.
 
     Queries high-risk months (June-October) in 5-day blocks.

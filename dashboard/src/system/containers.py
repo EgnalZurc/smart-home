@@ -16,6 +16,9 @@ from fastapi import APIRouter, HTTPException, Request
 router = APIRouter(prefix="/api/system", tags=["Containers"])
 
 # Mapping: app key → list of container names to stop/start together.
+# Keys are the logical service names used by the dashboard UI.
+# Values are the Docker container names that compose each service.
+# Multi-container services (like 'photos') are started/stopped in order.
 CONTROLLABLE_CONTAINERS: dict[str, list[str]] = {
     "ac": ["ac-service"],
     "vacaciones": ["vacaciones-service"],
