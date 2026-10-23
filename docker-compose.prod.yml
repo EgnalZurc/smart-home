@@ -308,6 +308,7 @@ services:
     image: egnal/smart-home-vaultwarden:latest
     container_name: vaultwarden
     restart: on-failure:5
+    user: "1000:1000"
     # Increased from 96m based on 93% usage (89MB/96MB) - Oct 2026
     mem_limit: 192m
     memswap_limit: 192m
