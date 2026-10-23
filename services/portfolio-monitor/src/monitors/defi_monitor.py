@@ -25,20 +25,23 @@ from . import BaseMonitor, register_monitor
 
 logger: logging.Logger = logging.getLogger(__name__)
 
+# Divisor to convert percentage (e.g., 5.0 for 5%) to decimal (0.05)
+PERCENT_DIVISOR: float = 100.0
+
 
 def calculate_yield(amount: float, apy_pct: float) -> tuple[float, float, float]:
     """Project yield from a deposited amount and an annual percentage yield.
 
     Args:
-        amount: Deposited value in the portfolio base currency.
-        apy_pct: Advertised annual percentage yield (e.g. ``5.0`` for 5%).
+        amount: Deposited value in the portfolio base currency (EUR).
+        apy_pct: Advertised annual percentage yield (e.g., 5.0 for 5%).
 
     Returns:
-        A ``(daily, monthly, yearly)`` tuple of projected yield amounts. Uses a
-        simple (non-compounding) projection: the APY already expresses the
+        A (daily, monthly, yearly) tuple of projected yield amounts in EUR.
+        Uses simple (non-compounding) projection: the APY expresses the
         annual return, so monthly = yearly / 12 and daily = yearly / 365.
     """
-    yearly = amount * (apy_pct / 100)
+    yearly = amount * (apy_pct / PERCENT_DIVISOR)
     monthly = yearly / 12
     daily = yearly / 365
     return daily, monthly, yearly

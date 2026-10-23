@@ -26,6 +26,9 @@ from typing import Any
 # Default drift threshold (percentage points) if config omits it.
 DEFAULT_THRESHOLD_PCT: float = 5.0
 
+# Multiplier to convert decimal ratio (e.g., 0.40) to percentage (40.0)
+PERCENT_MULTIPLIER: float = 100.0
+
 
 def _resolve_targets(
     etf_funds: list[dict[str, Any]],
@@ -123,7 +126,9 @@ def compute_rebalance(
         # With no portfolio value we cannot compute a meaningful weight; report
         # current_allocation as 0 and defer flagging (deviation == -target would
         # otherwise fire spurious alerts on an empty/unpriced portfolio).
-        current_allocation = (value / total_value * 100) if total_value > 0 else 0.0
+        current_allocation = (
+            (value / total_value * PERCENT_MULTIPLIER) if total_value > 0 else 0.0
+        )
         deviation = current_allocation - target
         needs = total_value > 0 and abs(deviation) > threshold_pct
 
@@ -143,7 +148,7 @@ def compute_rebalance(
             # Target value = target weight applied to the CURRENT total. The
             # delta tells us how much to buy (positive) or sell (negative) to
             # restore the target weight of today's portfolio.
-            target_value = target / 100 * total_value
+            target_value = target / PERCENT_MULTIPLIER * total_value
             delta = target_value - value
             suggested_trades.append(
                 {
