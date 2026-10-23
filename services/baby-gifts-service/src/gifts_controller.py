@@ -54,7 +54,11 @@ DB_FILE: Path = config.DB_FILE
 
 # ── Database setup ────────────────────────────────────────────────────────────
 def _init_db() -> None:
-    """Initialize SQLite database for invitations."""
+    """Initialize SQLite database for invitations.
+
+    Creates the invitations and rate_limits tables if they don't exist,
+    and handles schema migrations (e.g., adding expires_at column).
+    """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE))
     conn.execute("""
@@ -95,7 +99,11 @@ def _init_db() -> None:
 
 
 def _get_db() -> sqlite3.Connection:
-    """Get a database connection."""
+    """Get a database connection.
+
+    Ensures the database is initialized before returning a connection.
+    Caller is responsible for closing the connection.
+    """
     _init_db()
     conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE))
     conn.row_factory = sqlite3.Row
@@ -164,6 +172,10 @@ def _load_gifts() -> dict[str, Any]:
     try:
         return json.loads(GIFTS_FILE.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as e:
+        # OSError covers file permission issues, disk errors, and other I/O
+        # failures that may occur in containerized/volume-mounted environments.
+        # Returning empty data is safer than crashing the service; admins can
+        # restore from backup. The error is logged for investigation.
         logger.error(f"Error loading gifts: {e}")
         return {"gifts": []}
 
@@ -651,14 +663,23 @@ def check_rate_limit(ip: str) -> bool:
 def check_invitation_rate_limit(ip: str) -> bool:
     """Check rate limit for invitation creation (30 req/min per IP).
 
-    Uses a separate rate limit table/bucket to avoid interference with guest
-    endpoint rate limits.
+    Uses a separate rate limit table (invitation_rate_limits) to avoid
+    interference with guest endpoint rate limits. This separation is intentional:
+    - Guest endpoints have stricter limits (abuse prevention for public APIs)
+    - Invitation creation is admin-only with different thresholds
+    - Keeping them separate allows independent tuning without side effects
+
+    The table is created lazily here rather than in _init_db() because:
+    - It was added later and this ensures backwards compatibility
+    - Avoids migration complexity for a simple rate limit table
+    - The CREATE IF NOT EXISTS is idempotent and fast
 
     Returns True if allowed, False if blocked.
     """
     conn: sqlite3.Connection = _get_db()
     try:
-        # Ensure invitation_rate_limits table exists
+        # Ensure invitation_rate_limits table exists (lazy creation for
+        # backwards compatibility - see docstring for rationale)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS invitation_rate_limits (
                 ip TEXT PRIMARY KEY,
