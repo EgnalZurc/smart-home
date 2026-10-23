@@ -120,10 +120,11 @@ _get_body = get_body
 def _classify_email(subject: str) -> EmailType:
     """Clasifica el tipo de email de Idealista por su subject."""
     sl = subject.lower()
+    # Check for summary emails: daily digest or saved search notifications
+    # Note: "búsqueda" check handles both "busqueda" (ASCII) and "búsqueda" (accented)
     if (
         "resumen diario" in sl
-        or "novedades" in sl
-        and ("busqueda" in sl or "guardada" in sl or "b" in sl)
+        or ("novedades" in sl and ("busqueda" in sl or "guardada" in sl))
         or "anuncios recomendados" in sl
     ):
         return EmailType.RESUMEN_DIARIO
@@ -139,7 +140,8 @@ def _classify_email(subject: str) -> EmailType:
         t in sl for t in ["chalet", "casa", "piso", "apartamento", "finca", "vivienda"]
     ):
         return EmailType.NUEVO_ANUNCIO
-    if "busqueda" in sl or "b" in sl:
+    # Fallback for search-related emails
+    if "busqueda" in sl or "búsqueda" in sl:
         return EmailType.NUEVO_ANUNCIO
     return EmailType.OTRO
 
@@ -190,6 +192,8 @@ def _extract_price_from_body(
     if not price:
         price = _parse_price(body)
         if price:
+            # TODO: Consider adding email_id and email_type to debug context
+            # for better traceability when debugging price extraction issues
             logger.debug(
                 "[gmail] Precio no en contexto de %s, hallado en body completo: %s",
                 pid,
@@ -219,7 +223,6 @@ def _extract_alerts_from_email(
         body = _get_body(msg)
         email_type = _classify_email(subject)
 
-        subject.lower()
         is_summary = email_type == EmailType.RESUMEN_DIARIO
         is_price_drop = email_type in (
             EmailType.BAJADA_PRECIO,

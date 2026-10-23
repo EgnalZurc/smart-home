@@ -393,7 +393,7 @@ def parse_size(raw: str | None) -> float | None:
 # ---------------------------------------------------------------------------
 
 
-def infer_habitability(description: str, title: str):
+def infer_habitability(description: str, title: str) -> Habitability:
     """
     Infer property habitability level from description text (R4 rubric).
 
@@ -431,7 +431,7 @@ def infer_habitability(description: str, title: str):
     return Habitability.DESCONOCIDO
 
 
-def infer_internet(description: str, extras: list[str]):
+def infer_internet(description: str, extras: list[str]) -> Internet:
     """
     Infer internet connectivity level from listing text (R11 rubric).
 
@@ -463,7 +463,7 @@ def infer_internet(description: str, extras: list[str]):
     return Internet.NINGUNO  # sin info → valor neutro (puntúa 4)
 
 
-def infer_garage_type(description: str, extras: list[str]):
+def infer_garage_type(description: str, extras: list[str]) -> GarageType:
     """
     Infer garage type from listing text (R3 rubric).
 
@@ -642,7 +642,7 @@ def infer_ac(description: str, extras: list[str]) -> bool:
     return has_ac
 
 
-def infer_piscina(description: str, extras: list[str]) -> str:
+def infer_piscina(description: str, extras: list[str]) -> Piscina:
     """
     Infer swimming pool type from listing text (R5 rubric).
 

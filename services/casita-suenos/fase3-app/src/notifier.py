@@ -55,6 +55,14 @@ _PISCINA_EMOJI: Final[dict[str, str]] = {
 
 
 def _score_emoji(score: float) -> str:
+    """Return emoji indicator for score tier.
+
+    Args:
+        score: Property score value.
+
+    Returns:
+        Emoji string for the score tier, or empty string if below threshold.
+    """
     for r, emoji in _SCORE_EMOJI.items():
         if int(score) in r:
             return emoji
@@ -62,11 +70,26 @@ def _score_emoji(score: float) -> str:
 
 
 def _format_price(price: int) -> str:
+    """Format price with Spanish thousands separator.
+
+    Args:
+        price: Price in euros.
+
+    Returns:
+        Formatted price string with dot separator and euro symbol.
+    """
     return f"{price:,}€".replace(",", ".")
 
 
 def _escape_md(text: str) -> str:
-    """Escapa caracteres especiales de Markdown para evitar errores 400 en Telegram."""
+    """Escape Markdown special characters to prevent Telegram 400 errors.
+
+    Args:
+        text: Raw text that may contain Markdown characters.
+
+    Returns:
+        Text with Markdown characters escaped.
+    """
     # Escapa los caracteres que abren entidades pero Telegram no puede cerrar
     for ch in ["*", "_", "`", "["]:
         text = text.replace(ch, "\\" + ch)
