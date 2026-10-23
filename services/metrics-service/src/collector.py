@@ -20,11 +20,14 @@ import asyncio
 import logging
 import os
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from alert_store import AlertStore
 from alerts import AlertEngine
+
+if TYPE_CHECKING:
+    from libs.notifications import TelegramNotifier
 from config import (
     ALERT_HISTORY_RETENTION_DAYS,
     ALERTS_ENABLED,
@@ -48,7 +51,7 @@ from storage import RingBuffer, Sample
 logger = logging.getLogger(__name__)
 
 
-def _make_notifier() -> Any:
+def _make_notifier() -> TelegramNotifier:
     """Build a TelegramNotifier from the environment, tolerating import layout.
 
     In the container ``/app/libs`` is on ``sys.path`` (set by ``main.py`` /
@@ -320,6 +323,11 @@ def _cpu_percent_from_stats(stats: dict[str, Any]) -> float:
     Returns:
         CPU usage as a percentage (0-100+, may exceed 100 on multi-core).
         Returns 0.0 if the payload is malformed or deltas are zero.
+
+    Raises:
+        KeyError: If required keys are missing (caught internally, returns 0.0).
+        TypeError: If values are not numeric (caught internally, returns 0.0).
+        ZeroDivisionError: If sys_delta is zero (caught internally, returns 0.0).
     """
     try:
         cpu = stats["cpu_stats"]
@@ -552,7 +560,7 @@ class Collector:
             ring: RingBuffer instance. Created with defaults if not provided.
             store: SqliteStore instance. Created with defaults if not provided.
             alert_engine: AlertEngine instance. Created with store's DB path
-                if not provided.
+                if not provided. Duck-typed to avoid import cycle in tests.
         """
         self.ring = ring if ring is not None else RingBuffer()
         self.store = store if store is not None else SqliteStore()
