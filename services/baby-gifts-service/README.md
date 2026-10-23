@@ -9,6 +9,25 @@ This service manages a baby gift registry where:
 - Authenticated family users can view and reserve gifts
 - External guests can access via invitation links to view and reserve
 
+## Authentication Model
+
+Authentication is handled by **nginx auth_request** at the reverse proxy layer,
+not by this service directly. The flow:
+
+1. nginx intercepts requests to protected endpoints
+2. nginx makes a subrequest to the dashboard's `/api/verify` endpoint
+3. If authenticated, nginx sets `X-Auth-User` header and proxies to this service
+4. This service reads `X-Auth-User` as defense-in-depth (verifies header is present)
+
+**Important**: This service does NOT verify SUPER profile membership directly.
+Admin-only endpoints (gift CRUD, invitation management) rely on nginx routing
+rules that only proxy to admin paths if the user has the SUPER profile. The
+`require_auth_user` dependency in code is a secondary check ensuring the header
+exists, not the primary authorization gate.
+
+FAMILIA users (egnal, virchu) have additional privileges (see hidden gifts,
+toggle visibility) checked in code via `is_familia_user()`.
+
 ## Port
 
 - **Internal**: 8004
@@ -18,7 +37,7 @@ This service manages a baby gift registry where:
 
 All endpoints are proxied through the dashboard at `/api/baby-gifts/*`.
 
-### Admin Endpoints (requires SUPER profile)
+### Admin Endpoints (protected by nginx, requires SUPER profile)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/baby-gifts` | Get all gifts and categories |

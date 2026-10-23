@@ -118,6 +118,16 @@ app: FastAPI = FastAPI(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Input validation constants
+# ═══════════════════════════════════════════════════════════════════════════════
+MAX_NAME_LENGTH: int = 200
+MAX_DESCRIPTION_LENGTH: int = 1000
+MAX_PRICE_RANGE_LENGTH: int = 100
+MAX_URL_LENGTH: int = 2000
+MAX_INVITATION_NAME_LENGTH: int = 100
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Pydantic models with input sanitization
 # ═══════════════════════════════════════════════════════════════════════════════
 class GiftCreate(BaseModel):
@@ -134,11 +144,13 @@ class GiftCreate(BaseModel):
     def sanitize_text_fields(cls, v: str, info: ValidationInfo) -> str:
         """Sanitize text fields: strip, truncate, escape HTML."""
         max_lengths: dict[str, int] = {
-            "name": 200,
-            "description": 1000,
-            "price_range": 100,
+            "name": MAX_NAME_LENGTH,
+            "description": MAX_DESCRIPTION_LENGTH,
+            "price_range": MAX_PRICE_RANGE_LENGTH,
         }
-        return sanitize_string(v, max_lengths.get(info.field_name or "", 200))
+        return sanitize_string(
+            v, max_lengths.get(info.field_name or "", MAX_NAME_LENGTH)
+        )
 
     @field_validator("url", mode="after")
     @classmethod
@@ -150,7 +162,7 @@ class GiftCreate(BaseModel):
         # Block non-HTTP schemes (javascript:, data:, vbscript:, etc.)
         if cleaned and not cleaned.lower().startswith(("http://", "https://")):
             return ""
-        return cleaned[:2000] if len(cleaned) > 2000 else cleaned
+        return cleaned[:MAX_URL_LENGTH] if len(cleaned) > MAX_URL_LENGTH else cleaned
 
 
 class GiftUpdate(BaseModel):
@@ -169,11 +181,13 @@ class GiftUpdate(BaseModel):
         if v is None:
             return None
         max_lengths: dict[str, int] = {
-            "name": 200,
-            "description": 1000,
-            "price_range": 100,
+            "name": MAX_NAME_LENGTH,
+            "description": MAX_DESCRIPTION_LENGTH,
+            "price_range": MAX_PRICE_RANGE_LENGTH,
         }
-        return sanitize_string(v, max_lengths.get(info.field_name or "", 200))
+        return sanitize_string(
+            v, max_lengths.get(info.field_name or "", MAX_NAME_LENGTH)
+        )
 
     @field_validator("url", mode="after")
     @classmethod
@@ -185,7 +199,7 @@ class GiftUpdate(BaseModel):
         # Block non-HTTP schemes (javascript:, data:, vbscript:, etc.)
         if cleaned and not cleaned.lower().startswith(("http://", "https://")):
             return ""
-        return cleaned[:2000] if len(cleaned) > 2000 else cleaned
+        return cleaned[:MAX_URL_LENGTH] if len(cleaned) > MAX_URL_LENGTH else cleaned
 
 
 class InvitationCreate(BaseModel):
@@ -197,7 +211,7 @@ class InvitationCreate(BaseModel):
     @classmethod
     def sanitize_name(cls, v: str) -> str:
         """Sanitize invitation name: strip, truncate, escape HTML."""
-        return sanitize_string(v, 100)
+        return sanitize_string(v, MAX_INVITATION_NAME_LENGTH)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -211,6 +225,13 @@ def _get_client_ip(request: Request) -> str:
 
     Only trusts X-Forwarded-For header if the direct connection comes from
     a trusted proxy IP (e.g., nginx container). This prevents IP spoofing.
+
+    Note: Full IP is logged for rate limiting enforcement. This is necessary
+    for security (abuse prevention) and is a legitimate interest under GDPR
+    Article 6(1)(f). IPs are not stored long-term beyond the rate limit window.
+
+    TODO: Add tests for edge cases (missing client, malformed X-Forwarded-For,
+    multiple proxies in chain, IPv6 addresses).
     """
     client_ip: str = request.client.host if request.client else "unknown"
     forwarded: str | None = request.headers.get("X-Forwarded-For")
