@@ -686,6 +686,88 @@ Each service now catches specific exception types appropriate to the operations 
 
 ---
 
+## Fixed Issues (2026-10-23) - LOW Severity Code Quality Improvements
+
+All 96 LOW severity issues were fixed in PRs #410-#422 (13 PRs total).
+These are code quality improvements: type hints, documentation, constants extraction, and security config documentation.
+
+### Batch 1: Core Services (39 LOW - PRs #410-#413)
+
+#### [presence-service] Code Quality (11 issues)
+- **PR**: #410
+- **Changes**: Type hints with TYPE_CHECKING pattern, docstrings with Raises sections, GDPR Art. 6(1)(f) comments for IP logging
+
+#### [dashboard] Code Quality (10 issues)
+- **PR**: #413
+- **Changes**: Type hints for health check functions, docstrings with Args/Returns/Raises, documentation for WebSocket auth flow
+
+#### [ac-service] Code Quality (10 issues)
+- **PR**: #412
+- **Changes**: Type hints, magic numbers extracted to constants (TEMP_MIN=16, TEMP_MAX=30), docstrings with exception documentation
+
+#### [calendar-service] Code Quality (8 issues)
+- **PR**: #411
+- **Changes**: Type hints, dead code removed, docstrings for OAuth flow, test coverage TODOs
+
+### Batch 2: Secondary Services (29 LOW - PRs #414-#417)
+
+#### [metrics-service] Code Quality (7 issues)
+- **PR**: #414
+- **Changes**: Type hints with TYPE_CHECKING, docstrings with Raises sections, documentation for rate limiter config
+
+#### [vacaciones-service] Code Quality (8 issues)
+- **PR**: #415
+- **Changes**: Error handling in _serve_html, GDPR comments for IP logging, CSP documentation
+
+#### [baby-gifts-service] Code Quality (7 issues)
+- **PR**: #416
+- **Changes**: Constants extracted (MAX_NAME_LENGTH, MAX_GIFT_AMOUNT), GDPR comments, test coverage TODOs
+
+#### [casita-suenos] Code Quality (7 issues)
+- **PR**: #417
+- **Changes**: Lambdas replaced with explicit code, dead code removed, string check fix ("b" -> "búsqueda")
+
+### Batch 3: Remaining Services (20 LOW - PRs #418-#421)
+
+#### [valheim-admin] Code Quality (5 issues)
+- **PR**: #418
+- **Changes**: New README.md documenting Docker socket requirements and security considerations
+
+#### [vaultwarden] Code Quality (3 issues)
+- **PR**: #419
+- **Changes**: Base image pinned to specific version, README expanded with backup/restore procedures
+
+#### [energy-monitor] Code Quality (6 issues)
+- **PR**: #420
+- **Changes**: Improved encapsulation in alerts.py, new tests for alert thresholds, documentation
+
+#### [portfolio-monitor] Code Quality (6 issues)
+- **PR**: #421
+- **Changes**: New README.md, improved type hints in monitors/, new tests for savings_monitor
+
+### Batch 4: Infrastructure (8 LOW - PR #422)
+
+#### [infrastructure/nginx] Security Configuration Documentation
+- **PR**: #422
+- **Changes**:
+  - TLS cipher suite rationale documented (AEAD-only, PFS via ECDHE/DHE)
+  - Elliptic curve choices explained (X25519 primary, secp384r1 fallback)
+  - Session caching and ticket configuration documented
+  - Security headers (HSTS, CSP, X-Frame-Options) rationale added
+  - Rate limiting parameters documented
+
+### Summary
+
+| Batch | Services | Issues | PRs |
+|-------|----------|--------|-----|
+| 1 | presence, dashboard, ac, calendar | 39 | #410-#413 |
+| 2 | metrics, vacaciones, baby-gifts, casita | 29 | #414-#417 |
+| 3 | valheim-admin, vaultwarden, energy, portfolio | 20 | #418-#421 |
+| 4 | infrastructure/nginx | 8 | #422 |
+| **Total** | **13 services** | **96** | **13 PRs** |
+
+---
+
 ## Audit Markers
 
 These markers tell the audit system what to skip:
