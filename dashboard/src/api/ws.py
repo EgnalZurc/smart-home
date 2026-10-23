@@ -60,7 +60,9 @@ router = APIRouter(prefix="/api/ws", tags=["WebSocket"])
 
 # Broadcast cadence in seconds. Matches HEALTH_CACHE_TTL so each push reflects a
 # fresh cache refresh without triggering extra backend requests between ticks.
-BROADCAST_INTERVAL = 5.0
+from api.constants import WS_BROADCAST_INTERVAL_SECONDS
+
+BROADCAST_INTERVAL = WS_BROADCAST_INTERVAL_SECONDS
 
 # WebSocket close codes for authentication errors (4000-4999 = application-defined)
 WS_CLOSE_UNAUTHORIZED = 4001

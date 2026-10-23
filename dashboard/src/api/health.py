@@ -46,7 +46,9 @@ def _pc_agent_headers() -> dict[str, str]:
 # services. We cache each service's result for a short TTL so repeated polls
 # within the window reuse the last known result instead of issuing a new request.
 
-HEALTH_CACHE_TTL = 5.0  # seconds
+from api.constants import HEALTH_CACHE_TTL_SECONDS
+
+HEALTH_CACHE_TTL = HEALTH_CACHE_TTL_SECONDS
 
 # Maps a service key -> (timestamp, data) of the last successful check.
 _health_cache: dict[str, tuple[float, dict]] = {}
