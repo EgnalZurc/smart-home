@@ -2,8 +2,16 @@
 """
 OAuth2 setup script for Google Calendar API.
 
-This script runs ONCE manually to generate token.json for the calendar-service.
-It opens a browser for the user to authorize access, then saves the credentials.
+This script runs ONCE manually to generate the initial OAuth token for the
+calendar-service. It opens a browser for the user to authorize access, then
+saves the credentials to a JSON file.
+
+IMPORTANT: The calendar-service expects tokens in ENCRYPTED format (Fernet).
+After running this script:
+1. The output file contains PLAINTEXT credentials (for portability).
+2. Copy it to the service's data directory.
+3. The service will encrypt it on first load using GOOGLE_TOKEN_ENCRYPTION_KEY.
+4. Or encrypt manually before deploying if the key is available.
 
 Usage:
     python setup_oauth.py --credentials /path/to/client_secret.json --token-output /path/to/token.json
