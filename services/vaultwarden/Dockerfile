@@ -5,7 +5,7 @@
 # Customization: Environment variables baked in for subpath deployment
 #
 # ADMIN_TOKEN is NOT included here — passed via runtime secret
-FROM vaultwarden/server:1.37.4
+FROM vaultwarden/server:1.37.4@sha256:efb3cde962015fcc036b2ea625242248611943b27212ebf4392841fb30fad055
 
 # Timezone
 ENV TZ=Europe/Madrid
@@ -22,7 +22,9 @@ ENV ROCKET_ADDRESS=0.0.0.0
 ENV ROCKET_PORT=80
 
 # Health check - verifies API is responding, not just port open
-# /passwords/alive returns a JSON timestamp when the service is fully ready
+# /passwords/alive returns JSON: {"alive": true, "timestamp": "2026-10-23T12:00:00Z"}
+# Success: HTTP 200 with valid JSON indicates full API readiness
+# Failure: Non-200 status or connection refused triggers container restart
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -sf http://localhost:80/passwords/alive || exit 1
 
