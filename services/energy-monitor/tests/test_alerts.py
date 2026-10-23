@@ -103,3 +103,80 @@ def test_delivery_skipped_when_notifier_disabled(store):
     # Event still persisted, but nothing sent.
     assert store.recent_alerts()
     assert notifier.sent == []
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Threshold edge case tests (audit fix 2026-10-23)
+# ══════════════════════════════════════════════════════════════════════════════
+class TestThresholdEdgeCases:
+    """Tests for exact threshold boundary conditions."""
+
+    def test_power_exactly_at_threshold_does_not_fire(self, store):
+        """Power exactly equal to threshold should not fire (> not >=)."""
+        # Default POWER_ALERT_W is 3500, so 3500 exactly should NOT fire.
+        store.write_power(_NOW, [("ch0", 2000.0, 3500.0, 230.0, 0.9)])
+        notifier = _CapturingNotifier()
+        engine = AlertEngine(store, enabled=True, notifier=notifier)
+        events = engine.evaluate(now=_NOW)
+        power_events = [e for e in events if e["rule_key"] == "power_spike"]
+        assert len(power_events) == 0
+        assert notifier.sent == []
+
+    def test_power_one_watt_over_threshold_fires(self, store):
+        """Power just 1W over threshold should fire."""
+        store.write_power(_NOW, [("ch0", 2000.0, 3501.0, 230.0, 0.9)])
+        notifier = _CapturingNotifier()
+        engine = AlertEngine(store, enabled=True, notifier=notifier)
+        events = engine.evaluate(now=_NOW)
+        power_events = [e for e in events if e["rule_key"] == "power_spike"]
+        assert len(power_events) == 1
+        assert power_events[0]["state"] == "fired"
+
+    def test_daily_exactly_at_threshold_does_not_fire(self, store):
+        """Daily consumption exactly at threshold should not fire."""
+        # Set up exactly 20 kWh (default DAILY_KWH_ALERT)
+        day_start = _NOW - (_NOW % _DAY)
+        store.write_energy(day_start, [("ch0", 0.0)])
+        store.write_energy(_NOW, [("ch0", 20_000.0)])  # 20 kWh
+        notifier = _CapturingNotifier()
+        engine = AlertEngine(store, enabled=True, notifier=notifier)
+        events = engine.evaluate(now=_NOW)
+        daily_events = [e for e in events if e["rule_key"] == "daily_budget"]
+        assert len(daily_events) == 0
+
+    def test_monthly_exactly_at_threshold_does_not_fire(self, store):
+        """Monthly consumption exactly at threshold should not fire."""
+        # Set up exactly 400 kWh (default MONTHLY_KWH_ALERT)
+        store.write_energy(_MONTH_START, [("ch0", 0.0)])
+        store.write_energy(_NOW, [("ch0", 400_000.0)])  # 400 kWh
+        notifier = _CapturingNotifier()
+        engine = AlertEngine(store, enabled=True, notifier=notifier)
+        events = engine.evaluate(now=_NOW)
+        monthly_events = [e for e in events if e["rule_key"] == "monthly_budget"]
+        assert len(monthly_events) == 0
+
+    def test_rapid_oscillation_around_threshold(self, store):
+        """Rapid oscillation around threshold fires and resolves correctly."""
+        notifier = _CapturingNotifier()
+        engine = AlertEngine(store, enabled=True, notifier=notifier)
+
+        # First: over threshold -> fires
+        store.write_power(_NOW, [("ch0", 2000.0, 3600.0, 230.0, 0.9)])
+        events1 = engine.evaluate(now=_NOW)
+        assert any(e["state"] == "fired" for e in events1)
+
+        # Second: under threshold -> resolves
+        store.write_power(_NOW + 60, [("ch0", 2000.0, 3400.0, 230.0, 0.9)])
+        events2 = engine.evaluate(now=_NOW + 60)
+        assert any(e["state"] == "resolved" for e in events2)
+
+        # Third: over again -> fires again
+        store.write_power(_NOW + 120, [("ch0", 2000.0, 3600.0, 230.0, 0.9)])
+        events3 = engine.evaluate(now=_NOW + 120)
+        assert any(e["state"] == "fired" for e in events3)
+
+        # Total events in audit trail should be 3
+        all_power = [
+            a for a in store.recent_alerts() if a["rule_key"] == "power_spike"
+        ]
+        assert len(all_power) == 3
