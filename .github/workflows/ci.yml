@@ -91,7 +91,7 @@ jobs:
       # ── Check Z2M example has placeholders (prevent credential leaks) ──
       - name: Check Z2M example has placeholders
         run: |
-          if ! grep -q 'CHANGE_ME' infrastructure/zigbee2mqtt/configuration.example.yaml; then
+          if ! grep -q 'CHANGE_ME' infrastructure/zigbee2mqtt/config/configuration.example.yaml; then
             echo '::error::configuration.example.yaml must contain CHANGE_ME placeholders'
             exit 1
           fi
