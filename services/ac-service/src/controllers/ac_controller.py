@@ -21,6 +21,7 @@ import threading
 import time
 from dataclasses import dataclass
 
+import httpx
 from config import (
     DEFAULT_AC_MODE,
     DEFAULT_FAN_SPEED,
@@ -526,9 +527,18 @@ class ACController:
         while self._running:
             try:
                 self._tick()
-            except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
+            except (
+                OSError,
+                ValueError,
+                TypeError,
+                KeyError,
+                AttributeError,
+                httpx.HTTPError,
+                httpx.TimeoutException,
+            ) as e:
                 # Known recoverable errors: network issues, sensor data parsing,
-                # state access errors. Log and continue to keep the control loop alive.
+                # state access errors, MELCloud API failures.
+                # Log and continue to keep the control loop alive.
                 logger.exception("Error en loop de control: %s", e)
 
             time.sleep(self.config.loop_interval)
@@ -583,38 +593,46 @@ class ACController:
         avg_hum = None
         last_sensor_time = self._last_sensor_update_time
 
-        # Exclude virtual 'AC' sensor from averages
-        active_readings = {
-            name: r
-            for name, r in self.mqtt.get_active_readings(
-                self.config.sensor_timeout
-            ).items()
-            if name != "AC"
-        }
+        try:
+            # Exclude virtual 'AC' sensor from averages
+            active_readings = {
+                name: r
+                for name, r in self.mqtt.get_active_readings(
+                    self.config.sensor_timeout
+                ).items()
+                if name != "AC"
+            }
 
-        if active_readings:
-            temps = [
-                r.temperature
-                for r in active_readings.values()
-                if r.temperature is not None
-            ]
-            if temps:
-                avg_temp = sum(temps) / len(temps)
+            if active_readings:
+                temps = [
+                    r.temperature
+                    for r in active_readings.values()
+                    if r.temperature is not None
+                ]
+                if temps:
+                    avg_temp = sum(temps) / len(temps)
 
-            hums = [
-                r.humidity for r in active_readings.values() if r.humidity is not None
-            ]
-            if hums:
-                avg_hum = sum(hums) / len(hums)
+                hums = [
+                    r.humidity
+                    for r in active_readings.values()
+                    if r.humidity is not None
+                ]
+                if hums:
+                    avg_hum = sum(hums) / len(hums)
 
-            timestamps = [r.timestamp for r in active_readings.values()]
-            if timestamps:
-                most_recent = max(timestamps)
-                if most_recent > self._last_sensor_update_time:
-                    self._last_sensor_update_time = most_recent
-                    last_sensor_time = most_recent
+                timestamps = [r.timestamp for r in active_readings.values()]
+                if timestamps:
+                    most_recent = max(timestamps)
+                    if most_recent > self._last_sensor_update_time:
+                        self._last_sensor_update_time = most_recent
+                        last_sensor_time = most_recent
 
-        active_count = len(active_readings)
+            active_count = len(active_readings)
+        except (KeyError, AttributeError, TypeError) as e:
+            # Sensor data structure errors during iteration - return safe defaults
+            logger.warning("Error reading sensor data: %s", e)
+            active_count = 0
+
         return avg_temp, avg_hum, active_count, last_sensor_time
 
     def _build_inputs(

@@ -264,6 +264,11 @@ class ThermalSampleRecorder:
 
         Returns:
             Outdoor temperature in °C, or None if unavailable/error.
+
+        Note:
+            ZeroDivisionError is caught because some weather API providers
+            may compute averages or unit conversions internally that could
+            fail on edge cases (e.g., empty data sets, coordinate calculations).
         """
         if self._outdoor_provider is None:
             return None
