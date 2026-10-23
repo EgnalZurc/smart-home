@@ -481,17 +481,27 @@ The audit should NOT re-report these issues.
 
 ### [vaultwarden] Container Runs as Root
 - **Severity**: HIGH
-- **Status**: IN_PROGRESS
-- **Reason**: Official vaultwarden image runs as root by default; adding user: directive requires permission fixes
-- **Next Action**: Add `user: "1000:1000"` to docker-compose.prod.yml after verifying data directory permissions
-- **Review Date**: 2026-10-22
+- **Status**: FIXED
+- **PR**: #402
+- **Fixed Date**: 2026-10-23
+- **Description**: Official vaultwarden image runs as root by default, expanding attack surface
+- **Fix Applied**: Added `user: "1000:1000"` to docker-compose.prod.yml
+- **Verification**: `docker exec vaultwarden id` shows uid=1000
 
 ### [vaultwarden] No Automated Backup
 - **Severity**: HIGH
-- **Status**: IN_PROGRESS
-- **Reason**: Vaultwarden database contains all passwords; manual backup only
-- **Next Action**: Create backup script + cron job on Pi
-- **Review Date**: 2026-10-22
+- **Status**: FIXED
+- **PR**: #403
+- **Fixed Date**: 2026-10-23
+- **Description**: Vaultwarden database contains all passwords; manual backup only
+- **Fix Applied**: Created `scripts/backup-vaultwarden.sh` with:
+  - Online/hot backup using sqlite3 .backup (no downtime)
+  - RSA key backup (critical for decryption)
+  - 7-day rotation
+  - Checksum manifest
+  - Dry-run mode
+- **Setup**: SCP to Pi, chmod +x, add to crontab: `0 3 * * * /home/pi/scripts/backup-vaultwarden.sh`
+- **Verification**: Run `./backup-vaultwarden.sh --dry-run` on Pi
 
 ---
 
@@ -642,6 +652,37 @@ Each service now catches specific exception types appropriate to the operations 
   - SQLite: `sqlite3.Error`
   - Tests: Changed `raise Exception("...")` to specific types like `raise TimeoutError("...")`
 - **Verification**: `grep -r "except Exception" libs/` returns only documented catch-all handlers
+
+---
+
+## LOW Severity Issues - Review (2026-10-23)
+
+### ACCEPTED_RISK (architectural requirements or acceptable tradeoffs)
+
+| Issue | Service | Reason | Mitigations |
+|-------|---------|--------|-------------|
+| `0.0.0.0` binding | All services | Required for Docker container networking | nginx reverse proxy + Tailscale + auth_request |
+| apr_md5_crypt hash | dashboard | Required for nginx .htpasswd compatibility | File not exposed externally; sessions use JWT |
+| HTTP plaintext Shelly | energy-monitor | IoT devices on isolated local network | Network segmentation; not internet-accessible |
+| ARP spoofing | presence-service | Presence is informational, not security-critical | WPA3; alerts on unknown devices |
+| Legacy plaintext tokens | calendar-service | Migration path for existing tokens | Encryption enabled for new tokens; migration in progress |
+
+### ACCEPTABLE (low risk, no fix needed)
+
+| Issue | Service | Reason |
+|-------|---------|--------|
+| Session timeout 24h | dashboard | Reasonable TTL; device tokens provide graceful renewal |
+| Test credentials | tests/* | Test-only secrets like "test-secret-key-32-chars" - not in production |
+| Dockerfiles | all | Follow best practices (multi-stage, non-root, healthcheck) |
+| Error detail | all | Messages are generic ("Not ready", "Timeout") without internal paths |
+
+### LOW - Potential future improvements
+
+| Issue | Service | Current State | Recommendation |
+|-------|---------|---------------|----------------|
+| CSP unsafe-inline | casita, valheim-admin, portfolio | Inline scripts need unsafe-inline | Consider nonce-based CSP migration (dashboard already done) |
+| No request ID logging | some services | Requests not correlated across services | Add X-Request-ID header propagation |
+| Limited audit logging | all | Basic logging, no security-specific audit trail | Consider structured audit logging for sensitive operations |
 
 ---
 
