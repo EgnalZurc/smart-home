@@ -1,4 +1,15 @@
-"""AcTempScheduler: records AC room temperature hourly into sensor history."""
+"""AC temperature scheduler.
+
+Records the AC unit's room temperature reading once per hour into the sensor
+history topic. This provides a periodic snapshot of the indoor temperature
+as reported by the AC's internal thermometer, separate from the external
+Zigbee sensors.
+
+The scheduler wakes up every 30 seconds to check whether it's on the hour
+(:00 minute) and publishes the temperature to MQTT if not already recorded
+for that hour-slot. This data is useful for long-term analysis and for
+cross-referencing with the external sensor readings.
+"""
 
 from __future__ import annotations
 
