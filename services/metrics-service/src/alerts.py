@@ -538,7 +538,11 @@ class AlertEngine:
         message = "\n".join(lines)
         try:
             self.notifier.send(message)
-        except Exception:  # pragma: no cover  # noqa: BLE001 - notifier is best-effort
+        except (
+            Exception
+        ) as exc:  # pragma: no cover  # noqa: BLE001 - notifier is best-effort
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise
             logger.exception("Telegram alert delivery failed")
 
     # ── Read helpers for the API ────────────────────────────────────────────────
