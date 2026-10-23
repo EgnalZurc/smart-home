@@ -247,7 +247,7 @@ async def post_token(
     # Rate limiting check
     if not _login_limiter.is_allowed(client_ip):
         logger.warning(
-            "LOGIN BLOCKED (rate limit): user=%r ip=%s",
+            "LOGIN BLOCKED (rate limit): endpoint=/api/auth/token user=%r ip=%s",
             username,
             client_ip,
         )
@@ -275,7 +275,12 @@ async def post_token(
     )
 
     # Build response — always issue fresh 24h JWT
-    if not next_url.startswith("/") or next_url.startswith("//"):
+    # Sanitize next_url: must be relative, no protocol smuggling, and not logout
+    if (
+        not next_url.startswith("/")
+        or next_url.startswith("//")
+        or next_url.lower().startswith("/api/auth/logout")
+    ):
         next_url = "/smart-home"
 
     response = RedirectResponse(url=next_url, status_code=303)
