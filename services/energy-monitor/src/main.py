@@ -14,6 +14,13 @@ Endpoints (served on :8012):
   GET /health               → {online, service, db_ok, meter_online, ...}
   GET /api/health/energy     → health alias for the dashboard catalogue / CI
   GET /api/energy/current    → newest power per channel (live from the collector)
+
+Thresholds and Configuration:
+  Alert thresholds are configurable via environment variables (see config.py):
+    - ENERGY_POWER_ALERT_W: Power spike threshold in watts (default: 3500W)
+    - ENERGY_DAILY_KWH_ALERT: Daily energy budget in kWh (default: 20 kWh)
+    - ENERGY_MONTHLY_KWH_ALERT: Monthly energy budget in kWh (default: 400 kWh)
+  Set any threshold to 0 to disable that alert rule.
 """
 
 from __future__ import annotations
