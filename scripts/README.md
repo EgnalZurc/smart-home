@@ -12,6 +12,48 @@ This directory contains auxiliary scripts for development, setup, and utilities.
 
 ## 📜 Available Scripts
 
+### `backup-vaultwarden.sh`
+
+**Purpose**: Automated backup for Vaultwarden password manager
+
+**What it does**:
+- Creates hot backups of the SQLite database (no downtime required)
+- Backs up RSA keys (critical for decryption - rsa_key.pem, rsa_key.der, rsa_key.pub.der)
+- Backs up attachments and sends directories
+- Rotates old backups keeping the last 7 days
+- Logs to /var/log/vaultwarden-backup.log
+
+**Usage**:
+```bash
+# Dry run to see what would happen
+./backup-vaultwarden.sh --dry-run
+
+# Run actual backup
+./backup-vaultwarden.sh
+```
+
+**Setup on Raspberry Pi**:
+```bash
+# 1. Copy to Pi
+scp scripts/backup-vaultwarden.sh pi@raspberrypi.local:~/projects/smart-home/scripts/
+
+# 2. Make executable
+ssh pi@raspberrypi.local "chmod +x ~/projects/smart-home/scripts/backup-vaultwarden.sh"
+
+# 3. Test dry run
+ssh pi@raspberrypi.local "~/projects/smart-home/scripts/backup-vaultwarden.sh --dry-run"
+
+# 4. Add to crontab (daily at 3 AM)
+ssh pi@raspberrypi.local "crontab -e"
+# Add: 0 3 * * * /home/pi/projects/smart-home/scripts/backup-vaultwarden.sh >> /var/log/vaultwarden-backup.log 2>&1
+```
+
+**Requirements**:
+- `sqlite3` package on the Pi
+- Write access to backup directory (~~/backups/vaultwarden)
+
+---
+
 ### `serial_bridge.py`
 
 **Purpose**: TCP/IP bridge for Zigbee USB dongle (Windows development only)
