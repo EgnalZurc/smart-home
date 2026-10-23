@@ -433,7 +433,13 @@ class CalendarStore:
                 return False
 
     def prune_old_reminders(self, retention_days: int = 90) -> int:
-        """Delete reminder records older than retention_days. Returns count deleted."""
+        """Delete reminder records older than retention_days. Returns count deleted.
+
+        TODO: Add tests for this method covering:
+        - Records older than retention_days are deleted
+        - Records within retention_days are preserved
+        - Empty table case (returns 0)
+        """
         cutoff = int(time.time()) - retention_days * 24 * 3600
         with self._db.connect() as conn:
             rowcount = conn.execute(
@@ -530,6 +536,13 @@ class CalendarStore:
         An event overlaps if it starts before window ends AND ends after window starts.
         Includes confirmed and tentative (shared calendar) events.
         Used by the /today endpoint to get day's agenda.
+
+        TODO: Add tests for boundary conditions:
+        - Event exactly at window start (start_ts == window_start)
+        - Event exactly at window end (end_ts == window_end)
+        - Event spanning entire window
+        - Event partially overlapping (starts before, ends during)
+        - Event partially overlapping (starts during, ends after)
         """
         with self._db.connect() as conn:
             rows = conn.execute(
@@ -545,7 +558,13 @@ class CalendarStore:
         return [dict(r) for r in rows]
 
     def clear_calendar_events(self, calendar_id: str) -> int:
-        """Delete all events for a calendar (for full sync). Returns count deleted."""
+        """Delete all events for a calendar (for full sync). Returns count deleted.
+
+        TODO: Add tests for this method covering:
+        - Events for specified calendar_id are deleted
+        - Events for other calendars are preserved
+        - Empty calendar case (returns 0)
+        """
         with self._db.connect() as conn:
             rowcount = conn.execute(
                 "DELETE FROM events WHERE calendar_id = ?", (calendar_id,)

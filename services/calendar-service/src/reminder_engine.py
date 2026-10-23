@@ -138,6 +138,8 @@ def format_reminder_message(
 
     Args:
         event: Event dict with title, start_ts, location, person_id, calendar_id.
+            Note: Uses .get() for safe access since the event may come from
+            different query results with varying columns populated.
         offset_s: The offset (seconds before start) that triggered this reminder.
         store: Optional CalendarStore to look up calendar label and person name.
         now: Current timestamp (defaults to time.time()).

@@ -278,18 +278,6 @@ def _parse_event_time_str(time_str: str | None) -> int:
         return 0
 
 
-def _parse_event_time(time_obj: dict) -> int:
-    """Parse Google Calendar time object to Unix timestamp."""
-    if "dateTime" in time_obj:
-        dt = datetime.fromisoformat(time_obj["dateTime"].replace("Z", "+00:00"))
-        return int(dt.timestamp())
-    elif "date" in time_obj:
-        dt = datetime.strptime(time_obj["date"], "%Y-%m-%d")
-        dt = dt.replace(tzinfo=LOCAL_TZ)
-        return int(dt.timestamp())
-    return 0
-
-
 def _reminder_loop() -> None:
     """Check for due reminders every REMINDER_TICK_S seconds."""
     global _last_reminder_tick_ts
@@ -422,7 +410,6 @@ app.state.limiter = limiter
 app.add_middleware(SecurityHeadersMiddleware)
 
 
-@app.exception_handler(RateLimitExceeded)
 def _get_client_ip(request: Request) -> str:
     """Extract real client IP from request, handling reverse proxy headers.
 
@@ -440,6 +427,7 @@ def _get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+@app.exception_handler(RateLimitExceeded)
 async def rate_limit_exceeded_handler(
     request: Request, exc: RateLimitExceeded
 ) -> JSONResponse:
