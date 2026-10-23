@@ -8,6 +8,7 @@ a single source of truth. Defaults match the design document
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import re
 from re import Pattern
@@ -208,9 +209,7 @@ PRUNE_INTERVAL_S: int = int(os.environ.get("PRESENCE_PRUNE_INTERVAL_S", str(24 *
 
 # ── MQTT Credential Rotation Warning ─────────────────────────────────────────
 # Log a warning if MQTT credentials appear to be using defaults or are missing.
-import logging as _logging
-
-_config_logger = _logging.getLogger(__name__)
+_config_logger: logging.Logger = logging.getLogger(__name__)
 _mqtt_user = os.environ.get("MQTT_USER", "")
 _mqtt_pass = os.environ.get("MQTT_PASSWORD", "")
 if not _mqtt_user or not _mqtt_pass:

@@ -70,11 +70,19 @@ class Person(BaseModel):
 
 
 class Zone(BaseModel):
-    """A motion-sensor grouping (not per-person) used for occupancy + sleep."""
+    """A motion-sensor grouping used for room occupancy and sleep detection.
+
+    Zones are NOT per-person; they aggregate multiple Zigbee motion sensors
+    into logical areas (e.g., 'bedroom', 'living_room'). The presence engine
+    uses zone activity to infer:
+    - Room occupancy (any motion in zone → zone occupied)
+    - Sleep state (no motion in bedroom zone during NIGHT_WINDOW → sleeping)
+    """
 
     id: str = Field(..., description="Zone slug, e.g. 'bedroom'")
     sensors: list[str] = Field(
-        default_factory=list, description="zigbee2mqtt friendly names"
+        default_factory=list,
+        description="zigbee2mqtt friendly names of sensors in this zone",
     )
 
 
