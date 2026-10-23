@@ -543,6 +543,108 @@ The audit should NOT re-report these issues.
 
 ---
 
+## Fixed Issues (2026-10-23) - Generic Exception Handling Remediation
+
+All 44 MEDIUM severity issues for generic `except Exception` handling were fixed in PRs #391-#400.
+Each service now catches specific exception types appropriate to the operations being performed.
+
+### [casita-suenos] Generic Exception Handling (5 locations)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #391
+- **Fixed Date**: 2026-10-23
+- **Description**: Multiple functions used `except Exception` instead of specific types
+- **Fix Applied**: Replaced with `imaplib.IMAP4.error`, `httpx.HTTPError`, `httpx.TimeoutException`, `json.JSONDecodeError`, `OSError`, `KeyError`, `ValueError`, `RuntimeError`
+- **Verification**: `grep "except Exception" services/casita-suenos/` returns only global_exception_handler
+
+### [dashboard] Generic Exception Handling (3 locations)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #392
+- **Fixed Date**: 2026-10-23
+- **Description**: Health check functions used broad exception catching
+- **Fix Applied**: Replaced with `httpx.RequestError`, `httpx.HTTPStatusError`, `KeyError`, `OSError`
+- **Verification**: Check `dashboard/src/api/health.py` for specific exception types
+
+### [portfolio-monitor] Generic Exception Handling (2 locations)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #393
+- **Fixed Date**: 2026-10-23
+- **Description**: API client and notification functions caught all exceptions
+- **Fix Applied**: Replaced with `httpx.HTTPError`, `httpx.TimeoutException`, `json.JSONDecodeError`
+- **Verification**: Check `services/portfolio-monitor/src/` for specific exception types
+
+### [metrics-service] Generic Exception Handling (2 locations)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #394
+- **Fixed Date**: 2026-10-23
+- **Description**: Collector and health check functions used broad catching
+- **Fix Applied**: Replaced with `httpx.HTTPError`, `redis.RedisError`, `OSError`
+- **Verification**: Check `services/metrics-service/src/` for specific exception types
+
+### [calendar-service] Generic Exception Handling (2 locations)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #395
+- **Fixed Date**: 2026-10-23
+- **Description**: iCal parsing and OAuth flow used broad exception catching
+- **Fix Applied**: Replaced with `httpx.HTTPError`, `icalendar.ParserError`, `ValueError`
+- **Verification**: Check `services/calendar-service/src/` for specific exception types
+
+### [vacaciones-service] Generic Exception Handling (2 locations)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #396
+- **Fixed Date**: 2026-10-23
+- **Description**: Holiday lookup functions caught all exceptions
+- **Fix Applied**: Replaced with `httpx.HTTPError`, `httpx.TimeoutException`, `json.JSONDecodeError`
+- **Verification**: Check `services/vacaciones-service/src/` for specific exception types
+
+### [energy-monitor] Generic Exception Handling (3 locations)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #397
+- **Fixed Date**: 2026-10-23
+- **Description**: Shelly client and database functions used broad catching
+- **Fix Applied**: Replaced with `httpx.HTTPError`, `httpx.TimeoutException`, `json.JSONDecodeError`, `OSError`
+- **Verification**: Check `services/energy-monitor/src/` for specific exception types
+
+### [ac-service] Generic Exception Handling (2 locations)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #398
+- **Fixed Date**: 2026-10-23
+- **Description**: AC control API calls caught all exceptions
+- **Fix Applied**: Replaced with `httpx.HTTPError`, `httpx.TimeoutException`, `json.JSONDecodeError`
+- **Verification**: Check `services/ac-service/src/` for specific exception types
+
+### [baby-gifts] Generic Exception Handling (2 locations)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #399
+- **Fixed Date**: 2026-10-23
+- **Description**: Gift API and notification functions used broad catching
+- **Fix Applied**: Replaced with `httpx.HTTPError`, `aiohttp.ClientError`, `json.JSONDecodeError`
+- **Verification**: Check `services/baby-gifts/src/` for specific exception types
+
+### [libs/smart_home_common] Generic Exception Handling (24 locations)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #400
+- **Fixed Date**: 2026-10-23
+- **Description**: Shared libraries (mqtt, redis, http_client, notifications, service_proxy) used broad exception catching
+- **Fix Applied**: 
+  - MQTT: `(ConnectionError, TimeoutError, OSError)` - note: `paho.mqtt.client.MQTTException` doesn't exist
+  - Redis: `redis.RedisError`
+  - HTTP: `httpx.HTTPError`, `httpx.TimeoutException`
+  - SQLite: `sqlite3.Error`
+  - Tests: Changed `raise Exception("...")` to specific types like `raise TimeoutError("...")`
+- **Verification**: `grep -r "except Exception" libs/` returns only documented catch-all handlers
+
+---
+
 ## Audit Markers
 
 These markers tell the audit system what to skip:
