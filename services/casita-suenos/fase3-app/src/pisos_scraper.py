@@ -187,6 +187,9 @@ def _extract_listings(soup, base_url: str, zone: Zone, now: datetime) -> list[Pr
             has_garden = guaranteed_garden or infer_has_garden(description, extras)
             has_garage = guaranteed_garage or infer_has_garage(description, extras)
 
+            # AC inference: unpack tuple for has_ac and has_ac_preinstalled
+            ac_installed, ac_preinstalled = infer_ac_type(description, extras)
+
             results.append(
                 Property(
                     portal=Portal.PISOS,
@@ -203,10 +206,8 @@ def _extract_listings(soup, base_url: str, zone: Zone, now: datetime) -> list[Pr
                     habitability=infer_habitability(description, title),
                     internet=infer_internet(description, extras),
                     has_garage=has_garage,
-                    has_ac=(lambda t: t[0])(infer_ac_type(description, extras)),
-                    has_ac_preinstalled=(lambda t: t[1])(
-                        infer_ac_type(description, extras)
-                    ),
+                    has_ac=ac_installed,
+                    has_ac_preinstalled=ac_preinstalled,
                     piscina=infer_piscina(description, extras),
                     has_internet_mention=not infer_no_internet(description),
                     habitable=infer_habitable(description, title),

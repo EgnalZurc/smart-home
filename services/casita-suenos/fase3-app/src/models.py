@@ -119,7 +119,15 @@ class Zone:
 
 @dataclass
 class Property:
-    """Representa un anuncio inmobiliario normalizado."""
+    """Represents a normalized real estate listing.
+
+    Note on optional fields:
+        Fields typed as ``float | None`` or ``int | None`` (size_m2, rooms,
+        terrain_m2, distance_* overrides) may be None when the portal does
+        not provide the data. Callers should check for None before arithmetic
+        operations. The scorer module handles None gracefully by falling back
+        to zone defaults or neutral scores.
+    """
 
     # Identificación
     portal: Portal
