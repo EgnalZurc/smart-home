@@ -77,6 +77,55 @@ class TestCSRFProtection:
         )
         assert response.status_code == 403
 
+    def test_csrf_blocks_cors_request_without_origin(self, client: TestClient):
+        """CORS request (Sec-Fetch-Mode: cors) without Origin should be blocked."""
+        response = client.post(
+            "/api/portfolio/refresh",
+            headers={"Sec-Fetch-Mode": "cors"},
+        )
+        assert response.status_code == 403
+
+    def test_csrf_allows_cors_request_with_valid_origin(self, client: TestClient):
+        """CORS request with valid Origin should be allowed."""
+        response = client.post(
+            "/api/portfolio/refresh",
+            headers={
+                "Origin": "https://raspberrypi.tailaa37cd.ts.net",
+                "Sec-Fetch-Mode": "cors",
+            },
+        )
+        # Should not be 403
+        assert response.status_code != 403
+
+    def test_csrf_blocks_cors_request_with_invalid_origin(self, client: TestClient):
+        """CORS request with invalid Origin should be blocked."""
+        response = client.post(
+            "/api/portfolio/refresh",
+            headers={
+                "Origin": "https://evil.com",
+                "Sec-Fetch-Mode": "cors",
+            },
+        )
+        assert response.status_code == 403
+
+    def test_csrf_allows_same_origin_request(self, client: TestClient):
+        """Same-origin request (Sec-Fetch-Mode: same-origin) without Origin allowed."""
+        response = client.post(
+            "/api/portfolio/refresh",
+            headers={"Sec-Fetch-Mode": "same-origin"},
+        )
+        # same-origin without Origin is a trusted browser navigation
+        assert response.status_code != 403
+
+    def test_csrf_allows_navigate_request(self, client: TestClient):
+        """Navigate request (Sec-Fetch-Mode: navigate) without Origin allowed."""
+        response = client.post(
+            "/api/portfolio/refresh",
+            headers={"Sec-Fetch-Mode": "navigate"},
+        )
+        # navigate without Origin is a trusted browser navigation
+        assert response.status_code != 403
+
 
 class TestSwaggerDisabledInProduction:
     """Tests for Swagger/ReDoc disabled in production."""
