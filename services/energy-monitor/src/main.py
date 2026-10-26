@@ -54,6 +54,8 @@ logging.basicConfig(
 )
 _logger: logging.Logger = logging.getLogger(__name__)
 
+__all__ = ["app"]
+
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 limiter: Limiter = Limiter(key_func=get_remote_address)
 

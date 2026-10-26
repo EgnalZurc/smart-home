@@ -261,3 +261,77 @@ async def test_security_headers_on_error_responses(client):
     assert resp.status_code == 422
     assert resp.headers.get("X-Content-Type-Options") == "nosniff"
     assert resp.headers.get("X-Frame-Options") == "DENY"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Defensive branch coverage (LOW severity audit findings)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+async def test_lifespan_db_touch_oserror_logged(client, monkeypatch, caplog):
+    """LOW#1: Lifespan logs OSError on initial DB touch (main.py:139-140)."""
+    import logging
+
+    from collector import Collector
+    from database import EnergyStore
+
+    class FailingStore(EnergyStore):
+        def count(self):
+            raise OSError("disk full")
+
+    failing_collector = Collector.__new__(Collector)
+    failing_collector.store = FailingStore.__new__(FailingStore)
+    failing_collector.store._db = None  # prevent real DB access
+    failing_collector.devices = []
+    failing_collector.clients = {}
+    failing_collector.ring = {}
+    failing_collector.latest_energy = {}
+    failing_collector.labels = {}
+    failing_collector.last_tick_ts = None
+    failing_collector.meter_online = None
+    failing_collector._tasks = []
+
+    # Patch count to raise on first call (lifespan touch), succeed on second (health)
+    call_count = [0]
+
+    def count_with_fail():
+        call_count[0] += 1
+        if call_count[0] == 1:
+            raise OSError("disk full")
+        return 0
+
+    failing_collector.store.count = count_with_fail
+
+    monkeypatch.setattr(main, "collector", failing_collector)
+
+    with caplog.at_level(logging.WARNING):
+        # Trigger lifespan by making a request
+        transport = httpx.ASGITransport(app=main.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+            resp = await c.get("/health")
+
+    # The lifespan should have logged the OSError but not crashed
+    assert any("Initial DB touch failed" in r.message for r in caplog.records)
+
+
+async def test_db_ok_warning_logged_on_failure(monkeypatch, tmp_path, caplog):
+    """LOW#2: _db_ok logs warning on RuntimeError (main.py:163-164)."""
+    import logging
+
+    from collector import Collector
+    from database import EnergyStore
+
+    test_collector = Collector(EnergyStore(str(tmp_path / "e.db")))
+    monkeypatch.setattr(main, "collector", test_collector)
+
+    class BrokenStore:
+        def count(self):
+            raise RuntimeError("connection lost")
+
+    test_collector.store = BrokenStore()  # type: ignore[assignment]
+
+    with caplog.at_level(logging.WARNING):
+        result = main._db_ok()
+
+    assert result is False
+    assert any("DB health check failed" in r.message for r in caplog.records)
