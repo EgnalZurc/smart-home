@@ -113,27 +113,24 @@ class TestGetSetPreferences:
 # ---------------------------------------------------------------------------
 class TestGetPreferencesEndpoint:
     @pytest.mark.asyncio
-
     async def test_returns_default_dark(self, temp_auth_db):
         auth_users.create_user("alice", "pw")
         request = make_mock_request()
         with patch("api.user_prefs.require_authenticated", return_value="alice"):
-            result = await await get_preferences(request)
+            result = await get_preferences(request)
         assert result == {"dark_mode": True}
 
     @pytest.mark.asyncio
-
 
     async def test_returns_stored_value(self, temp_auth_db):
         auth_users.create_user("alice", "pw")
         auth_users.set_user_preferences("alice", False)
         request = make_mock_request()
         with patch("api.user_prefs.require_authenticated", return_value="alice"):
-            result = await await get_preferences(request)
+            result = await get_preferences(request)
         assert result == {"dark_mode": False}
 
     @pytest.mark.asyncio
-
 
     async def test_requires_authentication(self, temp_auth_db):
         from fastapi import HTTPException
@@ -153,19 +150,17 @@ class TestGetPreferencesEndpoint:
 # ---------------------------------------------------------------------------
 class TestUpdatePreferencesEndpoint:
     @pytest.mark.asyncio
-
     async def test_persists_and_returns_new_value(self, temp_auth_db):
         auth_users.create_user("alice", "pw")
         request = make_mock_request()
         body = Preferences(dark_mode=False)
         with patch("api.user_prefs.require_authenticated", return_value="alice"):
-            result = await await update_preferences(body, request)
+            result = await update_preferences(body, request)
         assert result == {"dark_mode": False}
         # Verify it was actually written to the DB.
         assert auth_users.get_user_preferences("alice") == {"dark_mode": False}
 
     @pytest.mark.asyncio
-
 
     async def test_toggle_back_to_true(self, temp_auth_db):
         auth_users.create_user("alice", "pw")
@@ -176,7 +171,6 @@ class TestUpdatePreferencesEndpoint:
         assert result == {"dark_mode": True}
 
     @pytest.mark.asyncio
-
 
     async def test_requires_authentication(self, temp_auth_db):
         from fastapi import HTTPException
@@ -406,23 +400,21 @@ class TestGetWidgetConfigEndpoint:
         auth_users.create_user("alice", "pw")
         request = make_mock_request()
         with patch("api.user_prefs.require_authenticated", return_value="alice"):
-            result = await await get_widget_config(request)
+            result = await get_widget_config(request)
         assert result == {"widgets": []}
 
     @pytest.mark.asyncio
-
 
     async def test_returns_stored_layout(self, temp_auth_db):
         auth_users.create_user("alice", "pw")
         auth_users.set_widget_config("alice", [{"widget_id": "ac", "size": "lg"}])
         request = make_mock_request()
         with patch("api.user_prefs.require_authenticated", return_value="alice"):
-            result = await await get_widget_config(request)
+            result = await get_widget_config(request)
         assert result["widgets"][0]["widget_id"] == "ac"
         assert result["widgets"][0]["size"] == "lg"
 
     @pytest.mark.asyncio
-
 
     async def test_requires_authentication(self, temp_auth_db):
         from fastapi import HTTPException
@@ -452,14 +444,13 @@ class TestUpdateWidgetConfigEndpoint:
             ]
         )
         with patch("api.user_prefs.require_authenticated", return_value="alice"):
-            result = await await update_widget_config(payload, request)
+            result = await update_widget_config(payload, request)
         ids = [w["widget_id"] for w in result["widgets"]]
         assert ids == ["ac", "casita"]
         # Verify it was actually written.
         assert auth_users.get_widget_config("alice") == result["widgets"]
 
     @pytest.mark.asyncio
-
 
     async def test_invalid_size_returns_422(self, temp_auth_db):
         from fastapi import HTTPException
@@ -473,7 +464,6 @@ class TestUpdateWidgetConfigEndpoint:
             assert exc.value.status_code == 422
 
     @pytest.mark.asyncio
-
 
     async def test_requires_authentication(self, temp_auth_db):
         from fastapi import HTTPException
