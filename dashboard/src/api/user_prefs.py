@@ -51,7 +51,7 @@ class WidgetConfigPayload(BaseModel):
 
 
 @router.get("/preferences")
-def get_preferences(request: Request) -> dict:
+async def get_preferences(request: Request) -> dict:
     """Return the current user's UI preferences.
 
     Returns:
@@ -62,7 +62,7 @@ def get_preferences(request: Request) -> dict:
 
 
 @router.post("/preferences")
-def update_preferences(prefs: Preferences, request: Request) -> dict:
+async def update_preferences(prefs: Preferences, request: Request) -> dict:
     """Persist the current user's UI preferences.
 
     Body:
@@ -77,7 +77,7 @@ def update_preferences(prefs: Preferences, request: Request) -> dict:
 
 
 @router.get("/widget-config")
-def get_widget_config(request: Request) -> dict:
+async def get_widget_config(request: Request) -> dict:
     """Return the current user's dashboard widget layout.
 
     Returns:
@@ -90,7 +90,7 @@ def get_widget_config(request: Request) -> dict:
 
 
 @router.post("/widget-config")
-def update_widget_config(payload: WidgetConfigPayload, request: Request) -> dict:
+async def update_widget_config(payload: WidgetConfigPayload, request: Request) -> dict:
     """Persist the current user's dashboard widget layout.
 
     Body:
