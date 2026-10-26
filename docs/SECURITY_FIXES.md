@@ -500,6 +500,18 @@ The audit should NOT re-report these issues.
 - **Review Date**: 2026-10-26
 - **Next Review**: 2027-04-26 (6 months)
 
+### [zigbee2mqtt] MQTT Plaintext Connection
+- **Severity**: LOW
+- **Status**: ACCEPTED_RISK
+- **Reason**: MQTT traffic is Docker-internal only (mosquitto container on same bridge network). No traffic leaves the Pi or crosses the internet. TLS would add complexity without security benefit.
+- **Mitigations**:
+  - Docker bridge network isolation
+  - MQTT authentication required (mosquitto `allow_anonymous false`)
+  - No external exposure
+- **Documentation**: Comment added in `configuration.example.yaml` explaining rationale
+- **Review Date**: 2026-10-26
+- **Next Review**: 2027-04-26 (6 months)
+
 ### [vaultwarden] No Automated Backup
 - **Severity**: HIGH
 - **Status**: FIXED
@@ -562,6 +574,37 @@ The audit should NOT re-report these issues.
 - **Description**: RSA key and database had world-readable permissions (644)
 - **Fix Applied**: `chmod 600` on rsa_key.pem and db.sqlite3 on the Pi
 - **Verification**: `ls -la ~/smart-home-prod/data/vaultwarden/` shows -rw------- permissions
+
+---
+
+## Fixed Issues (2026-10-26)
+
+### [zigbee2mqtt] Frontend Binding to 0.0.0.0
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: Frontend bound to 0.0.0.0 by default, potentially exposing it directly if firewall/Docker network is misconfigured
+- **Fix Applied**: Added `host: 127.0.0.1` to bind only to localhost; frontend accessed via nginx reverse proxy
+- **Verification**: Check `configuration.example.yaml` has `host: 127.0.0.1` under `frontend:`
+
+### [zigbee2mqtt] Empty Z2M_FRONTEND_PASSWORD Documentation
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: If Z2M_FRONTEND_PASSWORD env var is empty, frontend has no token protection (not documented)
+- **Fix Applied**: Added comment documenting this as accepted risk (nginx auth_request still protects /zigbee/ path)
+- **Verification**: Check `configuration.example.yaml` has comment about empty password behavior
+
+### [zigbee2mqtt] Duplicate YAML Block
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: Lines 49-57 were a copy-paste duplicate of the advanced block (cache_state, last_seen, devices, version)
+- **Fix Applied**: Removed the duplicate lines
+- **Verification**: `wc -l configuration.example.yaml` should be ~74 lines (was ~83 with duplicate)
 
 ---
 
