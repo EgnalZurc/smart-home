@@ -2,7 +2,7 @@
 
 Uses ``smart_home_common.sqlite_helpers.SqliteHelper`` (WAL + guaranteed close),
 same as every other service. Provider-neutral columns so a second calendar
-provider could be added later (design §3.2).
+provider could be added later (design Â§3.2).
 
 Scaffold scope: the schema (all six tables + indexes) and a small set of
 primitive accessors (``count``, ``upsert_event``, ``upcoming``, retention
@@ -75,7 +75,7 @@ class PruneResult(TypedDict):
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
-    """Create all calendar tables + indexes if they do not exist (design §3.2)."""
+    """Create all calendar tables + indexes if they do not exist (design Â§3.2)."""
     # Calendars we sync (config, editable via API).
     conn.execute(
         """
@@ -114,7 +114,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_events_cal_start ON events(calendar_id, start_ts)"
     )
-    # People mapping (thin — only reminder routing / widget grouping).
+    # People mapping (thin â€” only reminder routing / widget grouping).
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS people (
@@ -124,7 +124,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         )
         """
     )
-    # Attendee email → person slug (optional per-attendee routing).
+    # Attendee email â†’ person slug (optional per-attendee routing).
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS attendee_map (
@@ -145,8 +145,8 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         )
         """
     )
-    # History of reminders already sent — the dedup ledger + audit trail.
-    # UNIQUE(event_uid, offset_s, event_start) is the hard dedup guarantee (§5.2).
+    # History of reminders already sent â€” the dedup ledger + audit trail.
+    # UNIQUE(event_uid, offset_s, event_start) is the hard dedup guarantee (Â§5.2).
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS reminders_sent (
@@ -228,14 +228,14 @@ class CalendarStore:
         self.db_path = db_path
         self._db = SqliteHelper(db_path, init=_ensure_schema)
 
-    # ── Health / diagnostics ─────────────────────────────────────────────────
+    # â”€â”€ Health / diagnostics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def count(self) -> int:
         """Return the total number of cached events (used by the health probe)."""
         with self._db.connect() as conn:
             row = conn.execute("SELECT COUNT(*) AS n FROM events").fetchone()
         return int(row["n"])
 
-    # ── Calendars CRUD ───────────────────────────────────────────────────────
+    # â”€â”€ Calendars CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def get_enabled_calendars(self) -> list[Calendar]:
         """Return all calendars with enabled=1."""
         with self._db.connect() as conn:
@@ -307,7 +307,7 @@ class CalendarStore:
                 (1 if enabled else 0, calendar_id),
             )
 
-    # ── Reminder Rules CRUD ──────────────────────────────────────────────────
+    # â”€â”€ Reminder Rules CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def get_all_rules(self) -> list[ReminderRule]:
         """Return all reminder rules."""
         with self._db.connect() as conn:
@@ -364,7 +364,11 @@ class CalendarStore:
             return [ReminderRule(r) for r in rows]
 
     def add_rule(self, scope: str, scope_id: str | None, offset_s: int) -> int:
-        """Add a reminder rule. Returns the new rule's id."""
+        """Add a reminder rule. Returns the new rule's id.
+
+        The returned id is always a positive integer since SQLite AUTOINCREMENT
+        guarantees a non-null rowid on successful INSERT.
+        """
         with self._db.connect() as conn:
             cursor = conn.execute(
                 """
@@ -373,7 +377,10 @@ class CalendarStore:
                 """,
                 (scope, scope_id, offset_s),
             )
-            return cursor.lastrowid or 0
+            # lastrowid is guaranteed non-null after a successful INSERT
+            rule_id = cursor.lastrowid
+            assert rule_id is not None, "INSERT succeeded but lastrowid is None"
+            return rule_id
 
     def delete_rule(self, rule_id: int) -> bool:
         """Delete a reminder rule by id. Returns True if deleted."""
@@ -411,13 +418,13 @@ class CalendarStore:
                 created += 1
             return created
 
-    # ── Reminders Sent (dedup ledger) ────────────────────────────────────────
+    # â”€â”€ Reminders Sent (dedup ledger) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def try_record_reminder(
         self, event_uid: str, offset_s: int, event_start: int
     ) -> bool:
         """Attempt to record a sent reminder. Returns True if inserted, False if exists.
 
-        Uses UNIQUE(event_uid, offset_s, event_start) for hard dedup (§5.2).
+        Uses UNIQUE(event_uid, offset_s, event_start) for hard dedup (Â§5.2).
         """
         with self._db.connect() as conn:
             try:
@@ -433,13 +440,7 @@ class CalendarStore:
                 return False
 
     def prune_old_reminders(self, retention_days: int = 90) -> int:
-        """Delete reminder records older than retention_days. Returns count deleted.
-
-        TODO: Add tests for this method covering:
-        - Records older than retention_days are deleted
-        - Records within retention_days are preserved
-        - Empty table case (returns 0)
-        """
+        """Delete reminder records older than retention_days. Returns count deleted."""
         cutoff = int(time.time()) - retention_days * 24 * 3600
         with self._db.connect() as conn:
             rowcount = conn.execute(
@@ -449,7 +450,7 @@ class CalendarStore:
             logger.info("Pruned %d old reminder records", rowcount)
         return rowcount
 
-    # ── Writes ───────────────────────────────────────────────────────────────
+    # â”€â”€ Writes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def upsert_event(self, event: EventDict) -> None:
         """Insert or replace one cached event instance.
 
@@ -485,7 +486,7 @@ class CalendarStore:
                 },
             )
 
-    # ── Reads ────────────────────────────────────────────────────────────────
+    # â”€â”€ Reads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def upcoming(self, now: int | None = None, limit: int = 5) -> list[EventRow]:
         """Return the next ``limit`` active events at or after ``now``.
 
@@ -536,13 +537,6 @@ class CalendarStore:
         An event overlaps if it starts before window ends AND ends after window starts.
         Includes confirmed and tentative (shared calendar) events.
         Used by the /today endpoint to get day's agenda.
-
-        TODO: Add tests for boundary conditions:
-        - Event exactly at window start (start_ts == window_start)
-        - Event exactly at window end (end_ts == window_end)
-        - Event spanning entire window
-        - Event partially overlapping (starts before, ends during)
-        - Event partially overlapping (starts during, ends after)
         """
         with self._db.connect() as conn:
             rows = conn.execute(
@@ -558,13 +552,7 @@ class CalendarStore:
         return [dict(r) for r in rows]
 
     def clear_calendar_events(self, calendar_id: str) -> int:
-        """Delete all events for a calendar (for full sync). Returns count deleted.
-
-        TODO: Add tests for this method covering:
-        - Events for specified calendar_id are deleted
-        - Events for other calendars are preserved
-        - Empty calendar case (returns 0)
-        """
+        """Delete all events for a calendar (for full sync). Returns count deleted."""
         with self._db.connect() as conn:
             rowcount = conn.execute(
                 "DELETE FROM events WHERE calendar_id = ?", (calendar_id,)
@@ -573,7 +561,7 @@ class CalendarStore:
             logger.info("Cleared %d events from calendar %s", rowcount, calendar_id)
         return rowcount
 
-    # ── Retention (design §3.3) ──────────────────────────────────────────────
+    # â”€â”€ Retention (design Â§3.3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def prune(self, now: int | None = None) -> PruneResult:
         """Apply retention and checkpoint the WAL.
 
