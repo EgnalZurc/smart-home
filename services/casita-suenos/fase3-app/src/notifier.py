@@ -229,6 +229,8 @@ class TelegramNotifier:
     def __init__(
         self, bot_token: str, fallback_chat_id: str, db: Database | None = None
     ) -> None:
+        # Store token directly to avoid exposing it via _bot.token attribute
+        self._token: str = bot_token
         self._bot = telegram.Bot(token=bot_token)
         self._fallback_chat_id = fallback_chat_id
         self._db: Database | None = db  # instancia de Database para leer chat_ids
@@ -263,9 +265,8 @@ class TelegramNotifier:
             logger.warning("[telegram] Sin chat_ids configurados, mensaje no enviado.")
             return False
 
-        # Usar httpx sincrono: mas robusto para envio masivo sin asyncio overhead
-
-        token = self._bot.token
+        # Use stored _token instead of exposing via _bot.token
+        token = self._token
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         success = True
         for chat_id in chat_ids:

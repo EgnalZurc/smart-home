@@ -828,6 +828,8 @@ async def get_dismissed(request: Request) -> dict[str, list]:
 async def dismiss_property(req: PropertyUid, request: Request) -> dict[str, bool | str]:
     """Mark a property as dismissed (not interested).
 
+    Rate limited to 10 requests/minute per client IP to prevent abuse.
+
     Args:
         req: Request body with property UID.
         request: The incoming HTTP request.
@@ -836,8 +838,9 @@ async def dismiss_property(req: PropertyUid, request: Request) -> dict[str, bool
         dict with ok=True and the dismissed UID.
 
     Raises:
-        HTTPException: 404 if property not found, 503 if not ready.
+        HTTPException: 404 if property not found, 429 if rate limited, 503 if not ready.
     """
+    _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")
@@ -854,6 +857,8 @@ async def undismiss_property(
 ) -> dict[str, bool | str]:
     """Restore a dismissed property back to the radar.
 
+    Rate limited to 10 requests/minute per client IP to prevent abuse.
+
     Args:
         req: Request body with property UID.
         request: The incoming HTTP request.
@@ -862,8 +867,9 @@ async def undismiss_property(
         dict with ok=True and the restored UID.
 
     Raises:
-        HTTPException: 404 if property not found, 503 if not ready.
+        HTTPException: 404 if property not found, 429 if rate limited, 503 if not ready.
     """
+    _check_manual_trigger_rate_limit(request)
     scheduler = request.app.state.scheduler
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Not ready")

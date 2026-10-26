@@ -36,12 +36,37 @@ import logging
 import re
 import time
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import httpx
 from bs4 import BeautifulSoup
 from config import DEFAULT_HEADERS, SCRAPER_CONFIG
 
+if TYPE_CHECKING:
+    from models import GarageType, Habitability, Internet
+
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "RawListing",
+    "ScraperResult",
+    "parse_price",
+    "parse_rooms",
+    "parse_size",
+    "infer_habitability",
+    "infer_internet",
+    "infer_garage_type",
+    "infer_terrain_m2",
+    "infer_ac_type",
+    "infer_habitable",
+    "infer_has_garden",
+    "infer_has_garage",
+    "infer_no_internet",
+    "infer_ac",
+    "infer_piscina",
+    "get_html",
+    "make_client",
+]
 
 # ---------------------------------------------------------------------------
 # Keywords
@@ -393,7 +418,7 @@ def parse_size(raw: str | None) -> float | None:
 # ---------------------------------------------------------------------------
 
 
-def infer_habitability(description: str, title: str):
+def infer_habitability(description: str, title: str) -> Habitability:
     """
     Infer property habitability level from description text (R4 rubric).
 
@@ -431,7 +456,7 @@ def infer_habitability(description: str, title: str):
     return Habitability.DESCONOCIDO
 
 
-def infer_internet(description: str, extras: list[str]):
+def infer_internet(description: str, extras: list[str]) -> Internet:
     """
     Infer internet connectivity level from listing text (R11 rubric).
 
@@ -463,7 +488,7 @@ def infer_internet(description: str, extras: list[str]):
     return Internet.NINGUNO  # sin info → valor neutro (puntúa 4)
 
 
-def infer_garage_type(description: str, extras: list[str]):
+def infer_garage_type(description: str, extras: list[str]) -> GarageType:
     """
     Infer garage type from listing text (R3 rubric).
 
