@@ -159,14 +159,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Content-Security-Policy"] = (
-            # SECURITY: unsafe-inline required for SPA inline styles (chart.js, etc.)
+            # SECURITY: unsafe-inline required for SPA inline scripts/styles (chart.js, etc.)
             # This is an ACCEPTED_RISK documented in docs/SECURITY_FIXES.md under
             # "[infrastructure] CSP unsafe-inline". Mitigations:
-            # - All other CSP directives are strict (default-src 'self', script-src 'self')
+            # - All other CSP directives are strict
             # - Application served via Tailscale VPN only (not public internet)
             # - Other security headers provide defense-in-depth
             # Future: Consider nonce-based CSP migration (dashboard already migrated)
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self'"
         )
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
