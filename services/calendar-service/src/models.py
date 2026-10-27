@@ -2,12 +2,7 @@
 
 These describe the API contract (request/response shapes) and the domain
 objects the sync loop and reminder engine pass around. Storage-neutral so a
-second calendar provider could be added later (design §3.2, §4).
-
-Scaffold scope: the two headline domain models the design calls out —
-``CalendarEvent`` and ``Reminder`` — plus the supporting ``Calendar`` and
-``ReminderRule`` config models and the ``HealthResponse``. Business logic (sync,
-engine, notifier) lands in later tasks.
+second calendar provider could be added later.
 """
 
 from __future__ import annotations
@@ -15,19 +10,18 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 # ── Event status ─────────────────────────────────────────────────────────────
-# Mirrors the ``status`` column on the events table (design §3.2):
+# Mirrors the ``status`` column on the events table:
 #   confirmed → a live event instance
 #   cancelled → Google tombstone (status == "cancelled")
 #   deleted   → soft-deleted locally (suppresses in-flight reminders)
 EventStatus = str  # one of: "confirmed" | "cancelled" | "deleted"
 
-# Reminder-rule scope (design §5.1): most specific enabled rule wins
-#   (person > calendar > global).
+# Reminder-rule scope: most specific enabled rule wins (person > calendar > global).
 ReminderScope = str  # one of: "global" | "calendar" | "person"
 
 
 class Calendar(BaseModel):
-    """A Google calendar the service tracks (design §2.3 / §3.2 ``calendars``)."""
+    """A Google calendar the service tracks."""
 
     id: str = Field(
         ..., description="Google calendarId, e.g. 'x@group.calendar.google.com'"
@@ -47,9 +41,8 @@ class CalendarEvent(BaseModel):
 
     Recurring events are already expanded into concrete instances by Google
     (``singleEvents=true``), so every instance has a distinct ``start_ts`` and
-    its own stable ``uid`` (design §2.2, §3.2 ``events``). Timestamps are unix
-    epoch (UTC); the frontend formats to the local timezone. All-day events use
-    local-midnight boundaries.
+    its own stable ``uid``. Timestamps are unix epoch (UTC); the frontend
+    formats to the local timezone. All-day events use local-midnight boundaries.
     """
 
     uid: str = Field(..., description="Stable key '<calendar_id>:<event_id>:<start>'")
@@ -70,7 +63,7 @@ class CalendarEvent(BaseModel):
 
 
 class ReminderRule(BaseModel):
-    """A reminder offset rule (design §5.1 ``reminder_rules``).
+    """A reminder offset rule.
 
     Offsets are data, not code: ``offset_s`` is seconds before an event's start
     at which to remind (1800 = 30 min, 3600 = 1 h, 86400 = 1 day). ``scope``
@@ -89,10 +82,10 @@ class ReminderRule(BaseModel):
 class Reminder(BaseModel):
     """A reminder that is due (or was sent) for a specific event occurrence.
 
-    The ``(event_uid, offset_s, event_start)`` triple is the deduplication key
-    (design §5.2): a reminder fires exactly once per event occurrence per offset,
-    even across restarts or overlapping ticks. ``sent_ts`` / ``ok`` are set once
-    the Telegram send is attempted; before that they are ``None``.
+    The ``(event_uid, offset_s, event_start)`` triple is the deduplication key:
+    a reminder fires exactly once per event occurrence per offset, even across
+    restarts or overlapping ticks. ``sent_ts`` / ``ok`` are set once the Telegram
+    send is attempted; before that they are ``None``.
     """
 
     event_uid: str = Field(..., description="Event this reminder is for")
@@ -109,11 +102,11 @@ class Reminder(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Health payload (design §7 / §10.1).
+    """Health payload for the /health endpoint.
 
     Surfaces the real failure signals so a silently-broken deployment is visible:
     a revoked OAuth token, a stalled sync loop, an unwritable DB or a dead
-    reminder tick each turn the dashboard health step red (design §11).
+    reminder tick each turn the dashboard health step red.
     """
 
     online: bool = Field(True, description="Service is running")

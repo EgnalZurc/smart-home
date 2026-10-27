@@ -9,7 +9,7 @@ The client handles:
 - Calendar listing for configuration UI
 - Proper error handling for quota exhaustion and auth failures
 
-Design notes (from calendar-service-design.md §2):
+Design notes (from calendar-service-design.md Â§2):
 - Read-only scope (calendar.readonly) for least-privilege access
 - Service stores the OAuth refresh token at TOKEN_PATH (secret, mode 600)
 - Credentials come from env vars (GOOGLE_OAUTH_CLIENT_ID/SECRET), not a file
@@ -66,7 +66,8 @@ class TimeoutHttp(Http):
 
     The Google API client uses httplib2 by default which has no timeout,
     allowing sync operations to hang indefinitely on network issues.
-    This wrapper sets socket-level timeouts for all requests.
+    This wrapper sets socket-level timeouts for each request, restoring
+    the previous timeout after completion to avoid affecting other code.
     """
 
     def __init__(self, timeout: float = HTTP_TIMEOUT_S, **kwargs):
@@ -80,8 +81,7 @@ class TimeoutHttp(Http):
         self._timeout = timeout
 
     def request(self, *args, **kwargs):
-        """Make HTTP request with enforced timeout."""
-        # Set socket default timeout for this request
+        """Make HTTP request with enforced timeout, restoring previous value after."""
         old_timeout = socket.getdefaulttimeout()
         try:
             socket.setdefaulttimeout(self._timeout)
@@ -135,7 +135,7 @@ class NormalizedEvent(TypedDict):
     attendees: list[AttendeeInfo]
 
 
-# Read-only scope for least-privilege access (design §2.1).
+# Read-only scope for least-privilege access (design Â§2.1).
 CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
 
 
@@ -491,10 +491,10 @@ class GoogleCalendarClient:
         }
 
         if sync_token:
-            # Incremental sync — timeMin/timeMax are ignored per API docs
+            # Incremental sync â€” timeMin/timeMax are ignored per API docs
             params["syncToken"] = sync_token
         else:
-            # Full sync — apply time bounds
+            # Full sync â€” apply time bounds
             if time_min:
                 params["timeMin"] = time_min.astimezone(timezone.utc).isoformat()
             if time_max:
@@ -517,7 +517,7 @@ class GoogleCalendarClient:
 
         except HttpError as exc:
             if exc.resp.status == 410:
-                # Sync token is stale — caller should retry with full sync
+                # Sync token is stale â€” caller should retry with full sync
                 logger.warning(
                     "Sync token for calendar %s is stale (410 Gone)", calendar_id
                 )
