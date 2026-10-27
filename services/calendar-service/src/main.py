@@ -592,9 +592,7 @@ class CalendarConfig(BaseModel):
         if not v or len(v) > 254:  # Max email length per RFC 5321
             raise ValueError("Calendar ID must be 1-254 characters")
         if not cls._CALENDAR_ID_PATTERN.match(v):
-            raise ValueError(
-                'Calendar ID must be "primary" or a valid email address'
-            )
+            raise ValueError('Calendar ID must be "primary" or a valid email address')
         return v
 
 
