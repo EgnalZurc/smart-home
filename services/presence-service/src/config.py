@@ -106,6 +106,16 @@ def validate_mqtt_topic(value: str, *, allow_wildcards: bool = False) -> str:
     return value
 
 
+# ── Rate Limiting ────────────────────────────────────────────────────────────
+# Health endpoints execute DB queries, so rate limiting prevents DoS via spam.
+MAX_REQUESTS_PER_MINUTE: int = int(
+    os.environ.get("PRESENCE_MAX_REQUESTS_PER_MINUTE", "30")
+)
+RATE_LIMIT_WINDOW_S: int = int(os.environ.get("PRESENCE_RATE_LIMIT_WINDOW_S", "60"))
+MAX_RATE_LIMIT_ENTRIES: int = int(
+    os.environ.get("PRESENCE_MAX_RATE_LIMIT_ENTRIES", "1000")
+)
+
 # ── Logging ──────────────────────────────────────────────────────────────────
 LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO").upper()
 
