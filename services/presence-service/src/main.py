@@ -22,7 +22,15 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from config import DB_PATH, LOG_LEVEL, PORT, SERVICE_NAME
+from config import (
+    DB_PATH,
+    LOG_LEVEL,
+    MAX_RATE_LIMIT_ENTRIES,
+    MAX_REQUESTS_PER_MINUTE,
+    PORT,
+    RATE_LIMIT_WINDOW_S,
+    SERVICE_NAME,
+)
 from database import PresenceStore
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -32,11 +40,39 @@ _LIBS_PATH: str = os.environ.get("LIBS_PATH", "/app/libs")
 if _LIBS_PATH not in sys.path:
     sys.path.insert(0, _LIBS_PATH)
 
+from smart_home_common.rate_limiter import InMemoryRateLimiter  # noqa: E402
+
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logger: logging.Logger = logging.getLogger(__name__)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Rate Limiting — protects health endpoints from DoS via request spam
+# ═══════════════════════════════════════════════════════════════════════════════
+rate_limiter: InMemoryRateLimiter = InMemoryRateLimiter(
+    max_requests=MAX_REQUESTS_PER_MINUTE,
+    window_seconds=RATE_LIMIT_WINDOW_S,
+    max_entries=MAX_RATE_LIMIT_ENTRIES,
+)
+
+
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP from request, respecting X-Forwarded-For if present.
+
+    Args:
+        request: The FastAPI request object.
+
+    Returns:
+        The client IP address as a string, or "unknown" if not determinable.
+    """
+    forwarded: str | None = request.headers.get("x-forwarded-for")
+    if forwarded:
+        # Take the first IP in the chain (original client)
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
 
 # Single durable store for the process lifetime.
 store: PresenceStore = PresenceStore(DB_PATH)
@@ -80,6 +116,47 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Rate Limit Middleware
+# ═══════════════════════════════════════════════════════════════════════════════
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Middleware that applies rate limiting to all endpoints.
+
+    Unlike other services that skip health endpoints, this service applies rate
+    limiting to ALL endpoints including /health and /api/health/presence because
+    they execute database queries (db_ok) on every call. Without rate limiting,
+    an attacker could DoS the service by spamming health endpoints.
+
+    Rate limit: 30 requests per minute per client IP (configurable via env vars).
+    """
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        """Apply rate limiting and process the request.
+
+        Args:
+            request: The incoming HTTP request.
+            call_next: The next middleware or route handler in the chain.
+
+        Returns:
+            The HTTP response, or a 429 response if rate limit is exceeded.
+        """
+        client_ip: str = _get_client_ip(request)
+        if not rate_limiter.is_allowed(client_ip):
+            logger.warning(
+                "Rate limit exceeded for IP %s on %s",
+                client_ip,
+                request.url.path,
+            )
+            return Response(
+                content='{"detail":"Rate limit exceeded. Try again later."}',
+                status_code=429,
+                media_type="application/json",
+            )
+        return await call_next(request)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manage application startup and shutdown lifecycle.
@@ -110,6 +187,9 @@ app: FastAPI = FastAPI(
 
 # Register security headers middleware.
 app.add_middleware(SecurityHeadersMiddleware)
+
+# Register rate limit middleware (applies to ALL endpoints including health).
+app.add_middleware(RateLimitMiddleware)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
