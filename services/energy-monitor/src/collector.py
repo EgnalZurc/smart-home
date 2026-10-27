@@ -47,6 +47,8 @@ logger: logging.Logger = logging.getLogger(__name__)
 # One hi-res power point: (unix_ts, power_w, voltage, pf).
 PowerPoint = tuple[int, float, float | None, float | None]
 
+__all__ = ["Collector", "PowerPoint", "parse_devices"]
+
 
 def parse_devices(raw: str) -> list[dict]:
     """Parse the ``ENERGY_DEVICES`` JSON string into a validated device list.

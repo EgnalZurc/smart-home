@@ -58,7 +58,10 @@ async def test_gen1_get_status_online():
         return httpx.Response(200, json=GEN1_STATUS)
 
     dev = ShellyEMClient(
-        "main", "192.168.1.50", gen=GEN1, channels={"ch0": "General"},
+        "main",
+        "192.168.1.50",
+        gen=GEN1,
+        channels={"ch0": "General"},
         client=_mock_client(handler),
     )
     status = await dev.get_status()

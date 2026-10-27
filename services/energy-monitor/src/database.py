@@ -34,6 +34,8 @@ from config import (
 # Supported aggregation periods for ``consumption_by_period`` (design §4.3).
 VALID_PERIODS = ("hour", "day", "week", "month")
 
+__all__ = ["EnergyStore", "VALID_PERIODS"]
+
 try:
     from smart_home_common.sqlite_helpers import SqliteHelper
 except ImportError:  # pragma: no cover - import fallback outside the container
