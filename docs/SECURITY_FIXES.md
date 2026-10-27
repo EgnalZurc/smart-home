@@ -365,6 +365,73 @@ Each entry follows this format:
 
 ---
 
+## Fixed Issues (2026-10-26) - Mosquitto Infrastructure
+
+### [infrastructure/mosquitto] bind_address Documentation
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: bind_address 127.0.0.1 would break Docker inter-container communication; needed documentation that 0.0.0.0 is intentional
+- **Fix Applied**: Changed to 0.0.0.0 with comprehensive SECURITY NOTE explaining why this is safe (Docker network isolation, host firewall, Tailscale ACLs)
+- **Verification**: Check `mosquitto.conf` line 26-31 has bind_address 0.0.0.0 with security comment
+
+### [infrastructure/mosquitto] Certificate Renewal Documentation
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: Server certs valid 365 days vs CA 10 years with no documented renewal procedure
+- **Fix Applied**: Added comprehensive CERTIFICATE RENEWAL PROCEDURE section to generate-certs.sh including step-by-step renewal instructions and cron-based expiry monitoring example
+- **Verification**: Check `generate-certs.sh` contains "CERTIFICATE RENEWAL PROCEDURE" section
+
+### [infrastructure/mosquitto] require_certificate false Documentation
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: require_certificate false allows password-only auth; needed documentation that this is intentional
+- **Fix Applied**: Added SECURITY NOTE explaining rationale and alternative mTLS configuration
+- **Verification**: Check `mosquitto.conf` lines 43-48 has comment explaining require_certificate false
+
+### [infrastructure/mosquitto] RSA Key Size Documentation
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: RSA 2048-bit used; should document upgrade path to 4096 or ECDSA
+- **Fix Applied**: Added TODO comment with upgrade considerations and ECDSA example command
+- **Verification**: Check `generate-certs.sh` KEY_SIZE section has TODO and ECDSA example
+
+### [infrastructure/mosquitto] Subscribe/Unsubscribe Logging
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: Missing log_type subscribe/unsubscribe for audit trail
+- **Fix Applied**: Added `log_type subscribe` and `log_type unsubscribe` with explanatory comment
+- **Verification**: Check `mosquitto.conf` logging section includes subscribe/unsubscribe
+
+### [infrastructure/mosquitto] TLS Example Version
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: mosquitto-tls.conf.example showed tlsv1.2; update to tlsv1.3 for consistency
+- **Fix Applied**: Changed to tlsv1.3 with comment noting TLS 1.2 fallback option
+- **Verification**: Check `mosquitto-tls.conf.example` shows tls_version tlsv1.3
+
+### [infrastructure/mosquitto] Resource Limits Documentation
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: No max_connections/resource limits configured
+- **Fix Applied**: Added TODO section with recommended limits for future scaling
+- **Verification**: Check `mosquitto.conf` has "Resource Limits" section with TODO
+
+---
+
 ## Accepted Risks
 
 Issues in this section have been evaluated and accepted as low risk given the deployment context.

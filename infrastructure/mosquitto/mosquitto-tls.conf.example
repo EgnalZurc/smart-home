@@ -20,8 +20,10 @@ cafile /mosquitto/certs/ca.crt
 certfile /mosquitto/certs/server.crt
 keyfile /mosquitto/certs/server.key
 
-# TLS version - require TLS 1.2 minimum (disable older insecure versions)
-tls_version tlsv1.2
+# TLS version - require TLS 1.3 (modern, secure, faster handshake)
+# TLS 1.2 is still acceptable if client compatibility is needed:
+#   tls_version tlsv1.2
+tls_version tlsv1.3
 
 # ─── Client Certificate Authentication (Optional) ────────────────────────────
 # Uncomment to require client certificates (mutual TLS / mTLS)

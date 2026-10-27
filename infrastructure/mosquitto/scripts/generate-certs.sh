@@ -10,6 +10,27 @@
 # Examples:
 #   cd ~/smart-home-prod/data/mosquitto/certs && /path/to/generate-certs.sh
 #   ./generate-certs.sh /path/to/certs
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# CERTIFICATE RENEWAL PROCEDURE
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Server/client certificates are valid for 365 days (CERT_DAYS).
+# CA certificate is valid for 10 years (CA_DAYS).
+#
+# RENEWAL STEPS (run ~30 days before expiry):
+#   1. Check expiry: openssl x509 -in server.crt -noout -enddate
+#   2. Backup existing certs: cp -r certs/ certs.bak.$(date +%Y%m%d)/
+#   3. Re-run this script (same output_directory)
+#   4. Restart mosquitto: docker compose restart mosquitto
+#   5. Redistribute ca.crt to clients if CA was regenerated
+#
+# MONITORING EXPIRY:
+#   Add to cron (monthly check):
+#   0 0 1 * * openssl x509 -in /path/to/server.crt -checkend 2592000 || \
+#             echo "MQTT cert expires within 30 days" | mail -s "Cert Alert" admin
+#
+# ═══════════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
@@ -18,8 +39,15 @@ CERTS_DIR="${1:-$(pwd)}"
 
 # Certificate parameters
 CA_DAYS=3650        # 10 years for CA
-CERT_DAYS=365       # 1 year for server/client
+CERT_DAYS=365       # 1 year for server/client (see renewal procedure above)
+
+# KEY_SIZE: RSA 2048-bit is currently used (sufficient for internal TLS).
+# TODO (LOW priority): Consider upgrading to RSA 4096 or ECDSA P-384 for
+# enhanced security. This requires testing client compatibility first.
+# To upgrade: change KEY_SIZE=4096 or switch to ECDSA commands below.
+# ECDSA example: openssl ecparam -genkey -name secp384r1 -out ca.key
 KEY_SIZE=2048
+
 COUNTRY="ES"
 STATE="Madrid"
 CITY="Madrid"
@@ -114,3 +142,6 @@ echo "Next steps:"
 echo "  1. Update mosquitto.conf to use these certificates"
 echo "  2. Distribute ca.crt to MQTT clients"
 echo "  3. NEVER commit .key files to git (they're in .gitignore)"
+echo ""
+echo "IMPORTANT: Set a calendar reminder for certificate renewal!"
+echo "Server cert expires in ${CERT_DAYS} days. Renew 30 days before expiry."
