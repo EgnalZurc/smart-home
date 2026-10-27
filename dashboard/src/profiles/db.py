@@ -4,6 +4,11 @@ This module handles all SQLite database interactions including:
 - Connection management
 - Table creation
 - CRUD operations for profiles and user-profile assignments
+TODO: The CRUD functions (get_all_profiles, get_profile_by_id, etc.) are
+synchronous but are called from async FastAPI endpoints. For high-concurrency
+scenarios, consider wrapping these in `asyncio.to_thread()` at the call site
+or refactoring to use an async SQLite library like `aiosqlite`. Current usage
+is low-volume (admin operations) so blocking is acceptable for now.
 """
 
 import logging

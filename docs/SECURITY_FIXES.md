@@ -21,6 +21,15 @@ Each entry follows this format:
 
 ## Fixed Issues
 
+### [nginx] postMessage Wildcard Origin
+- **Severity**: HIGH
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: sso-cookie-vendor.html used `postMessage(..., '*')` wildcard origin, allowing any site to receive authentication events
+- **Fix Applied**: Replaced wildcard `'*'` with explicit trusted origin `'https://raspberrypi.tailaa37cd.ts.net'`
+- **Verification**: Check `infrastructure/nginx/html/sso-cookie-vendor.html` uses `TRUSTED_ORIGIN` constant instead of `'*'`
+
 ### [dashboard] PC_AGENT_TOKEN Exposure
 - **Severity**: CRITICAL
 - **Status**: FIXED

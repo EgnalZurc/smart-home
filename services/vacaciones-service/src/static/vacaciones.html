@@ -202,20 +202,20 @@ function renderSummary(yearData) {
         if (!item.hijo) {
             return '<div class="summary-row">' +
                 '<div class="summary-left">' +
-                '<span class="summary-dot" style="background:' + item.nucleo.color + '"></span>' +
-                '<span class="summary-nombre">' + item.nucleo.nombre + '</span>' +
+                '<span class="summary-dot" style="background:' + escapeHtml(item.nucleo.color) + '"></span>' +
+                '<span class="summary-nombre">' + escapeHtml(item.nucleo.nombre) + '</span>' +
                 '</div>' +
                 '<span class="summary-no-hijo">Sin hijo/a asignado</span>' +
                 '</div>';
         }
         return '<div class="summary-row">' +
             '<div class="summary-left">' +
-            '<span class="summary-dot" style="background:' + item.nucleo.color + '"></span>' +
-            '<div><div class="summary-nombre">' + item.nucleo.nombre + '</div>' +
-            '<div class="summary-hijo-label">con ' + item.hijo.nombre + '</div></div>' +
+            '<span class="summary-dot" style="background:' + escapeHtml(item.nucleo.color) + '"></span>' +
+            '<div><div class="summary-nombre">' + escapeHtml(item.nucleo.nombre) + '</div>' +
+            '<div class="summary-hijo-label">con ' + escapeHtml(item.hijo.nombre) + '</div></div>' +
             '</div>' +
             '<div class="summary-right">' +
-            '<div class="summary-count" style="color:' + item.nucleo.color + '">' + item.count + '</div>' +
+            '<div class="summary-count" style="color:' + escapeHtml(item.nucleo.color) + '">' + item.count + '</div>' +
             '<div class="summary-of">de ' + item.total + ' comidas</div>' +
             '</div></div>';
     }).join('');
@@ -256,16 +256,16 @@ function renderYear(year, maxYear, canDelete) {
                 var cls = editable ? 'interactive' : 'readonly';
                 var oc = editable ? 'onclick="togglePersona(this)"' : '';
                 return '<span class="persona-chip ' + cls + ' ' + (selected ? 'selected' : 'unselected') + '"' +
-                    ' data-year="' + year.year + '" data-momento="' + m.id + '"' +
-                    ' data-nucleo="' + nucleo.id + '" data-persona="' + persona.id + '" ' + oc + '>' +
-                    persona.inicial + '</span>';
+                    ' data-year="' + year.year + '" data-momento="' + escapeHtml(m.id) + '"' +
+                    ' data-nucleo="' + escapeHtml(nucleo.id) + '" data-persona="' + escapeHtml(persona.id) + '" ' + oc + '>' +
+                    escapeHtml(persona.inicial) + '</span>';
             }).join('');
             return '<div class="nucleo-section">' +
-                '<div class="nucleo-header" style="background:' + nucleo.color + '30;color:' + nucleo.color + '">' + nucleo.nombre + '</div>' +
+                '<div class="nucleo-header" style="background:' + escapeHtml(nucleo.color) + '30;color:' + escapeHtml(nucleo.color) + '">' + escapeHtml(nucleo.nombre) + '</div>' +
                 '<div class="personas-row">' + chips + '</div></div>';
         }).join('');
         return '<div class="meal-card ' + (m.importante ? 'meal-important' : 'meal-wildcard') + '">' +
-            '<div class="meal-head"><span>' + m.icon + '</span><span>' + m.label + '</span>' +
+            '<div class="meal-head"><span>' + m.icon + '</span><span>' + escapeHtml(m.label) + '</span>' +
             (!m.importante ? '<span class="text-amber-500 text-[10px]">(comod\u00edn)</span>' : '') +
             '</div>' + nucleosHtml + '</div>';
     }).join('');
@@ -307,19 +307,62 @@ function togglePersona(el) {
     debouncedSave(year);
 }
 
+/**
+ * Debounced save with retry logic and user feedback.
+ * Waits 500ms after the last change before saving to avoid excessive API calls.
+ * On failure, retries up to 2 times with exponential backoff.
+ * Shows visual feedback for save status (saving/error).
+ */
 function debouncedSave(year) {
     if (saveTimeout) clearTimeout(saveTimeout);
-    document.getElementById('saving-indicator').classList.add('show');
+    var indicator = document.getElementById('saving-indicator');
+    indicator.textContent = 'Guardando...';
+    indicator.style.background = 'rgba(99,102,241,0.9)';
+    indicator.classList.add('show');
+    
     saveTimeout = setTimeout(function() {
         var yd = null;
-        for (var i = 0; i < appData.years.length; i++) { if (appData.years[i].year === year) { yd = appData.years[i]; break; } }
-        if (yd) {
-            fetch('/api/vacaciones/year/' + year, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ comidas: yd.comidas, notas: yd.notas || '' })
-            }).catch(function(e) { console.error('Error saving', e); });
+        for (var i = 0; i < appData.years.length; i++) { 
+            if (appData.years[i].year === year) { yd = appData.years[i]; break; } 
         }
-        document.getElementById('saving-indicator').classList.remove('show');
+        if (yd) {
+            var retryCount = 0;
+            var maxRetries = 2;
+            
+            function attemptSave() {
+                fetch('/api/vacaciones/year/' + year, {
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ comidas: yd.comidas, notas: yd.notas || '' })
+                })
+                .then(function(response) {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    indicator.classList.remove('show');
+                })
+                .catch(function(e) {
+                    console.error('Save attempt ' + (retryCount + 1) + ' failed:', e);
+                    retryCount++;
+                    if (retryCount <= maxRetries) {
+                        // Exponential backoff: 1s, 2s
+                        var delay = Math.pow(2, retryCount - 1) * 1000;
+                        indicator.textContent = 'Reintentando...';
+                        setTimeout(attemptSave, delay);
+                    } else {
+                        // All retries failed - show error to user
+                        indicator.textContent = 'Error al guardar';
+                        indicator.style.background = 'rgba(239,68,68,0.9)';
+                        // Hide error after 3 seconds
+                        setTimeout(function() { 
+                            indicator.classList.remove('show'); 
+                        }, 3000);
+                    }
+                });
+            }
+            
+            attemptSave();
+        } else {
+            indicator.classList.remove('show');
+        }
     }, 500);
 }
 
@@ -352,12 +395,12 @@ function renderNucleosList() {
     document.getElementById('nucleos-list').innerHTML = editNucleos.map(function(n, i) {
         var opts = '<option value="">-- Ninguno --</option>' +
             editPersonas.filter(function(p) { return p.nombre.trim(); }).map(function(p) {
-                return '<option value="' + p.id + '"' + ((n.hijo_id || '') === p.id ? ' selected' : '') + '>' + p.nombre + '</option>';
+                return '<option value="' + escapeHtml(p.id) + '"' + ((n.hijo_id || '') === p.id ? ' selected' : '') + '>' + escapeHtml(p.nombre) + '</option>';
             }).join('');
         return '<div class="nucleo-form-group">' +
             '<div class="nucleo-form-row">' +
-            '<span class="color-dot" style="background:' + n.color + '" onclick="cycleColor(' + i + ')"></span>' +
-            '<input type="text" value="' + n.nombre + '" placeholder="Nombre del n\u00facleo"' +
+            '<span class="color-dot" style="background:' + escapeHtml(n.color) + '" onclick="cycleColor(' + i + ')"></span>' +
+            '<input type="text" value="' + escapeHtml(n.nombre) + '" placeholder="Nombre del n\u00facleo"' +
             ' onchange="editNucleos[' + i + '].nombre=this.value"' +
             ' style="flex:1;background:transparent;border:none;color:white;font-size:13px;outline:none">' +
             '<button style="background:none;border:none;color:#ef4444;cursor:pointer;padding:4px;font-size:14px"' +
@@ -378,8 +421,8 @@ function renderPersonasList() {
     });
     document.getElementById('personas-list').innerHTML = editPersonas.map(function(p, i) {
         return '<div class="form-item">' +
-            '<span class="inicial-badge">' + (p._ini || '-') + '</span>' +
-            '<input type="text" value="' + p.nombre + '" placeholder="Nombre" onchange="updatePersonaNombre(' + i + ', this.value)">' +
+            '<span class="inicial-badge">' + escapeHtml(p._ini || '-') + '</span>' +
+            '<input type="text" value="' + escapeHtml(p.nombre) + '" placeholder="Nombre" onchange="updatePersonaNombre(' + i + ', this.value)">' +
             '<button class="delete-btn" onclick="deletePersona(' + i + ')">&#128465;</button>' +
             '</div>';
     }).join('');
