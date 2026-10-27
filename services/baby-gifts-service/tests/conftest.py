@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-# Add src to path for imports
+# Add src to path for imports.
+# NOTE: This approach is used for consistency with how Docker/CI runs the service
+# (PYTHONPATH=src). An alternative is to configure pythonpath in pytest.ini:
+#   [pytest]
+#   pythonpath = src
+# However, the explicit sys.path.insert ensures tests work identically whether
+# run via pytest, IDE, or CI without requiring pytest.ini configuration.
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 # Set test environment variables before importing modules

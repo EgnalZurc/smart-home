@@ -1,3 +1,11 @@
+# Core dependencies - pinned for reproducibility
 fastapi==0.115.12
 uvicorn==0.34.2
+
+# Internal shared library (follows smart-home versioning)
 smart_home_common
+
+# TODO: Pin transitive dependencies for full reproducibility
+# Currently relying on pip's resolver for: pydantic, starlette, httptools, etc.
+# Consider using pip-compile (pip-tools) to generate a fully-pinned lockfile
+# or migrating to poetry/pdm for deterministic builds.

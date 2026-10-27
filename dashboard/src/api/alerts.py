@@ -132,8 +132,15 @@ async def _fetch_memory(days: int) -> list[dict]:
 
         data = await monitoring.get_memory_alerts(days=days)
         return _extract_alerts(data, "memory")
-    except (OSError, ValueError, KeyError, RuntimeError, TypeError, Exception) as exc:
-        # Broad catch: monitoring module may raise various errors (file I/O, JSON parsing)
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        RuntimeError,
+        TypeError,
+        AttributeError,
+    ) as exc:
+        # Specific exceptions: monitoring module may raise various errors (file I/O, JSON parsing, missing attributes)
         # and we must not break the aggregated feed.
         logger.warning("Failed to collect memory alerts: %s", exc)
         return []
