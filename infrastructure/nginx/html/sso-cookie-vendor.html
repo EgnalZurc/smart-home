@@ -54,8 +54,11 @@
     <script>
         // Signal to the mobile app that authentication is complete
         // The app listens for this via the WebView bridge
+        // SECURITY: Restrict postMessage to trusted origin only
+        // Using wildcard '*' would allow any site to receive auth events
+        const TRUSTED_ORIGIN = 'https://raspberrypi.tailaa37cd.ts.net';
         if (window.opener) {
-            window.opener.postMessage({ command: 'authResult', success: true }, '*');
+            window.opener.postMessage({ command: 'authResult', success: true }, TRUSTED_ORIGIN);
         }
         // For mobile apps using custom URL schemes
         if (window.ReactNativeWebView) {
