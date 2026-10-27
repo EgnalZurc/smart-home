@@ -564,6 +564,18 @@ The audit should NOT re-report these issues.
 - **Fix Applied**: Added `user: "1000:1000"` to docker-compose.prod.yml
 - **Verification**: `docker exec vaultwarden id` shows uid=1000
 
+### [zigbee2mqtt] MQTT Plaintext Connection
+- **Severity**: LOW
+- **Status**: ACCEPTED_RISK
+- **Reason**: MQTT traffic is Docker-internal only (mosquitto container on same bridge network). No traffic leaves the Pi or crosses the internet. TLS would add complexity without security benefit.
+- **Mitigations**:
+  - Docker bridge network isolation
+  - MQTT authentication required (mosquitto `allow_anonymous false`)
+  - No external exposure
+- **Documentation**: Comment added in `configuration.example.yaml` explaining rationale
+- **Review Date**: 2026-10-26
+- **Next Review**: 2027-04-26 (6 months)
+
 ### [vaultwarden] No Automated Backup
 - **Severity**: HIGH
 - **Status**: FIXED
@@ -841,6 +853,28 @@ These are code quality improvements: type hints, documentation, constants extrac
 | 3 | valheim-admin, vaultwarden, energy, portfolio | 20 | #418-#421 |
 | 4 | infrastructure/nginx | 8 | #422 |
 | **Total** | **13 services** | **96** | **13 PRs** |
+
+---
+
+## Fixed Issues (2026-10-26) - LOW Severity Documentation
+
+### [vaultwarden] LOG_LEVEL=warn Documentation
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: LOG_LEVEL=warn may hide useful info without documenting the tradeoff
+- **Fix Applied**: Added detailed comments explaining the tradeoff: warn vs info vs debug, and why 'warn' is chosen for production (minimize SD card wear on Pi)
+- **Verification**: Check `services/vaultwarden/Dockerfile` for LOG_LEVEL documentation
+
+### [vaultwarden] EXPOSE 3012 Documentation
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: EXPOSE 3012 (WebSocket port) not documented, unclear if needed
+- **Fix Applied**: Added comments explaining port 3012 is used for WebSocket real-time sync (WEBSOCKET_ENABLED=true), what it provides, and that it becomes unused but harmless if WebSocket is disabled
+- **Verification**: Check `services/vaultwarden/Dockerfile` EXPOSE section for documentation
 
 ---
 
