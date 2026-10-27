@@ -525,7 +525,9 @@ class ThresholdUpdate(BaseModel):
 
 
 @app.put("/api/metrics/thresholds")
-async def put_thresholds(request: Request, payload: ThresholdUpdate) -> ThresholdsResponse:
+async def put_thresholds(
+    request: Request, payload: ThresholdUpdate
+) -> ThresholdsResponse:
     """Patch alert thresholds at runtime.
 
     Defense-in-depth: Validates X-Internal-Request header to ensure request

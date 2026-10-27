@@ -88,7 +88,9 @@ async def dismiss_metrics_alert(request: Request):
     """
     require_super(request)
     body = await request.json()
-    return await _proxy.post("/api/metrics/alerts/dismiss", json=body, headers=_INTERNAL_HEADERS)
+    return await _proxy.post(
+        "/api/metrics/alerts/dismiss", json=body, headers=_INTERNAL_HEADERS
+    )
 
 
 @router.get("/thresholds")
@@ -103,4 +105,6 @@ async def put_metrics_thresholds(request: Request):
     """Patch alert thresholds at runtime (SUPER)."""
     require_super(request)
     body = await request.json()
-    return await _proxy.put("/api/metrics/thresholds", json=body, headers=_INTERNAL_HEADERS)
+    return await _proxy.put(
+        "/api/metrics/thresholds", json=body, headers=_INTERNAL_HEADERS
+    )
