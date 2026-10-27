@@ -21,14 +21,14 @@ Each entry follows this format:
 
 ## Fixed Issues
 
-### [nginx] postMessage Wildcard Origin
+### [nginx] postMessage Wildcard Origin (Initial report)
 - **Severity**: HIGH
 - **Status**: FIXED
-- **PR**: #TBD
-- **Fixed Date**: 2026-10-26
+- **PR**: #424
+- **Fixed Date**: 2026-10-27
 - **Description**: sso-cookie-vendor.html used `postMessage(..., '*')` wildcard origin, allowing any site to receive authentication events
-- **Fix Applied**: Replaced wildcard `'*'` with explicit trusted origin `'https://raspberrypi.tailaa37cd.ts.net'`
-- **Verification**: Check `infrastructure/nginx/html/sso-cookie-vendor.html` uses `TRUSTED_ORIGIN` constant instead of `'*'`
+- **Fix Applied**: Replaced wildcard `'*'` with explicit trusted origin constant
+- **Verification**: Check `infrastructure/nginx/html/sso-cookie-vendor.html` uses `TRUSTED_ORIGIN` constant
 
 ### [dashboard] PC_AGENT_TOKEN Exposure
 - **Severity**: CRITICAL
@@ -899,25 +899,160 @@ These are code quality improvements: type hints, documentation, constants extrac
 
 ---
 
-## Fixed Issues (2026-10-26) - LOW Severity Documentation
+## Fixed Issues (2026-10-26/27) - Security Audit Wave
 
-### [vaultwarden] LOG_LEVEL=warn Documentation
+Full security audit conducted on 2026-10-26, fixes implemented and deployed 2026-10-27.
+**15 PRs merged** covering 2 HIGH, ~25 MEDIUM, and ~50 LOW severity issues.
+
+### HIGH Severity Fixes
+
+#### [nginx] postMessage Wildcard Origin
+- **Severity**: HIGH
+- **Status**: FIXED
+- **PR**: #424
+- **Fixed Date**: 2026-10-27
+- **Description**: sso-cookie-vendor.html used `postMessage(..., '*')` wildcard origin, allowing any site to receive authentication events
+- **Fix Applied**: Replaced wildcard `'*'` with explicit trusted origin constant `TRUSTED_ORIGIN`
+- **Verification**: Check `infrastructure/nginx/html/sso-cookie-vendor.html`
+
+#### [presence-service] Rate Limiting on Health Endpoints
+- **Severity**: HIGH
+- **Status**: FIXED
+- **PR**: #426
+- **Fixed Date**: 2026-10-27
+- **Description**: Health endpoints had no rate limiting, potential DoS vector
+- **Fix Applied**: Added rate limiting (30 req/min) to health endpoints using InMemoryRateLimiter
+- **Verification**: Rapid requests to `/health` return 429 after threshold
+
+### MEDIUM Severity Fixes
+
+#### [ac-service] CORS Origins Validation
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #427
+- **Fixed Date**: 2026-10-27
+- **Description**: CORS origins not validated, MQTT timeout not documented
+- **Fix Applied**: Added CORS origin validation, documented MQTT connection timeouts
+- **Verification**: Check `services/ac-service/src/main.py` CORS middleware
+
+#### [dashboard] Async Endpoint Consistency
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #428
+- **Fixed Date**: 2026-10-27
+- **Description**: Mixed async/sync patterns, generic exception handling
+- **Fix Applied**: Standardized async endpoints, improved exception handling with specific types
+- **Verification**: Check `dashboard/src/api/` for consistent async patterns
+
+#### [vacaciones] DOM XSS Prevention
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #429
+- **Fixed Date**: 2026-10-27
+- **Description**: User input rendered without escaping, potential DOM XSS
+- **Fix Applied**: Added `escapeHtml()` function, applied to all user input renders, documented X-Forwarded-For trust
+- **Verification**: Check templates for escapeHtml usage
+
+#### [baby-gifts] Security Headers & GDPR
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #430
+- **Fixed Date**: 2026-10-27
+- **Description**: Missing security headers, no GDPR documentation for IP logging, sqlite without timeout
+- **Fix Applied**: Added SecurityHeadersMiddleware, GDPR Art. 6(1)(f) comments, sqlite3.connect with timeout=5.0
+- **Verification**: Check response headers include X-Content-Type-Options, X-Frame-Options
+
+#### [portfolio-monitor] Origin Validation & Sanitization
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #431
+- **Fixed Date**: 2026-10-27
+- **Description**: Origin validation weak, position_id/account_id not sanitized
+- **Fix Applied**: Improved Origin validation with Sec-Fetch-Mode, sanitized IDs, added MonitorName enum type hint
+- **Verification**: Check `services/portfolio-monitor/src/api/` for sanitization
+
+#### [casita-suenos] Rate Limiting for Dismiss/Undismiss
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #432
+- **Fixed Date**: 2026-10-27
+- **Description**: Dismiss/undismiss endpoints had no rate limiting
+- **Fix Applied**: Added rate limiting to dismiss/undismiss endpoints, documented Telegram token handling
+- **Verification**: Check `/api/casita/dismiss` and `/api/casita/undismiss` have rate limiting
+
+#### [metrics-service] Code Cleanup
 - **Severity**: LOW
 - **Status**: FIXED
-- **PR**: #TBD
-- **Fixed Date**: 2026-10-26
-- **Description**: LOG_LEVEL=warn may hide useful info without documenting the tradeoff
-- **Fix Applied**: Added detailed comments explaining the tradeoff: warn vs info vs debug, and why 'warn' is chosen for production (minimize SD card wear on Pi)
-- **Verification**: Check `services/vaultwarden/Dockerfile` for LOG_LEVEL documentation
+- **PR**: #433
+- **Fixed Date**: 2026-10-27
+- **Description**: Duplicate import, hardcoded Spanish strings
+- **Fix Applied**: Removed duplicate `time` import, added TODO(i18n) comments for Spanish strings
+- **Verification**: `ruff check services/metrics-service/src/`
 
-### [vaultwarden] EXPOSE 3012 Documentation
+#### [valheim-admin] Rate Limiter & Endpoints
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #434
+- **Fixed Date**: 2026-10-27
+- **Description**: Rate limiter unbounded, missing endpoints, hardcoded password
+- **Fix Applied**: Rate limiter with max_entries=10000, implemented /api/worlds/upload and /api/network endpoints, removed hardcoded password
+- **Verification**: Check `services/valheim-admin/src/main.py`
+
+#### [energy-monitor] Code Quality
+- **Severity**: MEDIUM/LOW
+- **Status**: FIXED
+- **PR**: #435
+- **Fixed Date**: 2026-10-27
+- **Description**: Missing __all__ exports, Protocol typing, daily budget edge case
+- **Fix Applied**: Added __all__ exports, Protocol typing for dependencies, edge case handling
+- **Verification**: Check `services/energy-monitor/src/` for __all__ definitions
+
+#### [calendar-service] Seed Validation & Tests
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #436
+- **Fixed Date**: 2026-10-27
+- **Description**: Missing seed validation, exception handling gaps, low test coverage
+- **Fix Applied**: Added seed validation, improved exception handling, added database tests
+- **Verification**: Run `pytest services/calendar-service/tests/`
+
+### Infrastructure Fixes
+
+#### [vaultwarden] Documentation
 - **Severity**: LOW
 - **Status**: FIXED
-- **PR**: #TBD
-- **Fixed Date**: 2026-10-26
-- **Description**: EXPOSE 3012 (WebSocket port) not documented, unclear if needed
-- **Fix Applied**: Added comments explaining port 3012 is used for WebSocket real-time sync (WEBSOCKET_ENABLED=true), what it provides, and that it becomes unused but harmless if WebSocket is disabled
-- **Verification**: Check `services/vaultwarden/Dockerfile` EXPOSE section for documentation
+- **PR**: #437
+- **Fixed Date**: 2026-10-27
+- **Description**: LOG_LEVEL and EXPOSE 3012 not documented
+- **Fix Applied**: Documented LOG_LEVEL tradeoffs (warn vs info), explained WebSocket port 3012 usage
+- **Verification**: Check `services/vaultwarden/Dockerfile` comments
+
+#### [zigbee2mqtt] Security Hardening
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #438
+- **Fixed Date**: 2026-10-27
+- **Description**: Frontend binding, duplicate YAML entries, plaintext MQTT connection
+- **Fix Applied**: Changed frontend host to localhost, cleaned up duplicate config, documented MQTT plaintext as ACCEPTED_RISK (Docker-internal only)
+- **Verification**: Check `infrastructure/zigbee2mqtt/config/configuration.example.yaml`
+
+#### [mosquitto] Security Documentation
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #439
+- **Fixed Date**: 2026-10-27
+- **Description**: Missing TLS documentation, no cert renewal procedure, bind address not restricted
+- **Fix Applied**: Added TLS setup documentation, cert renewal procedure in comments, documented bind address rationale
+- **Verification**: Check `infrastructure/mosquitto/` for README and config comments
+
+### Summary (2026-10-26/27 Audit)
+
+| Severity | Count | PRs |
+|----------|-------|-----|
+| HIGH | 2 | #424, #426 |
+| MEDIUM | ~25 | #427-#436, #438-#439 |
+| LOW | ~50 | Included in above PRs |
+| **Total** | **~77** | **15 PRs (#424, #426-#439)** |
 
 ---
 
