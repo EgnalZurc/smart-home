@@ -770,7 +770,6 @@ class TestSanitizeShellArg:
                 )
 
 
-
 # ── Security Headers Middleware ───────────────────────────────────────────────
 
 
@@ -827,6 +826,182 @@ class TestSecurityHeadersMiddleware:
         response = client.get("/health")
 
         assert (
-            response.headers.get("Referrer-Policy")
-            == "strict-origin-when-cross-origin"
+            response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
         )
+
+
+# ── Network Info Endpoint ─────────────────────────────────────────────────────
+
+
+class TestNetworkEndpoint:
+    """Tests for /api/network endpoint."""
+
+    def test_get_network_success(self):
+        """Network endpoint should return IP and port from pc-agent."""
+        from src.main import app, pc_agent
+
+        with patch.object(
+            pc_agent,
+            "get",
+            new_callable=AsyncMock,
+            return_value={"local_ip": "192.168.1.100", "port": 2456},
+        ):
+            client = TestClient(app)
+            response = client.get("/api/network")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["local_ip"] == "192.168.1.100"
+            assert data["port"] == 2456
+
+    def test_get_network_returns_defaults_on_failure(self):
+        """Network endpoint should return defaults when pc-agent unreachable."""
+        from src.main import app, pc_agent
+
+        with patch.object(
+            pc_agent,
+            "get",
+            new_callable=AsyncMock,
+            side_effect=HTTPException(503, "Unreachable"),
+        ):
+            client = TestClient(app)
+            response = client.get("/api/network")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["local_ip"] == "192.168.1.164"
+            assert data["port"] == 2456
+
+
+# ── World Upload Endpoints ────────────────────────────────────────────────────
+
+
+class TestWorldUploadV1Endpoint:
+    """Tests for /api/worlds/upload endpoint (V1 zip format)."""
+
+    def test_upload_v1_success(self):
+        """Upload V1 should accept valid zip and forward to pc-agent."""
+        from src.main import app, pc_agent
+
+        with patch.object(
+            pc_agent,
+            "post",
+            new_callable=AsyncMock,
+            return_value={"world": "TestWorld", "message": "Imported"},
+        ) as mock_post:
+            client = TestClient(app)
+            fake_zip = b"PK" + b"\x00" * 100
+
+            response = client.post(
+                "/api/worlds/upload",
+                files={"file": ("TestWorld.zip", fake_zip, "application/zip")},
+            )
+
+            assert response.status_code == 200
+            assert response.json()["world"] == "TestWorld"
+            mock_post.assert_called_once()
+
+    def test_upload_v1_rejects_non_zip(self):
+        """Upload V1 should reject non-zip files."""
+        from src.main import app
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/worlds/upload",
+            files={"file": ("TestWorld.txt", b"not a zip file", "text/plain")},
+        )
+
+        assert response.status_code == 400
+        assert "zip" in response.json()["detail"].lower()
+
+    def test_upload_v1_rejects_empty_file(self):
+        """Upload V1 should reject empty files."""
+        from src.main import app
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/worlds/upload",
+            files={"file": ("TestWorld.zip", b"", "application/zip")},
+        )
+
+        assert response.status_code == 400
+        assert "empty" in response.json()["detail"].lower()
+
+
+class TestWorldUploadLegacyEndpoint:
+    """Tests for /api/worlds/upload-legacy endpoint (.db + .fwl format)."""
+
+    def test_upload_legacy_success(self):
+        """Upload legacy should accept valid db+fwl pair."""
+        from src.main import app, pc_agent
+
+        with patch.object(
+            pc_agent,
+            "post",
+            new_callable=AsyncMock,
+            return_value={
+                "world": "TestWorld",
+                "files": ["TestWorld.db", "TestWorld.fwl"],
+            },
+        ):
+            client = TestClient(app)
+            fake_db = b"\x00" * 100
+            fake_fwl = b"\x00" * 100
+
+            response = client.post(
+                "/api/worlds/upload-legacy",
+                files=[
+                    ("files", ("TestWorld.db", fake_db, "application/octet-stream")),
+                    ("files", ("TestWorld.fwl", fake_fwl, "application/octet-stream")),
+                ],
+            )
+
+            assert response.status_code == 200
+            assert response.json()["world"] == "TestWorld"
+
+    def test_upload_legacy_rejects_single_file(self):
+        """Upload legacy should reject single file."""
+        from src.main import app
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/worlds/upload-legacy",
+            files=[
+                ("files", ("TestWorld.db", b"\x00" * 100, "application/octet-stream"))
+            ],
+        )
+
+        assert response.status_code == 400
+        assert "2 files" in response.json()["detail"]
+
+    def test_upload_legacy_rejects_mismatched_names(self):
+        """Upload legacy should reject files with different base names."""
+        from src.main import app
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/worlds/upload-legacy",
+            files=[
+                ("files", ("World1.db", b"\x00" * 100, "application/octet-stream")),
+                ("files", ("World2.fwl", b"\x00" * 100, "application/octet-stream")),
+            ],
+        )
+
+        assert response.status_code == 400
+        assert "match" in response.json()["detail"].lower()
+
+
+# ── Rate Limiter Bounded Size ─────────────────────────────────────────────────
+
+
+class TestRateLimiterBoundedSize:
+    """Tests for rate limiter max_entries configuration."""
+
+    def test_rate_limiter_has_max_entries(self):
+        """Rate limiter should be configured with max_entries."""
+        from src.main import server_control_limiter
+
+        # Verify max_entries was passed (check the internal attribute)
+        assert hasattr(server_control_limiter, "_max_entries") or hasattr(
+            server_control_limiter, "max_entries"
+        ), "Rate limiter should have max_entries configured"

@@ -16,6 +16,13 @@ homeassistant:
 
 mqtt:
   base_topic: zigbee2mqtt
+  # ──────────────────────────────────────────────────────────────────────────
+  # SECURITY NOTE: Using mqtt:// (plaintext) is ACCEPTED RISK for this setup.
+  # Rationale: MQTT traffic is Docker-internal only (mosquitto container on the
+  # same bridge network). No MQTT traffic leaves the Pi or crosses the internet.
+  # TLS would add complexity without security benefit in this isolated context.
+  # Review: 2026-10-26 | Next review: 2027-04-26
+  # ──────────────────────────────────────────────────────────────────────────
   server: mqtt://mosquitto:1883
   # ──────────────────────────────────────────────────────────────────────────
   # MQTT Authentication (REQUIRED)
@@ -34,10 +41,17 @@ serial:
 
 frontend:
   enabled: true
+  # SECURITY: Bind to localhost only. The frontend is proxied through nginx
+  # which handles authentication. Binding to 0.0.0.0 (default) would expose
+  # the frontend directly if firewall/Docker network is misconfigured.
+  host: 127.0.0.1
   port: 8081
   # Authentication token - defense-in-depth even behind nginx reverse proxy.
   # Reads from Z2M_FRONTEND_PASSWORD env var (passed via docker-compose).
   # Generate with: openssl rand -hex 32
+  # NOTE: If Z2M_FRONTEND_PASSWORD is empty/unset, frontend has no token
+  # protection. This is ACCEPTED RISK - see docs/SECURITY_FIXES.md
+  # (nginx auth_request still protects the /zigbee/ path).
   auth_token: '!env Z2M_FRONTEND_PASSWORD'
 
 advanced:
@@ -56,10 +70,5 @@ advanced:
   cache_state_send_on_startup: false
   last_seen: epoch
 
-devices: {}  # Add your devices here after pairing
-version: 5
-  cache_state: true
-  cache_state_send_on_startup: false
-  last_seen: epoch
 devices: {}  # Add your devices here after pairing
 version: 5
