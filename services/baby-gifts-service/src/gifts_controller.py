@@ -60,7 +60,7 @@ def _init_db() -> None:
     and handles schema migrations (e.g., adding expires_at column).
     """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE))
+    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE), timeout=5.0)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS invitations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,10 +102,11 @@ def _get_db() -> sqlite3.Connection:
     """Get a database connection.
 
     Ensures the database is initialized before returning a connection.
+    Uses timeout=5.0 to prevent indefinite blocking on locked database.
     Caller is responsible for closing the connection.
     """
     _init_db()
-    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE))
+    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE), timeout=5.0)
     conn.row_factory = sqlite3.Row
     return conn
 
