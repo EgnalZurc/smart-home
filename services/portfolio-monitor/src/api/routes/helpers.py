@@ -28,6 +28,13 @@ from smart_home_common.rate_limiter import InMemoryRateLimiter
 # of a service-local implementation, so every service enforces limits the same
 # way. The shared limiter uses a fixed window and exposes get_status(), which we
 # use to compute the Retry-After header.
+#
+# SCALING NOTE: This in-memory rate limiter is NOT shared across instances.
+# If portfolio-monitor is horizontally scaled (multiple replicas), each instance
+# maintains its own rate limit state, effectively multiplying the allowed rate
+# by the number of instances. For multi-instance deployments, replace with a
+# Redis-backed rate limiter (e.g., slowapi with Redis storage) to share state.
+# Current deployment: single instance on Raspberry Pi - in-memory is sufficient.
 # ─────────────────────────────────────────────────────────────────────────────
 # Rate limiters for different endpoint groups
 _refresh_limiter = InMemoryRateLimiter(max_requests=5, window_seconds=60)
