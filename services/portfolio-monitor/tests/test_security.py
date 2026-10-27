@@ -197,8 +197,10 @@ class TestSecurityHeaders:
 
         csp = response.headers.get("Content-Security-Policy", "")
         assert "default-src 'self'" in csp
-        assert "script-src 'self'" in csp
+        assert "script-src 'self' 'unsafe-inline'" in csp
         assert "style-src 'self' 'unsafe-inline'" in csp
+        assert "img-src 'self' data: https:" in csp
+        assert "connect-src 'self'" in csp
 
     def test_cache_control_on_api_endpoints(self, client: TestClient):
         """API endpoints should have no-store cache control."""
