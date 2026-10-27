@@ -15,6 +15,7 @@ user already values in fiat, so there is no price lookup to perform.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -27,6 +28,40 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 # Divisor to convert percentage (e.g., 5.0 for 5%) to decimal (0.05)
 PERCENT_DIVISOR: float = 100.0
+
+# Validation pattern for position_id: alphanumeric, colon, dash, underscore only
+# Max length 100 chars to prevent memory issues with very long strings
+_POSITION_ID_PATTERN: re.Pattern[str] = re.compile(r"^[\w:\-]{1,100}$")
+
+
+def _sanitize_position_id(protocol: str, asset: str) -> str:
+    """Generate and sanitize a position_id from protocol and asset.
+
+    Args:
+        protocol: DeFi protocol name (e.g., "Aave", "Compound").
+        asset: Asset symbol (e.g., "USDC", "ETH").
+
+    Returns:
+        Sanitized position_id in format "protocol:asset", with invalid
+        characters removed and length bounded to 100 chars.
+    """
+    # Remove any characters that aren't alphanumeric, colon, dash, or underscore
+    safe_protocol = re.sub(r"[^\w\-]", "", protocol or "unknown")
+    safe_asset = re.sub(r"[^\w\-]", "", asset or "unknown")
+
+    # Use 'unknown' if sanitization removed everything
+    if not safe_protocol:
+        safe_protocol = "unknown"
+    if not safe_asset:
+        safe_asset = "unknown"
+
+    position_id = f"{safe_protocol}:{safe_asset}"
+
+    # Truncate to max length if needed
+    if len(position_id) > 100:
+        position_id = position_id[:100]
+
+    return position_id
 
 
 def calculate_yield(amount: float, apy_pct: float) -> tuple[float, float, float]:
@@ -80,8 +115,8 @@ class DeFiMonitor(BaseMonitor):
         for position in positions:
             protocol: str = position.get("protocol", "")
             asset: str = position.get("asset", "")
-            position_id = f"{protocol}:{asset}" if protocol or asset else "defi"
-            logger.info(f"  → Processing {position_id}...")
+            position_id = _sanitize_position_id(protocol, asset)
+            logger.info("  → Processing %s...", position_id)
 
             try:
                 amount = float(position.get("amount", 0) or 0)
@@ -107,13 +142,13 @@ class DeFiMonitor(BaseMonitor):
                 total_yearly += yearly
 
             except (ValueError, TypeError, KeyError, AttributeError) as e:
-                logger.error(f"Error processing {position_id}: {e}")
+                logger.error("Error processing %s: %s", position_id, e)
                 continue
 
         self._results = results
         self._last_update = datetime.now(timezone.utc)
 
-        logger.info(f"DeFi monitor complete. {len(results)} positions processed.")
+        logger.info("DeFi monitor complete. %d positions processed.", len(results))
 
         return {
             "analysis": results,

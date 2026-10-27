@@ -175,6 +175,16 @@ def _get_client_ip(request: Request) -> str:
     Handles the X-Forwarded-For header set by reverse proxies (nginx)
     to get the real client IP instead of the proxy's IP.
 
+    Security Note:
+        This function trusts X-Forwarded-For unconditionally because in our
+        deployment architecture, ONLY nginx can set this header:
+        - The service binds to Docker's internal network (not exposed publicly)
+        - All external traffic flows through nginx reverse proxy
+        - nginx overwrites X-Forwarded-For with the real client IP
+        - Direct access to the service (bypassing nginx) is not possible
+        If the deployment architecture changes to expose this service directly,
+        this function MUST be updated to validate or ignore X-Forwarded-For.
+
     Args:
         request: The FastAPI request object.
 
@@ -184,6 +194,7 @@ def _get_client_ip(request: Request) -> str:
     """
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
+        # Take the first IP in the chain (leftmost = original client)
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 

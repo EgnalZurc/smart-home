@@ -22,6 +22,15 @@ Three configurable rules, each disabled when its threshold is set to 0:
     Fires when day-to-date consumption exceeds the daily energy budget.
     Helps track daily usage against a target.
 
+    **Limitation**: Day-to-date consumption is derived from
+    ``consumption_by_period('day', 1)``, which returns the current UTC
+    calendar day bucket. Near midnight UTC the "today" value may include
+    consumption that a local-timezone user considers yesterday's, or vice
+    versa. This is a known edge case; explicit time-zone alignment is not
+    implemented. For users in timezones far from UTC, the daily budget
+    alert may fire or resolve a few hours earlier/later than expected on
+    calendar boundaries.
+
 * ``monthly_budget`` (ENERGY_MONTHLY_KWH_ALERT, default: 400 kWh)
     Fires when month-to-date consumption exceeds the monthly energy budget.
     Severity is 'critical' (vs 'warning' for other rules).
@@ -40,7 +49,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Any, Protocol
 
 from config import (
     ALERTS_ENABLED,
@@ -50,12 +59,28 @@ from config import (
 )
 from database import EnergyStore
 
+
+# ── Notifier protocol for type safety ─────────────────────────────────────────
+class Notifier(Protocol):
+    """Protocol for alert message delivery (structural typing)."""
+
+    enabled: bool
+
+    def send(self, message: str) -> None:
+        """Send a message. May raise OSError or RuntimeError on failure."""
+        ...
+
+
+# Runtime import of the real notifier; falls back to None outside the container.
+_TelegramNotifier: type[Notifier] | None
 try:
-    from smart_home_common.telegram import TelegramNotifier
+    from smart_home_common.telegram import TelegramNotifier as _TelegramNotifier
 except ImportError:  # pragma: no cover - import fallback outside the container
-    TelegramNotifier = None  # type: ignore[assignment]
+    _TelegramNotifier = None
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+__all__ = ["AlertEngine", "Notifier"]
 
 # ── Alert rule type aliases (internal) ────────────────────────────────────────
 # Each rule is represented as (rule_key, severity, current_value, threshold).
@@ -107,8 +132,8 @@ class AlertEngine:
         # Lazily build a notifier from env unless one is injected (tests inject).
         if notifier is not None:
             self._notifier = notifier
-        elif TelegramNotifier is not None:
-            self._notifier = TelegramNotifier.from_env()
+        elif _TelegramNotifier is not None:
+            self._notifier = _TelegramNotifier.from_env()
         else:  # pragma: no cover - lib missing outside container
             self._notifier = None
         # rule_key -> "fired" | "ok"; absence means "never evaluated".
@@ -125,7 +150,7 @@ class AlertEngine:
         return self._enabled
 
     @property
-    def notifier(self) -> Any:
+    def notifier(self) -> Notifier | None:
         """The notifier used for alert delivery, or None if delivery is disabled."""
         return self._notifier
 

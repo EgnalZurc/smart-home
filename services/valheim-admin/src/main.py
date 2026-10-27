@@ -68,7 +68,7 @@ from config import (
     WORLD_NAME_PATTERN,
     is_internal_url,
 )
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -121,6 +121,7 @@ pc_agent = AsyncServiceClient(_client_config)
 server_control_limiter = InMemoryRateLimiter(
     max_requests=RATE_LIMIT_MAX_REQUESTS,
     window_seconds=RATE_LIMIT_WINDOW_SECONDS,
+    max_entries=10000,
 )
 
 # Compiled regex patterns for validation
@@ -454,10 +455,10 @@ async def health_ready() -> dict[str, Any]:
             "backend": "pc-agent",
             "backend_status": "reachable",
         }
-    except (httpx.ConnectError, httpx.TimeoutException):
-        pass
-    except HTTPException:
-        pass
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        logger.debug("health_ready: pc-agent connection failed: %s", e)
+    except HTTPException as e:
+        logger.debug("health_ready: pc-agent returned HTTP error: %s", e.status_code)
 
     raise HTTPException(
         status_code=503,
@@ -816,6 +817,160 @@ async def delete_world(world_name: str) -> dict[str, Any]:
     result = await pc_agent.delete(f"/valheim/worlds/{world_name}")
     logger.warning("World deleted: %s", world_name)
     return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# World Upload Endpoints
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Maximum upload size: 600 MB (Valheim world zips can be large)
+UPLOAD_MAX_SIZE_BYTES = 600 * 1024 * 1024
+
+
+@app.post("/api/worlds/upload")
+async def upload_world_v1(file: UploadFile) -> dict[str, Any]:
+    """Upload a Valheim 1.0 format world (zip file).
+
+    Accepts a zip file containing a Valheim 1.0 world folder structure.
+    The file is validated and forwarded to pc-agent for extraction.
+
+    Args:
+        file: The uploaded zip file containing the world folder.
+
+    Returns:
+        Result dictionary from pc-agent with the imported world name.
+
+    Raises:
+        HTTPException: 400 if the file is not a valid zip or exceeds size limit.
+        HTTPException: 413 if the file is too large.
+    """
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="File must be a .zip archive")
+
+    content = await file.read()
+    if len(content) > UPLOAD_MAX_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds 600 MB limit")
+
+    if len(content) < 10:
+        raise HTTPException(status_code=400, detail="File is empty or too small")
+
+    logger.info("Uploading V1 world: %s (%d bytes)", file.filename, len(content))
+
+    # Forward the file to pc-agent
+    result = await pc_agent.post(
+        "/valheim/worlds/upload",
+        files={"file": (file.filename, content, "application/zip")},
+    )
+    logger.info("V1 world upload completed: %s", result.get("world", "unknown"))
+    return result
+
+
+@app.post("/api/worlds/upload-legacy")
+async def upload_world_legacy(files: list[UploadFile]) -> dict[str, Any]:
+    """Upload a legacy Valheim world (.db + .fwl files).
+
+    Accepts exactly two files: a .db and a .fwl file with matching base names.
+    These are the pre-1.0 world format files.
+
+    Args:
+        files: List of exactly 2 files (.db and .fwl).
+
+    Returns:
+        Result dictionary from pc-agent with the imported world name.
+
+    Raises:
+        HTTPException: 400 if files are invalid or don't match expected format.
+        HTTPException: 413 if any file exceeds size limit.
+    """
+    if len(files) != 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Must upload exactly 2 files: one .db and one .fwl",
+        )
+
+    # Validate file extensions
+    extensions = sorted(
+        f.filename.split(".")[-1].lower() if f.filename else "" for f in files
+    )
+    if extensions != ["db", "fwl"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Must upload exactly one .db and one .fwl file",
+        )
+
+    # Validate matching base names
+    basenames = [f.filename.rsplit(".", 1)[0] if f.filename else "" for f in files]
+    if basenames[0] != basenames[1]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File basenames must match: got '{basenames[0]}' and '{basenames[1]}'",
+        )
+
+    # Read and validate sizes
+    file_data = []
+    for f in files:
+        content = await f.read()
+        if len(content) > UPLOAD_MAX_SIZE_BYTES:
+            raise HTTPException(
+                status_code=413, detail=f"File {f.filename} exceeds 600 MB limit"
+            )
+        if len(content) < 10:
+            raise HTTPException(
+                status_code=400, detail=f"File {f.filename} is empty or too small"
+            )
+        file_data.append((f.filename, content))
+
+    logger.info(
+        "Uploading legacy world: %s (%d files)",
+        basenames[0],
+        len(file_data),
+    )
+
+    # Forward files to pc-agent
+    files_payload = [
+        (
+            "files",
+            (fname, content, "application/octet-stream"),
+        )
+        for fname, content in file_data
+    ]
+    result = await pc_agent.post("/valheim/worlds/upload-legacy", files=files_payload)
+    logger.info("Legacy world upload completed: %s", result.get("world", "unknown"))
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Network Info Endpoint
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+@app.get("/api/network")
+async def get_network_info() -> dict[str, Any]:
+    """Get network information for direct IP connection.
+
+    Returns the local IP and port for connecting to the Valheim server
+    when crossplay/join code is not enabled.
+
+    Returns:
+        Dictionary with local_ip and port from pc-agent, or defaults
+        if pc-agent is unreachable.
+
+    Example response::
+
+        {
+            "local_ip": "192.168.1.164",
+            "port": 2456
+        }
+    """
+    try:
+        return await pc_agent.get("/valheim/network")
+    except HTTPException:
+        # Return sensible defaults if pc-agent is unreachable
+        logger.debug("get_network_info: pc-agent unreachable, returning defaults")
+        return {
+            "local_ip": "192.168.1.164",
+            "port": 2456,
+        }
 
 
 # ══════════════════════════════════════════════════════════════════════════════

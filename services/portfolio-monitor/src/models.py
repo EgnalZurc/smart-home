@@ -262,10 +262,33 @@ class MonitorState:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "MonitorState":
-        """Create from dict."""
+        """Create from dict.
+
+        Args:
+            data: Dictionary with optional last_etf_run and last_crypto_run keys.
+                  Timestamps can be ISO format strings with or without timezone.
+
+        Returns:
+            MonitorState instance with parsed timestamps.
+
+        Note:
+            Timestamps without timezone info are assumed to be UTC.
+            This ensures consistent behavior across different sources.
+        """
+        from datetime import timezone as tz
+
         state = cls()
-        if data.get("last_etf_run"):
-            state.last_etf_run = datetime.fromisoformat(data["last_etf_run"])
-        if data.get("last_crypto_run"):
-            state.last_crypto_run = datetime.fromisoformat(data["last_crypto_run"])
+
+        def _parse_timestamp(value: str | None) -> datetime | None:
+            """Parse ISO timestamp, ensuring UTC timezone."""
+            if not value:
+                return None
+            dt = datetime.fromisoformat(value)
+            # If no timezone info, assume UTC
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=tz.utc)
+            return dt
+
+        state.last_etf_run = _parse_timestamp(data.get("last_etf_run"))
+        state.last_crypto_run = _parse_timestamp(data.get("last_crypto_run"))
         return state

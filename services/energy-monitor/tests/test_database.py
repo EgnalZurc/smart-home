@@ -207,9 +207,7 @@ def test_stats_empty(store):
 def test_stats_total_and_peak(store):
     import datetime as _dt
 
-    month_start = int(
-        _dt.datetime(2023, 6, 1, tzinfo=_dt.timezone.utc).timestamp()
-    )
+    month_start = int(_dt.datetime(2023, 6, 1, tzinfo=_dt.timezone.utc).timestamp())
     day = 24 * 3600
     # Daily cumulative readings: +5 kWh day 1, +8 kWh day 2, +3 kWh day 3.
     store.write_energy(month_start, [("ch0", 0.0)])
@@ -255,3 +253,52 @@ def test_prune_deletes_old_alerts(store):
     store.record_alert("r", "warning", "fired", ts=old)
     deleted = store.prune(now=now)
     assert deleted["energy_alerts"] == 1
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Defensive branch coverage (LOW severity audit findings)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def test_prune_wal_checkpoint_failure_logged(store, monkeypatch, caplog):
+    """LOW#3: WAL checkpoint failure is logged but doesn't raise (database.py:178-179)."""
+    import logging
+    import sqlite3
+    from contextlib import contextmanager
+
+    # Make the next PRAGMA wal_checkpoint fail
+    original_connect = store._db.connect
+
+    class FailingConnection:
+        def __init__(self, real_conn):
+            self._real = real_conn
+            self._in_context = False
+
+        def __enter__(self):
+            self._in_context = True
+            self._real.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            self._in_context = False
+            return self._real.__exit__(*args)
+
+        def execute(self, sql, params=()):
+            if "wal_checkpoint" in sql.lower():
+                raise sqlite3.OperationalError("database is locked")
+            return self._real.execute(sql, params)
+
+    @contextmanager
+    def failing_connect():
+        with original_connect() as conn:
+            yield FailingConnection(conn)
+
+    monkeypatch.setattr(store._db, "connect", failing_connect)
+
+    with caplog.at_level(logging.WARNING):
+        # Should complete without raising
+        deleted = store.prune(now=100_000_000)
+
+    # Prune still returns results even if checkpoint failed
+    assert isinstance(deleted, dict)
+    assert any("wal_checkpoint failed" in r.message for r in caplog.records)
