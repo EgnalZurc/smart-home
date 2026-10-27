@@ -149,6 +149,21 @@
 <div id="loading-overlay"><div class="spinner"></div></div>
 
 <script>
+/**
+ * Escape HTML special characters to prevent XSS attacks.
+ * @param {string} str - String to escape
+ * @returns {string} Escaped string safe for HTML insertion
+ */
+function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 var appData = { nucleos: [], personas: [], years: [], momentos: [] };
 var editNucleos = [];
 var editPersonas = [];
