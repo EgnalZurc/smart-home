@@ -402,6 +402,10 @@ class AlertEngine:
     # Human-readable descriptions for rule keys (used in alert messages).
     # Maps rule_key -> (firing_template, resolved_template).
     # Templates use {target}, {value}, {unit}, {threshold} placeholders.
+    # TODO(i18n): These hardcoded Spanish strings should be moved to a locale
+    # file or config when internationalization support is added. Currently the
+    # Telegram alerts are sent to a Spanish-speaking household; hardcoding is
+    # acceptable for this use case. See docs/SECURITY_FIXES.md backlog.
     RULE_DESCRIPTIONS: dict[str, tuple[str, str]] = {
         "host_ram": (
             "Uso de RAM en {value}{unit} (máx {threshold}{unit})",
@@ -552,6 +556,8 @@ class AlertEngine:
     # ── Read helpers for the API ────────────────────────────────────────────────
 
     # Plain-text descriptions for dashboard titles (no markdown).
+    # TODO(i18n): Same as RULE_DESCRIPTIONS above — hardcoded Spanish strings
+    # acceptable for current single-household deployment.
     RULE_TITLES: dict[str, tuple[str, str]] = {
         "host_ram": ("RAM: {value}{unit}", "host"),
         "host_swap": ("Swap: {value}{unit}", "host"),
@@ -588,8 +594,6 @@ class AlertEngine:
 
         Returns True if the alert was found and dismissed, False otherwise.
         """
-        import time
-
         alert = self._active.get(fingerprint)
         if alert is None:
             return False
