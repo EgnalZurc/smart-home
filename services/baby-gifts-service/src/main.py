@@ -37,12 +37,13 @@ Port: 8004
 """
 
 import logging
+from collections.abc import Callable
 from html import escape as html_escape
 from pathlib import Path
 from typing import Any
 
 from config import TRUSTED_PROXY_IPS
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from gifts_controller import (
@@ -66,6 +67,8 @@ from gifts_controller import (
 )
 from notifier import send_gift_notification
 from pydantic import BaseModel, ValidationInfo, field_validator
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 from utils import parse_price
 
 
@@ -103,6 +106,13 @@ except ImportError:  # pragma: no cover
     sys.path.insert(0, str(__file__).replace("\\", "/").split("/services/")[0])
     from libs.html_serving import serve_html
 
+# TODO: Consider structured JSON logging for better log aggregation.
+# Current format is human-readable but less machine-parseable.
+# To enable JSON logging, add python-json-logger to requirements.txt and:
+#   from pythonjsonlogger import jsonlogger
+#   handler = logging.StreamHandler()
+#   handler.setFormatter(jsonlogger.JsonFormatter())
+#   logging.root.addHandler(handler)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
@@ -118,6 +128,40 @@ app: FastAPI = FastAPI(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Security middleware
+# ═══════════════════════════════════════════════════════════════════════════════
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses.
+
+    Headers added:
+        - X-Content-Type-Options: nosniff - Prevents MIME type sniffing
+        - X-Frame-Options: DENY - Prevents clickjacking via iframes
+        - X-XSS-Protection: 1; mode=block - Legacy XSS protection for older browsers
+        - Content-Security-Policy: default-src 'self' - Restricts resource loading
+        - Referrer-Policy: strict-origin-when-cross-origin - Controls referrer info
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        """Initialize middleware with ASGI application."""
+        super().__init__(app)
+
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Response]
+    ) -> Response:
+        """Process request and add security headers to response."""
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Input validation constants
 # ═══════════════════════════════════════════════════════════════════════════════
 MAX_NAME_LENGTH: int = 200
@@ -125,6 +169,8 @@ MAX_DESCRIPTION_LENGTH: int = 1000
 MAX_PRICE_RANGE_LENGTH: int = 100
 MAX_URL_LENGTH: int = 2000
 MAX_INVITATION_NAME_LENGTH: int = 100
+# Token preview length for safe logging (show first N chars only)
+TOKEN_PREVIEW_LENGTH: int = 4
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -233,6 +279,8 @@ def _get_client_ip(request: Request) -> str:
     TODO: Add tests for edge cases (missing client, malformed X-Forwarded-For,
     multiple proxies in chain, IPv6 addresses).
     """
+    # GDPR Art. 6(1)(f): IP logged for rate limiting (legitimate interest).
+    # Retained only in memory, not persisted.
     client_ip: str = request.client.host if request.client else "unknown"
     forwarded: str | None = request.headers.get("X-Forwarded-For")
 
@@ -300,16 +348,17 @@ def require_auth_user(request: Request) -> str:
 
 
 def _truncate_token(token: str) -> str:
-    """Truncate token for safe logging (show first 4 chars only).
+    """Truncate token for safe logging (show first N chars only).
 
     Args:
         token: Full token string.
 
     Returns:
-        str: Truncated token showing only first 4 chars + '...', or full if <= 4.
+        str: Truncated token showing only first TOKEN_PREVIEW_LENGTH chars + '...',
+            or full token if shorter than or equal to TOKEN_PREVIEW_LENGTH.
     """
-    if len(token) > 4:
-        return f"{token[:4]}..."
+    if len(token) > TOKEN_PREVIEW_LENGTH:
+        return f"{token[:TOKEN_PREVIEW_LENGTH]}..."
     return token
 
 
