@@ -546,14 +546,43 @@ The audit should NOT re-report these issues.
 ### [infrastructure] CSP unsafe-inline
 - **Severity**: HIGH
 - **Status**: ACCEPTED_RISK
-- **Reason**: Several SPAs (dashboard, valheim-admin) require unsafe-inline for inline scripts; migrating to nonce-based CSP is a major refactor
+- **Reason**: Several SPAs (ac-service, baby-gifts, portfolio-monitor, valheim-admin, casita-suenos) require unsafe-inline for inline scripts/styles; migrating to nonce-based CSP is a major refactor
 - **Mitigations**:
   - All other CSP directives are strict
   - Applications served via Tailscale only
-  - nginx includes other security headers (X-Frame-Options, X-Content-Type-Options)
-- **Documentation**: Comment in nginx smart-home.conf
-- **Review Date**: 2026-10-22
-- **Next Review**: 2027-04-22 (consider nonce migration)
+  - nginx auth_request guards all protected endpoints
+  - Other security headers (X-Frame-Options, X-Content-Type-Options) remain strict
+- **Documentation**: Comment in nginx smart-home.conf and each service's SecurityHeadersMiddleware
+- **Review Date**: 2026-10-27
+- **Next Review**: 2027-04-27 (consider nonce migration)
+
+#### Migration Roadmap to Nonce-based CSP
+
+The dashboard already uses nonce-based CSP via `CSPNonceMiddleware`. To migrate other services:
+
+**Phase 1 - Assessment (Q1 2027)**
+- Audit each SPA for inline scripts/styles usage
+- Identify third-party scripts (Chart.js, etc.) that need CDN allowlisting
+- Estimate refactoring effort per service
+
+**Phase 2 - Template Services First (Q2 2027)**
+- Migrate services with simple SPAs: valheim-admin, casita-suenos
+- Pattern: Move inline scripts to external .js files, use nonces for remaining inline
+- Validate with CSP Evaluator (https://csp-evaluator.withgoogle.com/)
+
+**Phase 3 - Complex SPAs (Q3 2027)**
+- Migrate portfolio-monitor (complex charts), baby-gifts (multiple modals)
+- May require build tooling changes to inject nonces into templates
+
+**Phase 4 - Final Services (Q4 2027)**
+- Migrate ac-service (real-time WebSocket, Chart.js)
+- Remove unsafe-inline from nginx csp-static.conf
+
+**Alternative: Hash-based CSP**
+For services with stable inline scripts, CSP hashes ('sha256-...') can replace unsafe-inline without code changes:
+1. Generate hashes: `echo -n "script content" | openssl dgst -sha256 -binary | base64`
+2. Add to CSP: `script-src 'self' 'sha256-...'`
+3. Limitation: Any script change requires CSP update
 
 ### [vaultwarden] Container Runs as Root
 - **Severity**: HIGH
@@ -811,9 +840,45 @@ Each service now catches specific exception types appropriate to the operations 
 
 | Issue | Service | Current State | Recommendation |
 |-------|---------|---------------|----------------|
-| CSP unsafe-inline | casita, valheim-admin, portfolio | Inline scripts need unsafe-inline | Consider nonce-based CSP migration (dashboard already done) |
+| CSP unsafe-inline | casita, valheim-admin, portfolio, baby-gifts, ac-service | Inline scripts need unsafe-inline | See Migration Roadmap above |
 | No request ID logging | some services | Requests not correlated across services | Add X-Request-ID header propagation |
 | Limited audit logging | all | Basic logging, no security-specific audit trail | Consider structured audit logging for sensitive operations |
+| In-memory rate limiters | all services | Rate limits not shared across instances | See Redis evaluation below |
+
+### Rate Limiter Architecture Evaluation (2026-10-27)
+
+**Current State**: All services use `InMemoryRateLimiter` from `smart_home_common`:
+- Thread-safe with LRU eviction (max 10K entries)
+- Per-instance state (not shared across replicas)
+- Zero external dependencies
+
+**Redis-backed Alternative**: slowapi with Redis storage (already used by calendar-service and energy-monitor for basic rate limiting via slowapi)
+
+**Evaluation**:
+
+| Factor | In-Memory | Redis-backed |
+|--------|-----------|--------------|
+| Complexity | Simple, no infra | Requires Redis container |
+| Latency | ~0.1ms | ~1-5ms per check |
+| Multi-instance | ❌ Each instance has own state | ✅ Shared state |
+| Failure mode | Graceful (limits per-instance) | Redis down = limits fail |
+| Memory | Per-process (~50KB at max) | Centralized |
+
+**Decision**: **Keep in-memory rate limiters**
+
+Rationale:
+1. **Single-instance deployment**: All services run as single containers on Pi 5. Multi-instance coordination is not needed.
+2. **Tailscale-only access**: Attack surface is limited to authenticated Tailscale users, not open internet.
+3. **Simplicity**: No Redis dependency to maintain, monitor, or recover from failures.
+4. **Defense-in-depth**: nginx also has `limit_req` zones for auth and general traffic.
+
+**When to reconsider**:
+- If services scale to multiple replicas
+- If public internet exposure is added
+- If coordinated rate limiting across services is needed
+
+**Review Date**: 2026-10-27
+**Next Review**: 2027-04-27
 
 ---
 

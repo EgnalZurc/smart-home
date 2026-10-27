@@ -196,11 +196,16 @@ async def test_get_thresholds_endpoint(client):
     assert any(r["key"] == "host_ram" for r in rules)
 
 
+# Header required for PUT/POST endpoints (defense-in-depth)
+_INTERNAL_HEADERS = {"X-Internal-Request": "dashboard"}
+
+
 async def test_put_thresholds_updates_value(client):
     async with client as c:
         resp = await c.put(
             "/api/metrics/thresholds",
             json={"updates": {"host_disk": {"value": 42.0}}},
+            headers=_INTERNAL_HEADERS,
         )
     assert resp.status_code == 200
     rule = next(r for r in resp.json()["thresholds"] if r["key"] == "host_disk")
@@ -212,8 +217,20 @@ async def test_put_thresholds_unknown_key_returns_400(client):
         resp = await c.put(
             "/api/metrics/thresholds",
             json={"updates": {"ghost": {"value": 1}}},
+            headers=_INTERNAL_HEADERS,
         )
     assert resp.status_code == 400
+
+
+async def test_put_thresholds_without_internal_header_returns_403(client):
+    """PUT without X-Internal-Request header should be rejected."""
+    async with client as c:
+        resp = await c.put(
+            "/api/metrics/thresholds",
+            json={"updates": {"host_disk": {"value": 42.0}}},
+        )
+    assert resp.status_code == 403
+    assert "Direct access forbidden" in resp.json()["detail"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

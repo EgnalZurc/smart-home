@@ -117,6 +117,40 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Defense-in-depth: Internal request validation
+# ═══════════════════════════════════════════════════════════════════════════════
+# Write endpoints (POST/PUT) validate that requests come through the dashboard
+# proxy by checking for X-Internal-Request header. This provides defense-in-depth
+# beyond the network isolation: even if an attacker reaches :8011 directly, they
+# cannot modify thresholds or dismiss alerts without the internal header.
+_INTERNAL_REQUEST_HEADER = "X-Internal-Request"
+_EXPECTED_INTERNAL_VALUE = "dashboard"
+
+
+def _require_internal_request(request: Request) -> None:
+    """Validate request comes from the dashboard proxy (defense-in-depth).
+
+    Args:
+        request: The incoming FastAPI request.
+
+    Raises:
+        HTTPException: 403 if X-Internal-Request header is missing or invalid.
+    """
+    header_value = request.headers.get(_INTERNAL_REQUEST_HEADER)
+    if header_value != _EXPECTED_INTERNAL_VALUE:
+        logger.warning(
+            "Rejected direct request to %s from %s (missing/invalid X-Internal-Request)",
+            request.url.path,
+            _get_client_ip(request),
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Direct access forbidden. Use the dashboard API.",
+        )
+
+
 # Single collector instance for the process lifetime.
 collector = Collector()
 
@@ -440,22 +474,27 @@ class DismissAlertRequest(BaseModel):
 
 
 @app.post("/api/metrics/alerts/dismiss")
-async def dismiss_alert(body: DismissAlertRequest) -> dict[str, str]:
+async def dismiss_alert(request: Request, body: DismissAlertRequest) -> dict[str, str]:
     """Manually dismiss an active alert by fingerprint.
 
     The alert is resolved as if the condition cleared naturally, with a
     'dismissed' event recorded in the history. If the underlying condition
     still breaches, the alert will re-fire on the next collector tick.
 
+    Defense-in-depth: Validates X-Internal-Request header to ensure request
+    comes through the dashboard proxy, not directly to :8011.
+
     Args:
+        request: The incoming FastAPI request (for header validation).
         body: DismissAlertRequest containing the fingerprint to dismiss.
 
     Returns:
         Dict with status and fingerprint.
 
     Raises:
-        HTTPException: 404 if the fingerprint is not found in active alerts.
+        HTTPException: 403 if not from dashboard proxy, 404 if alert not found.
     """
+    _require_internal_request(request)
     if collector.alert_engine.dismiss_alert(body.fingerprint):
         return {"status": "dismissed", "fingerprint": body.fingerprint}
     raise HTTPException(status_code=404, detail="Alert not found or already resolved")
@@ -486,18 +525,26 @@ class ThresholdUpdate(BaseModel):
 
 
 @app.put("/api/metrics/thresholds")
-async def put_thresholds(payload: ThresholdUpdate) -> ThresholdsResponse:
-    """Patch alert thresholds at runtime (SUPER-gated at the proxy).
+async def put_thresholds(
+    request: Request, payload: ThresholdUpdate
+) -> ThresholdsResponse:
+    """Patch alert thresholds at runtime.
+
+    Defense-in-depth: Validates X-Internal-Request header to ensure request
+    comes through the dashboard proxy (which enforces SUPER auth), not directly
+    to :8011.
 
     Args:
+        request: The incoming FastAPI request (for header validation).
         payload: ThresholdUpdate containing the updates to apply.
 
     Returns:
         Dict containing the updated thresholds.
 
     Raises:
-        HTTPException: If a rule key is unknown or a value is invalid.
+        HTTPException: 403 if not from dashboard proxy, 400 if rule key unknown.
     """
+    _require_internal_request(request)
     try:
         updated = collector.alert_engine.set_thresholds(payload.updates)
     except (KeyError, ValueError) as exc:
