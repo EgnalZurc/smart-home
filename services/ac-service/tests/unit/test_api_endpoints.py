@@ -1174,6 +1174,16 @@ class TestCSRFProtection:
 class TestSecurityHeaders:
     """Tests for security headers middleware."""
 
+    # Expected CSP matching SecurityHeadersMiddleware.CSP_HEADER
+    EXPECTED_CSP = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self' wss:; "
+        "frame-ancestors 'none'"
+    )
+
     def test_security_headers_present(self, client):
         """All security headers should be present in response."""
         response = client.get("/health")
@@ -1182,7 +1192,7 @@ class TestSecurityHeaders:
         assert response.headers["X-Content-Type-Options"] == "nosniff"
         assert response.headers["X-Frame-Options"] == "DENY"
         assert response.headers["X-XSS-Protection"] == "1; mode=block"
-        assert response.headers["Content-Security-Policy"] == "default-src 'self'"
+        assert response.headers["Content-Security-Policy"] == self.EXPECTED_CSP
 
     def test_security_headers_on_api_endpoint(self, client, mock_components):
         """Security headers should be present on API endpoints."""
