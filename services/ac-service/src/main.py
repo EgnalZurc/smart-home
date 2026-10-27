@@ -444,7 +444,15 @@ class CSRFProtectionMiddleware(BaseHTTPMiddleware):
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
             response.headers["X-XSS-Protection"] = "1; mode=block"
-            response.headers["Content-Security-Policy"] = "default-src 'self'"
+            # CSP matches SecurityHeadersMiddleware.CSP_HEADER
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; "
+                "connect-src 'self' wss:; "
+                "frame-ancestors 'none'"
+            )
             return response
         return await call_next(request)
 
@@ -456,8 +464,27 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         - X-Content-Type-Options: nosniff - Prevents MIME type sniffing
         - X-Frame-Options: DENY - Prevents clickjacking via iframes
         - X-XSS-Protection: 1; mode=block - Legacy XSS protection for older browsers
-        - Content-Security-Policy: default-src 'self' - Restricts resource loading
+        - Content-Security-Policy: Restricts resource loading (see CSP_HEADER below)
+
+    CSP breakdown:
+        - default-src 'self': Fallback for all fetch directives
+        - script-src 'self' 'unsafe-inline' cdn.jsdelivr.net: Allow Chart.js and
+          inline onclick handlers (legacy frontend, would need refactor to remove)
+        - style-src 'self' 'unsafe-inline': Allow inline style attributes
+        - img-src 'self' data:: Allow inline SVGs and data URIs
+        - connect-src 'self' wss:: Allow WebSocket connections for real-time updates
+        - frame-ancestors 'none': Prevent iframe embedding (clickjacking protection)
     """
+
+    # CSP policy matching nginx/snippets/csp-static.conf for consistency
+    CSP_HEADER: str = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self' wss:; "
+        "frame-ancestors 'none'"
+    )
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Response]
@@ -467,7 +494,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        response.headers["Content-Security-Policy"] = self.CSP_HEADER
         return response
 
 
