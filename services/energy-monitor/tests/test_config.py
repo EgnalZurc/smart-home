@@ -60,3 +60,25 @@ def test_env_overrides(monkeypatch):
     ):
         monkeypatch.delenv(var, raising=False)
     importlib.reload(cfg)
+
+
+def test_negative_threshold_logs_warning(monkeypatch, caplog):
+    """LOW#8: Negative thresholds log a warning (config.py:87-89)."""
+    import logging
+
+    # Set a negative threshold value
+    monkeypatch.setenv("ENERGY_POWER_ALERT_W", "-100")
+
+    with caplog.at_level(logging.WARNING):
+        cfg = _reload_config(monkeypatch)
+
+    # The negative value should still be loaded (treated as disabled)
+    assert cfg.POWER_ALERT_W == -100.0
+
+    # But a warning should have been logged
+    assert any("ENERGY_POWER_ALERT_W is negative" in r.message for r in caplog.records)
+    assert any("treating as disabled" in r.message for r in caplog.records)
+
+    # Clean up
+    monkeypatch.delenv("ENERGY_POWER_ALERT_W", raising=False)
+    importlib.reload(cfg)
