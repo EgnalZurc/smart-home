@@ -326,6 +326,7 @@ class TestSendMethods:
 
         # Create notifier with mock bot
         notifier = TelegramNotifier.__new__(TelegramNotifier)
+        notifier._token = "fake_token"
         notifier._bot = MagicMock()
         notifier._bot.token = "fake_token"
         notifier._fallback_chat_id = ""
@@ -351,6 +352,7 @@ class TestSendMethods:
 
         # Create notifier with mock
         notifier = TelegramNotifier.__new__(TelegramNotifier)
+        notifier._token = "fake_token"
         notifier._bot = MagicMock()
         notifier._bot.token = "fake_token"
         notifier._fallback_chat_id = "123456"
@@ -545,6 +547,7 @@ class TestHighScorerAlert:
             return mock_resp
 
         notifier = TelegramNotifier.__new__(TelegramNotifier)
+        notifier._token = "fake_token"
         notifier._bot = MagicMock()
         notifier._bot.token = "fake_token"
         notifier._fallback_chat_id = "123456"
@@ -571,6 +574,7 @@ class TestHighScorerAlert:
         from notifier import TelegramNotifier
 
         notifier = TelegramNotifier.__new__(TelegramNotifier)
+        notifier._token = "fake_token"
         notifier._bot = MagicMock()
         notifier._bot.token = "fake_token"
         notifier._fallback_chat_id = ""
