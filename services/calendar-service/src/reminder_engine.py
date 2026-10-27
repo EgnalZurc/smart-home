@@ -53,6 +53,29 @@ logger = logging.getLogger(__name__)
 # Default offsets (seconds before event start): 1 day, 2 hours, 30 minutes
 OFFSETS_DEFAULT = [86400, 7200, 1800]
 
+# ── Localized strings (Spanish) ──────────────────────────────────────────────
+# These could be moved to a config file or i18n system for multi-language support
+MSG_TODAY = "Hoy"
+MSG_TOMORROW = "Mañana"
+MSG_IN_MINUTES = "en {minutes} min"
+MSG_IN_HOURS = "en {hours}h"
+MSG_NO_TITLE = "Evento sin título"
+MONTH_NAMES = [
+    "",
+    "ene",
+    "feb",
+    "mar",
+    "abr",
+    "may",
+    "jun",
+    "jul",
+    "ago",
+    "sep",
+    "oct",
+    "nov",
+    "dic",
+]
+
 
 def get_applicable_rules(
     event: EventRow,
@@ -97,34 +120,19 @@ def _format_relative_time(event_start: int, now: int, tz: ZoneInfo) -> str:
     if event_dt.date() == now_dt.date():
         if delta_s < 3600:
             minutes = max(1, delta_s // 60)
-            return f"Hoy {time_str} (en {minutes} min)"
+            return f"{MSG_TODAY} {time_str} ({MSG_IN_MINUTES.format(minutes=minutes)})"
         else:
             hours = delta_s // 3600
-            return f"Hoy {time_str} (en {hours}h)"
+            return f"{MSG_TODAY} {time_str} ({MSG_IN_HOURS.format(hours=hours)})"
 
     # Tomorrow
     tomorrow = now_dt.date().toordinal() + 1
     if event_dt.date().toordinal() == tomorrow:
-        return f"Mañana {time_str}"
+        return f"{MSG_TOMORROW} {time_str}"
 
     # Further out: "15 oct 09:30"
     day = event_dt.day
-    month_names = [
-        "",
-        "ene",
-        "feb",
-        "mar",
-        "abr",
-        "may",
-        "jun",
-        "jul",
-        "ago",
-        "sep",
-        "oct",
-        "nov",
-        "dic",
-    ]
-    month = month_names[event_dt.month]
+    month = MONTH_NAMES[event_dt.month]
     return f"{day} {month} {time_str}"
 
 
@@ -153,7 +161,7 @@ def format_reminder_message(
     lines = []
 
     # 🔔 Title
-    title = event.get("title", "Evento sin título")
+    title = event.get("title") or MSG_NO_TITLE
     lines.append(f"🔔 {title}")
 
     # 📅 Date/time with relative context
