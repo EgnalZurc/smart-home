@@ -52,6 +52,8 @@ logger: logging.Logger = logging.getLogger(__name__)
 GEN1: int = 1
 GEN2: int = 2
 
+__all__ = ["GEN1", "GEN2", "ShellyEMClient", "ShellyError"]
+
 
 class ShellyError(Exception):
     """Raised when a Shelly device cannot be reached or returns bad data."""

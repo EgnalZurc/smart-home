@@ -63,9 +63,7 @@ def test_power_spike_resolves(store):
     store.write_power(_NOW, [("ch0", 1000.0, 500.0, 230.0, 0.9)])
     events = engine.evaluate(now=_NOW + 60)
     resolved = [
-        e
-        for e in events
-        if e["rule_key"] == "power_spike" and e["state"] == "resolved"
+        e for e in events if e["rule_key"] == "power_spike" and e["state"] == "resolved"
     ]
     assert len(resolved) == 1
     # Audit trail holds both the fired and resolved events.
@@ -176,7 +174,57 @@ class TestThresholdEdgeCases:
         assert any(e["state"] == "fired" for e in events3)
 
         # Total events in audit trail should be 3
-        all_power = [
-            a for a in store.recent_alerts() if a["rule_key"] == "power_spike"
-        ]
+        all_power = [a for a in store.recent_alerts() if a["rule_key"] == "power_spike"]
         assert len(all_power) == 3
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Defensive branch coverage (LOW severity audit findings)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestAlertDeliveryFailure:
+    """LOW#5: Alert delivery failure is logged but doesn't raise (alerts.py:234-239)."""
+
+    def test_delivery_oserror_swallowed(self, store, caplog):
+        """OSError during delivery is logged but alert still persisted."""
+        import logging
+
+        class FailingNotifier:
+            enabled = True
+
+            def send(self, message: str):
+                raise OSError("network unreachable")
+
+        store.write_power(_NOW, [("ch0", 2000.0, 4200.0, 230.0, 0.9)])
+        engine = AlertEngine(store, enabled=True, notifier=FailingNotifier())
+
+        with caplog.at_level(logging.WARNING):
+            events = engine.evaluate(now=_NOW)
+
+        # Alert still fires and is persisted despite delivery failure
+        assert len(events) == 1
+        assert events[0]["state"] == "fired"
+        assert store.recent_alerts()  # Alert was persisted
+        assert any("alert delivery failed" in r.message for r in caplog.records)
+
+    def test_delivery_runtimeerror_swallowed(self, store, caplog):
+        """RuntimeError during delivery is logged but alert still persisted."""
+        import logging
+
+        class FailingNotifier:
+            enabled = True
+
+            def send(self, message: str):
+                raise RuntimeError("telegram bot token invalid")
+
+        store.write_power(_NOW, [("ch0", 2000.0, 4200.0, 230.0, 0.9)])
+        engine = AlertEngine(store, enabled=True, notifier=FailingNotifier())
+
+        with caplog.at_level(logging.WARNING):
+            events = engine.evaluate(now=_NOW)
+
+        # Alert still fires and is persisted despite delivery failure
+        assert len(events) == 1
+        assert store.recent_alerts()
+        assert any("alert delivery failed" in r.message for r in caplog.records)

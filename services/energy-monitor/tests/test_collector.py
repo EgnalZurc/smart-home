@@ -247,3 +247,33 @@ async def test_stop_closes_clients(store):
     await col.start()
     await col.stop()
     assert fake.closed is True
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Defensive branch coverage (LOW severity audit findings)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+async def test_stop_logs_client_close_failure(store, caplog):
+    """LOW#4: Client close failure is logged but doesn't raise (collector.py:259-260)."""
+    import logging
+
+    import httpx
+
+    class FailingCloseClient:
+        device_id = "fail"
+
+        async def get_status(self):
+            return _status("fail", {}, {})
+
+        async def aclose(self):
+            raise httpx.HTTPError("connection reset")
+
+    col = Collector(store=store, devices=[])
+    col.clients = {"fail": FailingCloseClient()}
+    await col.start()
+
+    with caplog.at_level(logging.WARNING):
+        await col.stop()  # Should not raise
+
+    assert any("failed to close client" in r.message for r in caplog.records)

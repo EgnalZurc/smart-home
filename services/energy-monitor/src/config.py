@@ -11,7 +11,10 @@ now so those tasks only add behaviour, not new knobs.
 
 from __future__ import annotations
 
+import logging
 import os
+
+_logger = logging.getLogger(__name__)
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -84,3 +87,45 @@ ALERTS_ENABLED = os.environ.get("ENERGY_ALERTS_ENABLED", "true").lower() == "tru
 POWER_ALERT_W = float(os.environ.get("ENERGY_POWER_ALERT_W", "3500"))
 DAILY_KWH_ALERT = float(os.environ.get("ENERGY_DAILY_KWH_ALERT", "20"))
 MONTHLY_KWH_ALERT = float(os.environ.get("ENERGY_MONTHLY_KWH_ALERT", "400"))
+
+# ── Warn on negative thresholds (likely config typo) ──────────────────────────
+# Negative values are treated as disabled (same as 0), but this is rarely
+# intentional. Log a warning to help catch configuration mistakes early.
+for _name, _val in [
+    ("ENERGY_POWER_ALERT_W", POWER_ALERT_W),
+    ("ENERGY_DAILY_KWH_ALERT", DAILY_KWH_ALERT),
+    ("ENERGY_MONTHLY_KWH_ALERT", MONTHLY_KWH_ALERT),
+]:
+    if _val < 0:
+        _logger.warning(
+            "%s is negative (%.2f); treating as disabled (0). "
+            "Set to 0 explicitly or a positive value.",
+            _name,
+            _val,
+        )
+
+# ── Public exports ────────────────────────────────────────────────────────────
+__all__ = [
+    "ALERT_RETENTION_DAYS",
+    "ALERTS_ENABLED",
+    "DAILY_KWH_ALERT",
+    "DB_PATH",
+    "DEVICES_JSON",
+    "ENERGY_RETENTION_DAYS",
+    "ENERGY_SNAPSHOT_INTERVAL_S",
+    "HTTP_TIMEOUT_S",
+    "LOG_LEVEL",
+    "MONTHLY_KWH_ALERT",
+    "POLL_INTERVAL_S",
+    "PORT",
+    "POWER_ALERT_W",
+    "POWER_RETENTION_DAYS",
+    "PRICE_EUR_KWH",
+    "PRUNE_INTERVAL_S",
+    "RING_BUFFER_MAXLEN",
+    "ROLLUP_INTERVAL_S",
+    "SERVICE_NAME",
+    "SHELLY_PASSWORD",
+    "SHELLY_USER",
+    "TARIFF_MODE",
+]
