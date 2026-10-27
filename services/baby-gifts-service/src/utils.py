@@ -31,6 +31,11 @@ def parse_price(price_str: str) -> float:
         - Range: average of min and max
         - No numeric content: 0.0
 
+    Raises:
+        This function does not raise exceptions. Invalid or unparseable
+        input returns 0.0 instead of raising ValueError, making it safe
+        for use in sorting operations where a fallback is preferable.
+
     Examples:
         >>> parse_price("50€")
         50.0

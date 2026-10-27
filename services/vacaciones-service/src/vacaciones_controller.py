@@ -582,6 +582,17 @@ def is_healthy() -> bool:
 
     Verifies that the data directory exists and is accessible.
 
+    Limitations:
+        This check only verifies directory existence, not write capability.
+        A more thorough check would attempt a test write, but that adds I/O
+        overhead on every health probe (nginx polls frequently). Since the
+        service uses atomic writes with temp files in the same directory,
+        directory existence is a reasonable proxy for writability.
+        If write failures become an issue in production, consider:
+        1. A periodic background write test (not on every probe)
+        2. Caching the last successful write timestamp
+        3. Monitoring _save_data exceptions via metrics
+
     Returns:
         True if the data directory is accessible, False otherwise.
     """
