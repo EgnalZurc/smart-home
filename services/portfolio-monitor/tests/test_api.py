@@ -845,10 +845,10 @@ class TestRefreshMonitorEndpoint:
     """Tests for refresh single monitor endpoint."""
 
     def test_refresh_unknown_monitor(self, client):
-        """Refresh with unknown monitor returns 404."""
+        """Refresh with unknown monitor returns 422 (invalid enum value)."""
         response = client.post("/api/portfolio/refresh/unknown")
-        assert response.status_code == 404
-        assert "unknown" in response.json()["detail"].lower()
+        # With MonitorName enum, FastAPI returns 422 for invalid enum values
+        assert response.status_code == 422
 
     def test_refresh_etf_monitor(self, client):
         """Refresh ETF monitor returns 200 and starts background task."""

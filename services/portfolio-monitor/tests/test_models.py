@@ -180,3 +180,82 @@ class TestDeFiAnalysis:
         assert analysis.estimated_value == 0.0
         assert analysis.yearly_yield == 0.0
         assert analysis.level == AlertLevel.OK
+
+
+class TestMonitorState:
+    """Tests for MonitorState dataclass."""
+
+    def test_from_dict_with_timezone(self):
+        """from_dict handles timestamps with timezone info."""
+        from datetime import timezone
+
+        from models import MonitorState
+
+        data = {
+            "last_etf_run": "2024-06-15T10:30:00+02:00",
+            "last_crypto_run": "2024-06-15T08:30:00Z",
+        }
+
+        state = MonitorState.from_dict(data)
+
+        assert state.last_etf_run is not None
+        assert state.last_etf_run.tzinfo is not None
+        assert state.last_crypto_run is not None
+        assert state.last_crypto_run.tzinfo is not None
+
+    def test_from_dict_without_timezone(self):
+        """from_dict assumes UTC for timestamps without timezone."""
+        from datetime import timezone
+
+        from models import MonitorState
+
+        data = {
+            "last_etf_run": "2024-06-15T10:30:00",
+            "last_crypto_run": "2024-06-15T08:30:00",
+        }
+
+        state = MonitorState.from_dict(data)
+
+        # Should have UTC timezone added
+        assert state.last_etf_run is not None
+        assert state.last_etf_run.tzinfo == timezone.utc
+        assert state.last_crypto_run is not None
+        assert state.last_crypto_run.tzinfo == timezone.utc
+
+    def test_from_dict_empty_values(self):
+        """from_dict handles empty/None timestamp values."""
+        from models import MonitorState
+
+        data = {
+            "last_etf_run": None,
+            "last_crypto_run": "",
+        }
+
+        state = MonitorState.from_dict(data)
+
+        assert state.last_etf_run is None
+        assert state.last_crypto_run is None
+
+    def test_from_dict_missing_keys(self):
+        """from_dict handles missing keys."""
+        from models import MonitorState
+
+        state = MonitorState.from_dict({})
+
+        assert state.last_etf_run is None
+        assert state.last_crypto_run is None
+
+    def test_to_dict(self):
+        """to_dict serializes timestamps correctly."""
+        from datetime import datetime, timezone
+
+        from models import MonitorState
+
+        state = MonitorState()
+        state.last_etf_run = datetime(2024, 6, 15, 10, 30, 0, tzinfo=timezone.utc)
+        state.last_crypto_run = None
+
+        data = state.to_dict()
+
+        assert data["last_etf_run"] == "2024-06-15T10:30:00+00:00"
+        assert data["last_crypto_run"] is None

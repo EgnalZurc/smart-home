@@ -279,3 +279,56 @@ class TestSavingsMonitor:
         # Should still process the valid account
         assert result["total_balance"] >= 5000
         assert len(result["analysis"]) >= 1
+
+
+class TestAccountIdSanitization:
+    """Tests for account_id sanitization (security fix)."""
+
+    def test_sanitize_account_id_normal(self):
+        """Normal account IDs pass through."""
+        from monitors.savings_monitor import _sanitize_account_id
+
+        assert _sanitize_account_id("savings-1") == "savings-1"
+        assert _sanitize_account_id("emergency_fund") == "emergency_fund"
+        assert _sanitize_account_id("Account123") == "Account123"
+
+    def test_sanitize_account_id_removes_special_chars(self):
+        """Special characters are removed from account_id."""
+        from monitors.savings_monitor import _sanitize_account_id
+
+        # Injection attempts sanitized (quotes, semicolons, brackets, spaces removed)
+        # Note: dashes and underscores are intentionally allowed
+        assert (
+            _sanitize_account_id("<script>alert(1)</script>") == "scriptalert1script"
+        )
+        # The -- remains because dashes are valid chars in account IDs
+        assert _sanitize_account_id("'; DROP TABLE--") == "DROPTABLE--"
+
+    def test_sanitize_account_id_empty_value(self):
+        """Empty account_id returns 'unknown'."""
+        from monitors.savings_monitor import _sanitize_account_id
+
+        assert _sanitize_account_id("") == "unknown"
+        assert _sanitize_account_id(None) == "unknown"
+
+    def test_sanitize_account_id_truncates_long_values(self):
+        """Very long values are truncated to 50 chars."""
+        from monitors.savings_monitor import _sanitize_account_id
+
+        long_id = "A" * 100
+        result = _sanitize_account_id(long_id)
+
+        assert len(result) == 50
+
+    def test_sanitize_account_id_allows_dash_underscore(self):
+        """Dashes and underscores are allowed."""
+        from monitors.savings_monitor import _sanitize_account_id
+
+        assert _sanitize_account_id("my-savings-account") == "my-savings-account"
+        assert _sanitize_account_id("emergency_fund_2024") == "emergency_fund_2024"
+
+    def test_sanitize_account_id_all_special_chars(self):
+        """If all chars are special, returns 'unknown'."""
+        from monitors.savings_monitor import _sanitize_account_id
+
+        assert _sanitize_account_id("!@#$%^&*()") == "unknown"

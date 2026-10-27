@@ -10,8 +10,9 @@ call time so tests patching ``api.routes.get_orchestrator`` take effect here.
 """
 
 import logging
+from enum import Enum
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
 from .auth import require_auth
 from .helpers import _config_limiter, _enforce_rate_limit, _refresh_limiter
@@ -19,6 +20,19 @@ from .helpers import _config_limiter, _enforce_rate_limit, _refresh_limiter
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
+
+
+class MonitorName(str, Enum):
+    """Valid monitor names for refresh endpoints.
+
+    Using an Enum ensures that only valid monitor names are accepted,
+    providing type safety and preventing injection of arbitrary strings
+    into log messages and orchestrator calls.
+    """
+
+    ETF = "etf"
+    CRYPTO = "crypto"
+    SAVINGS = "savings"
 
 
 @router.post("/refresh", dependencies=[Depends(require_auth)])
@@ -46,14 +60,24 @@ async def refresh_all(request: Request, background_tasks: BackgroundTasks):
 
 @router.post("/refresh/{monitor_name}", dependencies=[Depends(require_auth)])
 async def refresh_monitor(
-    monitor_name: str, request: Request, background_tasks: BackgroundTasks
+    monitor_name: MonitorName, request: Request, background_tasks: BackgroundTasks
 ):
-    """Trigger a refresh of a specific monitor. Rate limited: 5 req/min."""
-    import api.routes as routes
+    """Trigger a refresh of a specific monitor. Rate limited: 5 req/min.
 
-    if monitor_name not in ["etf", "crypto", "savings"]:
-        logger.warning(f"Unknown monitor requested: {monitor_name}")
-        raise HTTPException(status_code=404, detail=f"Unknown monitor: {monitor_name}")
+    Args:
+        monitor_name: The monitor to refresh (etf, crypto, or savings).
+            Using MonitorName enum ensures type-safe validation and prevents
+            arbitrary string injection into logs.
+        request: The incoming HTTP request (for rate limiting).
+        background_tasks: FastAPI background tasks for async execution.
+
+    Returns:
+        JSON with status and monitor name.
+
+    Raises:
+        HTTPException 429: If rate limit exceeded.
+    """
+    import api.routes as routes
 
     _enforce_rate_limit(_refresh_limiter, request)
 
@@ -61,17 +85,20 @@ async def refresh_monitor(
 
     async def run_refresh():
         try:
-            await orch.run_monitor(monitor_name)
-            logger.info(f"Monitor {monitor_name} refresh completed")
+            await orch.run_monitor(monitor_name.value)
+            logger.info("Monitor %s refresh completed", monitor_name.value)
         except (OSError, ValueError, TypeError, RuntimeError, ConnectionError) as e:
             logger.error(
-                f"Error during refresh of {monitor_name}: {type(e).__name__}: {e}"
+                "Error during refresh of %s: %s: %s",
+                monitor_name.value,
+                type(e).__name__,
+                e,
             )
 
     background_tasks.add_task(run_refresh)
-    logger.info(f"Refresh {monitor_name} monitor triggered")
+    logger.info("Refresh %s monitor triggered", monitor_name.value)
 
-    return {"status": "refresh_started", "monitor": monitor_name}
+    return {"status": "refresh_started", "monitor": monitor_name.value}
 
 
 @router.post("/reload-config", dependencies=[Depends(require_auth)])
@@ -88,9 +115,27 @@ async def reload_config(request: Request):
 
 
 @router.get("/schedule")
-async def get_schedule():
-    """Get the monitoring schedule."""
+async def get_schedule(request: Request):
+    """Get the monitoring schedule. Rate limited: 30 req/min.
+
+    Returns the configured schedule for each monitor and the next scheduled
+    run times. This is a read-only endpoint but rate limited to prevent
+    abuse (e.g., polling loops that hammer the endpoint).
+
+    Args:
+        request: The incoming HTTP request (for rate limiting).
+
+    Returns:
+        JSON with schedule configuration and next_runs timestamps.
+
+    Raises:
+        HTTPException 429: If rate limit exceeded.
+    """
     import api.routes as routes
+
+    from .helpers import _enforce_rate_limit, _public_read_limiter
+
+    _enforce_rate_limit(_public_read_limiter, request)
 
     orch = routes.get_orchestrator()
     schedule = orch.get_schedule()

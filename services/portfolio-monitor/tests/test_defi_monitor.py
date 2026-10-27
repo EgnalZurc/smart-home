@@ -195,3 +195,51 @@ class TestDeFiMonitor:
         assert analysis.apy_pct == 0.0
         assert analysis.platform_url == ""
         assert analysis.yearly_yield == 0.0
+
+
+class TestPositionIdSanitization:
+    """Tests for position_id sanitization (security fix)."""
+
+    def test_sanitize_position_id_normal(self):
+        """Normal protocol:asset IDs pass through."""
+        from monitors.defi_monitor import _sanitize_position_id
+
+        assert _sanitize_position_id("Aave", "USDC") == "Aave:USDC"
+        assert _sanitize_position_id("Lido", "stETH") == "Lido:stETH"
+
+    def test_sanitize_position_id_removes_special_chars(self):
+        """Special characters are removed from position_id."""
+        from monitors.defi_monitor import _sanitize_position_id
+
+        # Injection attempts should be sanitized (quotes, semicolons, spaces removed)
+        # Note: dashes and underscores are intentionally allowed
+        assert _sanitize_position_id("Aave<script>", "USDC") == "Aavescript:USDC"
+        # The -- remains because dashes are valid chars in protocol/asset names
+        assert (
+            _sanitize_position_id("Protocol", "'; DROP TABLE--")
+            == "Protocol:DROPTABLE--"
+        )
+
+    def test_sanitize_position_id_empty_values(self):
+        """Empty protocol or asset get 'unknown' placeholder."""
+        from monitors.defi_monitor import _sanitize_position_id
+
+        assert _sanitize_position_id("", "") == "unknown:unknown"
+        assert _sanitize_position_id("Aave", "") == "Aave:unknown"
+        assert _sanitize_position_id("", "USDC") == "unknown:USDC"
+
+    def test_sanitize_position_id_truncates_long_values(self):
+        """Very long values are truncated to 100 chars."""
+        from monitors.defi_monitor import _sanitize_position_id
+
+        long_protocol = "A" * 100
+        long_asset = "B" * 100
+        result = _sanitize_position_id(long_protocol, long_asset)
+
+        assert len(result) <= 100
+
+    def test_sanitize_position_id_allows_dash_underscore(self):
+        """Dashes and underscores are allowed in position_id."""
+        from monitors.defi_monitor import _sanitize_position_id
+
+        assert _sanitize_position_id("Uniswap-V3", "ETH_USDC") == "Uniswap-V3:ETH_USDC"

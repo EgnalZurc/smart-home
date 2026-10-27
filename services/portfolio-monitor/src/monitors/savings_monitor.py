@@ -6,6 +6,7 @@ Tracks interest from remunerada/deposit accounts.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -18,6 +19,36 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 # Divisor to convert percentage (e.g., 5.0 for 5%) to decimal (0.05)
 PERCENT_DIVISOR: float = 100.0
+
+# Max length for account_id to prevent memory issues
+_ACCOUNT_ID_MAX_LENGTH: int = 50
+
+
+def _sanitize_account_id(account_id: str | None) -> str:
+    """Sanitize an account_id for safe use in logs and storage.
+
+    Args:
+        account_id: Raw account identifier from configuration.
+
+    Returns:
+        Sanitized account_id with invalid characters removed and
+        length bounded to 50 chars. Returns "unknown" if empty.
+    """
+    if not account_id:
+        return "unknown"
+
+    # Remove any characters that aren't alphanumeric, dash, or underscore
+    safe_id = re.sub(r"[^\w\-]", "", str(account_id))
+
+    # Truncate to max length if needed
+    if len(safe_id) > _ACCOUNT_ID_MAX_LENGTH:
+        safe_id = safe_id[:_ACCOUNT_ID_MAX_LENGTH]
+
+    # Return "unknown" if sanitization removed everything
+    if not safe_id:
+        return "unknown"
+
+    return safe_id
 
 
 def calculate_interest(balance: float, apy: float) -> tuple[float, float]:
@@ -111,8 +142,9 @@ class SavingsMonitor(BaseMonitor):
         total_yearly = 0.0
 
         for account in accounts:
-            account_id: str = account.get("id", "")
-            logger.info(f"  → Processing {account_id}...")
+            raw_account_id: str = account.get("id", "")
+            account_id = _sanitize_account_id(raw_account_id)
+            logger.info("  → Processing %s...", account_id)
 
             try:
                 balance: float = account.get("balance", 0)
@@ -141,13 +173,13 @@ class SavingsMonitor(BaseMonitor):
                 total_yearly += yearly
 
             except (ValueError, TypeError, KeyError, AttributeError) as e:
-                logger.error(f"Error processing {account_id}: {e}")
+                logger.error("Error processing %s: %s", account_id, e)
                 continue
 
         self._results = results
         self._last_update = datetime.now(timezone.utc)
 
-        logger.info(f"Savings monitor complete. {len(results)} accounts processed.")
+        logger.info("Savings monitor complete. %d accounts processed.", len(results))
 
         return {
             "analysis": results,

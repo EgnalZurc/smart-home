@@ -57,6 +57,16 @@ logger: logging.Logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 # Environment configuration
 # ─────────────────────────────────────────────────────────────────────────────
+# SECURITY: ENVIRONMENT controls Swagger/ReDoc exposure.
+# - "production" (default): Swagger/ReDoc DISABLED - no API documentation exposed
+# - Any other value: Swagger/ReDoc ENABLED at /docs and /redoc
+#
+# WARNING: In production deployments, NEVER set ENVIRONMENT to a non-production
+# value. Exposing API documentation can reveal endpoint structure, parameters,
+# and response schemas to potential attackers. The Tailscale VPN provides
+# network-level isolation, but defense-in-depth requires disabling docs.
+#
+# For local development, set ENVIRONMENT=development in your shell or .env file.
 ENVIRONMENT: str = os.environ.get("ENVIRONMENT", "production")
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -81,8 +91,17 @@ def _validate_origin(request: Request) -> bool:
     an allowed origin. This prevents CSRF attacks where a malicious site
     tries to make requests on behalf of the user.
 
-    For internal APIs behind Tailscale VPN, Origin validation is sufficient
-    because browsers always send Origin for cross-origin requests.
+    For internal APIs behind Tailscale VPN, Origin validation combined with
+    Sec-Fetch-Mode provides defense-in-depth:
+    - Origin header validates the source domain
+    - Sec-Fetch-Mode=cors indicates a cross-origin fetch (requires CORS)
+    - Sec-Fetch-Mode=navigate/same-origin are trusted browser navigations
+
+    Security note on missing Origin:
+    - Browsers ALWAYS send Origin for cross-origin POST requests
+    - Missing Origin typically means: same-origin request, or non-browser client
+    - We check Sec-Fetch-Mode to distinguish browser same-origin from scripts
+    - If Sec-Fetch-Mode=cors but no Origin, block (malformed browser request)
 
     Args:
         request: The incoming HTTP request.
@@ -95,12 +114,22 @@ def _validate_origin(request: Request) -> bool:
         return True
 
     origin = request.headers.get("origin")
+    sec_fetch_mode = request.headers.get("sec-fetch-mode")
+
+    # If browser sends Sec-Fetch-Mode=cors, Origin MUST be present and valid
+    # A cors request without Origin is malformed or stripped by a proxy
+    if sec_fetch_mode == "cors":
+        if not origin:
+            return False
+        return origin in _ALLOWED_ORIGINS
 
     # No Origin header - could be same-origin request or non-browser client
-    # For internal APIs, we allow requests without Origin (curl, scripts, etc.)
-    # Browsers ALWAYS send Origin for cross-origin POST requests
+    # Sec-Fetch-Mode helps distinguish:
+    # - "navigate", "same-origin", "nested-navigate" = trusted browser navigation
+    # - None = non-browser client (curl, scripts, internal services) - allowed
+    # - Unknown Sec-Fetch-Mode without Origin - block to be safe
     if not origin:
-        return True
+        return sec_fetch_mode in ("navigate", "same-origin", "nested-navigate", None)
 
     # Check if origin is in the allowed list
     return origin in _ALLOWED_ORIGINS
@@ -130,6 +159,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Content-Security-Policy"] = (
+            # SECURITY: unsafe-inline required for SPA inline styles (chart.js, etc.)
+            # This is an ACCEPTED_RISK documented in docs/SECURITY_FIXES.md under
+            # "[infrastructure] CSP unsafe-inline". Mitigations:
+            # - All other CSP directives are strict (default-src 'self', script-src 'self')
+            # - Application served via Tailscale VPN only (not public internet)
+            # - Other security headers provide defense-in-depth
+            # Future: Consider nonce-based CSP migration (dashboard already migrated)
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
         )
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
