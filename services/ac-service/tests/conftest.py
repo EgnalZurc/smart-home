@@ -22,7 +22,9 @@ except ModuleNotFoundError:
     if _common_src.exists():
         sys.path.insert(0, str(_common_src))
 
-# Set required environment variables for tests
+# Set required environment variables for tests.
+# These are deliberately dummy/placeholder values for test isolation - they never
+# reach real APIs since tests mock the external clients (MELCloud, MQTT).
 os.environ.setdefault("MELCLOUD_EMAIL", "test@example.com")
 os.environ.setdefault("MELCLOUD_PASSWORD", "testpassword")
 os.environ.setdefault("MELCLOUD_DEVICE_ID", "12345")

@@ -183,9 +183,16 @@ Z2M_DISCOVERY_TIMEOUT = float(
 MAX_HISTORY_PER_SENSOR = int(
     os.environ.get("MAX_HISTORY_PER_SENSOR", str(DEFAULT_MAX_HISTORY_PER_SENSOR))
 )
-# CORS: require explicit origins in production
+# CORS: require explicit origins in production. Each origin must be a valid
+# http/https URL to prevent misconfiguration (e.g. typos, bare hostnames).
 _cors_origins_raw = os.environ.get("CORS_ORIGINS", "")
-CORS_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+_cors_origins_parsed = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+for _origin in _cors_origins_parsed:
+    if not _origin.startswith(("http://", "https://")):
+        raise ValueError(
+            f"Invalid CORS origin '{_origin}': must start with http:// or https://"
+        )
+CORS_ORIGINS = _cors_origins_parsed
 LOCATION_LATITUDE = float(
     os.environ.get("LOCATION_LATITUDE", str(DEFAULT_LOCATION_LATITUDE))
 )
@@ -257,6 +264,8 @@ async def lifespan(app: FastAPI):
         logger.warning("No sensors discovered — continuing without sensors")
 
     # 1. MQTT
+    # Connection time: ~2-5s plain, ~5-15s with TLS (SSL handshake on Pi is slow).
+    # connect_retries * retry_delay gives the max wait before giving up.
     mqtt_handler = MqttHandler(
         MQTT_BROKER,
         MQTT_PORT,
@@ -382,8 +391,7 @@ app = FastAPI(
 
 # ── CSRF Protection ───────────────────────────────────────────────────────────
 
-# Allowed origins for CSRF validation. Static for now; extend via environment
-# variable AC_ALLOWED_ORIGINS (comma-separated list) if dynamic config needed.
+# Allowed origins for CSRF validation (static list).
 _ALLOWED_ORIGINS: set[str] = {
     "https://raspberrypi.tailaa37cd.ts.net",
     "http://raspberrypi.local",
@@ -544,7 +552,14 @@ class ManualParamsRequest(BaseModel):
 
 
 class ManualParamUpdate(BaseModel):
-    """Request model for updating a single manual parameter."""
+    """Request model for updating a single manual parameter.
+
+    The ``value`` field accepts str | float | int to support all parameter types:
+    - mode: str ("cool" | "heat")
+    - fan_speed: int (0-3)
+    - temperature: float (16.0-31.0)
+    Pydantic coerces the value to the expected type in the endpoint handler.
+    """
 
     param: str
     value: str | float | int

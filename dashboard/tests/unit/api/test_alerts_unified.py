@@ -185,7 +185,7 @@ class TestFetchMemory:
     async def test_returns_empty_on_error(self):
         with patch(
             "api.monitoring.get_memory_alerts",
-            new=AsyncMock(side_effect=Exception("disk fail")),
+            new=AsyncMock(side_effect=AttributeError("disk fail")),
         ):
             result = await _fetch_memory(days=7)
             assert result == []
