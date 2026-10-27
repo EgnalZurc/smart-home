@@ -365,6 +365,73 @@ Each entry follows this format:
 
 ---
 
+## Fixed Issues (2026-10-26) - Mosquitto Infrastructure
+
+### [infrastructure/mosquitto] bind_address Documentation
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: bind_address 127.0.0.1 would break Docker inter-container communication; needed documentation that 0.0.0.0 is intentional
+- **Fix Applied**: Changed to 0.0.0.0 with comprehensive SECURITY NOTE explaining why this is safe (Docker network isolation, host firewall, Tailscale ACLs)
+- **Verification**: Check `mosquitto.conf` line 26-31 has bind_address 0.0.0.0 with security comment
+
+### [infrastructure/mosquitto] Certificate Renewal Documentation
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: Server certs valid 365 days vs CA 10 years with no documented renewal procedure
+- **Fix Applied**: Added comprehensive CERTIFICATE RENEWAL PROCEDURE section to generate-certs.sh including step-by-step renewal instructions and cron-based expiry monitoring example
+- **Verification**: Check `generate-certs.sh` contains "CERTIFICATE RENEWAL PROCEDURE" section
+
+### [infrastructure/mosquitto] require_certificate false Documentation
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: require_certificate false allows password-only auth; needed documentation that this is intentional
+- **Fix Applied**: Added SECURITY NOTE explaining rationale and alternative mTLS configuration
+- **Verification**: Check `mosquitto.conf` lines 43-48 has comment explaining require_certificate false
+
+### [infrastructure/mosquitto] RSA Key Size Documentation
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: RSA 2048-bit used; should document upgrade path to 4096 or ECDSA
+- **Fix Applied**: Added TODO comment with upgrade considerations and ECDSA example command
+- **Verification**: Check `generate-certs.sh` KEY_SIZE section has TODO and ECDSA example
+
+### [infrastructure/mosquitto] Subscribe/Unsubscribe Logging
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: Missing log_type subscribe/unsubscribe for audit trail
+- **Fix Applied**: Added `log_type subscribe` and `log_type unsubscribe` with explanatory comment
+- **Verification**: Check `mosquitto.conf` logging section includes subscribe/unsubscribe
+
+### [infrastructure/mosquitto] TLS Example Version
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: mosquitto-tls.conf.example showed tlsv1.2; update to tlsv1.3 for consistency
+- **Fix Applied**: Changed to tlsv1.3 with comment noting TLS 1.2 fallback option
+- **Verification**: Check `mosquitto-tls.conf.example` shows tls_version tlsv1.3
+
+### [infrastructure/mosquitto] Resource Limits Documentation
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: No max_connections/resource limits configured
+- **Fix Applied**: Added TODO section with recommended limits for future scaling
+- **Verification**: Check `mosquitto.conf` has "Resource Limits" section with TODO
+
+---
+
 ## Accepted Risks
 
 Issues in this section have been evaluated and accepted as low risk given the deployment context.
@@ -509,6 +576,18 @@ The audit should NOT re-report these issues.
 - **Review Date**: 2026-10-26
 - **Next Review**: 2027-04-26 (6 months)
 
+### [zigbee2mqtt] MQTT Plaintext Connection
+- **Severity**: LOW
+- **Status**: ACCEPTED_RISK
+- **Reason**: MQTT traffic is Docker-internal only (mosquitto container on same bridge network). No traffic leaves the Pi or crosses the internet. TLS would add complexity without security benefit.
+- **Mitigations**:
+  - Docker bridge network isolation
+  - MQTT authentication required (mosquitto `allow_anonymous false`)
+  - No external exposure
+- **Documentation**: Comment added in `configuration.example.yaml` explaining rationale
+- **Review Date**: 2026-10-26
+- **Next Review**: 2027-04-26 (6 months)
+
 ### [vaultwarden] No Automated Backup
 - **Severity**: HIGH
 - **Status**: FIXED
@@ -571,6 +650,37 @@ The audit should NOT re-report these issues.
 - **Description**: RSA key and database had world-readable permissions (644)
 - **Fix Applied**: `chmod 600` on rsa_key.pem and db.sqlite3 on the Pi
 - **Verification**: `ls -la ~/smart-home-prod/data/vaultwarden/` shows -rw------- permissions
+
+---
+
+## Fixed Issues (2026-10-26)
+
+### [zigbee2mqtt] Frontend Binding to 0.0.0.0
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: Frontend bound to 0.0.0.0 by default, potentially exposing it directly if firewall/Docker network is misconfigured
+- **Fix Applied**: Added `host: 127.0.0.1` to bind only to localhost; frontend accessed via nginx reverse proxy
+- **Verification**: Check `configuration.example.yaml` has `host: 127.0.0.1` under `frontend:`
+
+### [zigbee2mqtt] Empty Z2M_FRONTEND_PASSWORD Documentation
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: If Z2M_FRONTEND_PASSWORD env var is empty, frontend has no token protection (not documented)
+- **Fix Applied**: Added comment documenting this as accepted risk (nginx auth_request still protects /zigbee/ path)
+- **Verification**: Check `configuration.example.yaml` has comment about empty password behavior
+
+### [zigbee2mqtt] Duplicate YAML Block
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-10-26
+- **Description**: Lines 49-57 were a copy-paste duplicate of the advanced block (cache_state, last_seen, devices, version)
+- **Fix Applied**: Removed the duplicate lines
+- **Verification**: `wc -l configuration.example.yaml` should be ~74 lines (was ~83 with duplicate)
 
 ---
 
