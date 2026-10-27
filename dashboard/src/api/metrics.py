@@ -8,6 +8,9 @@ directly.
 All routes require SUPER (level 0), matching ``system/stats.py`` and
 ``system/containers.py``: metrics expose host/container internals that only the
 admin should see.
+
+Defense-in-depth: POST/PUT requests include X-Internal-Request header that
+metrics-service validates, ensuring requests only come through the dashboard proxy.
 """
 
 from fastapi import APIRouter, Query, Request
@@ -18,6 +21,9 @@ from api.proxy.base import ServiceProxy
 router = APIRouter(prefix="/api/metrics", tags=["Metrics"])
 
 _proxy = ServiceProxy("http://metrics-service:8011")
+
+# Header sent to metrics-service for defense-in-depth validation on write endpoints
+_INTERNAL_HEADERS = {"X-Internal-Request": "dashboard"}
 
 
 @router.get("/latest")
@@ -82,7 +88,7 @@ async def dismiss_metrics_alert(request: Request):
     """
     require_super(request)
     body = await request.json()
-    return await _proxy.post("/api/metrics/alerts/dismiss", json=body)
+    return await _proxy.post("/api/metrics/alerts/dismiss", json=body, headers=_INTERNAL_HEADERS)
 
 
 @router.get("/thresholds")
@@ -97,4 +103,4 @@ async def put_metrics_thresholds(request: Request):
     """Patch alert thresholds at runtime (SUPER)."""
     require_super(request)
     body = await request.json()
-    return await _proxy.put("/api/metrics/thresholds", json=body)
+    return await _proxy.put("/api/metrics/thresholds", json=body, headers=_INTERNAL_HEADERS)
