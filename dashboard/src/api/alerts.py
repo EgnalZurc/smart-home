@@ -35,6 +35,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/alerts", tags=["Alerts"])
 
+__all__ = [
+    "router",
+    "get_unified_alerts",
+    "mark_alert_read",
+    "get_read_status",
+    "MarkReadRequest",
+]
+
+# Length of the SHA1-based fingerprint used for alert identification
+FINGERPRINT_LENGTH: int = 12
+
 
 class MarkReadRequest(BaseModel):
     """Body for ``POST /api/alerts/mark-read``."""
@@ -102,7 +113,9 @@ def _alert_identifier(alert: dict) -> str:
     basis = f"{title}|{url}" if (title or url) else repr(sorted(alert.items()))
     # Not a security control: this is a short, stable content fingerprint used
     # only to key read-state, so SHA1 (fast, compact) is fine.
-    return hashlib.sha1(basis.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
+    return hashlib.sha1(basis.encode("utf-8"), usedforsecurity=False).hexdigest()[
+        :FINGERPRINT_LENGTH
+    ]
 
 
 def _alert_key(alert: dict) -> str:

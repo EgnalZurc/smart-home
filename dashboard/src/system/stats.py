@@ -13,6 +13,13 @@ from typing import Any
 from api.auth_helpers import require_super
 from fastapi import APIRouter, Request
 
+# Byte conversion constants
+KB: int = 1024
+GB: int = 1024**3
+
+# CPU sampling delay in seconds for accurate measurement
+CPU_SAMPLE_DELAY_SECONDS: float = 0.5
+
 router = APIRouter(prefix="/api/system", tags=["System"])
 
 

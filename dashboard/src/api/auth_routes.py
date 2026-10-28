@@ -80,6 +80,14 @@ def _serve_login_html(
         request: The current request (for CSP nonce injection). Optional for
                  backwards compatibility but should always be passed.
         error: Optional error message to display on the login page.
+
+    Returns:
+        An HTMLResponse containing the rendered login page with Cache-Control
+        headers set to prevent caching.
+
+    Raises:
+        FileNotFoundError: If the login.html template is missing from
+            the static directory.
     """
     import re as _re
 

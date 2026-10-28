@@ -45,6 +45,8 @@ from fastapi import APIRouter, Query, Request
 
 router = APIRouter(prefix="/api/system", tags=["System"])
 
+__all__ = ["router", "get_system_summary", "SUMMARY_CACHE_TTL"]
+
 # ── Summary cache ─────────────────────────────────────────────────────────────
 #
 # The assembled summary is cached per (user, days) key for a short TTL. The key
