@@ -1136,3 +1136,128 @@ skip_patterns:
   - "MAC.*PII"                 # Fixed: now hashed
   - "timing.*attack.*compare"  # Fixed: secrets.compare_digest
 ```
+
+
+---
+
+## Fixed Issues (2026-10-28) - LOW Severity Audit + Production Fixes
+
+Audit conducted 2026-10-28 identified ~178 LOW severity issues across all services.
+13 PRs merged (#455-#468) fixing code quality: type hints, magic numbers, docstrings, constants, exports.
+2 additional PRs (#469-#470) fixed post-deploy production issues.
+
+### LOW Severity Fixes - Code Quality
+
+#### [casita-suenos] Type Hints, Magic Numbers, Docstrings
+- **Severity**: LOW
+- **PR**: #455
+- **Fixed Date**: 2026-10-28
+- **Description**: Missing type hints, undocumented magic numbers, incomplete docstrings
+- **Fix Applied**: Added type hints with TYPE_CHECKING pattern, extracted magic numbers to named constants, added comprehensive docstrings with Args/Returns/Raises sections
+- **Verification**: `ruff check services/casita-suenos/` passes
+
+#### [portfolio-monitor] TTL Cache Constants, Middleware Typing
+- **Severity**: LOW
+- **PR**: #457
+- **Fixed Date**: 2026-10-28
+- **Description**: Hard-coded TTL values, missing type hints in middleware
+- **Fix Applied**: Extracted TTL constants (CACHE_TTL_SECONDS), added type hints to middleware functions
+- **Verification**: Check `services/portfolio-monitor/src/` for CACHE_TTL_* constants
+
+#### [vacaciones-service] Return Type Annotations, Comments
+- **Severity**: LOW
+- **PR**: #458
+- **Fixed Date**: 2026-10-28
+- **Description**: Missing return type annotations, insufficient code comments
+- **Fix Applied**: Added return type annotations to all public functions, added explanatory comments
+- **Verification**: Check function signatures include `-> ReturnType`
+
+#### [metrics-service] Literal Types, Constants
+- **Severity**: LOW
+- **PR**: #459
+- **Fixed Date**: 2026-10-28
+- **Description**: Magic numbers, missing Literal type hints for known string values
+- **Fix Applied**: Added BYTES_PER_MB constant, Literal type hints for status strings
+- **Verification**: Check `services/metrics-service/src/` for BYTES_PER_MB
+
+#### [valheim-admin] JS Constants, Middleware Typing
+- **Severity**: LOW
+- **PR**: #461
+- **Fixed Date**: 2026-10-28
+- **Description**: Hard-coded values in JavaScript, missing Python type hints
+- **Fix Applied**: Extracted JS constants, added Python middleware type hints
+- **Verification**: Check `services/valheim-admin/src/static/` for const declarations
+
+#### [presence-service] Constants, Exports
+- **Severity**: LOW
+- **PR**: #462
+- **Fixed Date**: 2026-10-28
+- **Description**: Magic number for MAC hash length, missing __all__ exports
+- **Fix Applied**: Added MAC_HASH_LENGTH constant, __all__ exports in modules
+- **Verification**: Check for `MAC_HASH_LENGTH = 64` constant
+
+#### [dashboard] System Stats Constants, Exports
+- **Severity**: LOW
+- **PR**: #464
+- **Fixed Date**: 2026-10-28
+- **Description**: Magic numbers in system stats, missing __all__ exports
+- **Fix Applied**: Added KB, GB, CPU_SAMPLE_DELAY constants after imports, __all__ exports
+- **Verification**: Check `dashboard/src/system/stats.py` for KB/GB constants
+
+#### [energy-monitor] Rate Limit Constants
+- **Severity**: LOW
+- **PR**: #465
+- **Fixed Date**: 2026-10-28
+- **Description**: Hard-coded rate limit retry-after value
+- **Fix Applied**: Added RATE_LIMIT_RETRY_AFTER_S constant
+- **Verification**: Check for `RATE_LIMIT_RETRY_AFTER_S` constant
+
+#### [nginx] Security Headers
+- **Severity**: LOW
+- **PR**: #466
+- **Fixed Date**: 2026-10-28
+- **Description**: Missing COOP, CORP, X-DNS-Prefetch-Control headers
+- **Fix Applied**: Added Cross-Origin-Opener-Policy, Cross-Origin-Resource-Policy, X-DNS-Prefetch-Control headers to security-headers.conf
+- **Verification**: `curl -I ... | grep -E "Cross-Origin|DNS-Prefetch"`
+
+#### [baby-gifts] Database Constants
+- **Severity**: LOW
+- **PR**: #467
+- **Fixed Date**: 2026-10-28
+- **Description**: Hard-coded database timeout, user token prefix
+- **Fix Applied**: Added DB_TIMEOUT_SECONDS, USER_TOKEN_PREFIX constants
+- **Verification**: Check for `DB_TIMEOUT_SECONDS = 5.0` constant
+
+#### [calendar-service] Time Constants
+- **Severity**: LOW
+- **PR**: #468
+- **Fixed Date**: 2026-10-28
+- **Description**: Hard-coded time values, magic numbers for token length
+- **Fix Applied**: Added time constants, MIN_OAUTH_TOKEN_LENGTH constant
+- **Verification**: Check for time-related constants in config
+
+### Production Fixes (Post-Deploy)
+
+#### [nginx] Health Endpoint Rate Limit Burst
+- **Severity**: PRODUCTION
+- **PR**: #469
+- **Fixed Date**: 2026-10-28
+- **Description**: Dashboard loads ~12 health checks simultaneously on page load; with burst=5 and rate=20r/s, requests were getting 429 Too Many Requests errors
+- **Fix Applied**: Increased burst from 5 to 20 for all health endpoints in smart-home.conf
+- **Verification**: Load dashboard and verify no 429 errors on health checks
+
+#### [dashboard] CSP Script Hash Mismatch
+- **Severity**: PRODUCTION
+- **PR**: #470
+- **Fixed Date**: 2026-10-28
+- **Description**: CSP was blocking inline script with error "sha256-6aocxNIG1gKbasSx4jiZ2r+1Xt9RspymZv1XK5UIwpU= not in script-src". The hash in csp_nonce.py was outdated after recent changes to dashboard.html
+- **Fix Applied**: Updated SHA256 hash in csp_nonce.py to match current dashboard.html inline script content
+- **Verification**: Dashboard loads without CSP violations in browser console
+
+### Summary (2026-10-28)
+
+| Category | Count | PRs |
+|----------|-------|-----|
+| LOW (code quality) | ~50 | #455, #457-#459, #461-#462, #464-#468 |
+| Production fixes | 2 | #469-#470 |
+| **Total** | **~52** | **13 PRs** |
