@@ -34,6 +34,7 @@ Example:
 """
 
 import logging
+import os
 import re
 import shlex
 import time
@@ -827,6 +828,55 @@ async def delete_world(world_name: str) -> dict[str, Any]:
 UPLOAD_MAX_SIZE_BYTES = 600 * 1024 * 1024
 
 
+def _sanitize_filename(filename: str | None, expected_ext: str) -> str:
+    """Sanitize an uploaded filename to prevent path traversal and injection.
+
+    Extracts the basename, validates the base part against WORLD_NAME_PATTERN,
+    and ensures the extension matches expected.
+
+    Args:
+        filename: The raw filename from the upload.
+        expected_ext: Expected extension (e.g., ".zip", ".db").
+
+    Returns:
+        Sanitized filename safe for forwarding.
+
+    Raises:
+        HTTPException: 400 if filename is missing, has invalid characters,
+            or wrong extension.
+    """
+    if not filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    # Extract basename to prevent path traversal (e.g., "../../etc/passwd")
+    safe_name = os.path.basename(filename)
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    # Split into base and extension
+    base, ext = os.path.splitext(safe_name)
+    if ext.lower() != expected_ext.lower():
+        raise HTTPException(
+            status_code=400,
+            detail=f"File must have {expected_ext} extension",
+        )
+
+    # Validate base name against world name pattern (alphanumeric, underscore, hyphen)
+    if not base or not _WORLD_NAME_RE.match(base):
+        raise HTTPException(
+            status_code=400,
+            detail="Filename must contain only letters, numbers, underscores, and hyphens",
+        )
+
+    if len(base) > WORLD_NAME_MAX_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Filename too long (max {WORLD_NAME_MAX_LENGTH} characters)",
+        )
+
+    return f"{base}{ext.lower()}"
+
+
 @app.post("/api/worlds/upload")
 async def upload_world_v1(file: UploadFile) -> dict[str, Any]:
     """Upload a Valheim 1.0 format world (zip file).
@@ -844,8 +894,8 @@ async def upload_world_v1(file: UploadFile) -> dict[str, Any]:
         HTTPException: 400 if the file is not a valid zip or exceeds size limit.
         HTTPException: 413 if the file is too large.
     """
-    if not file.filename or not file.filename.lower().endswith(".zip"):
-        raise HTTPException(status_code=400, detail="File must be a .zip archive")
+    # Sanitize filename to prevent path traversal and shell injection
+    safe_filename = _sanitize_filename(file.filename, ".zip")
 
     content = await file.read()
     if len(content) > UPLOAD_MAX_SIZE_BYTES:
@@ -854,12 +904,12 @@ async def upload_world_v1(file: UploadFile) -> dict[str, Any]:
     if len(content) < 10:
         raise HTTPException(status_code=400, detail="File is empty or too small")
 
-    logger.info("Uploading V1 world: %s (%d bytes)", file.filename, len(content))
+    logger.info("Uploading V1 world: %s (%d bytes)", safe_filename, len(content))
 
-    # Forward the file to pc-agent
+    # Forward the file to pc-agent with sanitized filename
     result = await pc_agent.post(
         "/valheim/worlds/upload",
-        files={"file": (file.filename, content, "application/zip")},
+        files={"file": (safe_filename, content, "application/zip")},
     )
     logger.info("V1 world upload completed: %s", result.get("world", "unknown"))
     return result
@@ -888,18 +938,31 @@ async def upload_world_legacy(files: list[UploadFile]) -> dict[str, Any]:
             detail="Must upload exactly 2 files: one .db and one .fwl",
         )
 
-    # Validate file extensions
+    # Sanitize filenames and collect extensions
+    sanitized_files: list[tuple[str, UploadFile]] = []
+    for f in files:
+        # Determine expected extension from raw filename
+        raw_ext = os.path.splitext(f.filename or "")[1].lower()
+        if raw_ext not in (".db", ".fwl"):
+            raise HTTPException(
+                status_code=400,
+                detail="Must upload exactly one .db and one .fwl file",
+            )
+        safe_name = _sanitize_filename(f.filename, raw_ext)
+        sanitized_files.append((safe_name, f))
+
+    # Validate we have exactly one of each extension
     extensions = sorted(
-        f.filename.split(".")[-1].lower() if f.filename else "" for f in files
+        os.path.splitext(name)[1].lower() for name, _ in sanitized_files
     )
-    if extensions != ["db", "fwl"]:
+    if extensions != [".db", ".fwl"]:
         raise HTTPException(
             status_code=400,
             detail="Must upload exactly one .db and one .fwl file",
         )
 
     # Validate matching base names
-    basenames = [f.filename.rsplit(".", 1)[0] if f.filename else "" for f in files]
+    basenames = [os.path.splitext(name)[0] for name, _ in sanitized_files]
     if basenames[0] != basenames[1]:
         raise HTTPException(
             status_code=400,
@@ -907,18 +970,18 @@ async def upload_world_legacy(files: list[UploadFile]) -> dict[str, Any]:
         )
 
     # Read and validate sizes
-    file_data = []
-    for f in files:
+    file_data: list[tuple[str, bytes]] = []
+    for safe_name, f in sanitized_files:
         content = await f.read()
         if len(content) > UPLOAD_MAX_SIZE_BYTES:
             raise HTTPException(
-                status_code=413, detail=f"File {f.filename} exceeds 600 MB limit"
+                status_code=413, detail=f"File {safe_name} exceeds 600 MB limit"
             )
         if len(content) < 10:
             raise HTTPException(
-                status_code=400, detail=f"File {f.filename} is empty or too small"
+                status_code=400, detail=f"File {safe_name} is empty or too small"
             )
-        file_data.append((f.filename, content))
+        file_data.append((safe_name, content))
 
     logger.info(
         "Uploading legacy world: %s (%d files)",
@@ -926,7 +989,7 @@ async def upload_world_legacy(files: list[UploadFile]) -> dict[str, Any]:
         len(file_data),
     )
 
-    # Forward files to pc-agent
+    # Forward files to pc-agent with sanitized filenames
     files_payload = [
         (
             "files",
