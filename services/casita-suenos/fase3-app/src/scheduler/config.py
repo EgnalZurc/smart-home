@@ -38,3 +38,13 @@ LOOP_TICK_SEC: Final[int] = 60
 
 # Distancia máxima (km) aceptada por el fallback geográfico de Nominatim
 NOMINATIM_MAX_DIST_KM: Final[float] = 200.0
+
+
+# Timeout para las peticiones a Nominatim (segundos)
+NOMINATIM_TIMEOUT_SEC: Final[int] = 5
+
+# Período de gracia inicial antes de que el scheduler empiece a procesar (segundos)
+STARTUP_GRACE_PERIOD_SEC: Final[int] = 10
+
+# Días hacia atrás para buscar alertas de Gmail
+GMAIL_LOOKBACK_DAYS: Final[int] = 3

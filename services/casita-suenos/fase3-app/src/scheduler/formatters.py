@@ -24,6 +24,9 @@ _RESULT_EMOJI: Final[dict[str, str]] = {
     "ok_with_errors": "⚠️",
     "error": "❌",
 }
+# Longitud máxima para mensajes de error truncados en notificaciones
+_ERROR_MSG_MAX_LEN: Final[int] = 120
+
 _PORTAL_LABELS: Final[dict[str, str]] = {
     "pisos": "Pisos.com",
     "habitaclia": "Habitaclia",
@@ -83,7 +86,11 @@ def build_scraper_errors_message(errors: list[ScraperError]) -> str:
     for err in errors:
         lines.append(f"• *{err.portal}* / {err.zone_id}")
         # Acortar el mensaje de error para que no sea enorme
-        short_err = err.error[:120] + "..." if len(err.error) > 120 else err.error
+        short_err = (
+            err.error[:_ERROR_MSG_MAX_LEN] + "..."
+            if len(err.error) > _ERROR_MSG_MAX_LEN
+            else err.error
+        )
         lines.append(f"  `{short_err}`")
         lines.append("")
     lines.append(

@@ -15,6 +15,12 @@ Responsabilidades:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from casita_scheduler import CasitaScheduler
+    from database import Database
+
 import logging
 import os
 import sys
@@ -256,8 +262,8 @@ def _set_process_name() -> None:
 # ── Instancia global del scheduler (deprecated, use app.state) ────────────────
 # These are kept for backward compatibility with main()
 # New code should use request.app.state.scheduler and request.app.state.db
-_scheduler_instance = None
-_db_instance = None
+_scheduler_instance: CasitaScheduler | None = None
+_db_instance: Database | None = None
 
 
 # ── Lifespan context manager ──────────────────────────────────────────────────

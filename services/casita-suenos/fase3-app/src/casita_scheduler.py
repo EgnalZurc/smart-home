@@ -31,9 +31,11 @@ import httpx
 import pisos_scraper
 from scheduler import formatters, zone_inference
 from scheduler.config import GMAIL_CHECK_INTERVAL_SEC as _GMAIL_CHECK_INTERVAL_SEC
+from scheduler.config import GMAIL_LOOKBACK_DAYS as _GMAIL_LOOKBACK_DAYS
 from scheduler.config import LOOP_TICK_SEC as _LOOP_TICK_SEC
 from scheduler.config import SCRAPING_DAYS as _SCRAPING_DAYS
 from scheduler.config import SCRAPING_HOUR as _SCRAPING_HOUR
+from scheduler.config import STARTUP_GRACE_PERIOD_SEC as _STARTUP_GRACE_PERIOD_SEC
 from scheduler.config import SUMMARY_DAY as _SUMMARY_DAY
 from scheduler.config import SUMMARY_HOUR as _SUMMARY_HOUR
 from scheduler.config import TOP_ZONES_FOR_APIFY as _TOP_ZONES_FOR_APIFY
@@ -124,8 +126,8 @@ class CasitaScheduler:
 
     def _loop(self) -> None:
         """Loop principal que comprueba cada minuto si toca ejecutar algún job."""
-        # Grace period inicial de 10s para que el resto del sistema arranque
-        time.sleep(10)
+        # Grace period inicial (constante definida en scheduler.config) para que el resto del sistema arranque
+        time.sleep(_STARTUP_GRACE_PERIOD_SEC)
 
         while self._running:
             now = datetime.now()
@@ -580,6 +582,12 @@ class CasitaScheduler:
             self._gmail_check_running = False
 
     def _do_gmail_check(self) -> None:
+        """Check for new Idealista alerts from Gmail and process them.
+
+        Fetches unread emails from the configured Gmail account, parses
+        property alerts, scores them, and notifies via Telegram if any
+        exceed the alert threshold.
+        """
         from idealista_email_parser import delete_processed_emails, fetch_new_alerts
 
         logger.info("[casita] Comprobando alertas Gmail de Idealista")
@@ -587,7 +595,7 @@ class CasitaScheduler:
             alerts, errors, imap_conn = fetch_new_alerts(
                 email_address=self._gmail_address,
                 app_password=self._gmail_app_password,
-                lookback_days=3,
+                lookback_days=_GMAIL_LOOKBACK_DAYS,
             )
         except (imaplib.IMAP4.error, OSError) as e:
             logger.error("[casita] Error en check Gmail: %s", e)
@@ -696,6 +704,12 @@ class CasitaScheduler:
             self._fotocasa_check_running = False
 
     def _do_fotocasa_check(self) -> None:
+        """Check for new Fotocasa alerts from Gmail and process them.
+
+        Fetches unread Fotocasa notification emails, parses property data,
+        infers zones, scores properties, and notifies via Telegram if any
+        exceed the alert threshold.
+        """
         from datetime import datetime as _dt
 
         from fotocasa_email_parser import (
