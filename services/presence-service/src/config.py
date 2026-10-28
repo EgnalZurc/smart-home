@@ -21,6 +21,60 @@ _HOSTNAME_RE: Pattern[str] = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9]
 # Rejects wildcards (#, +) and special characters to prevent topic injection.
 _MQTT_TOPIC_RE: Pattern[str] = re.compile(r"^[a-zA-Z0-9/_-]+$")
 
+__all__ = [
+    # Rate Limiting
+    "MAX_REQUESTS_PER_MINUTE",
+    "RATE_LIMIT_WINDOW_S",
+    "MAX_RATE_LIMIT_ENTRIES",
+    # Logging
+    "LOG_LEVEL",
+    # Service
+    "SERVICE_NAME",
+    "PORT",
+    # SQLite
+    "DB_PATH",
+    # Loops
+    "ROUTER_POLL_INTERVAL_S",
+    "ENGINE_TICK_S",
+    # Source TTLs
+    "ROUTER_TTL_S",
+    "BLE_TTL_S",
+    "MOTION_OCCUPANCY_TTL_S",
+    # Fusion weights & threshold
+    "WEIGHT_ROUTER",
+    "WEIGHT_BLE",
+    "WEIGHT_MOTION",
+    "PRESENT_THRESHOLD",
+    # Debounce / state timeouts
+    "ARRIVAL_DEBOUNCE_S",
+    "DEPARTURE_GRACE_S",
+    "SLEEP_INACTIVITY_S",
+    "NIGHT_WINDOW",
+    "SLEEP_ZONE",
+    # Router access
+    "ROUTER_MODE",
+    "ROUTER_HOST",
+    "ROUTER_USER",
+    "ROUTER_PASSWORD",
+    "ARP_SUBNET",
+    # MQTT
+    "MQTT_BROKER",
+    "MQTT_PORT",
+    "BLE_TOPIC",
+    "MOTION_TOPIC",
+    "MQTT_PUBLISH_PREFIX",
+    # Notifications
+    "NOTIFY_ENABLED",
+    "NOTIFY_EVENTS",
+    # Seed
+    "PEOPLE_SEED",
+    # Retention
+    "RETENTION_DAYS",
+    "PRUNE_INTERVAL_S",
+    # Validators
+    "validate_mqtt_topic",
+]
+
 
 def _validate_subnet(value: str) -> str:
     """Validate CIDR notation (e.g. 192.168.1.0/24)."""
