@@ -105,7 +105,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     Headers added:
     - X-Content-Type-Options: nosniff - prevents MIME type sniffing
     - X-Frame-Options: DENY - prevents clickjacking
-    - Content-Security-Policy: default-src 'self' - restricts resource loading
+    - Content-Security-Policy: aligned with nginx csp-static.conf for SPA compatibility
     - Referrer-Policy: strict-origin-when-cross-origin - limits referrer info
     - Cache-Control: no-store - prevents caching of sensitive data
     """
@@ -115,7 +115,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self'"
+        )
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Cache-Control"] = "no-store"
         return response
