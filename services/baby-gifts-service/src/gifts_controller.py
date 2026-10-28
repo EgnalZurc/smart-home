@@ -116,19 +116,22 @@ def _get_db() -> sqlite3.Connection:
 
 
 # ── Gift ID validation ────────────────────────────────────────────────────────
-# Regex pattern for valid gift IDs: g_<timestamp>_<hex8>
-# timestamp: 13+ digits (milliseconds since epoch)
-# hex: 8 hex characters (from secrets.token_hex(4))
+# Regex patterns for valid gift IDs:
+# - New format: g_<timestamp_ms>_<hex8> (e.g., g_1729432800000_a1b2c3d4)
+# - Legacy format: g_<timestamp_s_or_ms> (e.g., g_1790764472872) - no hex suffix
+# timestamp: 10+ digits (seconds or milliseconds since epoch)
+# hex: 8 hex characters (from secrets.token_hex(4)) - optional for legacy
 import re
 
-_GIFT_ID_PATTERN: re.Pattern[str] = re.compile(r"^g_\d{13,}_[0-9a-f]{8}$")
+_GIFT_ID_PATTERN: re.Pattern[str] = re.compile(r"^g_\d{10,}(_[0-9a-f]{8})?$")
 
 
 def _validate_gift_id(gift_id: str) -> bool:
     """Validate gift_id format for security.
 
     Accepts:
-    - Native format: g_<timestamp_ms>_<hex8> (e.g., g_1729432800000_a1b2c3d4)
+    - New format: g_<timestamp_ms>_<hex8> (e.g., g_1729432800000_a1b2c3d4)
+    - Legacy format: g_<timestamp> (e.g., g_1790764472872) - no hex suffix
     - UUID format: for future compatibility
 
     Rejects:
