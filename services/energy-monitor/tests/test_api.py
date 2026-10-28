@@ -240,7 +240,14 @@ async def test_security_headers_present(client):
     # Check all required security headers
     assert resp.headers.get("X-Content-Type-Options") == "nosniff"
     assert resp.headers.get("X-Frame-Options") == "DENY"
-    assert resp.headers.get("Content-Security-Policy") == "default-src 'self'"
+    expected_csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self'"
+    )
+    assert resp.headers.get("Content-Security-Policy") == expected_csp
     assert resp.headers.get("X-XSS-Protection") == "1; mode=block"
     assert resp.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
 
