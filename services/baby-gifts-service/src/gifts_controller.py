@@ -44,6 +44,10 @@ import config
 
 logger: logging.Logger = logging.getLogger(__name__)
 
+# ── Constants ─────────────────────────────────────────────────────────────────
+DB_TIMEOUT_SECONDS: float = 5.0
+INVITATION_TOKEN_BYTES: int = 24
+
 _lock: threading.Lock = threading.Lock()
 
 # Module-level references that can be patched by tests
@@ -60,7 +64,7 @@ def _init_db() -> None:
     and handles schema migrations (e.g., adding expires_at column).
     """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE), timeout=5.0)
+    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE), timeout=DB_TIMEOUT_SECONDS)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS invitations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,7 +110,7 @@ def _get_db() -> sqlite3.Connection:
     Caller is responsible for closing the connection.
     """
     _init_db()
-    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE), timeout=5.0)
+    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE), timeout=DB_TIMEOUT_SECONDS)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -193,6 +197,13 @@ def _save_gifts(data: dict[str, Any]) -> None:
 
     This mirrors smart_home_common.persistence.atomic_write_json; it is inlined
     because baby-gifts does not ship the shared library.
+
+    Args:
+        data: Dictionary containing gifts data to persist.
+
+    Raises:
+        OSError: If the data directory cannot be created, or the temporary file
+            cannot be written, fsynced, or renamed to the target path.
     """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     temp_path: str | None = None
@@ -485,7 +496,7 @@ def create_invitation(name: str, _retries: int = 0) -> dict[str, Any]:
         )
         return {"status": "error", "message": "Failed to generate unique token"}
 
-    token: str = secrets.token_urlsafe(24)  # 32 chars
+    token: str = secrets.token_urlsafe(INVITATION_TOKEN_BYTES)  # 32 chars
     now: datetime = datetime.now()
     expires_at: datetime = now + timedelta(days=config.INVITATION_EXPIRY_DAYS)
 

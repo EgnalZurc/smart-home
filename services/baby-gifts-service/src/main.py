@@ -184,6 +184,8 @@ MAX_URL_LENGTH: int = 2000
 MAX_INVITATION_NAME_LENGTH: int = 100
 # Token preview length for safe logging (show first N chars only)
 TOKEN_PREVIEW_LENGTH: int = 4
+# Prefix for authenticated user tokens (distinguishes from guest invitation tokens)
+USER_TOKEN_PREFIX: str = "user:"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -710,7 +712,7 @@ def get_gifts_for_user(request: Request) -> dict[str, Any]:
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
 
-    user_token: str = f"user:{username}"
+    user_token: str = f"{USER_TOKEN_PREFIX}{username}"
     user_is_familia: bool = is_familia_user(username)
 
     # Get gifts and filter reservation info
@@ -777,7 +779,7 @@ def user_reserve(gift_id: str, request: Request) -> dict[str, Any]:
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
 
-    user_token: str = f"user:{username}"
+    user_token: str = f"{USER_TOKEN_PREFIX}{username}"
     result: dict[str, Any] = reserve_gift(gift_id, user_token, username)
 
     if result["status"] == "error":
@@ -806,7 +808,7 @@ def user_unreserve(gift_id: str, request: Request) -> dict[str, Any]:
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
 
-    user_token: str = f"user:{username}"
+    user_token: str = f"{USER_TOKEN_PREFIX}{username}"
     gift: dict[str, Any] | None = get_gift(gift_id)
     gift_name: str = gift["name"] if gift else "Unknown"
 
