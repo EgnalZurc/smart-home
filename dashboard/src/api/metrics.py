@@ -20,6 +20,18 @@ from api.proxy.base import ServiceProxy
 
 router = APIRouter(prefix="/api/metrics", tags=["Metrics"])
 
+__all__ = [
+    "router",
+    "get_metrics_latest",
+    "get_metrics_series",
+    "get_metrics_summary",
+    "get_metrics_alerts",
+    "get_metrics_alerts_history",
+    "dismiss_metrics_alert",
+    "get_metrics_thresholds",
+    "put_metrics_thresholds",
+]
+
 _proxy = ServiceProxy("http://metrics-service:8011")
 
 # Header sent to metrics-service for defense-in-depth validation on write endpoints

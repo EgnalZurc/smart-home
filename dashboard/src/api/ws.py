@@ -67,6 +67,9 @@ BROADCAST_INTERVAL = WS_BROADCAST_INTERVAL_SECONDS
 # WebSocket close codes for authentication errors (4000-4999 = application-defined)
 WS_CLOSE_UNAUTHORIZED = 4001
 
+# Default value when client IP cannot be determined
+UNKNOWN_IP: str = "unknown"
+
 
 class ConnectionManager:
     """Tracks connected WebSocket clients and the shared broadcast task.
@@ -182,7 +185,7 @@ def _get_client_ip(websocket: WebSocket) -> str:
     """
     if websocket.client:
         return websocket.client.host
-    return "unknown"
+    return UNKNOWN_IP
 
 
 def _validate_session(websocket: WebSocket) -> str | None:
@@ -269,7 +272,7 @@ def _is_recognized_device_ip(username: str, client_ip: str) -> bool:
     Returns:
         True if the IP is associated with any device token for this user.
     """
-    if client_ip == "unknown":
+    if client_ip == UNKNOWN_IP:
         # Can't verify IP — reject for safety
         return False
 

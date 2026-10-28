@@ -25,6 +25,17 @@ from api.auth_helpers import require_authenticated
 
 router = APIRouter(prefix="/api/user", tags=["User"])
 
+__all__ = [
+    "router",
+    "get_preferences",
+    "update_preferences",
+    "get_widget_config",
+    "update_widget_config",
+    "Preferences",
+    "WidgetConfig",
+    "WidgetConfigPayload",
+]
+
 logger = logging.getLogger(__name__)
 
 
