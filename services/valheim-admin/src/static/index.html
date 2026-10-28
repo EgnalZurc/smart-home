@@ -267,6 +267,25 @@
 <!-- Toast -->
 <div id="toast"></div>
 <script>
+// ══════════════════════════════════════════════════════════════════════════════
+// Configuration Constants
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** Interval (ms) for polling server status. */
+const STATUS_POLL_MS = 15000;
+
+/** Interval (ms) for polling server logs. */
+const LOGS_POLL_MS = 30000;
+
+/** Delay (ms) before reloading status after a server action (start/stop/restart). */
+const ACTION_RELOAD_DELAY_MS = 3000;
+
+/** Default number of log lines to fetch. */
+const DEFAULT_LOG_LINES = 60;
+
+/** Maximum upload size in bytes (600 MB). Must match server-side UPLOAD_MAX_SIZE_BYTES. */
+const UPLOAD_MAX_BYTES = 600 * 1024 * 1024;
+
 // ── State ──────────────────────────────────────────────────────────────────
 let serverRunning    = false;
 let crossplayEnabled = false;
@@ -349,7 +368,7 @@ async function serverAction(action) {
     try {
         await fetch(`./api/server/${action}`, { method: 'POST' });
         toast(action === 'stop' ? '⏹ Servidor parado' : action === 'start' ? '▶ Arrancando…' : '🔄 Reiniciando…');
-        setTimeout(loadStatus, 3000);
+        setTimeout(loadStatus, ACTION_RELOAD_DELAY_MS);
     } catch { toast('❌ Error'); }
     btn.disabled = false;
     btn.textContent = orig;
@@ -561,7 +580,7 @@ async function handleUploadV1(input) {
         status.textContent = '❌ El fichero está vacío.';
         return;
     }
-    if (file.size > 600 * 1024 * 1024) {
+    if (file.size > UPLOAD_MAX_BYTES) {
         status.textContent = '❌ El fichero supera el límite de 600 MB.';
         return;
     }
@@ -620,7 +639,7 @@ async function handleUploadLegacy(input) {
     }
     for (const f of files) {
         if (f.size < 10) { status.textContent = `❌ "${f.name}" está vacío.`; return; }
-        if (f.size > 600 * 1024 * 1024) { status.textContent = `❌ "${f.name}" supera 600 MB.`; return; }
+        if (f.size > UPLOAD_MAX_BYTES) { status.textContent = `❌ "${f.name}" supera 600 MB.`; return; }
     }
 
     status.innerHTML = `<span class="spinner" style="width:12px;height:12px;border-width:1.5px;vertical-align:middle"></span> Subiendo backup…`;
@@ -656,7 +675,7 @@ async function handleUploadLegacy(input) {
 async function loadLogs() {
     const el = document.getElementById('log-box');
     try {
-        const d = await fetch('./api/logs?lines=60').then(r => r.json());
+        const d = await fetch(`./api/logs?lines=${DEFAULT_LOG_LINES}`).then(r => r.json());
         if (!d.lines.length) { el.textContent = 'Sin logs disponibles.'; return; }
         el.innerHTML = d.lines.map(l => {
             const important = /Game server|Load world|player|connect|handshake|join code/i.test(l);
@@ -673,8 +692,8 @@ function escHtml(s) {
 // ── Init ───────────────────────────────────────────────────────────────────
 (async function init() {
     await Promise.all([ loadStatus(), loadConfig(), loadWorlds(), loadLogs() ]);
-    setInterval(loadStatus, 15000);
-    setInterval(loadLogs,   30000);
+    setInterval(loadStatus, STATUS_POLL_MS);
+    setInterval(loadLogs,   LOGS_POLL_MS);
 })();
 </script>
 </body>

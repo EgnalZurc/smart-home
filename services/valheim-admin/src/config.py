@@ -95,6 +95,14 @@ RATE_LIMIT_MAX_REQUESTS = 10
 RATE_LIMIT_WINDOW_SECONDS = 60
 """Time window in seconds for rate limiting."""
 
+RATE_LIMIT_MAX_ENTRIES = 10000
+"""Maximum number of entries to track in the rate limiter's internal storage.
+
+This limits memory usage by capping how many distinct IP addresses are tracked.
+When the limit is reached, oldest entries are evicted (LRU behavior in the
+InMemoryRateLimiter implementation).
+"""
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Input Validation Limits
 # ══════════════════════════════════════════════════════════════════════════════
@@ -148,6 +156,23 @@ LOGS_MIN_LINES = 1
 
 LOGS_MAX_LINES = 10000
 """Maximum number of log lines that can be requested."""
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Upload Limits
+# ══════════════════════════════════════════════════════════════════════════════
+
+UPLOAD_MAX_SIZE_BYTES = 600 * 1024 * 1024
+"""Maximum upload size: 600 MB.
+
+Valheim world files can be quite large, especially for mature worlds with
+extensive exploration and building. The 600 MB limit accommodates:
+- Valheim 1.0 world folders (zipped): typically 10-50 MB, up to 200 MB for
+  very large worlds with extensive terrain modifications.
+- Legacy format (.db + .fwl files): similar sizes.
+
+The limit is enforced both client-side (in JavaScript) and server-side to
+prevent abuse and protect against memory exhaustion during upload processing.
+"""
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Service Metadata
