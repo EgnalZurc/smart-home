@@ -35,6 +35,16 @@ except ImportError:  # pragma: no cover - import fallback outside the container
 
 from database import CalendarStore
 
+__all__ = [
+    "ReminderStats",
+    "SECONDS_PER_DAY",
+    "SECONDS_PER_HOUR",
+    "OFFSETS_DEFAULT",
+    "get_applicable_rules",
+    "format_reminder_message",
+    "check_and_send_reminders",
+]
+
 if TYPE_CHECKING:
     from database import EventRow
 
@@ -50,8 +60,12 @@ class ReminderStats(TypedDict):
 
 logger = logging.getLogger(__name__)
 
+# ── Constants ────────────────────────────────────────────────────────────────
+SECONDS_PER_DAY = 86400
+SECONDS_PER_HOUR = 3600
+
 # Default offsets (seconds before event start): 1 day, 2 hours, 30 minutes
-OFFSETS_DEFAULT = [86400, 7200, 1800]
+OFFSETS_DEFAULT = [SECONDS_PER_DAY, 2 * SECONDS_PER_HOUR, 30 * 60]
 
 # ── Localized strings (Spanish) ──────────────────────────────────────────────
 # These could be moved to a config file or i18n system for multi-language support
