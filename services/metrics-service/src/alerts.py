@@ -26,7 +26,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from storage import RingBuffer
 
@@ -97,7 +97,7 @@ class Threshold:
     sustained_s: int = 0
     scope: Scope = Scope.HOST
     critical_value: float | None = None
-    aggregate: str = "last"  # "last" | "p95"
+    aggregate: Literal["last", "p95"] = "last"
     count_ticks: int | None = None
     enabled: bool = True
     unit: str = ""
@@ -406,7 +406,7 @@ class AlertEngine:
     # file or config when internationalization support is added. Currently the
     # Telegram alerts are sent to a Spanish-speaking household; hardcoding is
     # acceptable for this use case. See docs/SECURITY_FIXES.md backlog.
-    RULE_DESCRIPTIONS: dict[str, tuple[str, str]] = {
+    RULE_DESCRIPTIONS: ClassVar[dict[str, tuple[str, str]]] = {
         "host_ram": (
             "Uso de RAM en {value}{unit} (máx {threshold}{unit})",
             "Uso de RAM normalizado",
@@ -558,7 +558,7 @@ class AlertEngine:
     # Plain-text descriptions for dashboard titles (no markdown).
     # TODO(i18n): Same as RULE_DESCRIPTIONS above — hardcoded Spanish strings
     # acceptable for current single-household deployment.
-    RULE_TITLES: dict[str, tuple[str, str]] = {
+    RULE_TITLES: ClassVar[dict[str, tuple[str, str]]] = {
         "host_ram": ("RAM: {value}{unit}", "host"),
         "host_swap": ("Swap: {value}{unit}", "host"),
         "host_temp": ("Temperatura: {value}{unit}", "host"),
