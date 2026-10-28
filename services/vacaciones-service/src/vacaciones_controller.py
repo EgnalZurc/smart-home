@@ -43,7 +43,10 @@ logger = logging.getLogger(__name__)
 
 DATA_FILE = Path(_os.environ.get("VACACIONES_DATA_FILE", "/app/data/vacaciones.json"))
 
-# Resource limits — prevent unbounded growth
+# Resource limits — prevent unbounded growth and cap memory/storage usage.
+# MAX_NUCLEOS=20: families rarely have more than 20 distinct gathering groups.
+# MAX_PERSONAS=50: upper bound for extended family members tracked in the app.
+# MAX_YEARS=20: planning horizon; 20 years of history is more than enough.
 MAX_NUCLEOS = 20
 MAX_PERSONAS = 50
 MAX_YEARS = 20
