@@ -166,14 +166,24 @@ class TestGiftIdValidation:
         assert _validate_gift_id("g_9999999999999_deadbeef") is True
         assert _validate_gift_id("g_1234567890123_00000000") is True
 
+    def test_validate_gift_id_accepts_legacy_format(self, tmp_data_dir):
+        """_validate_gift_id should return True for legacy g_timestamp format (no hex)."""
+        from gifts_controller import _validate_gift_id
+
+        # Valid legacy format: g_<10+ digit timestamp> (no hex suffix)
+        assert _validate_gift_id("g_1790764472872") is True  # 13 digits, no hex
+        assert _validate_gift_id("g_1234567890") is True  # 10 digits
+        assert _validate_gift_id("g_12345678901234567") is True  # 17 digits
+
     def test_validate_gift_id_rejects_invalid(self, tmp_data_dir):
         """_validate_gift_id should return False for invalid formats."""
         from gifts_controller import _validate_gift_id
 
         assert _validate_gift_id("not-a-uuid") is False
-        # Short timestamp (less than 13 digits)
+        # Short timestamp (less than 10 digits)
         assert _validate_gift_id("g_12345_abc") is False
-        # Short hex (less than 8 chars)
+        assert _validate_gift_id("g_123456789") is False  # 9 digits
+        # Invalid hex (not 8 chars)
         assert _validate_gift_id("g_1234567890123_abc") is False
         assert _validate_gift_id("") is False
 
