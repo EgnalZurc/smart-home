@@ -49,6 +49,11 @@ logging.basicConfig(
 logger: logging.Logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Constants
+# ═══════════════════════════════════════════════════════════════════════════════
+UNKNOWN_CLIENT_IP: str = "unknown"  # Fallback when client IP cannot be determined
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Rate Limiting — protects health endpoints from DoS via request spam
 # ═══════════════════════════════════════════════════════════════════════════════
 rate_limiter: InMemoryRateLimiter = InMemoryRateLimiter(
@@ -71,7 +76,7 @@ def _get_client_ip(request: Request) -> str:
     if forwarded:
         # Take the first IP in the chain (original client)
         return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    return request.client.host if request.client else UNKNOWN_CLIENT_IP
 
 
 # Single durable store for the process lifetime.

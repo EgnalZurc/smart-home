@@ -11,6 +11,18 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+__all__ = [
+    "Beacon",
+    "Device",
+    "Evidence",
+    "HouseMode",
+    "Person",
+    "PresenceEvent",
+    "PresenceState",
+    "Source",
+    "Zone",
+]
+
 
 class PresenceState(str, Enum):
     """Per-person presence state (design §3.2).
