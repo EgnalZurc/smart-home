@@ -1,4 +1,4 @@
-"""Baby Gifts Service — standalone microservice for baby gift registry.
+"""Baby Gifts Service â€” standalone microservice for baby gift registry.
 
 Three access modes:
 1. Admin (authenticated via nginx auth_request + SUPER profile): full CRUD
@@ -6,32 +6,32 @@ Three access modes:
 3. Guest (via invitation token): view gifts + reserve/unreserve own
 
 Serves:
-  GET  /smart-home/baby-gifts       → SPA (admin/user view, requires auth)
-  GET  /guest/baby-gifts/{token}    → SPA (guest view, token-based access)
+  GET  /smart-home/baby-gifts       â†’ SPA (admin/user view, requires auth)
+  GET  /guest/baby-gifts/{token}    â†’ SPA (guest view, token-based access)
 
   # Admin endpoints (protected by nginx auth_request, requires SUPER)
-  GET  /api/baby-gifts              → all gifts (with reservation details)
-  POST /api/baby-gifts              → add gift
-  PUT  /api/baby-gifts/{id}         → update gift
-  DELETE /api/baby-gifts/{id}       → delete gift
-  POST /api/baby-gifts/{id}/unreserve → admin can unreserve any gift
-  GET  /api/baby-gifts/invitations  → list all invitations
-  POST /api/baby-gifts/invitations  → create invitation
-  DELETE /api/baby-gifts/invitations/{token} → delete invitation
-  POST /api/baby-gifts/invitations/{token}/revoke → revoke invitation
+  GET  /api/baby-gifts              â†’ all gifts (with reservation details)
+  POST /api/baby-gifts              â†’ add gift
+  PUT  /api/baby-gifts/{id}         â†’ update gift
+  DELETE /api/baby-gifts/{id}       â†’ delete gift
+  POST /api/baby-gifts/{id}/unreserve â†’ admin can unreserve any gift
+  GET  /api/baby-gifts/invitations  â†’ list all invitations
+  POST /api/baby-gifts/invitations  â†’ create invitation
+  DELETE /api/baby-gifts/invitations/{token} â†’ delete invitation
+  POST /api/baby-gifts/invitations/{token}/revoke â†’ revoke invitation
 
   # Authenticated user endpoints (protected by nginx auth_request)
-  GET  /api/baby-gifts/user              → get gifts for authenticated user
-  POST /api/baby-gifts/user/reserve/{id} → reserve a gift as authenticated user
-  POST /api/baby-gifts/user/unreserve/{id} → unreserve own gift
+  GET  /api/baby-gifts/user              â†’ get gifts for authenticated user
+  POST /api/baby-gifts/user/reserve/{id} â†’ reserve a gift as authenticated user
+  POST /api/baby-gifts/user/unreserve/{id} â†’ unreserve own gift
 
   # Guest endpoints (token-based, public)
-  GET  /api/baby-gifts/guest/{token}           → get gifts for guest
-  POST /api/baby-gifts/guest/{token}/reserve/{id}   → reserve a gift
-  POST /api/baby-gifts/guest/{token}/unreserve/{id} → unreserve own gift
+  GET  /api/baby-gifts/guest/{token}           â†’ get gifts for guest
+  POST /api/baby-gifts/guest/{token}/reserve/{id}   â†’ reserve a gift
+  POST /api/baby-gifts/guest/{token}/unreserve/{id} â†’ unreserve own gift
 
-  GET  /health                      → health check
-  GET  /api/health/baby-gifts       → health check alias
+  GET  /health                      â†’ health check
+  GET  /api/health/baby-gifts       â†’ health check alias
 
 Port: 8004
 """
@@ -72,9 +72,9 @@ from starlette.types import ASGIApp
 from utils import parse_price
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Input sanitization
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 def sanitize_string(value: str, max_length: int) -> str:
     """Sanitize user-provided string: strip whitespace, limit length, escape HTML.
 
@@ -97,7 +97,7 @@ def sanitize_string(value: str, max_length: int) -> str:
 
 
 # Import serve_html from shared lib (path added via PYTHONPATH in Dockerfile/CI;
-# fallback inserts repo root for local development — mirrors notifier.py).
+# fallback inserts repo root for local development â€” mirrors notifier.py).
 try:
     from libs.html_serving import serve_html
 except ImportError:  # pragma: no cover
@@ -127,9 +127,9 @@ app: FastAPI = FastAPI(
 )
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Security middleware
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses.
 
@@ -174,9 +174,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Input validation constants
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 MAX_NAME_LENGTH: int = 200
 MAX_DESCRIPTION_LENGTH: int = 1000
 MAX_PRICE_RANGE_LENGTH: int = 100
@@ -184,11 +184,13 @@ MAX_URL_LENGTH: int = 2000
 MAX_INVITATION_NAME_LENGTH: int = 100
 # Token preview length for safe logging (show first N chars only)
 TOKEN_PREVIEW_LENGTH: int = 4
+# Prefix for authenticated user tokens to distinguish from guest invitation tokens
+USER_TOKEN_PREFIX: str = "user:"
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Pydantic models with input sanitization
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class GiftCreate(BaseModel):
     """Model for creating a new gift."""
 
@@ -273,9 +275,9 @@ class InvitationCreate(BaseModel):
         return sanitize_string(v, MAX_INVITATION_NAME_LENGTH)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Helpers
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 _STATIC_DIR: Path = Path(__file__).parent / "static"
 
 
@@ -375,9 +377,9 @@ def _truncate_token(token: str) -> str:
     return token
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Health endpoints
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/health")
 def health() -> dict[str, Any]:
     """Health check endpoint for nginx and the dashboard.
@@ -398,9 +400,9 @@ def health_alias() -> dict[str, bool]:
     return {"online": is_healthy()}
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # SPA serving
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/smart-home/baby-gifts")
 async def serve_admin(request: Request) -> HTMLResponse:
     """Serve the admin/user SPA (protected by nginx auth_request).
@@ -442,7 +444,7 @@ async def serve_guest(token: str, request: Request) -> HTMLResponse:
     """
     guest: dict[str, Any] | None = validate_invitation(token)
     if not guest:
-        raise HTTPException(status_code=404, detail="Enlace no válido o expirado")
+        raise HTTPException(status_code=404, detail="Enlace no vÃ¡lido o expirado")
 
     client_ip: str = _get_client_ip(request)
     logger.info(
@@ -452,9 +454,9 @@ async def serve_guest(token: str, request: Request) -> HTMLResponse:
     return serve_html(_STATIC_DIR, "baby-gifts.html", guest_token=token)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Admin API (protected by nginx auth_request)
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/api/baby-gifts")
 def get_all_gifts(username: str = Depends(require_auth_user)) -> dict[str, Any]:
     """Get all gifts with full reservation details (admin only).
@@ -572,9 +574,9 @@ def admin_unreserve(
     return result
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Invitation management (admin only)
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/api/baby-gifts/invitations")
 def get_invitations(
     username: str = Depends(require_auth_user),
@@ -686,9 +688,9 @@ def revoke_inv(
     return result
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Authenticated User API (protected by nginx auth_request)
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/api/baby-gifts/user")
 def get_gifts_for_user(request: Request) -> dict[str, Any]:
     """Get gifts for an authenticated user.
@@ -710,7 +712,7 @@ def get_gifts_for_user(request: Request) -> dict[str, Any]:
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
 
-    user_token: str = f"user:{username}"
+    user_token: str = f"{USER_TOKEN_PREFIX}{username}"
     user_is_familia: bool = is_familia_user(username)
 
     # Get gifts and filter reservation info
@@ -777,7 +779,7 @@ def user_reserve(gift_id: str, request: Request) -> dict[str, Any]:
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
 
-    user_token: str = f"user:{username}"
+    user_token: str = f"{USER_TOKEN_PREFIX}{username}"
     result: dict[str, Any] = reserve_gift(gift_id, user_token, username)
 
     if result["status"] == "error":
@@ -806,7 +808,7 @@ def user_unreserve(gift_id: str, request: Request) -> dict[str, Any]:
     if not username:
         raise HTTPException(status_code=401, detail="Usuario no autenticado")
 
-    user_token: str = f"user:{username}"
+    user_token: str = f"{USER_TOKEN_PREFIX}{username}"
     gift: dict[str, Any] | None = get_gift(gift_id)
     gift_name: str = gift["name"] if gift else "Unknown"
 
@@ -839,7 +841,7 @@ def user_toggle_visibility(gift_id: str, request: Request) -> dict[str, Any]:
 
     if not is_familia_user(username):
         raise HTTPException(
-            status_code=403, detail="No tienes permiso para esta acción"
+            status_code=403, detail="No tienes permiso para esta acciÃ³n"
         )
 
     result: dict[str, Any] = toggle_gift_visibility(gift_id)
@@ -852,9 +854,9 @@ def user_toggle_visibility(gift_id: str, request: Request) -> dict[str, Any]:
     return result
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Guest API (public, token-based)
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/api/baby-gifts/guest/{token}")
 def get_gifts_for_guest(
     token: str,
@@ -878,7 +880,7 @@ def get_gifts_for_guest(
     """
     guest: dict[str, Any] | None = validate_invitation(token)
     if not guest:
-        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+        raise HTTPException(status_code=401, detail="Token invÃ¡lido o expirado")
 
     # Get gifts and filter reservation info
     data: dict[str, Any] = get_gifts_data(include_admin=False)
@@ -933,7 +935,7 @@ def guest_reserve(
     """
     guest: dict[str, Any] | None = validate_invitation(token)
     if not guest:
-        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+        raise HTTPException(status_code=401, detail="Token invÃ¡lido o expirado")
 
     result: dict[str, Any] = reserve_gift(gift_id, token, guest["name"])
     if result["status"] == "error":
@@ -965,7 +967,7 @@ def guest_unreserve(
     """
     guest: dict[str, Any] | None = validate_invitation(token)
     if not guest:
-        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+        raise HTTPException(status_code=401, detail="Token invÃ¡lido o expirado")
 
     gift: dict[str, Any] | None = get_gift(gift_id)
     gift_name: str = gift["name"] if gift else "Unknown"
@@ -979,9 +981,9 @@ def guest_unreserve(
     return result
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Static assets
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 if _STATIC_DIR.exists():
     app.mount(
         "/static/baby-gifts", StaticFiles(directory=str(_STATIC_DIR)), name="static"

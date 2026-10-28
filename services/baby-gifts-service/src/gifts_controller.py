@@ -1,4 +1,4 @@
-"""Baby Gifts Controller — data and invitation management.
+"""Baby Gifts Controller â€” data and invitation management.
 
 Data model:
 - gifts.json: list of gift items with reservation status
@@ -7,10 +7,10 @@ Data model:
 Gift structure:
 {
     "id": "g_123456",
-    "name": "Carrito de bebé",
+    "name": "Carrito de bebÃ©",
     "description": "Preferiblemente ligero y plegable",
     "url": "https://...",  # optional link
-    "price_range": "€€€",  # €, €€, €€€ or empty
+    "price_range": "â‚¬â‚¬â‚¬",  # â‚¬, â‚¬â‚¬, â‚¬â‚¬â‚¬ or empty
     "priority": 1,  # 1=alta, 2=media, 3=baja
     "reserved_by": null,  # invitation token, "user:username", or null
     "reserved_by_name": null,  # guest name or username
@@ -21,7 +21,7 @@ Gift structure:
 Invitation structure (SQLite):
 - id: auto
 - token: unique 32-char string
-- name: guest name (e.g. "Tía María")
+- name: guest name (e.g. "TÃ­a MarÃ­a")
 - created_at: timestamp
 - expires_at: timestamp (6 months from creation)
 - last_access: timestamp (updated on each visit)
@@ -44,6 +44,13 @@ import config
 
 logger: logging.Logger = logging.getLogger(__name__)
 
+# ── Constants ─────────────────────────────────────────────────────────────────
+DB_TIMEOUT_SECONDS: float = 5.0
+"""Timeout for SQLite connections to prevent indefinite blocking."""
+
+INVITATION_TOKEN_BYTES: int = 24
+"""Number of bytes for invitation token generation (produces 32-char URL-safe string)."""
+
 _lock: threading.Lock = threading.Lock()
 
 # Module-level references that can be patched by tests
@@ -52,7 +59,7 @@ GIFTS_FILE: Path = config.GIFTS_FILE
 DB_FILE: Path = config.DB_FILE
 
 
-# ── Database setup ────────────────────────────────────────────────────────────
+# â”€â”€ Database setup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _init_db() -> None:
     """Initialize SQLite database for invitations.
 
@@ -60,7 +67,7 @@ def _init_db() -> None:
     and handles schema migrations (e.g., adding expires_at column).
     """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE), timeout=5.0)
+    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE), timeout=DB_TIMEOUT_SECONDS)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS invitations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,16 +109,16 @@ def _get_db() -> sqlite3.Connection:
     """Get a database connection.
 
     Ensures the database is initialized before returning a connection.
-    Uses timeout=5.0 to prevent indefinite blocking on locked database.
+    Uses timeout=DB_TIMEOUT_SECONDS to prevent indefinite blocking on locked database.
     Caller is responsible for closing the connection.
     """
     _init_db()
-    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE), timeout=5.0)
+    conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE), timeout=DB_TIMEOUT_SECONDS)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-# ── Gift ID validation ────────────────────────────────────────────────────────
+# â”€â”€ Gift ID validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Regex pattern for valid gift IDs: g_<timestamp>_<hex8>
 # timestamp: 13+ digits (milliseconds since epoch)
 # hex: 8 hex characters (from secrets.token_hex(4))
@@ -165,7 +172,7 @@ def _validate_gift_id(gift_id: str) -> bool:
     return False
 
 
-# ── Gifts data ────────────────────────────────────────────────────────────────
+# â”€â”€ Gifts data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _load_gifts() -> dict[str, Any]:
     """Load gifts data from JSON file."""
     if not GIFTS_FILE.exists():
@@ -187,12 +194,21 @@ def _save_gifts(data: dict[str, Any]) -> None:
     Writes to a temporary file in the same directory, fsyncs it, then renames
     it over the target with os.replace() (atomic on POSIX and Windows). A crash
     mid-write therefore leaves either the old complete gifts.json or the new
-    complete one — never a half-written file that _load_gifts would discard,
+    complete one â€” never a half-written file that _load_gifts would discard,
     losing every reservation. The temp file must share the target's filesystem
     for the rename to be atomic, hence dir=DATA_DIR.
 
     This mirrors smart_home_common.persistence.atomic_write_json; it is inlined
     because baby-gifts does not ship the shared library.
+
+    Args:
+        data: Dictionary containing the gifts data to persist.
+
+    Raises:
+        OSError: If the data directory cannot be created, the temp file cannot
+            be written, or the atomic rename fails (e.g., disk full, permission
+            denied, filesystem error). Stray temp files are cleaned up on error.
+        TypeError: If data contains non-JSON-serializable values.
     """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     temp_path: str | None = None
@@ -366,7 +382,7 @@ def reserve_gift(gift_id: str, token: str, guest_name: str) -> dict[str, Any]:
                     )
                     return {
                         "status": "error",
-                        "message": "Este regalo ya está reservado",
+                        "message": "Este regalo ya estÃ¡ reservado",
                     }
                 gift["reserved_by"] = token
                 gift["reserved_by_name"] = guest_name
@@ -410,7 +426,7 @@ def unreserve_gift(gift_id: str, token: str, is_admin: bool = False) -> dict[str
                     )
                     return {
                         "status": "error",
-                        "message": "Este regalo no está reservado",
+                        "message": "Este regalo no estÃ¡ reservado",
                     }
                 # Check permission
                 if not is_admin and gift["reserved_by"] != token:
@@ -462,7 +478,7 @@ def is_familia_user(username: str) -> bool:
     return username.lower() in config.FAMILIA_USERS
 
 
-# ── Invitations ───────────────────────────────────────────────────────────────
+# â”€â”€ Invitations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 MAX_INVITATION_RETRIES: int = 3
 
 
@@ -485,7 +501,7 @@ def create_invitation(name: str, _retries: int = 0) -> dict[str, Any]:
         )
         return {"status": "error", "message": "Failed to generate unique token"}
 
-    token: str = secrets.token_urlsafe(24)  # 32 chars
+    token: str = secrets.token_urlsafe(INVITATION_TOKEN_BYTES)  # 32 chars
     now: datetime = datetime.now()
     expires_at: datetime = now + timedelta(days=config.INVITATION_EXPIRY_DAYS)
 
@@ -587,8 +603,8 @@ def revoke_invitation(token: str) -> dict[str, Any]:
         )
         conn.commit()
         if result.rowcount > 0:
-            return {"status": "ok", "message": "Invitación revocada"}
-        return {"status": "error", "message": "Invitación no encontrada"}
+            return {"status": "ok", "message": "InvitaciÃ³n revocada"}
+        return {"status": "error", "message": "InvitaciÃ³n no encontrada"}
     finally:
         conn.close()
 
@@ -602,8 +618,8 @@ def delete_invitation(token: str) -> dict[str, Any]:
         )
         conn.commit()
         if result.rowcount > 0:
-            return {"status": "ok", "message": "Invitación eliminada"}
-        return {"status": "error", "message": "Invitación no encontrada"}
+            return {"status": "ok", "message": "InvitaciÃ³n eliminada"}
+        return {"status": "error", "message": "InvitaciÃ³n no encontrada"}
     finally:
         conn.close()
 
@@ -618,7 +634,7 @@ def get_invitation_reservations(token: str) -> int:
         return count
 
 
-# ── Rate limiting ─────────────────────────────────────────────────────────────
+# â”€â”€ Rate limiting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def check_rate_limit(ip: str) -> bool:
