@@ -398,6 +398,37 @@ class ACController:
         logger.info("Manual param updated: %s = %s", param, value)
         self._persist_state()
 
+    def set_temperature_safe(
+        self,
+        temperature: float,
+        *,
+        power: bool = True,
+        mode: str = "cool",
+        fan_speed: int = 0,
+    ) -> bool:
+        """Thread-safe wrapper for MELCloud set_temperature.
+
+        Acquires _melcloud_lock before calling the MELCloud client to prevent
+        race conditions between API endpoints and the control loop.
+
+        Args:
+            temperature: Target setpoint temperature (°C).
+            power: Whether to turn AC on (True) or off (False).
+            mode: AC mode ("cool" or "heat").
+            fan_speed: Fan speed (0=auto, 1=low, 2=mid, 3=high).
+
+        Returns:
+            True if command was successful, False otherwise.
+        """
+        with self._melcloud_lock:
+            return self.melcloud.set_temperature(
+                self.config.device_id,
+                temperature,
+                power=power,
+                mode=mode,
+                fan_speed=fan_speed,
+            )
+
     def start(self) -> None:
         """Start the control loop in a background thread.
 
