@@ -335,9 +335,9 @@ class TestGuestEndpoints:
             "reserved_by_token": None,
         }
 
-        # Write directly to gifts.json
+        # Write directly to gifts.json (format: {"gifts": [...], "invitations": [...]})
         gifts_file = gifts_controller.GIFTS_FILE
-        gifts_file.write_text(json.dumps([legacy_gift]))
+        gifts_file.write_text(json.dumps({"gifts": [legacy_gift], "invitations": []}))
 
         # Reserve the legacy gift as guest - this was failing with 400
         response = client.post(f"/api/baby-gifts/guest/{token}/reserve/{legacy_id}")
