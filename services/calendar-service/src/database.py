@@ -20,6 +20,15 @@ from typing import TypedDict
 
 from config import DB_PATH, EVENT_RETENTION_DAYS, REMINDER_RETENTION_DAYS
 
+__all__ = [
+    "CalendarStore",
+    "Calendar",
+    "ReminderRule",
+    "EventDict",
+    "EventRow",
+    "PruneResult",
+]
+
 try:
     from smart_home_common.sqlite_helpers import SqliteHelper
 except ImportError:  # pragma: no cover - import fallback outside the container

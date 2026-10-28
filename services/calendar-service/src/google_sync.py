@@ -45,7 +45,20 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from httplib2 import Http, HttpLib2Error
 
+__all__ = [
+    "GoogleCalendarClient",
+    "GoogleAuthError",
+    "InvalidSyncToken",
+    "CalendarInfo",
+    "AttendeeInfo",
+    "NormalizedEvent",
+    "MIN_OAUTH_TOKEN_LENGTH",
+]
+
 logger = logging.getLogger(__name__)
+
+# ── Constants ────────────────────────────────────────────────────────────────
+MIN_OAUTH_TOKEN_LENGTH = 20
 
 
 def _redact_secret(value: str | None) -> str:
@@ -313,7 +326,7 @@ class GoogleCalendarClient:
                     return False
 
                 # Tokens should look like OAuth tokens (min length, no whitespace)
-                if len(refresh_token) < 20 or " " in refresh_token:
+                if len(refresh_token) < MIN_OAUTH_TOKEN_LENGTH or " " in refresh_token:
                     logger.warning(
                         "Invalid token file at %s: refresh_token format invalid",
                         self.token_path,

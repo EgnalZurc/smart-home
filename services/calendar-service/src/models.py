@@ -9,6 +9,16 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+__all__ = [
+    "EventStatus",
+    "ReminderScope",
+    "Calendar",
+    "CalendarEvent",
+    "ReminderRule",
+    "Reminder",
+    "HealthResponse",
+]
+
 # ── Event status ─────────────────────────────────────────────────────────────
 # Mirrors the ``status`` column on the events table:
 #   confirmed → a live event instance
