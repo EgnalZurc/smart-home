@@ -61,6 +61,26 @@ def parse_devices(raw: str) -> list[dict]:
     1. Per-device "username"/"password" in the JSON entry (highest priority)
     2. Global SHELLY_USER/SHELLY_PASSWORD environment variables (fallback)
     3. No authentication (if neither is set)
+
+    Args:
+        raw: JSON string containing an array of device configuration objects.
+            Each object should have at minimum ``id`` (device identifier) and
+            ``ip`` (device address). Optional fields: ``gen`` (Shelly generation,
+            defaults to 1), ``channels`` (channel-to-label mapping), ``username``
+            and ``password`` (per-device authentication).
+
+    Returns:
+        A list of validated device dictionaries, each containing:
+        - id: Device identifier string
+        - ip: Device IP address string
+        - gen: Shelly generation (1 or 2)
+        - channels: Dict mapping channel IDs to human labels
+        - username: Authentication username (or None)
+        - password: Authentication password (or None)
+
+    Raises:
+        No exceptions are raised; invalid JSON or malformed entries are logged
+        as warnings and skipped, returning an empty or partial list.
     """
     try:
         parsed = json.loads(raw)
@@ -96,6 +116,14 @@ def _global_channel(device_id: str, channel: str) -> str:
 
     Two devices may both expose ``ch0``; namespacing by device id keeps their
     series distinct in the ring buffer and SQLite.
+
+    Args:
+        device_id: The device identifier (e.g., "shelly-em-01").
+        channel: The channel identifier within the device (e.g., "ch0", "ch1").
+
+    Returns:
+        A colon-separated string ``<device_id>:<channel>`` that uniquely
+        identifies this channel across all devices in the system.
     """
     return f"{device_id}:{channel}"
 
@@ -108,6 +136,26 @@ class Collector:
         store: EnergyStore | None = None,
         devices: list[dict] | None = None,
     ) -> None:
+        """Initialize the collector with optional injected dependencies.
+
+        Sets up the internal data structures for power/energy collection:
+        - Ring buffer for hi-res power samples (tier 1, in-memory)
+        - Latest energy readings for hourly snapshots
+        - Channel labels from device inventory
+
+        Args:
+            store: Optional pre-configured EnergyStore instance. If None,
+                creates a new EnergyStore with default settings. Useful for
+                testing with mock or in-memory stores.
+            devices: Optional pre-parsed device list. If None, parses the
+                ``DEVICES_JSON`` configuration. Useful for testing with
+                controlled device inventories.
+
+        Note:
+            Shelly clients are not created until ``start()`` is called.
+            This allows the collector to be instantiated at module load
+            without network side effects.
+        """
         self.store = store if store is not None else EnergyStore()
         self.devices = devices if devices is not None else parse_devices(DEVICES_JSON)
         self.clients: dict[str, ShellyEMClient] = {}

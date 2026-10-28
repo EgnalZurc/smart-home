@@ -34,6 +34,11 @@ from config import (
 # Supported aggregation periods for ``consumption_by_period`` (design §4.3).
 VALID_PERIODS = ("hour", "day", "week", "month")
 
+# ── Configuration constants ───────────────────────────────────────────────────
+MAX_CONSUMPTION_PERIODS: int = 1000  # Maximum periods for consumption_by_period
+MAX_RECENT_ALERTS: int = 500  # Maximum alerts for recent_alerts
+DECEMBER: int = 12  # Month number for year wrap-around in _advance_period
+
 __all__ = ["EnergyStore", "VALID_PERIODS"]
 
 try:
@@ -126,7 +131,7 @@ def _advance_period(dt: datetime, period: str) -> datetime:
     if period == "month":
         # Month length varies; step to the 1st of the next month.
         year, month = dt.year, dt.month
-        if month == 12:
+        if month == DECEMBER:
             return dt.replace(year=year + 1, month=1)
         return dt.replace(month=month + 1)
     raise ValueError(f"unknown period: {period!r}")
@@ -365,7 +370,7 @@ class EnergyStore:
         """
         if period not in VALID_PERIODS:
             raise ValueError(f"period must be one of {VALID_PERIODS}, got {period!r}")
-        count = max(1, min(int(count), 1000))
+        count = max(1, min(int(count), MAX_CONSUMPTION_PERIODS))
         now = int(time.time()) if now is None else now
 
         starts = _period_starts(now, period, count)
@@ -475,7 +480,7 @@ class EnergyStore:
 
     def recent_alerts(self, limit: int = 50) -> list[dict[str, object]]:
         """Return the most recent alert events, newest first."""
-        limit = max(1, min(int(limit), 500))
+        limit = max(1, min(int(limit), MAX_RECENT_ALERTS))
         with self._db.connect() as conn:
             rows = conn.execute(
                 "SELECT id, ts, rule_key, channel, severity, state, value, message "
