@@ -15,7 +15,7 @@ from collections.abc import Callable
 import httpx
 from zones import ZONE_COORDS, ZONES, Zone
 
-from scheduler.config import NOMINATIM_MAX_DIST_KM
+from scheduler.config import NOMINATIM_MAX_DIST_KM, NOMINATIM_TIMEOUT_SEC
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ def infer_zone_nominatim(hint: str) -> Zone | None:
             f"https://nominatim.openstreetmap.org/search?{q}",
             headers={"User-Agent": "casita-suenos/1.0 (raspberrypi)"},
         )
-        with urllib.request.urlopen(req, timeout=5) as r:  # nosec B310
+        with urllib.request.urlopen(req, timeout=NOMINATIM_TIMEOUT_SEC) as r:  # nosec B310
             data = json.loads(r.read().decode())
         if not data:
             logger.info("[casita] Nominatim: sin resultados para '%s'", hint)

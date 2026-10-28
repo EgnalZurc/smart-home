@@ -57,6 +57,11 @@ from imap_base import (
 logger = logging.getLogger(__name__)
 
 _LOG_PREFIX = "gmail"
+
+# Número de caracteres alrededor de la URL para buscar precio
+_PRICE_CONTEXT_CHARS = 600
+# Caracteres del body como fallback cuando no se encuentra la URL
+_FALLBACK_CONTEXT_CHARS = 2000
 _IDEALISTA_SENDER = "noresponder@idealista.com"
 
 _URL_PATTERN = re.compile(
@@ -178,11 +183,11 @@ def _extract_price_from_body(
     url_match = re.search(rf"inmueble/{re.escape(pid)}", body)
 
     if url_match:
-        start = max(0, url_match.start() - 600)
-        end = min(len(body), url_match.end() + 600)
+        start = max(0, url_match.start() - _PRICE_CONTEXT_CHARS)
+        end = min(len(body), url_match.end() + _PRICE_CONTEXT_CHARS)
         ctx = body[start:end]
     else:
-        ctx = body[:2000]  # fallback: primeros 2000 chars
+        ctx = body[:_FALLBACK_CONTEXT_CHARS]  # fallback: primeros 2000 chars
 
     price = _parse_price(ctx)
     rooms_m = _ROOMS_PATTERN.search(ctx)
