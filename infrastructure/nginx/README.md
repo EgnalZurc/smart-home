@@ -50,7 +50,17 @@ Defined in `snippets/security-headers.conf` and included in all server blocks:
 | `X-Content-Type-Options` | nosniff | Prevent MIME-type sniffing |
 | `Referrer-Policy` | strict-origin-when-cross-origin | Control referrer leakage |
 | `Permissions-Policy` | geolocation=(), microphone=(), camera=() | Restrict browser APIs |
+| `X-XSS-Protection` | 0 | Disable XSS auditor (recommended by MDN) |
+| `X-DNS-Prefetch-Control` | off | Prevent DNS prefetch privacy leakage |
+| `Cross-Origin-Opener-Policy` | same-origin | Window isolation (Spectre mitigation) |
+| `Cross-Origin-Resource-Policy` | same-origin | Resource loading restriction |
 | `Content-Security-Policy` | See below | Prevent XSS and injection attacks |
+
+#### Deprecated Headers (Not Included)
+
+| Header | Status | Reason |
+|--------|--------|--------|
+| `Expect-CT` | **Deprecated** | Certificate Transparency is now enforced by default in all major browsers since 2018. Chrome removed support in version 107 (Oct 2022). Adding this header provides no security benefit and increases response size. Reference: [Chrome Platform Status](https://chromestatus.com/feature/6244547273687040) |
 
 #### Content Security Policy
 
