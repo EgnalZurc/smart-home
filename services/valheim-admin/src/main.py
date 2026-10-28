@@ -54,6 +54,7 @@ from config import (
     PC_AGENT_TIMEOUT,
     PC_AGENT_TOKEN,
     PC_AGENT_URL,
+    RATE_LIMIT_MAX_ENTRIES,
     RATE_LIMIT_MAX_REQUESTS,
     RATE_LIMIT_WINDOW_SECONDS,
     SAVE_INTERVAL_DEFAULT_SECONDS,
@@ -65,15 +66,17 @@ from config import (
     SERVICE_NAME,
     SERVICE_TITLE,
     SERVICE_VERSION,
+    UPLOAD_MAX_SIZE_BYTES,
     WORLD_NAME_MAX_LENGTH,
     WORLD_NAME_PATTERN,
     is_internal_url,
 )
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from smart_home_common.rate_limiter import InMemoryRateLimiter
+from starlette.middleware.base import RequestResponseEndpoint
 
 
 class ConfigUpdateRequest(BaseModel):
@@ -122,7 +125,7 @@ pc_agent = AsyncServiceClient(_client_config)
 server_control_limiter = InMemoryRateLimiter(
     max_requests=RATE_LIMIT_MAX_REQUESTS,
     window_seconds=RATE_LIMIT_WINDOW_SECONDS,
-    max_entries=10000,
+    max_entries=RATE_LIMIT_MAX_ENTRIES,
 )
 
 # Compiled regex patterns for validation
@@ -169,6 +172,9 @@ def _check_rate_limit(request: Request) -> None:
 
     Args:
         request: The incoming FastAPI request object.
+
+    Returns:
+        None. The function returns normally if the request is within rate limits.
 
     Raises:
         HTTPException: 429 status if the rate limit is exceeded, includes
@@ -217,7 +223,9 @@ app = FastAPI(title=SERVICE_TITLE, version=SERVICE_VERSION, lifespan=lifespan)
 
 
 @app.middleware("http")
-async def security_headers_middleware(request: Request, call_next):
+async def security_headers_middleware(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
     """Add security headers to all HTTP responses.
 
     This middleware adds standard security headers to protect against common
@@ -823,9 +831,6 @@ async def delete_world(world_name: str) -> dict[str, Any]:
 # ══════════════════════════════════════════════════════════════════════════════
 # World Upload Endpoints
 # ══════════════════════════════════════════════════════════════════════════════
-
-# Maximum upload size: 600 MB (Valheim world zips can be large)
-UPLOAD_MAX_SIZE_BYTES = 600 * 1024 * 1024
 
 
 def _sanitize_filename(filename: str | None, expected_ext: str) -> str:
