@@ -13,12 +13,13 @@ from __future__ import annotations
 
 import threading
 from collections import deque
+from typing import TypeAlias
 
 from config import RING_BUFFER_MAXLEN
 
 # A single raw sample as produced by the collector.
-Sample = tuple[str, str, float]  # (metric, label, value)
-Point = tuple[int, float]  # (ts, value)
+Sample: TypeAlias = tuple[str, str, float]  # (metric, label, value)
+Point: TypeAlias = tuple[int, float]  # (ts, value)
 
 
 class RingBuffer:

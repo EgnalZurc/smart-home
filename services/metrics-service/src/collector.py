@@ -50,6 +50,9 @@ from storage import RingBuffer, Sample
 
 logger = logging.getLogger(__name__)
 
+# Conversion constant for bytes to megabytes
+BYTES_PER_MB = 1024 * 1024
+
 
 def _make_notifier() -> TelegramNotifier:
     """Build a TelegramNotifier from the environment, tolerating import layout.
@@ -367,7 +370,7 @@ def parse_container_stats(name: str, stats: dict[str, Any]) -> list[Sample]:
     # Docker includes page cache in usage; subtract it like `docker stats` does.
     cache = (mem.get("stats", {}) or {}).get("inactive_file", 0)
     if usage is not None:
-        used_mb = round(max(0, usage - cache) / (1024 * 1024), 1)
+        used_mb = round(max(0, usage - cache) / BYTES_PER_MB, 1)
         samples.append(("container.mem.used_mb", name, used_mb))
         if limit:
             pct = round(max(0, usage - cache) / limit * 100, 1)
