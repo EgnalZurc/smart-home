@@ -29,7 +29,7 @@ import logging
 import os
 import re
 import sys
-from collections.abc import Awaitable, AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
