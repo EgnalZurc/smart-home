@@ -1,5 +1,5 @@
 """
-Portfolio Monitor — ETF Monitor.
+Portfolio Monitor â€” ETF Monitor.
 Downloads market data from Yahoo Finance and calculates technical signals.
 """
 
@@ -27,42 +27,46 @@ from . import BaseMonitor, register_monitor
 
 logger = logging.getLogger(__name__)
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Timeout Configuration
 #
 # yfinance doesn't expose a timeout parameter directly; it uses requests
 # internally with default settings. We wrap blocking calls in asyncio.wait_for
 # to enforce a maximum duration and prevent hung connections from blocking
 # the entire monitor run.
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 YFINANCE_TIMEOUT_SECONDS = 5.0  # Per-call timeout (reduced for fast-fail)
 YFINANCE_MAX_RETRIES = 3
 YFINANCE_RETRY_MIN_WAIT = 1  # seconds
 YFINANCE_RETRY_MAX_WAIT = 4  # seconds
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # TTL Cache for Yahoo Finance responses (shared implementation)
 #
 # yfinance hits Yahoo Finance on every call; a scheduled run plus any dashboard
 # refresh can download the same 1-year history repeatedly. Caching per ticker
 # for a few minutes removes redundant network round-trips (and the risk of
 # Yahoo throttling) without affecting the daily signal cadence.
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # ETF history is used for signals that update daily; 5 min is plenty to collapse
 # bursts of requests while staying fresh. OHLC (sparklines) is purely cosmetic
 # historical data, so it can live a bit longer.
-_history_cache = TTLCache(default_ttl_seconds=300)  # 5 min
-_ohlc_cache = TTLCache(default_ttl_seconds=900)  # 15 min
+_HISTORY_CACHE_TTL = 300  # 5 min — ETF history for signals
+_OHLC_CACHE_TTL = 900  # 15 min — OHLC for sparklines
+_DIVIDENDS_CACHE_TTL = 3600  # 1 hour — dividend history (changes rarely)
+
+_history_cache = TTLCache(default_ttl_seconds=_HISTORY_CACHE_TTL)
+_ohlc_cache = TTLCache(default_ttl_seconds=_OHLC_CACHE_TTL)
 # Dividend history changes at most a few times a year, so it can be cached for
 # much longer than price history. 1 hour collapses dashboard refresh bursts
 # while still picking up a newly declared distribution within the same day.
-_dividends_cache = TTLCache(default_ttl_seconds=3600)  # 1 hour
+_dividends_cache = TTLCache(default_ttl_seconds=_DIVIDENDS_CACHE_TTL)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Circuit Breaker — prevent cascading failures to Yahoo Finance
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Circuit Breaker â€” prevent cascading failures to Yahoo Finance
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class CircuitBreaker:
     """Simple circuit breaker for external API calls.
 
@@ -113,9 +117,9 @@ class CircuitBreaker:
 _yahoo_circuit = CircuitBreaker(max_failures=5, reset_timeout=60.0)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Plan helpers
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def current_phase() -> tuple[str, int | None]:
     """Return (phase label, months remaining) tuple."""
     today = datetime.today()
@@ -164,9 +168,9 @@ def projected_milestone(fund_id: str) -> float | None:
         return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Tax calculation
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def calculate_tax(gain: float) -> float:
     """
     Calculate IRPF tax on a capital gain using progressive brackets.
@@ -175,11 +179,11 @@ def calculate_tax(gain: float) -> float:
     - Each bracket has an upper limit and a rate
     - You pay the rate only on the portion within that bracket
 
-    Example with 2025 brackets for a 70.000€ gain:
-    - First 6.000€ at 19% = 1.140€
-    - Next 44.000€ (6.000-50.000) at 21% = 9.240€
-    - Remaining 20.000€ (50.000-70.000) at 23% = 4.600€
-    - Total = 14.980€
+    Example with 2025 brackets for a 70.000â‚¬ gain:
+    - First 6.000â‚¬ at 19% = 1.140â‚¬
+    - Next 44.000â‚¬ (6.000-50.000) at 21% = 9.240â‚¬
+    - Remaining 20.000â‚¬ (50.000-70.000) at 23% = 4.600â‚¬
+    - Total = 14.980â‚¬
     """
     if gain <= 0:
         return 0.0
@@ -228,9 +232,9 @@ def calculate_tax_impact(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Data download
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def fetch_etf_data(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Download one year of historical data for an ETF.
 
@@ -268,7 +272,23 @@ def fetch_etf_data(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
     reraise=True,
 )
 def _fetch_etf_data_with_retry(ticker_sym: str) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Internal fetch with retry logic. Called by fetch_etf_data after cache miss."""
+    """Fetch ETF data from Yahoo Finance with exponential backoff retry.
+
+    This is the internal fetch function called by fetch_etf_data after a cache
+    miss. It downloads 1 year of historical data and basic ticker info.
+
+    Args:
+        ticker_sym: The Yahoo Finance ticker symbol (e.g., 'IWDA.AS').
+
+    Returns:
+        A tuple of (history DataFrame, info dict). The history contains OHLCV
+        data; info contains fast_info or info attributes from yfinance.
+
+    Raises:
+        OSError: On network failures after all retries exhausted.
+        ValueError: On invalid data from Yahoo Finance.
+        RuntimeError: On other yfinance errors.
+    """
     try:
         ticker = yf.Ticker(ticker_sym)
         hist = ticker.history(period="1y")
@@ -334,7 +354,25 @@ def fetch_ohlc_data(ticker_sym: str, period: str = "1mo") -> list[list[float]]:
 def _fetch_ohlc_data_with_retry(
     ticker_sym: str, period: str, cache_key: str
 ) -> list[list[float]]:
-    """Internal OHLC fetch with retry logic. Called after cache miss."""
+    """Fetch OHLC data from Yahoo Finance with exponential backoff retry.
+
+    This is the internal fetch function called by fetch_ohlc_data after a cache
+    miss. It downloads OHLC data for sparkline chart rendering.
+
+    Args:
+        ticker_sym: The Yahoo Finance ticker symbol (e.g., 'IWDA.AS').
+        period: The time period to fetch (e.g., '1mo', '3mo').
+        cache_key: The key to store the result in the OHLC cache.
+
+    Returns:
+        A list of [timestamp_ms, open, high, low, close] entries suitable for
+        charting libraries. Returns empty list on error.
+
+    Raises:
+        OSError: On network failures after all retries exhausted.
+        ValueError: On invalid data from Yahoo Finance.
+        RuntimeError: On other yfinance errors.
+    """
     try:
         ticker = yf.Ticker(ticker_sym)
         hist = ticker.history(period=period)
@@ -360,9 +398,9 @@ def _fetch_ohlc_data_with_retry(
         raise
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Dividend helpers
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def fetch_dividends(ticker_sym: str) -> pd.Series:
     """Download the full dividend history for a ticker as a pandas Series.
 
@@ -517,9 +555,9 @@ def calculate_dividend_info(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Signal analysis
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _analyse_moving_averages(
     hist: pd.DataFrame,
     price: float,
@@ -796,9 +834,9 @@ def get_recommendation(level: AlertLevel, name: str) -> Signal:
     return Signal(t("rec.ok.title"), t("rec.ok.body", name=name), "OK")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Monitor class
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @register_monitor
 class ETFMonitor(BaseMonitor):
     """ETF portfolio monitor."""
@@ -821,7 +859,7 @@ class ETFMonitor(BaseMonitor):
 
         for fund_id, cfg in config.get_etf_portfolio().items():
             ticker = cfg["ticker"]
-            logger.info(f"  → {fund_id} ({ticker})...")
+            logger.info(f"  â†’ {fund_id} ({ticker})...")
 
             try:
                 # yfinance performs blocking network I/O; run it off the event
@@ -859,7 +897,7 @@ class ETFMonitor(BaseMonitor):
                 milestone = projected_milestone(fund_id)
                 year = years_since_start()
 
-                # OHLC download is blocking network I/O too → offload it with timeout.
+                # OHLC download is blocking network I/O too â†’ offload it with timeout.
                 try:
                     ohlc = await asyncio.wait_for(
                         asyncio.to_thread(fetch_ohlc_data, ticker, "1mo"),
