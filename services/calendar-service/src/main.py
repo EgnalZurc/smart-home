@@ -220,6 +220,11 @@ def _do_sync() -> None:
     horizon = now + SYNC_HORIZON_DAYS * 86400
 
     for cal in calendars:
+        # SECURITY: Re-validate calendar_id from DB before passing to Google API
+        # to prevent SSRF if a malformed ID was somehow stored in the database.
+        if not CalendarConfig._CALENDAR_ID_PATTERN.match(cal.id):
+            logger.warning("Invalid calendar_id in DB, skipping: %s", cal.id[:20])
+            continue
         try:
             events, new_token = google_client.sync_events(
                 calendar_id=cal.id,
