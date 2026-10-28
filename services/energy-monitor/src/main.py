@@ -29,7 +29,7 @@ import logging
 import os
 import re
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import Awaitable, AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -58,6 +58,7 @@ __all__ = ["app"]
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 limiter: Limiter = Limiter(key_func=get_remote_address)
+RATE_LIMIT_RETRY_AFTER_S: int = 60
 
 
 async def _rate_limit_exceeded_handler(
@@ -86,12 +87,14 @@ async def _rate_limit_exceeded_handler(
     return Response(
         content=f"Rate limit exceeded: {exc.detail}",
         status_code=429,
-        headers={"Retry-After": "60"},
+        headers={"Retry-After": str(RATE_LIMIT_RETRY_AFTER_S)},
     )
 
 
 # ── Security headers middleware ───────────────────────────────────────────────
-async def security_headers_middleware(request: Request, call_next: Any) -> Response:
+async def security_headers_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     """Add security headers to all HTTP responses.
 
     Applies standard security headers to mitigate common web vulnerabilities:
