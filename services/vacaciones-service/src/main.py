@@ -247,14 +247,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     - Referrer-Policy: Controls referrer information sent to other sites
 
     CSP Policy Note:
-        The strict "default-src 'self'" policy is intentional for this service.
-        The vacaciones SPA uses only local assets (CSS, JS from /static/) and
-        makes fetch() calls to same-origin API endpoints. No external resources,
-        inline scripts, or eval() are required. This strict CSP prevents XSS
-        attacks by blocking any injected scripts from loading external resources
-        or executing inline code. If future features require relaxation (e.g.,
-        external fonts), add specific directives like "font-src 'self' fonts.gstatic.com"
-        rather than weakening default-src.
+        The CSP is aligned with nginx's csp-static.conf to support SPA frontends
+        that use inline scripts/styles. This is an accepted risk documented in
+        SECURITY_FIXES.md — the service is only accessible via Tailscale VPN
+        with nginx auth_request protection.
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
@@ -263,9 +259,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
-        # Strict CSP: only same-origin resources allowed. See class docstring
-        # for rationale on why 'default-src: self' is appropriate here.
-        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        # CSP aligned with nginx csp-static.conf for SPA compatibility.
+        # Allows inline scripts/styles needed by the SPA frontend.
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self'"
+        )
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         return response
 
