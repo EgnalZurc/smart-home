@@ -23,12 +23,24 @@ from typing import Any
 from config import DB_PATH, RETENTION_DAYS
 from models import PresenceEvent
 
+__all__ = [
+    "MAC_HASH_LENGTH",
+    "MAX_PERSON_ID_LENGTH",
+    "PresenceStore",
+    "hash_mac",
+    "validate_person_id",
+]
+
+# ── Constants ────────────────────────────────────────────────────────────────
+MAC_HASH_LENGTH: int = 16  # Truncated SHA-256 hex chars (64 bits)
+MAX_PERSON_ID_LENGTH: int = 64  # Maximum length for person_id field
+
 # ── PII Pseudonymization ─────────────────────────────────────────────────────
 # MAC addresses are personally identifiable information (PII) that can be used
 # to track individuals. To comply with privacy regulations and minimize data
 # exposure in case of a breach, we hash MACs before storing or logging them.
 #
-# The hash is truncated to 16 hex chars (64 bits) which provides:
+# The hash is truncated to MAC_HASH_LENGTH hex chars (64 bits) which provides:
 # - Sufficient uniqueness for device correlation within the household
 # - Irreversibility (cannot recover the original MAC)
 # - Consistent pseudonymization across the codebase
@@ -50,11 +62,13 @@ def hash_mac(mac: str) -> str:
     """
     # Normalize: lowercase, remove separators
     normalized: str = mac.lower().replace(":", "").replace("-", "").replace(".", "")
-    return hashlib.sha256(normalized.encode()).hexdigest()[:16]
+    return hashlib.sha256(normalized.encode()).hexdigest()[:MAC_HASH_LENGTH]
 
 
 # ── Input Validation ─────────────────────────────────────────────────────────
-_PERSON_ID_PATTERN: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+_PERSON_ID_PATTERN: re.Pattern[str] = re.compile(
+    rf"^[a-zA-Z0-9_-]{{1,{MAX_PERSON_ID_LENGTH}}}$"
+)
 
 
 def validate_person_id(person_id: str) -> str:
@@ -71,7 +85,8 @@ def validate_person_id(person_id: str) -> str:
     """
     if not person_id or not _PERSON_ID_PATTERN.match(person_id):
         raise ValueError(
-            "Invalid person_id: must be 1-64 alphanumeric chars, hyphens or underscores"
+            f"Invalid person_id: must be 1-{MAX_PERSON_ID_LENGTH} alphanumeric chars, "
+            "hyphens or underscores"
         )
     return person_id
 
@@ -89,7 +104,23 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
-    """Create the presence tables + indexes if they do not exist (design §7.2)."""
+    """Create the presence tables and indexes if they do not exist.
+
+    Implements the schema from design document §7.2:
+    - people: enrolled household members with track flag
+    - devices: hashed MAC addresses linked to people
+    - beacons: BLE identifiers linked to people
+    - zones: motion sensor groupings for room occupancy
+    - presence_current: one-row-per-person snapshot surviving restarts
+    - transitions: audit trail of state changes with retention policy
+
+    Args:
+        conn: An open SQLite connection (WAL mode recommended).
+
+    Note:
+        This function is idempotent — safe to call on every startup.
+        Indexes are created for efficient time-range and person-filtered queries.
+    """
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS people (
