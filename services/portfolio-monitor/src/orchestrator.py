@@ -1,5 +1,5 @@
 """
-Portfolio Monitor — Monitor Orchestrator.
+Portfolio Monitor â€” Monitor Orchestrator.
 Manages scheduled execution of monitors and maintains state.
 Sends email alerts when WARN or DANGER signals are detected.
 
@@ -17,15 +17,15 @@ from config import DATA_DIR, reload_config
 from models import AlertLevel, MonitorState, PortfolioSummary
 from smart_home_common.persistence import atomic_write_json
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 # State file path
 STATE_FILE = DATA_DIR / "state.json"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Protocols for dependency injection
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class NotifierProtocol(Protocol):
     """Protocol for email notifier - allows dependency injection."""
 
@@ -52,9 +52,9 @@ class MonitorProtocol(Protocol):
     async def run(self) -> dict[str, Any]: ...
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Orchestrator
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class Orchestrator:
     """Orchestrates the execution of portfolio monitors."""
 
@@ -258,7 +258,7 @@ class Orchestrator:
         # Only send if there are actual market warnings
         if overall_level not in (AlertLevel.WARN, AlertLevel.DANGER):
             logger.info(
-                f"No market alerts to send — ETF: {self._summary.etf_level}, "
+                f"No market alerts to send â€” ETF: {self._summary.etf_level}, "
                 f"Crypto: {self._summary.crypto_level}, Overall: OK"
             )
             return
@@ -282,7 +282,7 @@ class Orchestrator:
             return
 
         logger.info(
-            f"Sending market alert — {len(etf_alerts)} ETF alerts, "
+            f"Sending market alert â€” {len(etf_alerts)} ETF alerts, "
             f"{len(crypto_alerts)} crypto alerts"
         )
 
@@ -353,15 +353,15 @@ class Orchestrator:
         ``monitor_names`` lists every monitor sharing that earliest timestamp
         (so monitors configured at the same minute fire together).
 
-        Deriving the exact target timestamp from the schedule — rather than
-        polling a fixed interval — keeps the cadence drift-free: a run that
+        Deriving the exact target timestamp from the schedule â€” rather than
+        polling a fixed interval â€” keeps the cadence drift-free: a run that
         takes N seconds does not push the next slot by N seconds.
         """
         next_runs = {
             name: run for name, run in self.get_next_run_times().items() if run
         }
         if not next_runs:
-            # No schedule configured — fall back to a bounded idle wait so the
+            # No schedule configured â€” fall back to a bounded idle wait so the
             # loop still responds to shutdown/cancellation promptly.
             return 60.0, []
 
@@ -434,7 +434,7 @@ class Orchestrator:
 
         # Run all monitors immediately on startup if no previous data
         if not self._summary.etf_analysis and not self._summary.crypto_analysis:
-            logger.info("No previous data — running initial monitor refresh...")
+            logger.info("No previous data â€” running initial monitor refresh...")
             try:
                 await self.run_all_monitors()
             except (ValueError, KeyError, TypeError, OSError, RuntimeError) as e:
@@ -465,9 +465,9 @@ class Orchestrator:
         logger.info("Configuration reloaded")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Singleton instance (with factory for dependency injection in tests)
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _orchestrator: Orchestrator | None = None
 
 
