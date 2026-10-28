@@ -301,6 +301,50 @@ class TestGuestEndpoints:
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
 
+    def test_guest_reserve_gift_with_legacy_id_format(
+        self, client, sample_invitation_name
+    ):
+        """POST /api/baby-gifts/guest/{token}/reserve/{id} should work with legacy ID.
+
+        Regression test for issue where reserving a gift with legacy ID format
+        (g_<timestamp> without hex suffix, e.g. g_1790764472872) returned
+        HTTP 400 "Invalid gift_id format".
+        """
+        import json
+
+        import gifts_controller
+
+        # Create invitation
+        inv_resp = client.post(
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
+        )
+        token = inv_resp.json()["token"]
+
+        # Inject a gift with legacy ID format directly into storage
+        # (simulating an existing gift created before the hex suffix was added)
+        legacy_id = "g_1790764472872"  # Exact ID from the reported failure
+        legacy_gift = {
+            "id": legacy_id,
+            "name": "Cambiador NATTOU verde",
+            "price": "62€",
+            "visible": True,
+            "reserved": False,
+            "reserved_by": None,
+            "reserved_by_token": None,
+        }
+
+        # Write directly to gifts.json (format: {"gifts": [...], "invitations": [...]})
+        gifts_file = gifts_controller.GIFTS_FILE
+        gifts_file.write_text(json.dumps({"gifts": [legacy_gift], "invitations": []}))
+
+        # Reserve the legacy gift as guest - this was failing with 400
+        response = client.post(f"/api/baby-gifts/guest/{token}/reserve/{legacy_id}")
+
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.json()}"
+        assert response.json()["status"] == "ok"
+
     def test_guest_unreserve_own_gift(
         self, client, sample_gift, sample_invitation_name
     ):
