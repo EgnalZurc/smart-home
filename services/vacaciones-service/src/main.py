@@ -254,7 +254,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        """Process request and add security headers to response."""
+        """Process request and add security headers to response.
+
+        Args:
+            request: The incoming HTTP request.
+            call_next: The next middleware or route handler in the chain.
+
+        Returns:
+            Response with security headers added.
+        """
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
