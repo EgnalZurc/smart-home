@@ -81,7 +81,7 @@ class CSPNonceMiddleware(BaseHTTPMiddleware):
         """
         return {
             "default-src": "'self'",
-            "script-src": "'self' 'nonce-{nonce}' 'sha256-9tNtSo+QG/qAg8Lu7LzUt+l7jTqjSxZ59ump2veyz14='",
+            "script-src": "'self' 'nonce-{nonce}' 'sha256-5Tka0bwFMmGXAe2sf1KS5GXMvUe2E/F/eKU8m01zjM8='",
             "style-src": "'self' 'nonce-{nonce}'",
             "img-src": "'self' data: https:",
             "font-src": "'self' data:",
