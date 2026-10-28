@@ -151,6 +151,10 @@ MELCLOUD_APP_VERSION = os.environ.get("MELCLOUD_APP_VERSION", "1.32.1.0")
 
 if not MELCLOUD_EMAIL or not MELCLOUD_PASSWORD:
     raise RuntimeError("MELCLOUD_EMAIL and MELCLOUD_PASSWORD are required")
+if "@" not in MELCLOUD_EMAIL:
+    raise RuntimeError("MELCLOUD_EMAIL must be a valid email address (must contain @)")
+if MELCLOUD_PASSWORD.strip() == "":
+    raise RuntimeError("MELCLOUD_PASSWORD cannot be empty or whitespace-only")
 if "MELCLOUD_DEVICE_ID" not in os.environ:
     raise RuntimeError("MELCLOUD_DEVICE_ID is required")
 if "MELCLOUD_BUILDING_ID" not in os.environ:
@@ -979,8 +983,8 @@ def set_manual_params(req: ManualParamsRequest, request: Request) -> dict[str, o
     )
     state = ac_controller.current_state
     if state.control_mode == "manual":
-        success = ac_controller.melcloud.set_temperature(
-            ac_controller.config.device_id,
+        # Use thread-safe method to avoid race with control loop
+        success = ac_controller.set_temperature_safe(
             req.temperature,
             power=True,
             mode=req.mode,
@@ -1048,8 +1052,8 @@ def update_manual_param(req: ManualParamUpdate, request: Request) -> dict[str, o
     temperature = (
         converted_value if param == "temperature" else manual_params.temperature
     )
-    success = ac_controller.melcloud.set_temperature(
-        ac_controller.config.device_id,
+    # Use thread-safe method to avoid race with control loop
+    success = ac_controller.set_temperature_safe(
         temperature,
         power=True,
         mode=mode,
