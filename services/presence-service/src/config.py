@@ -228,3 +228,15 @@ if not _mqtt_user or not _mqtt_pass:
         "MQTT authentication may be disabled. See security policy at "
         "infrastructure/mosquitto/docs/credential-rotation.md"
     )
+
+# ── Router Password Validation Warning ───────────────────────────────────────
+# Log warnings if ROUTER_PASSWORD is empty or too short for security.
+ROUTER_PASSWORD: str = os.environ.get("ROUTER_PASSWORD", "")
+if ROUTER_PASSWORD and len(ROUTER_PASSWORD) < 8:
+    _config_logger.warning(
+        "ROUTER_PASSWORD is short (<%d chars) - consider a stronger password", 8
+    )
+if not ROUTER_PASSWORD:
+    _config_logger.warning(
+        "ROUTER_PASSWORD is empty - router integration will not work"
+    )
