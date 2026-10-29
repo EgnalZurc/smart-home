@@ -35,6 +35,14 @@ from database import PresenceStore
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
+__all__ = [
+    "app",
+    "rate_limiter",
+    "store",
+    "RateLimitMiddleware",
+    "SecurityHeadersMiddleware",
+]
+
 # Shared libs live at /app/libs in the container; add to path for imports.
 _LIBS_PATH: str = os.environ.get("LIBS_PATH", "/app/libs")
 if _LIBS_PATH not in sys.path:
