@@ -28,7 +28,7 @@ The client is async (``httpx.AsyncClient``) because the collector runs inside
 the FastAPI event loop and polls several devices concurrently; a blocking client
 would stall the loop (same reasoning as metrics-service's collector).
 
-SECURITY NOTE — HTTP (plaintext) by design:
+SECURITY NOTE — HTTP (plaintext) by design [ACCEPTED_RISK]:
     Shelly devices expose their local API over plain HTTP only (no TLS). This is
     **intentional and acceptable** for this deployment because:
     1. All traffic stays within the trusted home LAN (192.168.x.x / VLAN).
@@ -293,7 +293,29 @@ class ShellyEMClient:
 
 
 def _as_float(value: Any) -> float | None:
-    """Coerce a value to float, returning None for missing/invalid input."""
+    """Coerce a value to float, returning None for missing/invalid input.
+
+    Used to safely extract numeric readings from Shelly API responses where
+    values may be missing (None), already numeric, or string representations.
+
+    Args:
+        value: The value to convert. Can be int, float, str, None, or any type.
+
+    Returns:
+        The value as a float if conversion succeeds, None otherwise.
+        Returns None for None input, non-numeric strings, or types that
+        cannot be converted to float.
+
+    Examples:
+        >>> _as_float(123.45)
+        123.45
+        >>> _as_float("42")
+        42.0
+        >>> _as_float(None)
+        None
+        >>> _as_float("not a number")
+        None
+    """
     if value is None:
         return None
     try:
@@ -303,7 +325,29 @@ def _as_float(value: Any) -> float | None:
 
 
 def _rpc_index(comp_key: str) -> int | None:
-    """Extract the integer index from an RPC key like ``em1:2`` → ``2``."""
+    """Extract the integer index from a Gen2 RPC component key.
+
+    Gen2 Shelly devices use component keys like ``em1:0``, ``em1:1``, ``emdata:2``
+    where the suffix after the colon identifies the meter/channel index.
+
+    Args:
+        comp_key: A component key string in the format ``prefix:index``,
+            e.g., ``"em1:0"``, ``"emdata:2"``.
+
+    Returns:
+        The integer index extracted from the key, or None if the key format
+        is invalid (missing colon, non-integer suffix).
+
+    Examples:
+        >>> _rpc_index("em1:2")
+        2
+        >>> _rpc_index("emdata:0")
+        0
+        >>> _rpc_index("invalid")
+        None
+        >>> _rpc_index("em1:abc")
+        None
+    """
     try:
         return int(comp_key.split(":", 1)[1])
     except (IndexError, ValueError):

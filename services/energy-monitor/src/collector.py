@@ -173,7 +173,21 @@ class Collector:
 
     # ── Setup ─────────────────────────────────────────────────────────────────
     def _build_clients(self) -> None:
-        """Instantiate one ShellyEMClient per inventory entry."""
+        """Instantiate one ShellyEMClient per inventory entry.
+
+        Iterates through the parsed device inventory and creates an HTTP client
+        for each device, configuring authentication and channel labels. Called
+        once during ``start()`` after the event loop is available.
+
+        Side effects:
+            - Populates ``self.clients`` with device_id → ShellyEMClient mappings.
+            - Populates ``self.labels`` with global_channel → human_label mappings
+              for the read API's friendly names.
+
+        Note:
+            Client creation is deferred to start() rather than __init__ to avoid
+            network side effects during module import or test setup.
+        """
         for dev in self.devices:
             self.clients[dev["id"]] = ShellyEMClient(
                 device_id=dev["id"],

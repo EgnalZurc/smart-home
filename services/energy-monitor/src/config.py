@@ -69,6 +69,16 @@ SHELLY_USER = os.environ.get("SHELLY_USER", "")
 SHELLY_PASSWORD = os.environ.get("SHELLY_PASSWORD", "")
 
 # ── Tariff / cost estimation (design §6) ─────────────────────────────────────
+# RESERVED FOR FUTURE USE: These settings are read from environment but not yet
+# consumed by any runtime code. They are defined now to:
+# 1. Establish the configuration surface for the planned cost estimation feature
+# 2. Allow operators to pre-configure tariff settings before the feature lands
+# 3. Document the intended schema for future implementation
+#
+# Planned usage (Task 6.x - Cost Estimation):
+#   - TARIFF_MODE: 'flat' (single rate), 'tou' (time-of-use with peak/off-peak),
+#     or 'spot' (real-time pricing from external API)
+#   - PRICE_EUR_KWH: Base rate for 'flat' mode; fallback rate for other modes
 TARIFF_MODE = os.environ.get("ENERGY_TARIFF_MODE", "flat")
 PRICE_EUR_KWH = float(os.environ.get("ENERGY_PRICE_EUR_KWH", "0.15"))
 
