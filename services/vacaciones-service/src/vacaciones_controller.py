@@ -35,9 +35,33 @@ import json
 import logging
 import os as _os
 import tempfile
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
+
+# Public API exports for this module
+__all__ = [
+    "Persona",
+    "NucleoFamiliar",
+    "Comida",
+    "YearPlan",
+    "VacacionesData",
+    "Momento",
+    "MOMENTOS",
+    "MAX_NUCLEOS",
+    "MAX_PERSONAS",
+    "MAX_YEARS",
+    "DATA_FILE",
+    "get_vacaciones_data",
+    "get_config",
+    "save_config",
+    "save_year",
+    "add_year",
+    "delete_year",
+    "is_healthy",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +215,9 @@ class VacacionesData:
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization.
 
+        Returns a deep copy to prevent mutation of internal state through
+        the returned dictionary.
+
         Returns:
             Dictionary with nucleos, personas, and years lists.
         """
@@ -201,61 +228,79 @@ class VacacionesData:
         }
 
 
-# MOMENTOS is a tuple (immutable) to prevent accidental modification at runtime.
+# MOMENTOS uses NamedTuple for true immutability (the outer tuple prevents
+# reassigning the sequence, and NamedTuple instances are immutable).
 # Each momento represents a meal during the Christmas gathering period.
-MOMENTOS = (
-    {
-        "id": "cena_24",
-        "label": "Cena 24",
-        "icon": "&#127770;",
-        "dia": 24,
-        "tipo": "cena",
-        "importante": True,
-    },
-    {
-        "id": "comida_25",
-        "label": "Comida 25",
-        "icon": "&#9728;&#65039;",
-        "dia": 25,
-        "tipo": "comida",
-        "importante": True,
-    },
-    {
-        "id": "cena_31",
-        "label": "Cena 31",
-        "icon": "&#127770;",
-        "dia": 31,
-        "tipo": "cena",
-        "importante": True,
-    },
-    {
-        "id": "comida_1",
-        "label": "Comida 1",
-        "icon": "&#9728;&#65039;",
-        "dia": 1,
-        "tipo": "comida",
-        "importante": True,
-    },
-    {
-        "id": "desayuno_6",
-        "label": "Desayuno 6",
-        "icon": "&#9728;&#65039;",
-        "dia": 6,
-        "tipo": "desayuno",
-        "importante": False,
-    },
-    {
-        "id": "comida_6",
-        "label": "Comida 6",
-        "icon": "&#127869;",
-        "dia": 6,
-        "tipo": "comida",
-        "importante": False,
-    },
+
+
+class Momento(NamedTuple):
+    """Immutable representation of a meal moment during Christmas."""
+
+    id: str
+    label: str
+    icon: str
+    dia: int
+    tipo: str
+    importante: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return self._asdict()
+
+
+MOMENTOS: tuple[Momento, ...] = (
+    Momento(
+        id="cena_24",
+        label="Cena 24",
+        icon="&#127770;",
+        dia=24,
+        tipo="cena",
+        importante=True,
+    ),
+    Momento(
+        id="comida_25",
+        label="Comida 25",
+        icon="&#9728;&#65039;",
+        dia=25,
+        tipo="comida",
+        importante=True,
+    ),
+    Momento(
+        id="cena_31",
+        label="Cena 31",
+        icon="&#127770;",
+        dia=31,
+        tipo="cena",
+        importante=True,
+    ),
+    Momento(
+        id="comida_1",
+        label="Comida 1",
+        icon="&#9728;&#65039;",
+        dia=1,
+        tipo="comida",
+        importante=True,
+    ),
+    Momento(
+        id="desayuno_6",
+        label="Desayuno 6",
+        icon="&#9728;&#65039;",
+        dia=6,
+        tipo="desayuno",
+        importante=False,
+    ),
+    Momento(
+        id="comida_6",
+        label="Comida 6",
+        icon="&#127869;",
+        dia=6,
+        tipo="comida",
+        importante=False,
+    ),
 )
 
 
-def _generate_inicial(nombre: str, existing_iniciales: list[str]) -> str:
+def _generate_inicial(nombre: str, existing_iniciales: Sequence[str]) -> str:
     """Generate a unique initial abbreviation for a person's name.
 
     Tries progressively longer prefixes of the name until finding one
@@ -366,7 +411,9 @@ def _load_data() -> VacacionesData:
         personas=[],
         years=[
             YearPlan(
-                year=2026, comidas=[Comida(momento=m["id"]) for m in MOMENTOS], notas=""
+                year=datetime.now().year,
+                comidas=[Comida(momento=m.id) for m in MOMENTOS],
+                notas="",
             )
         ],
     )
@@ -422,7 +469,7 @@ def get_vacaciones_data() -> dict[str, Any]:
         'momentos' reference data.
     """
     data = _load_data()
-    return {**data.to_dict(), "momentos": MOMENTOS}
+    return {**data.to_dict(), "momentos": [m.to_dict() for m in MOMENTOS]}
 
 
 def get_config() -> dict[str, Any]:
@@ -569,10 +616,12 @@ def add_year() -> dict[str, Any]:
     data = _load_data()
     if len(data.years) >= MAX_YEARS:
         return {"status": "error", "message": f"Too many years (max {MAX_YEARS})"}
-    max_year = max(y.year for y in data.years) if data.years else 2025
+    max_year = (
+        max(y.year for y in data.years) if data.years else datetime.now().year - 1
+    )
     new_year = max_year + 1
     new_year_plan = YearPlan(
-        year=new_year, comidas=[Comida(momento=m["id"]) for m in MOMENTOS], notas=""
+        year=new_year, comidas=[Comida(momento=m.id) for m in MOMENTOS], notas=""
     )
     data.years.append(new_year_plan)
     data.years.sort(key=lambda y: y.year)
