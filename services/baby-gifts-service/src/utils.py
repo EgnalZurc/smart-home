@@ -65,6 +65,7 @@ def parse_price(price_str: str) -> float:
             max_price: float = float(numbers[-1])
             return (min_price + max_price) / 2.0
         return float(numbers[0])
-    except ValueError:
-        # Malformed number string (e.g., multiple decimal points)
+    except (ValueError, OverflowError):
+        # ValueError: Malformed number string (e.g., multiple decimal points)
+        # OverflowError: Number too large to represent as float (e.g., 10**400)
         return 0.0

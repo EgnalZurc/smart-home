@@ -21,12 +21,25 @@ from typing import TYPE_CHECKING, Literal
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# Import TelegramNotifier from shared lib
-# The lib path is added to PYTHONPATH in Dockerfile/CI
+# Import TelegramNotifier from shared lib.
+#
+# Path resolution strategy:
+# - Production (Docker): PYTHONPATH includes /app which contains libs/
+# - CI (pytest): PYTHONPATH=src is set, and conftest.py adds the repo root
+# - Local development: May not have libs/ in path, so we fall back to dynamic
+#   path insertion based on the known repo structure (services/<name>/src/).
+#
+# The fallback uses sys.path.insert(0, ...) to prepend the repo root, which
+# allows `from libs.notifications import ...` to resolve. This is intentional
+# rather than using relative imports because:
+# 1. libs/ is a shared library, not part of this service's package
+# 2. The Dockerfile copies libs/ to /app/libs, not into the service directory
+# 3. This pattern is used consistently across all services that use shared libs
 try:
     from libs.notifications import TelegramNotifier
 except ImportError:
-    # Fallback for local development without libs in path
+    # Local development fallback: derive repo root from this file's known location
+    # (/repo/services/baby-gifts-service/src/notifier.py → /repo)
     sys.path.insert(0, str(__file__).replace("\\", "/").split("/services/")[0])
     from libs.notifications import TelegramNotifier
 
