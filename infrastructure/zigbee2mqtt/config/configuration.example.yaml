@@ -33,7 +33,14 @@ mqtt:
   # Generate password: docker exec mosquitto mosquitto_passwd -b /mosquitto/config/passwd zigbee2mqtt <password>
   # ──────────────────────────────────────────────────────────────────────────
   user: zigbee2mqtt
-  password: CHANGE_ME  # Set the real password here after generating it
+  # ⚠️ WARNING: CHANGE_ME is a placeholder - deployment will fail without a real password!
+  # Steps to set up MQTT authentication:
+  #   1. Deploy mosquitto first (docker compose up -d mosquitto)
+  #   2. Generate password: docker exec mosquitto mosquitto_passwd -b /mosquitto/config/passwd zigbee2mqtt YOUR_PASSWORD
+  #   3. Replace CHANGE_ME below with YOUR_PASSWORD
+  #   4. Restart zigbee2mqtt: docker compose restart zigbee2mqtt
+  # VALIDATION: If you see "CHANGE_ME" in production, authentication is NOT configured!
+  password: CHANGE_ME
 
 serial:
   port: tcp://host.docker.internal:8282
@@ -46,12 +53,26 @@ frontend:
   # the frontend directly if firewall/Docker network is misconfigured.
   host: 127.0.0.1
   port: 8081
-  # Authentication token - defense-in-depth even behind nginx reverse proxy.
-  # Reads from Z2M_FRONTEND_PASSWORD env var (passed via docker-compose).
-  # Generate with: openssl rand -hex 32
-  # NOTE: If Z2M_FRONTEND_PASSWORD is empty/unset, frontend has no token
-  # protection. This is ACCEPTED RISK - see docs/SECURITY_FIXES.md
-  # (nginx auth_request still protects the /zigbee/ path).
+  # ──────────────────────────────────────────────────────────────────────────
+  # DUAL-LAYER AUTHENTICATION DESIGN
+  # ──────────────────────────────────────────────────────────────────────────
+  # Layer 1 (REQUIRED): nginx auth_request on /zigbee/ path
+  #   - Configured in infrastructure/nginx/conf.d/smart-home.conf
+  #   - Validates dashboard session token before proxying to zigbee2mqtt
+  #   - This is the PRIMARY authentication gate - always active
+  #
+  # Layer 2 (OPTIONAL): Frontend auth_token (defense-in-depth)
+  #   - Reads from Z2M_FRONTEND_PASSWORD env var (set in docker-compose.prod.yml)
+  #   - Generate with: openssl rand -hex 32
+  #   - Provides additional protection if nginx misconfiguration occurs
+  #
+  # ACCEPTED RISK: If Z2M_FRONTEND_PASSWORD env var is empty/unset, Layer 2
+  # is inactive. This is acceptable because:
+  #   - Layer 1 (nginx auth_request) is ALWAYS enforced
+  #   - Frontend binds to 127.0.0.1 (not directly accessible)
+  #   - Network is Tailscale-only (no public internet exposure)
+  # See docs/SECURITY_FIXES.md for full risk assessment.
+  # ──────────────────────────────────────────────────────────────────────────
   auth_token: '!env Z2M_FRONTEND_PASSWORD'
 
 advanced:
