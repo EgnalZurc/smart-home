@@ -1,17 +1,21 @@
 """Pytest configuration for presence-service.
 
-Ensures the shared ``smart_home_common`` library is importable when the service
-is tested in isolation (CI runs ``PYTHONPATH=src`` from the service directory;
-the shared lib lives at ``../../libs/smart_home_common/src``).
+Ensures the service source and shared ``smart_home_common`` library are
+importable when running tests in isolation (CI runs from the service directory).
 """
 
 import sys
 from pathlib import Path
 
-_SERVICE_ROOT = Path(__file__).resolve().parents[1]
-_REPO_ROOT = _SERVICE_ROOT.parents[1]
-_COMMON_SRC = _REPO_ROOT / "libs" / "smart_home_common" / "src"
+# Service root is the parent of this tests/ directory
+_SERVICE_ROOT: Path = Path(__file__).resolve().parent.parent
+_SRC_PATH: Path = _SERVICE_ROOT / "src"
 
-for p in (str(_SERVICE_ROOT / "src"), str(_COMMON_SRC)):
-    if p not in sys.path:
-        sys.path.insert(0, p)
+# Shared library lives at repo_root/libs/smart_home_common/src
+_COMMON_SRC: Path = _SERVICE_ROOT.parent.parent / "libs" / "smart_home_common" / "src"
+
+# Add paths if not already present (idempotent)
+for path in (_SRC_PATH, _COMMON_SRC):
+    path_str: str = str(path)
+    if path_str not in sys.path:
+        sys.path.insert(0, path_str)

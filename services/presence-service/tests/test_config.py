@@ -1,15 +1,12 @@
 """Tests for configuration validation, especially MQTT topic security."""
 
 import pytest
-from config import validate_mqtt_topic
+from config import VALID_ROUTER_MODES, validate_mqtt_topic
 
 
 class TestMqttTopicValidation:
     """MQTT topic validation to prevent topic injection attacks."""
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Valid topics (no wildcards)
-    # ─────────────────────────────────────────────────────────────────────────
     @pytest.mark.parametrize(
         "topic",
         [
@@ -25,9 +22,6 @@ class TestMqttTopicValidation:
         """Valid topics with alphanumeric, slashes, underscores, hyphens pass."""
         assert validate_mqtt_topic(topic, allow_wildcards=False) == topic
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Invalid characters (always rejected)
-    # ─────────────────────────────────────────────────────────────────────────
     @pytest.mark.parametrize(
         "topic",
         [
@@ -48,9 +42,6 @@ class TestMqttTopicValidation:
         with pytest.raises(ValueError, match="invalid characters"):
             validate_mqtt_topic(topic, allow_wildcards=False)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Wildcards rejected when allow_wildcards=False (publish topics)
-    # ─────────────────────────────────────────────────────────────────────────
     @pytest.mark.parametrize(
         "topic",
         [
@@ -67,9 +58,6 @@ class TestMqttTopicValidation:
         with pytest.raises(ValueError, match="wildcards"):
             validate_mqtt_topic(topic, allow_wildcards=False)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Wildcards allowed when allow_wildcards=True (subscription topics)
-    # ─────────────────────────────────────────────────────────────────────────
     @pytest.mark.parametrize(
         "topic",
         [
@@ -86,9 +74,6 @@ class TestMqttTopicValidation:
         """Wildcards are allowed for subscription topics."""
         assert validate_mqtt_topic(topic, allow_wildcards=True) == topic
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Edge cases
-    # ─────────────────────────────────────────────────────────────────────────
     def test_empty_topic_rejected(self) -> None:
         """Empty topics are rejected."""
         with pytest.raises(ValueError, match="cannot be empty"):
@@ -107,3 +92,40 @@ class TestMqttTopicValidation:
             validate_mqtt_topic("home/sensors/", allow_wildcards=False)
             == "home/sensors/"
         )
+
+
+class TestRouterModeValidation:
+    """ROUTER_MODE validation to prevent invalid router polling strategies."""
+
+    def test_valid_router_modes_constant(self) -> None:
+        """VALID_ROUTER_MODES contains expected modes."""
+        assert "arpsweep" in VALID_ROUTER_MODES
+        assert "openwrt_ssh" in VALID_ROUTER_MODES
+        assert "fritzbox" in VALID_ROUTER_MODES
+        assert "mikrotik" in VALID_ROUTER_MODES
+        assert len(VALID_ROUTER_MODES) == 4
+
+    def test_invalid_router_mode_raises(self) -> None:
+        """Invalid ROUTER_MODE raises ValueError from validation function."""
+        import importlib
+        import sys
+
+        if "config" in sys.modules:
+            del sys.modules["config"]
+        cfg = importlib.import_module("config")
+
+        with pytest.raises(ValueError, match="ROUTER_MODE must be one of"):
+            cfg._validate_router_mode("invalid_mode")
+
+    def test_valid_router_modes_accepted_by_validator(self) -> None:
+        """Valid ROUTER_MODE values are accepted by the validator."""
+        import importlib
+        import sys
+
+        if "config" in sys.modules:
+            del sys.modules["config"]
+        cfg = importlib.import_module("config")
+
+        for mode in ("arpsweep", "openwrt_ssh", "fritzbox", "mikrotik"):
+            result = cfg._validate_router_mode(mode)
+            assert result == mode

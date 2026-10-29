@@ -32,7 +32,12 @@ __all__ = [
 ]
 
 # ── Constants ────────────────────────────────────────────────────────────────
-MAC_HASH_LENGTH: int = 16  # Truncated SHA-256 hex chars (64 bits)
+# MAC_HASH_LENGTH: Number of hex characters to use from SHA-256 hash of MAC.
+# 16 hex chars = 64 bits of entropy, which provides:
+#   - Collision probability ~1 in 2^32 (birthday paradox) for household scale
+#   - Irreversible pseudonymization (cannot recover original MAC)
+#   - Compact storage while maintaining sufficient uniqueness
+MAC_HASH_LENGTH: int = 16  # 16 hex chars = 64 bits of entropy
 MAX_PERSON_ID_LENGTH: int = 64  # Maximum length for person_id field
 
 # ── PII Pseudonymization ─────────────────────────────────────────────────────

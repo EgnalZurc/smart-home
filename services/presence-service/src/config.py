@@ -53,6 +53,7 @@ __all__ = [
     "SLEEP_ZONE",
     # Router access
     "ROUTER_MODE",
+    "VALID_ROUTER_MODES",
     "ROUTER_HOST",
     "ROUTER_USER",
     "ROUTER_PASSWORD",
@@ -214,8 +215,23 @@ SLEEP_ZONE: str = os.environ.get("PRESENCE_SLEEP_ZONE", "bedroom")
 # This is an accepted risk - the container is isolated and only accessible via Tailscale.
 # Prefer SSH-based modes (openwrt_ssh, fritzbox, mikrotik) when available, as they
 # don't require elevated network privileges.
-# Available modes: arpsweep | openwrt_ssh | fritzbox | mikrotik
-ROUTER_MODE: str = os.environ.get("PRESENCE_ROUTER_MODE", "arpsweep")
+VALID_ROUTER_MODES: frozenset[str] = frozenset(
+    {"arpsweep", "openwrt_ssh", "fritzbox", "mikrotik"}
+)
+
+
+def _validate_router_mode(value: str) -> str:
+    """Validate ROUTER_MODE is one of the supported router polling strategies."""
+    if value not in VALID_ROUTER_MODES:
+        raise ValueError(
+            f"ROUTER_MODE must be one of {sorted(VALID_ROUTER_MODES)}: got {value!r}"
+        )
+    return value
+
+
+ROUTER_MODE: str = _validate_router_mode(
+    os.environ.get("PRESENCE_ROUTER_MODE", "arpsweep")
+)
 ROUTER_HOST: str = _validate_router_host(
     os.environ.get("PRESENCE_ROUTER_HOST", "192.168.1.1")
 )

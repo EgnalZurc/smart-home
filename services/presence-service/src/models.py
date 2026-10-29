@@ -94,7 +94,13 @@ class Zone(BaseModel):
     id: str = Field(..., description="Zone slug, e.g. 'bedroom'")
     sensors: list[str] = Field(
         default_factory=list,
-        description="zigbee2mqtt friendly names of sensors in this zone",
+        description=(
+            "zigbee2mqtt friendly names of sensors in this zone. "
+            "Format: free-form strings matching the sensor's friendly_name in "
+            "zigbee2mqtt (e.g., 'motion_dormitorio', 'pir_hallway'). "
+            "No validation is performed at model level; the MQTT handler "
+            "matches incoming topic names against these values."
+        ),
     )
 
 
@@ -123,4 +129,13 @@ class PresenceEvent(BaseModel):
     from_state: PresenceState
     to_state: PresenceState
     confidence: float = Field(0.0, description="Confidence at transition time")
-    source: str = Field("", description="Source that triggered the transition")
+    source: str = Field(
+        "",
+        description=(
+            "Free-form string identifying what triggered this transition. "
+            "Common values: 'router', 'ble', 'motion', 'manual', 'engine'. "
+            "Not constrained to Source enum because transitions can be triggered "
+            "by multiple sources combined or by administrative actions. "
+            "Empty string indicates source not recorded (legacy events)."
+        ),
+    )
