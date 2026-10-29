@@ -39,7 +39,13 @@ MAX_CONSUMPTION_PERIODS: int = 1000  # Maximum periods for consumption_by_period
 MAX_RECENT_ALERTS: int = 500  # Maximum alerts for recent_alerts
 DECEMBER: int = 12  # Month number for year wrap-around in _advance_period
 
-__all__ = ["EnergyStore", "VALID_PERIODS"]
+__all__ = [
+    "DECEMBER",
+    "EnergyStore",
+    "MAX_CONSUMPTION_PERIODS",
+    "MAX_RECENT_ALERTS",
+    "VALID_PERIODS",
+]
 
 try:
     from smart_home_common.sqlite_helpers import SqliteHelper
