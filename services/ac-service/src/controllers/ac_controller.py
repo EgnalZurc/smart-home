@@ -599,6 +599,8 @@ class ACController:
                 # Known recoverable errors: network issues, sensor data parsing,
                 # state access errors, MELCloud API failures.
                 # Log and continue to keep the control loop alive.
+                # Log message in Spanish for consistency with existing logs and
+                # to match the dashboard UI language (user-facing service).
                 logger.exception("Error en loop de control: %s", e)
 
             time.sleep(self.config.loop_interval)

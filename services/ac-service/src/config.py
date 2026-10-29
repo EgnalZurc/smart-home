@@ -199,7 +199,13 @@ HISTORY_MAX_SIZE: int = 1000
 """Maximum number of history records to keep before trimming."""
 
 HISTORY_TRIM_SIZE: int = 500
-"""Number of history records to keep after trimming."""
+"""Number of history records to keep after trimming.
+
+Set to 500 to balance memory usage (~500 records ≈ 8h at 1 record/min) with
+enough data for the learning/analysis endpoints that need patterns over
+several hours. The trim keeps the newest half when HISTORY_MAX_SIZE is reached,
+preventing unbounded growth while preserving recent operational context.
+"""
 
 EVENT_LOG_MAX_HOURS: int = 720
 """Maximum hours of event log history to return (30 days)."""

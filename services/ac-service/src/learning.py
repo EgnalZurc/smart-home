@@ -29,6 +29,20 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, TypedDict
 
+__all__ = [
+    "ACTIVE_STATES",
+    "MIN_RECORDS_FOR_ANALYSIS",
+    "HourPattern",
+    "SetpointStats",
+    "CorrelationResult",
+    "ActivityStats",
+    "Recommendation",
+    "PatternsDict",
+    "CorrelationsDict",
+    "LearningResult",
+    "analyze_history",
+]
+
 # Controller states that mean the AC is actively producing cold air.
 # "off", "cooldown", "system_off" and "error" are considered inactive.
 ACTIVE_STATES: frozenset[str] = frozenset(
