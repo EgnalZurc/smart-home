@@ -416,11 +416,7 @@ function renderConnectInstructions(d) {
         }).catch(() => {
             el.innerHTML = `
                 <p style="margin-bottom:8px"><strong style="color:#e2e8f0">Conexión por IP:</strong></p>
-                <ol style="padding-left:18px; line-height:2">
-                    <li>Valheim → Unirse → <strong>Añadir servidor</strong></li>
-                    <li>IP: <strong style="color:#a5b4fc">192.168.1.163</strong> · Puerto: <strong style="color:#a5b4fc">2456</strong></li>
-                    <li>Contraseña: la configurada</li>
-                </ol>`;
+                <p style="color:#ef4444;font-size:.8rem">Error al obtener datos de red. Refresca la página.</p>`;
         });
     }
 }
@@ -434,7 +430,10 @@ async function loadConfig() {
         document.getElementById('cfg-save').value        = String(d.save_interval);
         document.getElementById('cfg-crossplay').checked = d.crossplay;
         document.getElementById('cfg-public').checked    = d.server_public;
-    } catch {}
+    } catch (e) {
+        console.error('Failed to load config:', e);
+        toast('❌ Error al cargar configuración');
+    }
 }
 
 async function saveConfig(e) {
