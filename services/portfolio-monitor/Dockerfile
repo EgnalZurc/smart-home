@@ -6,7 +6,7 @@
 # docker build -f services/portfolio-monitor/Dockerfile .
 # ═══════════════════════════════════════════════════════════════════════════════
 
-FROM python:3.12-slim AS builder
+FROM python:3.12.7-slim AS builder
 WORKDIR /build
 COPY services/portfolio-monitor/requirements.txt .
 RUN pip install --user --no-cache-dir --no-compile -r requirements.txt
@@ -14,7 +14,7 @@ RUN pip install --user --no-cache-dir --no-compile -r requirements.txt
 COPY libs/smart_home_common/ /build/smart_home_common/
 RUN pip install --user --no-cache-dir --no-compile /build/smart_home_common
 
-FROM python:3.12-slim
+FROM python:3.12.7-slim
 RUN adduser --disabled-password --gecos '' --uid 1000 appuser
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

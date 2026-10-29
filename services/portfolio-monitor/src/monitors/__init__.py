@@ -4,11 +4,43 @@ Portfolio Monitor — Monitor registry and base classes.
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any
 
 from models import AlertLevel
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared sanitization helpers
+# ─────────────────────────────────────────────────────────────────────────────
+def sanitize_id(
+    value: str | None, max_length: int = 50, default: str = "unknown"
+) -> str:
+    """Sanitize an identifier for safe use in logs and storage.
+
+    Args:
+        value: Raw identifier to sanitize.
+        max_length: Maximum length of the result (default 50).
+        default: Value to return if input is empty or sanitizes to empty.
+
+    Returns:
+        Sanitized identifier with invalid characters removed and
+        length bounded to max_length chars.
+    """
+    if not value:
+        return default
+
+    # Remove any characters that aren't alphanumeric, dash, or underscore
+    safe_id = re.sub(r"[^\w\-]", "", str(value))
+
+    # Truncate to max length if needed
+    if len(safe_id) > max_length:
+        safe_id = safe_id[:max_length]
+
+    # Return default if sanitization removed everything
+    return safe_id if safe_id else default
 
 
 class BaseMonitor(ABC):

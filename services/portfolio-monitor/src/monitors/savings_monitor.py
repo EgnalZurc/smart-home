@@ -6,14 +6,13 @@ Tracks interest from remunerada/deposit accounts.
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime, timezone
 from typing import Any
 
 import config
 from models import AlertLevel, SavingsAnalysis
 
-from . import BaseMonitor, register_monitor
+from . import BaseMonitor, register_monitor, sanitize_id
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -27,28 +26,9 @@ _ACCOUNT_ID_MAX_LENGTH: int = 50
 def _sanitize_account_id(account_id: str | None) -> str:
     """Sanitize an account_id for safe use in logs and storage.
 
-    Args:
-        account_id: Raw account identifier from configuration.
-
-    Returns:
-        Sanitized account_id with invalid characters removed and
-        length bounded to 50 chars. Returns "unknown" if empty.
+    Wrapper around the shared sanitize_id helper with account-specific defaults.
     """
-    if not account_id:
-        return "unknown"
-
-    # Remove any characters that aren't alphanumeric, dash, or underscore
-    safe_id = re.sub(r"[^\w\-]", "", str(account_id))
-
-    # Truncate to max length if needed
-    if len(safe_id) > _ACCOUNT_ID_MAX_LENGTH:
-        safe_id = safe_id[:_ACCOUNT_ID_MAX_LENGTH]
-
-    # Return "unknown" if sanitization removed everything
-    if not safe_id:
-        return "unknown"
-
-    return safe_id
+    return sanitize_id(account_id, max_length=_ACCOUNT_ID_MAX_LENGTH)
 
 
 def calculate_interest(balance: float, apy: float) -> tuple[float, float]:

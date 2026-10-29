@@ -3,7 +3,9 @@ Portfolio Monitor Ã¢â‚¬â€ Configuration loader.
 Loads settings from TOML file and exposes typed configuration.
 """
 
+import logging
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -199,6 +201,63 @@ def _build_etf_thresholds(settings: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Crypto Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+_logger = logging.getLogger(__name__)
+
+# CoinGecko IDs: lowercase alphanumeric with hyphens, 1-100 chars
+# Examples: bitcoin, ethereum, binancecoin, matic-network, shiba-inu
+_COINGECKO_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9\-]{0,99}$")
+
+
+def _validate_coingecko_id(coingecko_id: str) -> bool:
+    """Validate that a coingecko_id matches expected format.
+
+    CoinGecko IDs are lowercase strings with alphanumeric characters and
+    hyphens, typically 1-100 characters. Examples: bitcoin, ethereum,
+    matic-network, shiba-inu.
+
+    Args:
+        coingecko_id: The CoinGecko API identifier to validate.
+
+    Returns:
+        True if the ID matches the expected format, False otherwise.
+    """
+    if not coingecko_id or not isinstance(coingecko_id, str):
+        return False
+    return bool(_COINGECKO_ID_PATTERN.match(coingecko_id))
+
+
+def _build_crypto_positions(settings: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build crypto positions list with validation.
+
+    Validates coingecko_id format for each position and logs warnings
+    for invalid IDs.
+
+    Args:
+        settings: The raw settings dictionary loaded from TOML.
+
+    Returns:
+        List of crypto position dictionaries with validated coingecko_ids.
+    """
+    raw_positions = _get(settings, "crypto.positions", [])
+    positions = []
+
+    for pos in raw_positions:
+        coingecko_id = pos.get("coingecko_id", "")
+        if coingecko_id and not _validate_coingecko_id(coingecko_id):
+            _logger.warning(
+                "Invalid coingecko_id format '%s' for position %s — "
+                "expected lowercase alphanumeric with hyphens",
+                coingecko_id,
+                pos.get("symbol", "unknown"),
+            )
+        positions.append(pos)
+
+    return positions
+
+
 def _build_crypto_thresholds(settings: dict[str, Any]) -> dict[str, Any]:
     """Build the crypto signal thresholds from raw settings.
 
@@ -270,7 +329,7 @@ ETF_PORTFOLIO: dict[str, dict[str, Any]] = _build_etf_portfolio(_S)
 ETF_FUND_IDS: list[str] = list(ETF_PORTFOLIO.keys())
 ETF_PLAN: dict[str, Any] = _build_etf_plan(_S)
 ETF_THRESHOLDS: dict[str, Any] = _build_etf_thresholds(_S)
-CRYPTO_POSITIONS: list[dict[str, Any]] = _get(_S, "crypto.positions", [])
+CRYPTO_POSITIONS: list[dict[str, Any]] = _build_crypto_positions(_S)
 CRYPTO_THRESHOLDS: dict[str, Any] = _build_crypto_thresholds(_S)
 SAVINGS_ACCOUNTS: list[dict[str, Any]] = _get(_S, "savings.accounts", [])
 DEFI_POSITIONS: list[dict[str, Any]] = _get(_S, "defi", [])
@@ -355,7 +414,7 @@ def reload_config() -> dict[str, Any]:
     ETF_FUND_IDS = list(ETF_PORTFOLIO.keys())
     ETF_PLAN = _build_etf_plan(_S)
     ETF_THRESHOLDS = _build_etf_thresholds(_S)
-    CRYPTO_POSITIONS = _get(_S, "crypto.positions", [])
+    CRYPTO_POSITIONS = _build_crypto_positions(_S)
     CRYPTO_THRESHOLDS = _build_crypto_thresholds(_S)
     SAVINGS_ACCOUNTS = _get(_S, "savings.accounts", [])
     DEFI_POSITIONS = _get(_S, "defi", [])
