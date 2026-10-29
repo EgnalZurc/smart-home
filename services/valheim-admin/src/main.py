@@ -33,10 +33,16 @@ Example:
         uvicorn main:app --host 0.0.0.0 --port 8080
 """
 
+__all__ = [
+    "app",
+    "ConfigUpdateRequest",
+    "health",
+    "health_ready",
+]
+
 import logging
 import os
 import re
-import shlex
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -133,37 +139,6 @@ _WORLD_NAME_RE = re.compile(WORLD_NAME_PATTERN)
 _SERVER_NAME_RE = re.compile(SERVER_NAME_PATTERN)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Utility Functions
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-def _sanitize_shell_arg(arg: str) -> str:
-    """Sanitize an argument for safe shell command construction.
-
-    Uses shlex.quote to properly escape special characters that could be
-    interpreted by the shell.
-
-    Note:
-        valheim-admin is a proxy service and does not execute shell commands
-        directly. This utility is provided for consistency with other services
-        and potential future use.
-
-    Args:
-        arg: The argument string to sanitize.
-
-    Returns:
-        The shell-escaped argument string.
-
-    Example:
-        >>> _sanitize_shell_arg("hello world")
-        "'hello world'"
-        >>> _sanitize_shell_arg("test; rm -rf /")
-        "'test; rm -rf /'"
-    """
-    return shlex.quote(arg)
-
-
 def _check_rate_limit(request: Request) -> None:
     """Check if the request exceeds the rate limit for server control.
 
@@ -183,7 +158,14 @@ def _check_rate_limit(request: Request) -> None:
     client_ip = request.client.host if request.client else "unknown"
     if not server_control_limiter.is_allowed(client_ip):
         status = server_control_limiter.get_status(client_ip)
-        logger.warning("Rate limit exceeded for IP: %s", client_ip)
+        logger.warning(
+            "Rate limit exceeded for IP %s on %s %s (remaining=%d, resets_at=%s)",
+            client_ip,
+            request.method,
+            request.url.path,
+            status.remaining,
+            status.reset_at.isoformat(),
+        )
         raise HTTPException(
             status_code=429,
             detail="Too many requests. Try again later.",
@@ -244,7 +226,7 @@ async def security_headers_middleware(
     Returns:
         The HTTP response with security headers added.
     """
-    response = await call_next(request)
+    response: Response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Content-Security-Policy"] = (
@@ -466,8 +448,10 @@ async def health_ready() -> dict[str, Any]:
         }
     except (httpx.ConnectError, httpx.TimeoutException) as e:
         logger.debug("health_ready: pc-agent connection failed: %s", e)
-    except HTTPException as e:
-        logger.debug("health_ready: pc-agent returned HTTP error: %s", e.status_code)
+    except httpx.HTTPStatusError as e:
+        logger.debug(
+            "health_ready: pc-agent returned HTTP error: %s", e.response.status_code
+        )
 
     raise HTTPException(
         status_code=503,
