@@ -397,7 +397,9 @@ class CasitaScheduler:
                     )
                     new_errors.append(error)
                 except Exception as e:
-                    # Fallback for unexpected errors - record and continue
+                    # Fallback for unexpected scraper errors (HTML parsing, JSON
+                    # decode, unexpected API responses). Intentional: one zone
+                    # failure should not stop the entire scraping run.
                     err_msg = str(e)
                     logger.error(
                         "[casita] Error inesperado %s zona %s: %s",
@@ -430,7 +432,8 @@ class CasitaScheduler:
                         )
                     )
                 except Exception as e:
-                    # Fallback for unexpected errors - record and continue
+                    # Fallback for unexpected Apify API errors. Intentional: Apify
+                    # failure should not stop scraping other zones/portals.
                     err_msg = str(e)
                     logger.error(
                         "[casita] Error inesperado apify zona %s: %s", zone_id, err_msg
@@ -601,7 +604,8 @@ class CasitaScheduler:
             logger.error("[casita] Error en check Gmail: %s", e)
             return
         except Exception as e:
-            # Fallback for unexpected errors
+            # Fallback for unexpected errors (SSL issues, encoding problems, etc.).
+            # Intentional: Gmail check failure should not crash the scheduler loop.
             logger.error("[casita] Error inesperado en check Gmail: %s", e)
             return
         if errors:
@@ -728,7 +732,8 @@ class CasitaScheduler:
             logger.error("[casita] Error en check Fotocasa: %s", e)
             return
         except Exception as e:
-            # Fallback for unexpected errors
+            # Fallback for unexpected errors (SSL issues, encoding problems, etc.).
+            # Intentional: Fotocasa check failure should not crash the scheduler loop.
             logger.error("[casita] Error inesperado en check Fotocasa: %s", e)
             return
 
@@ -920,7 +925,8 @@ class CasitaScheduler:
         ) as e:
             logger.error("[casita] Error en resumen semanal: %s", e)
         except Exception as e:
-            # Fallback for unexpected errors
+            # Fallback for unexpected errors. Intentional: weekly summary failure
+            # is non-critical and should not crash the scheduler loop.
             logger.error("[casita] Error inesperado en resumen semanal: %s", e)
 
     # ------------------------------------------------------------------
