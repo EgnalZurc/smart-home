@@ -2,6 +2,15 @@
 """
 OAuth2 setup script for Google Calendar API.
 
+SECURITY AUDIT NOTE (2026-10-29):
+This script is a ONE-TIME manual setup utility, NOT part of the production runtime.
+It is designed to run locally on a trusted machine with browser access.
+Security considerations:
+- Credentials are stored to disk (token_output_path) - ensure appropriate file perms
+- The OAuth callback runs a local HTTP server (not HTTPS) - acceptable for localhost
+- Token output is PLAINTEXT - encrypt before deploying to production
+- This script should NOT be included in the Docker image or production environment
+
 This script runs ONCE manually to generate the initial OAuth token for the
 calendar-service. It opens a browser for the user to authorize access, then
 saves the credentials to a JSON file.

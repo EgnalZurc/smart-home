@@ -26,6 +26,11 @@ COPY --chown=appuser:appuser services/calendar-service/src/ .
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8014
+# HEALTHCHECK uses python3 instead of curl because:
+# 1. python:3.12-slim doesn't include curl (saves ~5MB image size)
+# 2. Python is already present (it's the runtime)
+# 3. urllib.request is part of the stdlib, no extra deps needed
+# Using curl would require: apt-get update && apt-get install -y curl
 HEALTHCHECK --interval=60s --timeout=5s --start-period=30s --retries=3 \
     CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8014/health', timeout=3)"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8014"]

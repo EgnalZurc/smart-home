@@ -41,6 +41,8 @@ __all__ = [
 
 # â”€â”€ Logging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+# Log level configurable via LOG_LEVEL env var. Valid: DEBUG, INFO, WARNING,
+# ERROR, CRITICAL (case-insensitive). DEBUG is verbose; INFO for production.
 
 # â”€â”€ Service â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 SERVICE_NAME = "calendar-service"
@@ -96,6 +98,8 @@ UTC_TZ = ZoneInfo("UTC")
 CALENDAR_SEED = os.environ.get("CALENDAR_SEED", "")
 
 # â”€â”€ HTTP timeouts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Default 10s is sufficient for most Google API calls. Increase to 30s if on a
+# slow/high-latency network. Configurable via CALENDAR_HTTP_TIMEOUT_S env var.
 HTTP_TIMEOUT_S = float(os.environ.get("CALENDAR_HTTP_TIMEOUT_S", "10.0"))
 
 # â”€â”€ API authentication â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
