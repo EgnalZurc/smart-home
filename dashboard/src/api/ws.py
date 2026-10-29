@@ -219,6 +219,11 @@ def _validate_device_token(websocket: WebSocket) -> str | None:
     address associated with device tokens for the user. This prevents a stolen
     device token from being used from an unrecognized location.
 
+    Additionally, when a token is rotated, the new token's IP address is updated
+    to match the current client IP if different from the stored IP. This ensures
+    IP tracking persists through rotations while still allowing legitimate IP
+    changes (e.g., user's home IP changes).
+
     Returns:
         The authenticated username if valid, None otherwise.
     """
@@ -250,6 +255,24 @@ def _validate_device_token(websocket: WebSocket) -> str | None:
             client_ip,
         )
         return None
+
+    # Update IP address on rotation if it changed (IP tracking persistence)
+    # This happens when verify_and_rotate succeeded and returned a new cookie value
+    if result.new_cookie_value and client_ip != UNKNOWN_IP:
+        try:
+            auth_devices.update_device_ip(result.username, client_ip)
+            logger.debug(
+                "Updated device IP for user %r to %s on token rotation",
+                result.username,
+                client_ip,
+            )
+        except (OSError, ValueError) as exc:
+            # Non-fatal: IP update failure shouldn't block authentication
+            logger.warning(
+                "Failed to update device IP for user %r: %s",
+                result.username,
+                exc,
+            )
 
     logger.debug(
         "WebSocket authenticated via device token for user %r (IP: %s)",

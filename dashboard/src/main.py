@@ -413,9 +413,44 @@ app.include_router(routes.router)
 # UI ROUTES - These serve HTML pages, NOT included in Swagger
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Template cache: stores raw file content to avoid reading from disk on every request.
+# Key: filename, Value: (content, mtime). Content is re-read if file mtime changes.
+_template_cache: dict[str, tuple[str, float]] = {}
+
+
+def _get_cached_template(filename: str) -> str:
+    """Get template content from cache, refreshing if file changed.
+
+    Caches the raw HTML content in memory to avoid synchronous file I/O on
+    every request. The cache is invalidated when the file's mtime changes,
+    so updates are picked up automatically on the next request after a deploy.
+
+    Args:
+        filename: Name of the HTML file in the static directory.
+
+    Returns:
+        The raw HTML content of the template file.
+    """
+    template_path = Path(__file__).parent / "static" / filename
+    current_mtime = template_path.stat().st_mtime
+
+    cached = _template_cache.get(filename)
+    if cached is not None:
+        content, cached_mtime = cached
+        if cached_mtime == current_mtime:
+            return content
+
+    # Read and cache the template
+    content = template_path.read_text(encoding="utf-8")
+    _template_cache[filename] = (content, current_mtime)
+    return content
+
 
 def _serve_html(filename: str, request: Request) -> HTMLResponse:
     """Serve an HTML file with no-cache headers and CSP nonce injection.
+
+    Uses in-memory caching to avoid reading the template from disk on every
+    request. The cache is invalidated when the file's mtime changes.
 
     Injects the CSP nonce (from CSPNonceMiddleware) into inline <style> and
     <script> tags so they pass the Content-Security-Policy checks.
@@ -427,8 +462,7 @@ def _serve_html(filename: str, request: Request) -> HTMLResponse:
     Returns:
         HTMLResponse with injected nonce and cache-control headers.
     """
-    frontend_path = Path(__file__).parent / "static" / filename
-    content = frontend_path.read_text(encoding="utf-8")
+    content = _get_cached_template(filename)
 
     # Inject version comment for cache busting
     content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")

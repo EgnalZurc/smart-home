@@ -186,7 +186,9 @@ async def set_pc_mode(mode: str, request: Request):
 # Wake: Sends Wake-on-LAN magic packet using the wakeonlan Python library.
 
 # MAC address of EgnalPC's WiFi adapter (Intel AX200)
-EGNALPC_MAC = os.environ.get("EGNALPC_MAC", "A4:B1:C1:92:76:B0")
+# Configurable via EGNALPC_MAC environment variable (see api/constants.py).
+from api.constants import EGNALPC_MAC
+
 # Broadcast address of the physical LAN subnet (NOT 255.255.255.255)
 # Required because the container is on a Docker bridge network (172.18.x.x)
 # and global broadcast doesn't reach the physical network.
