@@ -1,5 +1,10 @@
 """Unit tests for FastAPI endpoints."""
 
+from datetime import datetime
+
+# Helper: current year for dynamic test assertions
+CURRENT_YEAR = datetime.now().year
+
 
 class TestHealthEndpoints:
     """Tests for health check endpoints."""
@@ -128,15 +133,16 @@ class TestYearEndpoints:
         ]
 
         response = client.post(
-            "/api/vacaciones/year/2026", json={"comidas": comidas, "notas": "Year note"}
+            f"/api/vacaciones/year/{CURRENT_YEAR}",
+            json={"comidas": comidas, "notas": "Year note"},
         )
 
         assert response.status_code == 200
 
         # Verify
         data = client.get("/api/vacaciones").json()
-        year_2026 = next(y for y in data["years"] if y["year"] == 2026)
-        assert year_2026["notas"] == "Year note"
+        year_data = next(y for y in data["years"] if y["year"] == CURRENT_YEAR)
+        assert year_data["notas"] == "Year note"
 
     def test_delete_year_removes_highest(self, client):
         """DELETE /api/vacaciones/year/{year} should remove the highest year."""
@@ -160,13 +166,13 @@ class TestYearEndpoints:
         client.post("/api/vacaciones/year")
 
         # Try to delete the lower year
-        response = client.delete("/api/vacaciones/year/2026")
+        response = client.delete(f"/api/vacaciones/year/{CURRENT_YEAR}")
 
         assert response.status_code == 400
 
     def test_delete_only_year_fails(self, client):
         """DELETE /api/vacaciones/year/{year} should fail for the only year."""
-        response = client.delete("/api/vacaciones/year/2026")
+        response = client.delete(f"/api/vacaciones/year/{CURRENT_YEAR}")
 
         assert response.status_code == 400
 
@@ -200,16 +206,16 @@ class TestDefaultData:
         data = response.json()
 
         assert len(data["years"]) >= 1
-        assert data["years"][0]["year"] == 2026
+        assert data["years"][0]["year"] == CURRENT_YEAR
 
     def test_default_year_has_all_momentos(self, client):
         """Default year should have comidas for all momentos."""
         response = client.get("/api/vacaciones")
         data = response.json()
 
-        year_2026 = next(y for y in data["years"] if y["year"] == 2026)
+        year_data = next(y for y in data["years"] if y["year"] == CURRENT_YEAR)
         momentos_ids = [m["id"] for m in data["momentos"]]
-        comidas_momentos = [c["momento"] for c in year_2026["comidas"]]
+        comidas_momentos = [c["momento"] for c in year_data["comidas"]]
 
         for momento_id in momentos_ids:
             assert momento_id in comidas_momentos
@@ -571,7 +577,7 @@ class TestCSRFProtection:
 
             # Origin c.com should be blocked
             response = client.delete(
-                "/api/vacaciones/year/2025",
+                f"/api/vacaciones/year/{CURRENT_YEAR}",
                 headers={"Origin": "https://c.com"},
             )
             assert response.status_code == 403
@@ -638,7 +644,7 @@ class TestCSRFProtection:
             )
 
             # DELETE without Origin should fail
-            response = client.delete("/api/vacaciones/year/2025")
+            response = client.delete(f"/api/vacaciones/year/{CURRENT_YEAR}")
             assert response.status_code == 403
         finally:
             os.environ["ALLOWED_ORIGINS"] = "*"
