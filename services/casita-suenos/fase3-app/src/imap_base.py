@@ -34,6 +34,27 @@ import re
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    # Constants
+    "IMAP_HOST",
+    "IMAP_PORT",
+    "SEARCH_FOLDERS",
+    "TRASH_FOLDERS",
+    "PRICE_PATTERN",
+    "ROOMS_PATTERN",
+    "SIZE_PATTERN",
+    "PRICE_MIN",
+    "PRICE_MAX",
+    # Functions
+    "sanitize_imap_error",
+    "connect_imap",
+    "decode_subject",
+    "get_body",
+    "parse_price_value",
+    "collect_messages",
+    "delete_processed",
+]
+
 # --- Conexión --------------------------------------------------------------
 IMAP_HOST = "imap.gmail.com"
 IMAP_PORT = 993
@@ -50,12 +71,15 @@ SEARCH_FOLDERS = [
 
 # Carpetas de descarte: aquí sólo se buscan los no leídos (UNSEEN) para no
 # reprocesar, y al "procesar" no se borra el email sino que se marca \\Seen.
-TRASH_FOLDERS = {
-    "[Gmail]/Papelera",
-    "[Gmail]/Spam",
-    "[Gmail]/Trash",
-    "[Gmail]/Junk",
-}
+# Using frozenset for immutability (these folders should never change at runtime).
+TRASH_FOLDERS: frozenset[str] = frozenset(
+    {
+        "[Gmail]/Papelera",
+        "[Gmail]/Spam",
+        "[Gmail]/Trash",
+        "[Gmail]/Junk",
+    }
+)
 
 # --- Patrones compartidos --------------------------------------------------
 # Precio: "60.000 €", "150.000 &euro;", con separador de miles

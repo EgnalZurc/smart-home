@@ -56,6 +56,13 @@ from imap_base import (
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "EmailType",
+    "IdealistaAlert",
+    "fetch_new_alerts",
+    "delete_processed_emails",
+]
+
 _LOG_PREFIX = "gmail"
 
 # Número de caracteres alrededor de la URL para buscar precio

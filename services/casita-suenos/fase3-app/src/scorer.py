@@ -30,6 +30,10 @@ from models import (
 logger = logging.getLogger(__name__)
 
 ALERT_THRESHOLD = 119.0  # 66% de 180 — umbral radar
+
+# Maximum possible score across all 18 criteria (10 pts each).
+# Note: Also defined in models.ScoreBreakdown.MAX_SCORE for use in dataclass
+# methods. Keep both values synchronized when changing the scoring system.
 MAX_SCORE = 180.0
 
 

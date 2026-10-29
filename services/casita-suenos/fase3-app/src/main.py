@@ -377,14 +377,19 @@ app = FastAPI(
 # ── CSRF Protection via Origin Validation ────────────────────────────────────
 # Allowed origins for CSRF protection. Requests from these origins are trusted.
 # Internal API behind Tailscale VPN - only allow known hosts.
-_ALLOWED_ORIGINS: set[str] = {
-    "https://raspberrypi.tailaa37cd.ts.net",  # Tailscale hostname
-    "http://raspberrypi.local",  # Local network
-    "http://localhost",
-    "http://localhost:8001",
-    "http://127.0.0.1",
-    "http://127.0.0.1:8001",
-}
+# Using frozenset for immutability (security best practice).
+_ALLOWED_ORIGINS: frozenset[str] = frozenset(
+    {
+        "https://raspberrypi.tailaa37cd.ts.net",  # Tailscale hostname
+        "http://raspberrypi.local",  # Local network
+        "http://localhost",
+        "http://localhost:8001",
+        "http://127.0.0.1",
+        "http://127.0.0.1:8001",
+        # Note: Telegram API calls originate from our server, not browsers,
+        # so they don't send Origin headers and are allowed by default.
+    }
+)
 
 
 def _validate_origin(request: Request) -> bool:
@@ -1218,25 +1223,30 @@ def _telegram_polling(db) -> None:
 
     Args:
         db: Database instance for registering chat IDs.
+
+    Note:
+        This thread handles all exceptions to ensure it never crashes.
+        Connection errors are expected (network issues) and logged at debug level.
+        Unexpected errors are logged at warning level for monitoring.
     """
     import httpx
 
-    token = TELEGRAM_BOT_TOKEN
-    offset = 0
-    url = f"https://api.telegram.org/bot{token}/getUpdates"
+    token: str = TELEGRAM_BOT_TOKEN
+    offset: int = 0
+    url: str = f"https://api.telegram.org/bot{token}/getUpdates"
     logger.info("[main] Polling Telegram iniciado")
 
     while True:
         try:
             resp = httpx.get(url, params={"offset": offset, "timeout": 30}, timeout=35)
-            updates = resp.json().get("result", [])
+            updates: list[dict] = resp.json().get("result", [])
             for upd in updates:
                 offset = upd["update_id"] + 1
                 msg = upd.get("message", {})
-                text = msg.get("text", "")
+                text: str = msg.get("text", "")
                 chat = msg.get("chat", {})
-                chat_id = str(chat.get("id", ""))
-                username = chat.get("username", "") or chat.get("first_name", "")
+                chat_id: str = str(chat.get("id", ""))
+                username: str = chat.get("username", "") or chat.get("first_name", "")
 
                 if chat_id and text.startswith("/start") and db is not None:
                     db.register_telegram_chat(chat_id, username)
@@ -1275,8 +1285,24 @@ def _telegram_polling(db) -> None:
             logger.debug(
                 "[main] Telegram polling HTTP error: %s", _sanitize_telegram_error(e)
             )
+        except httpx.ConnectError as e:
+            # Network connectivity issues - expected during network changes
+            logger.debug(
+                "[main] Telegram polling connection error: %s",
+                _sanitize_telegram_error(e),
+            )
+        except OSError as e:
+            # Socket-level errors (DNS, connection refused, etc.)
+            logger.debug("[main] Telegram polling OS error: %s", e)
         except (ValueError, KeyError) as e:
             logger.debug("[main] Telegram polling parse error: %s", e)
+        except Exception as e:
+            # Fallback for any unexpected exception - ensure thread never crashes
+            # Log at warning level for monitoring, but continue running
+            logger.warning(
+                "[main] Telegram polling unexpected error: %s",
+                _sanitize_telegram_error(e),
+            )
         time.sleep(1)
 
 
