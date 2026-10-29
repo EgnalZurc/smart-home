@@ -367,3 +367,30 @@ def mark_token_delivered(username: str, user_agent: str) -> None:
             (username, user_agent),
         )
     logger.info("Pending device token delivered to user %r", username)
+
+
+def update_device_ip(username: str, new_ip: str) -> int:
+    """Update IP address for all active device tokens of a user.
+
+    This is called during token rotation to ensure IP tracking persists.
+    When a user's IP changes legitimately (e.g., ISP-assigned IP change,
+    connecting from a different network), this updates the stored IP.
+
+    Args:
+        username: The user whose device IPs to update.
+        new_ip: The new IP address to store.
+
+    Returns:
+        Number of rows updated.
+    """
+    with _db() as conn:
+        cur = conn.execute(
+            "UPDATE device_tokens SET ip_address = ? WHERE username = ?",
+            (new_ip, username),
+        )
+        count = cur.rowcount
+    if count > 0:
+        logger.debug(
+            "Updated IP to %s for %d device(s) of user %r", new_ip, count, username
+        )
+    return count
