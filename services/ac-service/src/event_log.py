@@ -74,6 +74,13 @@ class ACEventLog:
     Thread-safe by construction: every method opens its own short-lived
     connection via :class:`SqliteHelper` (``check_same_thread=False``), so it
     can be called from FastAPI request handlers and background threads alike.
+
+    SQLite Connection Timeout:
+        Uses the default SQLite timeout of 5 seconds, which is appropriate for
+        this use case: all operations are simple INSERTs or SELECTs on indexed
+        columns that complete in milliseconds. The 5-second timeout provides
+        adequate headroom for rare lock contention between the control loop and
+        API handlers without risking indefinite hangs.
     """
 
     db_path: Path

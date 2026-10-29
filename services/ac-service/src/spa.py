@@ -15,6 +15,11 @@ from pathlib import Path
 
 from fastapi.responses import HTMLResponse
 
+__all__ = [
+    "STATIC_DIR",
+    "serve_html",
+]
+
 STATIC_DIR: Path = Path(__file__).parent / "static"
 
 

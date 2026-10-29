@@ -24,5 +24,7 @@ COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 COPY --chown=appuser:appuser services/ac-service/src/ .
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
 USER appuser
+# AC service listens on port 8002. Routed through nginx in production.
+# See docker-compose.prod.yml for port mapping and nginx/conf.d for routing.
 EXPOSE 8002
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002"]

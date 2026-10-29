@@ -33,6 +33,20 @@ import threading
 from collections import deque
 from dataclasses import dataclass
 
+__all__ = [
+    "ACTIVE_STATES",
+    "TARGET_TOLERANCE_C",
+    "MIN_SEGMENT_DELTA_C",
+    "MIN_SEGMENT_SAMPLES",
+    "MIN_SEGMENT_SECONDS",
+    "OUTDOOR_BUCKET_WIDTH_C",
+    "DEFAULT_BUFFER_SIZE",
+    "ThermalSample",
+    "SegmentStats",
+    "ThermalBuffer",
+    "analyze",
+]
+
 # ── Tunables ──────────────────────────────────────────────────────────────────
 
 # AC controller states in which the unit is actively driving the temperature.
