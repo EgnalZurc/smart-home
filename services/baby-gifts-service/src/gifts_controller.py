@@ -46,6 +46,12 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 DB_TIMEOUT_SECONDS: float = 5.0
+
+# Number of random bytes used to generate invitation tokens via secrets.token_urlsafe().
+# token_urlsafe(n) produces ceil(n * 8 / 6) characters (base64url encoding), so:
+# - 24 bytes → 32 characters (24 * 8 / 6 = 32)
+# This provides 192 bits of entropy, which is cryptographically secure for
+# invitation tokens (brute-force infeasible even at billions of attempts/second).
 INVITATION_TOKEN_BYTES: int = 24
 
 _lock: threading.Lock = threading.Lock()
@@ -108,6 +114,19 @@ def _get_db() -> sqlite3.Connection:
     Ensures the database is initialized before returning a connection.
     Uses timeout=5.0 to prevent indefinite blocking on locked database.
     Caller is responsible for closing the connection.
+
+    Note on connection pooling:
+        This service uses a simple single-connection-per-request pattern rather
+        than a connection pool. This is intentional and acceptable because:
+        - Baby gifts is a low-traffic internal service (~10-50 requests/day)
+        - SQLite's file-level locking makes pooling less beneficial than with
+          client-server databases (PostgreSQL, MySQL)
+        - The 5s timeout handles any lock contention from concurrent requests
+        - Simpler code with fewer failure modes for a non-critical service
+
+        If traffic increases significantly (>100 concurrent users), consider:
+        - Switching to PostgreSQL with connection pooling, or
+        - Using SQLite's WAL mode with a thread-local connection cache
     """
     _init_db()
     conn: sqlite3.Connection = sqlite3.connect(str(DB_FILE), timeout=DB_TIMEOUT_SECONDS)
@@ -123,7 +142,10 @@ def _get_db() -> sqlite3.Connection:
 # hex: 8 hex characters (from secrets.token_hex(4)) - optional for legacy
 import re
 
-_GIFT_ID_PATTERN: re.Pattern[str] = re.compile(r"^g_\d{10,}(_[0-9a-f]{8})?$")
+# timestamp: 10-20 digits (seconds or milliseconds since epoch, with upper bound
+# to prevent ReDoS and reject absurd values; 20 digits covers timestamps until
+# year 3169 in milliseconds)
+_GIFT_ID_PATTERN: re.Pattern[str] = re.compile(r"^g_\d{10,20}(_[0-9a-f]{8})?$")
 
 
 def _validate_gift_id(gift_id: str) -> bool:
