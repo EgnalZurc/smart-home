@@ -5,4 +5,8 @@ httpx==0.28.1
 
 # Test dependencies
 pytest==8.3.5
-pytest-asyncio==0.24.0
+# pytest-asyncio 1.x dropped the deprecated event_loop fixture (removed in 1.0.0).
+# This codebase uses asyncio_mode=auto and does not rely on event_loop, so the
+# upgrade is safe. Pinned to 1.4.x for stability; unpinning may pull in breaking
+# changes from future major versions.
+pytest-asyncio==1.4.1

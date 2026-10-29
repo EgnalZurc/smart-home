@@ -555,4 +555,9 @@ async def put_thresholds(
 if __name__ == "__main__":  # pragma: no cover
     import uvicorn
 
+    # Binding to 0.0.0.0 is intentional: the service runs inside a Docker container
+    # where it must accept connections from the host network and other containers.
+    # Network isolation is enforced at the Docker/compose level (internal network +
+    # nginx reverse proxy), not at the bind address. See docs/SECURITY_FIXES.md
+    # "Accepted Risks" for the full rationale.
     uvicorn.run(app, host="0.0.0.0", port=PORT)  # noqa: S104  # nosec B104
