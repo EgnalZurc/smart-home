@@ -24,6 +24,12 @@ USER appuser
 
 EXPOSE 8080
 
+# HEALTHCHECK: Verifies the service is responding on /health endpoint.
+# Uses Python's urllib since curl is not installed in the slim image.
+# - interval: check every 30s
+# - timeout: fail if no response within 5s
+# - retries: mark unhealthy after 3 consecutive failures
+# - start-period: allow 20s for initial startup before counting failures
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=20s \
   CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=3)" || exit 1
 

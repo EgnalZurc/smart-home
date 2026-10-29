@@ -1,4 +1,4 @@
-﻿"""Vacaciones (Christmas Planning) API controller.
+"""Vacaciones (Christmas Planning) API controller.
 
 This module provides the data layer for the Vacaciones service, handling
 persistence of family gathering plans to a JSON file.
@@ -36,40 +36,14 @@ import logging
 import os as _os
 import tempfile
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
 from pathlib import Path
-from typing import Any, NamedTuple, Sequence
-
-# Public API exports for this module
-__all__ = [
-    # Data classes
-    "Persona",
-    "NucleoFamiliar",
-    "Comida",
-    "YearPlan",
-    "VacacionesData",
-    "Momento",
-    # Constants
-    "MOMENTOS",
-    "MAX_NUCLEOS",
-    "MAX_PERSONAS",
-    "MAX_YEARS",
-    "DATA_FILE",
-    # Functions
-    "get_vacaciones_data",
-    "get_config",
-    "save_config",
-    "save_year",
-    "add_year",
-    "delete_year",
-    "is_healthy",
-]
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 DATA_FILE = Path(_os.environ.get("VACACIONES_DATA_FILE", "/app/data/vacaciones.json"))
 
-# Resource limits â€” prevent unbounded growth and cap memory/storage usage.
+# Resource limits — prevent unbounded growth and cap memory/storage usage.
 # MAX_NUCLEOS=20: families rarely have more than 20 distinct gathering groups.
 # MAX_PERSONAS=50: upper bound for extended family members tracked in the app.
 # MAX_YEARS=20: planning horizon; 20 years of history is more than enough.
@@ -217,9 +191,6 @@ class VacacionesData:
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization.
 
-        Returns a deep copy to prevent mutation of internal state through
-        the returned dictionary.
-
         Returns:
             Dictionary with nucleos, personas, and years lists.
         """
@@ -230,79 +201,61 @@ class VacacionesData:
         }
 
 
-# MOMENTOS uses NamedTuple for true immutability (the outer tuple prevents
-# reassigning the sequence, and NamedTuple instances are immutable).
+# MOMENTOS is a tuple (immutable) to prevent accidental modification at runtime.
 # Each momento represents a meal during the Christmas gathering period.
-
-
-class Momento(NamedTuple):
-    """Immutable representation of a meal moment during Christmas."""
-
-    id: str
-    label: str
-    icon: str
-    dia: int
-    tipo: str
-    importante: bool
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
-        return self._asdict()
-
-
-MOMENTOS: tuple[Momento, ...] = (
-    Momento(
-        id="cena_24",
-        label="Cena 24",
-        icon="&#127770;",
-        dia=24,
-        tipo="cena",
-        importante=True,
-    ),
-    Momento(
-        id="comida_25",
-        label="Comida 25",
-        icon="&#9728;&#65039;",
-        dia=25,
-        tipo="comida",
-        importante=True,
-    ),
-    Momento(
-        id="cena_31",
-        label="Cena 31",
-        icon="&#127770;",
-        dia=31,
-        tipo="cena",
-        importante=True,
-    ),
-    Momento(
-        id="comida_1",
-        label="Comida 1",
-        icon="&#9728;&#65039;",
-        dia=1,
-        tipo="comida",
-        importante=True,
-    ),
-    Momento(
-        id="desayuno_6",
-        label="Desayuno 6",
-        icon="&#9728;&#65039;",
-        dia=6,
-        tipo="desayuno",
-        importante=False,
-    ),
-    Momento(
-        id="comida_6",
-        label="Comida 6",
-        icon="&#127869;",
-        dia=6,
-        tipo="comida",
-        importante=False,
-    ),
+MOMENTOS = (
+    {
+        "id": "cena_24",
+        "label": "Cena 24",
+        "icon": "&#127770;",
+        "dia": 24,
+        "tipo": "cena",
+        "importante": True,
+    },
+    {
+        "id": "comida_25",
+        "label": "Comida 25",
+        "icon": "&#9728;&#65039;",
+        "dia": 25,
+        "tipo": "comida",
+        "importante": True,
+    },
+    {
+        "id": "cena_31",
+        "label": "Cena 31",
+        "icon": "&#127770;",
+        "dia": 31,
+        "tipo": "cena",
+        "importante": True,
+    },
+    {
+        "id": "comida_1",
+        "label": "Comida 1",
+        "icon": "&#9728;&#65039;",
+        "dia": 1,
+        "tipo": "comida",
+        "importante": True,
+    },
+    {
+        "id": "desayuno_6",
+        "label": "Desayuno 6",
+        "icon": "&#9728;&#65039;",
+        "dia": 6,
+        "tipo": "desayuno",
+        "importante": False,
+    },
+    {
+        "id": "comida_6",
+        "label": "Comida 6",
+        "icon": "&#127869;",
+        "dia": 6,
+        "tipo": "comida",
+        "importante": False,
+    },
 )
 
 
-def _generate_inicial(nombre: str, existing_iniciales: Sequence[str]) -> str:
+def _generate_inicial(nombre: str, existing_iniciales: list[str]) -> str:
     """Generate a unique initial abbreviation for a person's name.
 
     Tries progressively longer prefixes of the name until finding one
@@ -369,7 +322,7 @@ def _load_data() -> VacacionesData:
         VacacionesData instance with the loaded or default data.
 
     Note:
-        Errors are logged but not raised â€” the service stays usable
+        Errors are logged but not raised — the service stays usable
         with defaults rather than failing completely.
     """
     _ensure_data_dir()
@@ -400,24 +353,20 @@ def _load_data() -> VacacionesData:
             # Corrupt or unreadable data file: log it instead of silently
             # swallowing the error, then fall through to sane defaults so the
             # service stays usable. (A partial/corrupt file can happen after a
-            # crash mid-write â€” see _save_data for the atomic-write fix.)
+            # crash mid-write — see _save_data for the atomic-write fix.)
             logger.error(
-                "Failed to load vacaciones data from %s (%s): %s â€” "
+                "Failed to load vacaciones data from %s (%s): %s — "
                 "falling back to defaults",
                 DATA_FILE,
                 type(e).__name__,
                 e,
             )
-    # Use current year as the default starting year for new installations
-    default_year = datetime.now().year
     return VacacionesData(
         nucleos=[],
         personas=[],
         years=[
             YearPlan(
-                year=default_year,
-                comidas=[Comida(momento=m.id) for m in MOMENTOS],
-                notas="",
+                year=2026, comidas=[Comida(momento=m["id"]) for m in MOMENTOS], notas=""
             )
         ],
     )
@@ -429,7 +378,7 @@ def _save_data(data: VacacionesData) -> None:
     Writes to a temporary file in the same directory, flushes it to
     disk, and atomically renames it over the target with os.replace().
     A crash at any point leaves either the old complete file or the new
-    complete file on disk â€” never a half-written one.
+    complete file on disk — never a half-written one.
 
     Args:
         data: The VacacionesData instance to persist.
@@ -473,8 +422,7 @@ def get_vacaciones_data() -> dict[str, Any]:
         'momentos' reference data.
     """
     data = _load_data()
-    # Serialize MOMENTOS NamedTuples to dicts for JSON compatibility
-    return {**data.to_dict(), "momentos": [m.to_dict() for m in MOMENTOS]}
+    return {**data.to_dict(), "momentos": MOMENTOS}
 
 
 def get_config() -> dict[str, Any]:
@@ -621,11 +569,10 @@ def add_year() -> dict[str, Any]:
     data = _load_data()
     if len(data.years) >= MAX_YEARS:
         return {"status": "error", "message": f"Too many years (max {MAX_YEARS})"}
-    # Use current year - 1 as fallback when no years exist (unlikely edge case)
-    max_year = max(y.year for y in data.years) if data.years else datetime.now().year - 1
+    max_year = max(y.year for y in data.years) if data.years else 2025
     new_year = max_year + 1
     new_year_plan = YearPlan(
-        year=new_year, comidas=[Comida(momento=m.id) for m in MOMENTOS], notas=""
+        year=new_year, comidas=[Comida(momento=m["id"]) for m in MOMENTOS], notas=""
     )
     data.years.append(new_year_plan)
     data.years.sort(key=lambda y: y.year)

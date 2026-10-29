@@ -1,9 +1,4 @@
-﻿"""Unit tests for FastAPI endpoints."""
-
-from datetime import datetime
-
-# Helper: current year for dynamic test assertions (avoids hardcoding years)
-CURRENT_YEAR = datetime.now().year
+"""Unit tests for FastAPI endpoints."""
 
 
 class TestHealthEndpoints:
@@ -133,15 +128,15 @@ class TestYearEndpoints:
         ]
 
         response = client.post(
-            f"/api/vacaciones/year/{CURRENT_YEAR}", json={"comidas": comidas, "notas": "Year note"}
+            "/api/vacaciones/year/2026", json={"comidas": comidas, "notas": "Year note"}
         )
 
         assert response.status_code == 200
 
         # Verify
         data = client.get("/api/vacaciones").json()
-        year_data = next(y for y in data["years"] if y["year"] == CURRENT_YEAR)
-        assert year_data["notas"] == "Year note"
+        year_2026 = next(y for y in data["years"] if y["year"] == 2026)
+        assert year_2026["notas"] == "Year note"
 
     def test_delete_year_removes_highest(self, client):
         """DELETE /api/vacaciones/year/{year} should remove the highest year."""
@@ -165,13 +160,13 @@ class TestYearEndpoints:
         client.post("/api/vacaciones/year")
 
         # Try to delete the lower year
-        response = client.delete(f"/api/vacaciones/year/{CURRENT_YEAR}")
+        response = client.delete("/api/vacaciones/year/2026")
 
         assert response.status_code == 400
 
     def test_delete_only_year_fails(self, client):
         """DELETE /api/vacaciones/year/{year} should fail for the only year."""
-        response = client.delete(f"/api/vacaciones/year/{CURRENT_YEAR}")
+        response = client.delete("/api/vacaciones/year/2026")
 
         assert response.status_code == 400
 
@@ -184,7 +179,7 @@ class TestSPAServing:
 
         The bundled static/vacaciones.html ships with the service, so
         _serve_html should always succeed. A 500 here means the SPA file is
-        missing or unreadable â€” a real failure the suite must not tolerate.
+        missing or unreadable — a real failure the suite must not tolerate.
         """
         response = client.get("/smart-home/vacaciones")
 
@@ -205,16 +200,16 @@ class TestDefaultData:
         data = response.json()
 
         assert len(data["years"]) >= 1
-        assert data["years"][0]["year"] == CURRENT_YEAR
+        assert data["years"][0]["year"] == 2026
 
     def test_default_year_has_all_momentos(self, client):
         """Default year should have comidas for all momentos."""
         response = client.get("/api/vacaciones")
         data = response.json()
 
-        year_data = next(y for y in data["years"] if y["year"] == CURRENT_YEAR)
+        year_2026 = next(y for y in data["years"] if y["year"] == 2026)
         momentos_ids = [m["id"] for m in data["momentos"]]
-        comidas_momentos = [c["momento"] for c in year_data["comidas"]]
+        comidas_momentos = [c["momento"] for c in year_2026["comidas"]]
 
         for momento_id in momentos_ids:
             assert momento_id in comidas_momentos
@@ -576,7 +571,7 @@ class TestCSRFProtection:
 
             # Origin c.com should be blocked
             response = client.delete(
-                f"/api/vacaciones/year/{CURRENT_YEAR}",
+                "/api/vacaciones/year/2025",
                 headers={"Origin": "https://c.com"},
             )
             assert response.status_code == 403
@@ -643,7 +638,7 @@ class TestCSRFProtection:
             )
 
             # DELETE without Origin should fail
-            response = client.delete(f"/api/vacaciones/year/{CURRENT_YEAR}")
+            response = client.delete("/api/vacaciones/year/2025")
             assert response.status_code == 403
         finally:
             os.environ["ALLOWED_ORIGINS"] = "*"

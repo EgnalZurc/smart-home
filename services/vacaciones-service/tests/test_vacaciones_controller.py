@@ -1,11 +1,6 @@
-﻿"""Unit tests for vacaciones_controller module."""
-
-from datetime import datetime
+"""Unit tests for vacaciones_controller module."""
 
 import pytest
-
-# Helper: current year for dynamic test assertions (avoids hardcoding years)
-CURRENT_YEAR = datetime.now().year
 
 
 class TestDataPersistence:
@@ -20,7 +15,7 @@ class TestDataPersistence:
         assert data.nucleos == []
         assert data.personas == []
         assert len(data.years) == 1  # Default year
-        assert data.years[0].year == CURRENT_YEAR
+        assert data.years[0].year == 2026
 
     def test_save_and_load_round_trip(self, tmp_data_file):
         """Data should survive save and load cycle."""
@@ -53,22 +48,22 @@ class TestInicialGeneration:
         """_generate_inicial should use first letter if available."""
         from vacaciones_controller import _generate_inicial
 
-        inicial = _generate_inicial("MarÃ­a", [])
+        inicial = _generate_inicial("María", [])
         assert inicial == "M"
 
     def test_generate_inicial_extends_for_conflict(self, tmp_data_file):
         """_generate_inicial should extend if first letter is taken."""
         from vacaciones_controller import _generate_inicial
 
-        inicial = _generate_inicial("MarÃ­a", ["M"])
+        inicial = _generate_inicial("María", ["M"])
         assert inicial == "MA"
 
     def test_generate_inicial_further_extends(self, tmp_data_file):
         """_generate_inicial should keep extending for more conflicts."""
         from vacaciones_controller import _generate_inicial
 
-        inicial = _generate_inicial("MarÃ­a", ["M", "MA", "MAR"])
-        assert inicial == "MARÃ"
+        inicial = _generate_inicial("María", ["M", "MA", "MAR"])
+        assert inicial == "MARÍ"
 
     def test_generate_inicial_uses_counter_as_fallback(self, tmp_data_file):
         """_generate_inicial should use counter when name exhausted."""
@@ -181,11 +176,11 @@ class TestYearManagement:
         result = add_year()
 
         assert result["status"] == "ok"
-        assert result["year"] == CURRENT_YEAR + 1  # Default is CURRENT_YEAR, so next is CURRENT_YEAR + 1
+        assert result["year"] == 2027  # Default is 2026, so next is 2027
 
         data = get_vacaciones_data()
         years = [y["year"] for y in data["years"]]
-        assert CURRENT_YEAR + 1 in years
+        assert 2027 in years
 
     def test_add_year_initializes_comidas(self, tmp_data_file):
         """add_year should initialize comidas for the new year."""
@@ -194,7 +189,7 @@ class TestYearManagement:
         add_year()
         data = get_vacaciones_data()
 
-        new_year = next(y for y in data["years"] if y["year"] == CURRENT_YEAR + 1)
+        new_year = next(y for y in data["years"] if y["year"] == 2027)
         assert len(new_year["comidas"]) == len(MOMENTOS)
 
     def test_save_year_updates_existing(self, tmp_data_file):
@@ -209,14 +204,14 @@ class TestYearManagement:
                 "notas": "Test note",
             }
         ]
-        save_year(CURRENT_YEAR, comidas, notas="Year note")
+        save_year(2026, comidas, notas="Year note")
 
         data = get_vacaciones_data()
-        year_data = next(y for y in data["years"] if y["year"] == CURRENT_YEAR)
+        year_2026 = next(y for y in data["years"] if y["year"] == 2026)
 
-        assert year_data["notas"] == "Year note"
-        assert len(year_data["comidas"]) == 1
-        assert year_data["comidas"][0]["nucleo_id"] == "padres_angel"
+        assert year_2026["notas"] == "Year note"
+        assert len(year_2026["comidas"]) == 1
+        assert year_2026["comidas"][0]["nucleo_id"] == "padres_angel"
 
     def test_save_year_creates_if_missing(self, tmp_data_file):
         """save_year should create year if it doesn't exist."""
@@ -232,21 +227,21 @@ class TestYearManagement:
         """delete_year should remove the highest year."""
         from vacaciones_controller import add_year, delete_year, get_vacaciones_data
 
-        add_year()  # Creates CURRENT_YEAR + 1
-        result = delete_year(CURRENT_YEAR + 1)
+        add_year()  # Creates 2027
+        result = delete_year(2027)
 
         assert result["status"] == "ok"
 
         data = get_vacaciones_data()
         years = [y["year"] for y in data["years"]]
-        assert CURRENT_YEAR + 1 not in years
+        assert 2027 not in years
 
     def test_delete_year_rejects_non_highest(self, tmp_data_file):
         """delete_year should reject deleting non-highest year."""
         from vacaciones_controller import add_year, delete_year
 
-        add_year()  # Creates CURRENT_YEAR + 1
-        result = delete_year(CURRENT_YEAR)  # Try to delete lower year
+        add_year()  # Creates 2027
+        result = delete_year(2026)  # Try to delete lower year
 
         assert result["status"] == "error"
         assert "highest" in result["message"].lower()
@@ -255,7 +250,7 @@ class TestYearManagement:
         """delete_year should reject deleting the only year."""
         from vacaciones_controller import delete_year
 
-        result = delete_year(CURRENT_YEAR)  # Only year
+        result = delete_year(2026)  # Only year
 
         assert result["status"] == "error"
         assert "only" in result["message"].lower()
@@ -269,22 +264,22 @@ class TestMomentos:
         from vacaciones_controller import MOMENTOS
 
         for momento in MOMENTOS:
-            assert hasattr(momento, "id")
-            assert hasattr(momento, "label")
-            assert hasattr(momento, "dia")
-            assert hasattr(momento, "tipo")
-            assert hasattr(momento, "importante")
+            assert "id" in momento
+            assert "label" in momento
+            assert "dia" in momento
+            assert "tipo" in momento
+            assert "importante" in momento
 
     def test_momentos_covers_key_dates(self, tmp_data_file):
         """MOMENTOS should cover key Christmas dates."""
         from vacaciones_controller import MOMENTOS
 
-        dias = [m.dia for m in MOMENTOS]
+        dias = [m["dia"] for m in MOMENTOS]
 
         assert 24 in dias  # Nochebuena
         assert 25 in dias  # Navidad
         assert 31 in dias  # Nochevieja
-        assert 1 in dias  # AÃ±o Nuevo
+        assert 1 in dias  # Año Nuevo
         assert 6 in dias  # Reyes
 
     def test_important_meals_marked(self, tmp_data_file):
@@ -293,8 +288,8 @@ class TestMomentos:
 
         important_ids = ["cena_24", "comida_25", "cena_31", "comida_1"]
         for m in MOMENTOS:
-            if m.id in important_ids:
-                assert m.importante is True
+            if m["id"] in important_ids:
+                assert m["importante"] is True
 
 
 class TestHealthCheck:
