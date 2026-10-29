@@ -41,11 +41,30 @@ CERTS_DIR="${1:-$(pwd)}"
 CA_DAYS=3650        # 10 years for CA
 CERT_DAYS=365       # 1 year for server/client (see renewal procedure above)
 
-# KEY_SIZE: RSA 2048-bit is currently used (sufficient for internal TLS).
-# TODO (LOW priority): Consider upgrading to RSA 4096 or ECDSA P-384 for
-# enhanced security. This requires testing client compatibility first.
-# To upgrade: change KEY_SIZE=4096 or switch to ECDSA commands below.
-# ECDSA example: openssl ecparam -genkey -name secp384r1 -out ca.key
+# ═══════════════════════════════════════════════════════════════════════════════
+# KEY SIZE RATIONALE
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# RSA 2048-bit is used for internal TLS within the home network.
+#
+# NIST SP 800-57 (2020 revision) recommends RSA 3072+ for security beyond 2030.
+# RSA 2048 provides ~112 bits of security, while RSA 3072 provides ~128 bits.
+# See: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-57pt1r5.pdf
+#
+# ACCEPTED RISK: RSA 2048 is retained because:
+#   - Internal network only (Tailscale VPN, Docker bridge)
+#   - Short certificate validity (365 days) limits exposure window
+#   - IoT clients (ESP32, Tasmota) may have limited crypto support
+#   - No sensitive data in transit (home automation telemetry)
+#
+# UPGRADE PATH (if needed):
+#   - RSA 3072: Change KEY_SIZE=3072 below (drop-in replacement)
+#   - RSA 4096: Change KEY_SIZE=4096 (slower, but maximum RSA security)
+#   - ECDSA P-384: Replace openssl genrsa with:
+#       openssl ecparam -genkey -name secp384r1 -out ca.key
+#     (faster, smaller keys, ~192-bit security, but verify client support)
+#
+# ═══════════════════════════════════════════════════════════════════════════════
 KEY_SIZE=2048
 
 COUNTRY="ES"
