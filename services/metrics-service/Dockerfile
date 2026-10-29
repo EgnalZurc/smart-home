@@ -33,6 +33,10 @@ COPY --chown=appuser:appuser libs/notifications/ /app/libs/notifications/
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8011
+# HEALTHCHECK uses python3 + urllib instead of curl because the base image is
+# python:3.12-slim which does not include curl. Installing curl would add ~5MB
+# to the image for a feature we can achieve with the Python stdlib. The urllib
+# approach is also more consistent with the Python-based service.
 HEALTHCHECK --interval=60s --timeout=5s --start-period=20s --retries=3 \
     CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8011/health', timeout=3)"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8011"]

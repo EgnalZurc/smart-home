@@ -759,7 +759,10 @@ class Collector:
         for task in self._tasks:
             try:
                 await task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001 - swallow task exceptions during shutdown
+                # Tasks are cancelled, so CancelledError is expected. Any other
+                # exception is logged by the task's own handler; re-raising here
+                # would prevent graceful shutdown of subsequent tasks.
                 pass
         self._tasks = []
         if self._client is not None:
