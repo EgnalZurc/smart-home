@@ -8,7 +8,9 @@ import logging
 import os
 import re
 import sys
+import threading
 import time
+import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -91,6 +93,8 @@ class CircuitBreaker:
 
     When failures exceed max_failures, the circuit opens and calls fail fast
     for reset_timeout seconds before allowing a retry.
+
+    Thread-safe: uses a lock to protect state mutations.
     """
 
     def __init__(self, max_failures: int = 5, reset_timeout: float = 60.0):
@@ -99,37 +103,41 @@ class CircuitBreaker:
         self._failures = 0
         self._last_failure_time: float | None = None
         self._state = "closed"  # closed, open, half-open
+        self._lock = threading.Lock()
 
     def is_open(self) -> bool:
         """Check if circuit is open (should fail fast)."""
-        if self._state == "closed":
-            return False
-
-        if self._state == "open" and self._last_failure_time:
-            elapsed = time.time() - self._last_failure_time
-            if elapsed >= self._reset_timeout:
-                self._state = "half-open"
+        with self._lock:
+            if self._state == "closed":
                 return False
 
-        return self._state == "open"
+            if self._state == "open" and self._last_failure_time:
+                elapsed = time.time() - self._last_failure_time
+                if elapsed >= self._reset_timeout:
+                    self._state = "half-open"
+                    return False
+
+            return self._state == "open"
 
     def record_success(self) -> None:
         """Record a successful call, resetting the circuit."""
-        self._failures = 0
-        self._state = "closed"
-        self._last_failure_time = None
+        with self._lock:
+            self._failures = 0
+            self._state = "closed"
+            self._last_failure_time = None
 
     def record_failure(self) -> None:
         """Record a failed call, potentially opening the circuit."""
-        self._failures += 1
-        self._last_failure_time = time.time()
+        with self._lock:
+            self._failures += 1
+            self._last_failure_time = time.time()
 
-        if self._failures >= self._max_failures:
-            self._state = "open"
-            logger.warning(
-                f"Circuit breaker opened after {self._failures} failures. "
-                f"Will retry in {self._reset_timeout}s."
-            )
+            if self._failures >= self._max_failures:
+                self._state = "open"
+                logger.warning(
+                    f"Circuit breaker opened after {self._failures} failures. "
+                    f"Will retry in {self._reset_timeout}s."
+                )
 
 
 # Circuit breakers for external APIs
@@ -237,7 +245,11 @@ def fetch_ohlc(coingecko_id: str, days: int = 30) -> list[list[float]]:
     except (requests.RequestException, json.JSONDecodeError, KeyError) as e:
         _coingecko_circuit.record_failure()
         logger.error(
-            f"Error fetching OHLC for {coingecko_id}: {_sanitize_error(str(e))}"
+            "Error fetching OHLC for %s (%s): %s\n%s",
+            coingecko_id,
+            type(e).__name__,
+            _sanitize_error(str(e)),
+            traceback.format_exc(),
         )
         return []
 

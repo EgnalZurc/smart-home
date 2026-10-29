@@ -133,6 +133,7 @@ class _BuiltinEmailSender:
         except (OSError, self._smtplib.SMTPException) as e:
             # Sanitize exception to prevent password leakage in tracebacks
             error_msg = str(e)
+            exc_type = type(e).__name__
             # Remove any occurrence of the password from the error message
             password = self._smtp_password
             if password and password in error_msg:
@@ -145,7 +146,8 @@ class _BuiltinEmailSender:
                 r"\1 [REDACTED]",
                 error_msg,
             )
-            return NotificationResult(False, error_msg)
+            logger.warning("[email] Send failed (%s): %s", exc_type, error_msg)
+            return NotificationResult(False, f"{exc_type}: {error_msg}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

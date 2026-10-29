@@ -8,6 +8,8 @@ numpy==2.2.1
 tomli==2.2.1
 tenacity==9.0.0
 
-# Test dependencies
+# Test dependencies (required for pytest, not for production runtime)
+# These are installed in the CI test image (Dockerfile.citest) and
+# in dev environments. They are NOT included in the production Docker image.
 pytest==8.3.5
 httpx==0.28.1

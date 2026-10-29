@@ -34,11 +34,11 @@ class NotifierProtocol(Protocol):
 
     def send_summary_alert(
         self,
-        etf_results: list,
-        crypto_results: list,
+        etf_results: list[Any],
+        crypto_results: list[Any],
         overall_level: AlertLevel,
         fear_greed: int | None = None,
-        savings_results: list | None = None,
+        savings_results: list[Any] | None = None,
     ) -> Any: ...
 
     def send_scheduled_alert(self, alert: Any) -> Any: ...
