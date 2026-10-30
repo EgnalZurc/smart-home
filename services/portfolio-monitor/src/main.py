@@ -74,7 +74,10 @@ ENVIRONMENT: str = os.environ.get("ENVIRONMENT", "production")
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Allowed origins for CSRF protection. Requests from these origins are trusted.
 # Internal API behind Tailscale VPN - only allow known hosts.
-_ALLOWED_ORIGINS: set[str] = {
+#
+# Additional origins can be added via the ALLOWED_ORIGINS environment variable
+# as a comma-separated list (e.g., "https://custom.domain,http://other:8080").
+_BASE_ALLOWED_ORIGINS: set[str] = {
     "https://raspberrypi.tailaa37cd.ts.net",  # Tailscale hostname
     "http://raspberrypi.local",  # Local network
     "http://localhost",
@@ -82,6 +85,29 @@ _ALLOWED_ORIGINS: set[str] = {
     "http://127.0.0.1",
     "http://127.0.0.1:8010",
 }
+
+
+def _load_allowed_origins() -> set[str]:
+    """Load allowed origins from base set plus environment variable.
+
+    The ALLOWED_ORIGINS env var accepts a comma-separated list of additional
+    origins to trust. Empty entries and whitespace are ignored.
+
+    Returns:
+        Set of all allowed origins (base + environment).
+    """
+    origins = _BASE_ALLOWED_ORIGINS.copy()
+    env_origins = os.environ.get("ALLOWED_ORIGINS", "")
+    if env_origins:
+        for origin in env_origins.split(","):
+            origin = origin.strip()
+            if origin:
+                origins.add(origin)
+                logger.info("Added custom allowed origin from env: %s", origin)
+    return origins
+
+
+_ALLOWED_ORIGINS: set[str] = _load_allowed_origins()
 
 
 def _validate_origin(request: Request) -> bool:

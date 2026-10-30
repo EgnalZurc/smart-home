@@ -37,9 +37,12 @@ from config import LOG_LEVEL, PORT, SERVICE_NAME
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 # Shared libs live at /app/libs in the container; add to path for imports.
+# NOTE [L6 - import fallback]: This path manipulation is dev/container-only.
+# In production the Docker image sets PYTHONPATH to include /app/libs.
+# The fallback allows running `python main.py` from the src/ directory
+# during local development without setting PYTHONPATH manually.
 _LIBS_PATH: str = os.environ.get("LIBS_PATH", "/app/libs")
 if _LIBS_PATH not in sys.path:
     sys.path.insert(0, _LIBS_PATH)
@@ -56,27 +59,58 @@ _logger: logging.Logger = logging.getLogger(__name__)
 
 __all__ = ["app"]
 
+
+# ── Client IP extraction (M3 fix) ─────────────────────────────────────────────
+def _get_client_ip(request: Request) -> str:
+    """Extract the real client IP from the request, respecting X-Forwarded-For.
+
+    In production, requests pass through nginx which sets X-Forwarded-For.
+    This helper ensures rate limiting applies to the actual client IP,
+    not the proxy IP (which would cause all clients to share one limit).
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        The client IP address as a string. Falls back to the direct client IP
+        when X-Forwarded-For is absent or empty.
+
+    Note:
+        X-Forwarded-For format: "client, proxy1, proxy2, ..."
+        We take the FIRST IP (leftmost) as it represents the original client.
+        nginx is configured to overwrite (not append) X-Forwarded-For for
+        untrusted upstream proxies.
+    """
+    forwarded_for: str | None = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        # Take the first IP (original client), strip whitespace
+        client_ip: str = forwarded_for.split(",")[0].strip()
+        if client_ip:
+            return client_ip
+    # Fall back to direct client IP
+    if request.client:
+        return request.client.host
+    return "unknown"
+
+
 # ── Rate limiting ─────────────────────────────────────────────────────────────
-limiter: Limiter = Limiter(key_func=get_remote_address)
+# Rate limit strings are defined as constants for maintainability (L3 fix).
+# See also RATE_LIMIT_RETRY_AFTER_S used in the 429 response header.
+RATE_LIMIT_HEALTH: str = "60/minute"
+RATE_LIMIT_CURRENT: str = "120/minute"
+RATE_LIMIT_HISTORY: str = "60/minute"
+RATE_LIMIT_STATS: str = "60/minute"
+RATE_LIMIT_ALERTS: str = "60/minute"
+
+limiter: Limiter = Limiter(key_func=_get_client_ip)
 RATE_LIMIT_RETRY_AFTER_S: int = 60
 
 
 async def _rate_limit_exceeded_handler(
     request: Request, exc: RateLimitExceeded
 ) -> Response:
-    """Handle rate limit exceeded errors with logging and proper response.
-
-    Logs the rate limit violation for security monitoring and abuse detection,
-    then returns a 429 response with Retry-After header.
-
-    Args:
-        request: The incoming HTTP request that exceeded the rate limit.
-        exc: The RateLimitExceeded exception containing violation details.
-
-    Returns:
-        A 429 Too Many Requests response with Retry-After header set to 60s.
-    """
-    client_ip: str = get_remote_address(request) or "unknown"
+    """Handle rate limit exceeded errors with logging and proper response."""
+    client_ip: str = _get_client_ip(request)
     _logger.warning(
         "Rate limit exceeded for IP %s on %s %s: %s",
         client_ip,
@@ -92,6 +126,13 @@ async def _rate_limit_exceeded_handler(
 
 
 # ── Security headers middleware ───────────────────────────────────────────────
+# CSP NOTE [L1 - unsafe-inline for Swagger UI]:
+# The Content-Security-Policy includes 'unsafe-inline' for script-src and
+# style-src because FastAPI's built-in Swagger UI (/swagger) and ReDoc (/redoc)
+# documentation pages use inline scripts and styles. This is an ACCEPTED_RISK:
+# - The API is internal-only (behind nginx auth_request + Tailscale VPN)
+# - Swagger UI is a dev/debug tool, not exposed to end users
+# - All other CSP directives remain strict (default-src 'self', etc.)
 async def security_headers_middleware(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
@@ -233,7 +274,7 @@ def _health_payload() -> dict[str, Any]:
 
 
 @app.get("/health")
-@limiter.limit("60/minute")
+@limiter.limit(RATE_LIMIT_HEALTH)
 async def health(request: Request) -> dict[str, Any]:
     """Health check endpoint.
 
@@ -250,7 +291,7 @@ async def health(request: Request) -> dict[str, Any]:
 
 
 @app.get("/api/health/energy")
-@limiter.limit("60/minute")
+@limiter.limit(RATE_LIMIT_HEALTH)
 async def health_alias(request: Request) -> dict[str, Any]:
     """Health check alias at the dashboard/CI expected path.
 
@@ -308,7 +349,7 @@ def _validate_channel(channel: str | None) -> str | None:
 # Energy read API
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/energy/current")
-@limiter.limit("120/minute")
+@limiter.limit(RATE_LIMIT_CURRENT)
 async def get_current(request: Request) -> dict[str, Any]:
     """Get the most recent power reading for each channel.
 
@@ -329,7 +370,7 @@ async def get_current(request: Request) -> dict[str, Any]:
 
 
 @app.get("/api/energy/history")
-@limiter.limit("60/minute")
+@limiter.limit(RATE_LIMIT_HISTORY)
 async def get_history(
     request: Request,
     period: str = Query("day", description="Aggregation period"),
@@ -377,7 +418,7 @@ async def get_history(
 
 
 @app.get("/api/energy/stats")
-@limiter.limit("60/minute")
+@limiter.limit(RATE_LIMIT_STATS)
 async def get_stats(request: Request) -> dict[str, float | int | None]:
     """Get month-to-date consumption statistics.
 
@@ -400,7 +441,7 @@ async def get_stats(request: Request) -> dict[str, float | int | None]:
 
 
 @app.get("/api/energy/alerts")
-@limiter.limit("60/minute")
+@limiter.limit(RATE_LIMIT_ALERTS)
 async def get_alerts(
     request: Request,
     limit: int = Query(50, ge=1, le=500, description="Max events to return"),
@@ -426,4 +467,10 @@ async def get_alerts(
 if __name__ == "__main__":  # pragma: no cover
     import uvicorn
 
+    # SECURITY NOTE [H1 - 0.0.0.0 binding]:
+    # Binding to 0.0.0.0 is required for Docker container networking. The service
+    # is NOT exposed directly to the host or internet:
+    # - docker-compose.prod.yml uses `expose:` (internal only), not `ports:`
+    # - All external access goes through nginx reverse proxy with auth_request
+    # - nginx is only reachable via Tailscale VPN (no public internet exposure)
     uvicorn.run(app, host="0.0.0.0", port=PORT)  # noqa: S104  # nosec B104

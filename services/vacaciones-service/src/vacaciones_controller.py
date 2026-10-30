@@ -632,23 +632,33 @@ def add_year() -> dict[str, Any]:
 def is_healthy() -> bool:
     """Check if the service is healthy.
 
-    Verifies that the data directory exists and is accessible.
+    Verifies that the data directory exists, is accessible, and is writable.
+    The write probe creates and removes a small temp file to verify actual
+    write capability, catching permission issues or read-only filesystems
+    that directory existence alone would miss.
 
-    Limitations:
-        This check only verifies directory existence, not write capability.
-        A more thorough check would attempt a test write, but that adds I/O
-        overhead on every health probe (nginx polls frequently). Since the
-        service uses atomic writes with temp files in the same directory,
-        directory existence is a reasonable proxy for writability.
-        If write failures become an issue in production, consider:
-        1. A periodic background write test (not on every probe)
-        2. Caching the last successful write timestamp
-        3. Monitoring _save_data exceptions via metrics
+    Performance Note:
+        The write probe adds minimal I/O overhead (~1ms on typical systems).
+        Since health checks run every 30s from nginx and dashboard, this is
+        acceptable for catching real failures. The probe file is cleaned up
+        immediately after creation.
 
     Returns:
-        True if the data directory is accessible, False otherwise.
+        True if the data directory is accessible and writable, False otherwise.
     """
     try:
-        return DATA_FILE.parent.exists() and DATA_FILE.parent.is_dir()
+        data_dir = DATA_FILE.parent
+        if not data_dir.exists() or not data_dir.is_dir():
+            return False
+
+        # Write verification probe: attempt actual write to catch permission issues
+        probe_file = data_dir / ".health_probe"
+        try:
+            probe_file.write_text("ok", encoding="utf-8")
+            probe_file.unlink()
+        except OSError:
+            return False
+
+        return True
     except OSError:
         return False
