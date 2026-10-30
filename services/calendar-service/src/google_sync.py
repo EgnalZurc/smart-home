@@ -420,8 +420,12 @@ class GoogleCalendarClient:
         # Set restrictive permissions before moving to final location
         try:
             os.chmod(tmp_path, 0o600)
-        except OSError:
-            pass  # Windows doesn't support chmod the same way
+        except OSError as exc:
+            # M5: Log warning when chmod fails (Windows doesn't support Unix-style chmod).
+            logger.warning(
+                "Could not set restrictive permissions on token file (expected on Windows): %s",
+                exc,
+            )
         os.replace(tmp_path, self.token_path)
         logger.debug(
             "Saved token to %s (encrypted=%s)", self.token_path, bool(_get_fernet())
