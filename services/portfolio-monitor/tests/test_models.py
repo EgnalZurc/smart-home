@@ -187,7 +187,6 @@ class TestMonitorState:
 
     def test_from_dict_with_timezone(self):
         """from_dict handles timestamps with timezone info."""
-        from datetime import timezone
 
         from models import MonitorState
 

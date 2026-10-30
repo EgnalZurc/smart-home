@@ -38,8 +38,12 @@ async def require_auth(
     """
     token = _get_auth_token()
 
-    # Auth disabled — allow all requests
+    # Auth disabled — allow all requests (log warning for visibility)
     if not token:
+        logger.warning(
+            "AUTH_TOKEN not configured - authentication is disabled. "
+            "Set AUTH_TOKEN environment variable to enable bearer token auth."
+        )
         return
 
     if not authorization:
