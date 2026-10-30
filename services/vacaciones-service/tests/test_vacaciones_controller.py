@@ -495,7 +495,6 @@ class TestResourceLimits:
         assert len(config["personas"]) == MAX_PERSONAS
 
 
-
 # TODO: Add edge case tests for the following scenarios:
 # - _generate_inicial with unicode/emoji characters in names
 # - _generate_inicial hitting max_attempts limit (pathological input)
