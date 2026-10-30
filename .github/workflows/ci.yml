@@ -273,7 +273,7 @@ jobs:
           [[ "${{ steps.changes.outputs.portfolio-monitor }}" == "true" ]] && \
             add_service "portfolio-monitor" "egnal/smart-home-portfolio-monitor" "." "services/portfolio-monitor/Dockerfile"
           [[ "${{ steps.changes.outputs.vacaciones }}" == "true" ]] && \
-            add_service "vacaciones-service" "egnal/smart-home-vacaciones" "./services/vacaciones-service" "Dockerfile"
+            add_service "vacaciones-service" "egnal/smart-home-vacaciones" "." "services/vacaciones-service/Dockerfile"
           [[ "${{ steps.changes.outputs.casita }}" == "true" ]] && \
             add_service "casita-suenos" "egnal/smart-home-casita-suenos" "." "services/casita-suenos/fase3-app/Dockerfile"
           [[ "${{ steps.changes.outputs.vaultwarden }}" == "true" ]] && \
