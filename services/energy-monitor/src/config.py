@@ -55,9 +55,20 @@ HTTP_TIMEOUT_S = float(os.environ.get("ENERGY_HTTP_TIMEOUT_S", "4.0"))
 DEVICES_JSON = os.environ.get("ENERGY_DEVICES", "[]")
 
 # ── Shelly authentication (global defaults) ──────────────────────────────────
-# SECURITY: Default credentials for Shelly devices. Individual devices can
-# override these by specifying "username"/"password" in their ENERGY_DEVICES
-# entry. Never hardcode credentials in source code.
+# SECURITY NOTE [M1 - credentials in env vars]: Shelly device credentials are
+# read from environment variables, which is an ACCEPTED_RISK for this deployment:
+#
+# 1. The credentials authenticate to local LAN devices only (192.168.x.x),
+#    not to any cloud service or external API.
+# 2. The devices are on an isolated IoT VLAN, not reachable from the internet.
+# 3. Docker secrets or a vault would add complexity without meaningful security
+#    benefit for LAN-only authentication to dumb IoT devices.
+# 4. The env vars are set in the host's .env file (not committed to git) and
+#    passed to the container via docker-compose env_file directive.
+#
+# If this service were to authenticate to cloud APIs or sensitive services,
+# Docker secrets or a secrets manager (Vault, AWS Secrets Manager) would be
+# appropriate. For local IoT device auth, environment variables are acceptable.
 #
 # Environment variables:
 #   SHELLY_USER     - Default username for all Shelly devices

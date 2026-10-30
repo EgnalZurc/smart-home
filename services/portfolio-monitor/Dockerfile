@@ -9,6 +9,12 @@
 FROM python:3.12.7-slim AS builder
 WORKDIR /build
 COPY services/portfolio-monitor/requirements.txt .
+# Note: --no-deps is intentionally NOT used here. The requirements.txt specifies
+# pinned versions of direct dependencies, but we allow pip to resolve transitive
+# dependencies to ensure compatibility. Using --no-deps would require manually
+# listing all transitive dependencies, increasing maintenance burden without
+# significant security benefit for this internal service. Dependencies are
+# reviewed during requirements.txt updates.
 RUN pip install --user --no-cache-dir --no-compile -r requirements.txt
 # Install the shared library into the same --user prefix so it ships with the app.
 COPY libs/smart_home_common/ /build/smart_home_common/
