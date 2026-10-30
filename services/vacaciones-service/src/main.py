@@ -34,9 +34,9 @@ Typical usage:
         uvicorn main:app --host 0.0.0.0 --port 8003
 """
 
+import hashlib
 import logging
 import os
-import time
 from pathlib import Path
 from urllib.parse import urlparse
 
