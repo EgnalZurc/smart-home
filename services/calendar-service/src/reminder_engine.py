@@ -222,6 +222,9 @@ def format_daily_summary(
 
     Returns:
         Formatted string with emojis ready for Telegram.
+
+    All-day events are shown first with 🌅 emoji and no time.
+    Timed events follow with - bullet and HH:MM format.
     """
     lines = [f"📅 Eventos de hoy {date_str}:", ""]
 
@@ -229,15 +232,29 @@ def format_daily_summary(
         lines.append("No hay eventos programados para hoy")
     else:
         tz = ZoneInfo(TZ)
-        for event in events:
-            # Time in HH:MM format
+
+        # Separate all-day events from timed events
+        all_day_events = [e for e in events if e.get("all_day")]
+        timed_events = [e for e in events if not e.get("all_day")]
+
+        # All-day events first (with 🌅 emoji, no time)
+        for event in all_day_events:
+            title = event.get("title") or MSG_NO_TITLE
+            lines.append(f"🌅 {title}")
+
+            # Location (indented, if present)
+            location = event.get("location")
+            if location:
+                lines.append(f"  📍 {location}")
+
+        # Timed events (with - bullet and HH:MM)
+        for event in timed_events:
             start_ts = event.get("start_ts", 0)
             event_dt = datetime.fromtimestamp(start_ts, tz=tz)
             time_str = event_dt.strftime("%H:%M")
 
-            # Title
             title = event.get("title") or MSG_NO_TITLE
-            lines.append(f"- [{time_str}] {title}")
+            lines.append(f"- {time_str} {title}")
 
             # Location (indented, if present)
             location = event.get("location")

@@ -206,16 +206,14 @@ class TestFormatDailySummary:
         assert "📅 Eventos de hoy 30/10/2026:" in msg
         assert "No hay eventos programados para hoy" in msg
 
-    def test_single_event(self):
-        """Single event is listed with time and title."""
-        # October 30, 2026 09:00 Madrid time
+    def test_single_timed_event(self):
+        """Single timed event is listed with time and title."""
+        from datetime import datetime
         from zoneinfo import ZoneInfo
 
         from config import TZ
 
         tz = ZoneInfo(TZ)
-        from datetime import datetime
-
         event_dt = datetime(2026, 10, 30, 9, 0, 0, tzinfo=tz)
         events = [
             {
@@ -226,22 +224,22 @@ class TestFormatDailySummary:
                 "start_ts": int(event_dt.timestamp()),
                 "end_ts": int(event_dt.timestamp()) + 1800,
                 "location": None,
+                "all_day": False,
             }
         ]
         msg = format_daily_summary(events, "30/10/2026", store=None)
         assert "📅 Eventos de hoy 30/10/2026:" in msg
-        assert "[09:00] Morning standup" in msg
+        assert "- 09:00 Morning standup" in msg
         assert "No hay eventos" not in msg
 
     def test_event_with_location(self):
         """Event with location shows the location line."""
+        from datetime import datetime
         from zoneinfo import ZoneInfo
 
         from config import TZ
 
         tz = ZoneInfo(TZ)
-        from datetime import datetime
-
         event_dt = datetime(2026, 10, 30, 14, 30, 0, tzinfo=tz)
         events = [
             {
@@ -252,21 +250,21 @@ class TestFormatDailySummary:
                 "start_ts": int(event_dt.timestamp()),
                 "end_ts": int(event_dt.timestamp()) + 3600,
                 "location": "Sala A",
+                "all_day": False,
             }
         ]
         msg = format_daily_summary(events, "30/10/2026", store=None)
-        assert "[14:30] Team meeting" in msg
+        assert "- 14:30 Team meeting" in msg
         assert "📍 Sala A" in msg
 
-    def test_multiple_events(self):
-        """Multiple events are listed in order."""
+    def test_multiple_timed_events(self):
+        """Multiple timed events are listed in order."""
+        from datetime import datetime
         from zoneinfo import ZoneInfo
 
         from config import TZ
 
         tz = ZoneInfo(TZ)
-        from datetime import datetime
-
         events = [
             {
                 "uid": "cal1:evt1",
@@ -276,6 +274,7 @@ class TestFormatDailySummary:
                 "start_ts": int(datetime(2026, 10, 30, 8, 0, tzinfo=tz).timestamp()),
                 "end_ts": int(datetime(2026, 10, 30, 8, 30, tzinfo=tz).timestamp()),
                 "location": None,
+                "all_day": False,
             },
             {
                 "uid": "cal1:evt2",
@@ -285,11 +284,133 @@ class TestFormatDailySummary:
                 "start_ts": int(datetime(2026, 10, 30, 13, 0, tzinfo=tz).timestamp()),
                 "end_ts": int(datetime(2026, 10, 30, 14, 0, tzinfo=tz).timestamp()),
                 "location": "Cafeteria",
+                "all_day": False,
             },
         ]
         msg = format_daily_summary(events, "30/10/2026", store=None)
-        assert "[08:00] Morning coffee" in msg
-        assert "[13:00] Lunch with team" in msg
+        assert "- 08:00 Morning coffee" in msg
+        assert "- 13:00 Lunch with team" in msg
         assert "📍 Cafeteria" in msg
         # Check order (Morning before Lunch)
         assert msg.index("Morning coffee") < msg.index("Lunch with team")
+
+    def test_all_day_event(self):
+        """All-day event is shown with 🌅 emoji and no time."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from config import TZ
+
+        tz = ZoneInfo(TZ)
+        # All-day events have start_ts at midnight
+        midnight = datetime(2026, 10, 30, 0, 0, 0, tzinfo=tz)
+        events = [
+            {
+                "uid": "cal1:evt1",
+                "calendar_id": "cal1",
+                "google_id": "evt1",
+                "title": "Cumpleaños de Juan",
+                "start_ts": int(midnight.timestamp()),
+                "end_ts": int(midnight.timestamp()) + 86400,
+                "location": "Casa de Juan",
+                "all_day": True,
+            }
+        ]
+        msg = format_daily_summary(events, "30/10/2026", store=None)
+        assert "🌅 Cumpleaños de Juan" in msg
+        assert "📍 Casa de Juan" in msg
+        # Should NOT have time format
+        assert "00:00" not in msg
+        assert "- " not in msg.split("🌅")[1].split("\n")[0]  # No bullet before title
+
+    def test_all_day_events_shown_first(self):
+        """All-day events appear before timed events."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from config import TZ
+
+        tz = ZoneInfo(TZ)
+        midnight = datetime(2026, 10, 30, 0, 0, 0, tzinfo=tz)
+        events = [
+            {
+                "uid": "cal1:evt1",
+                "calendar_id": "cal1",
+                "google_id": "evt1",
+                "title": "Reunión 9am",
+                "start_ts": int(datetime(2026, 10, 30, 9, 0, tzinfo=tz).timestamp()),
+                "end_ts": int(datetime(2026, 10, 30, 10, 0, tzinfo=tz).timestamp()),
+                "location": None,
+                "all_day": False,
+            },
+            {
+                "uid": "cal1:evt2",
+                "calendar_id": "cal1",
+                "google_id": "evt2",
+                "title": "Festivo Nacional",
+                "start_ts": int(midnight.timestamp()),
+                "end_ts": int(midnight.timestamp()) + 86400,
+                "location": None,
+                "all_day": True,
+            },
+        ]
+        msg = format_daily_summary(events, "30/10/2026", store=None)
+        # All-day event should come before timed event
+        assert msg.index("Festivo Nacional") < msg.index("Reunión 9am")
+        # Check format
+        assert "🌅 Festivo Nacional" in msg
+        assert "- 09:00 Reunión 9am" in msg
+
+    def test_mixed_events_with_locations(self):
+        """Mixed all-day and timed events with locations format correctly."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from config import TZ
+
+        tz = ZoneInfo(TZ)
+        midnight = datetime(2026, 10, 30, 0, 0, 0, tzinfo=tz)
+        events = [
+            {
+                "uid": "cal1:evt1",
+                "calendar_id": "cal1",
+                "google_id": "evt1",
+                "title": "Cumpleaños de Juan",
+                "start_ts": int(midnight.timestamp()),
+                "end_ts": int(midnight.timestamp()) + 86400,
+                "location": "Casa de Juan",
+                "all_day": True,
+            },
+            {
+                "uid": "cal1:evt2",
+                "calendar_id": "cal1",
+                "google_id": "evt2",
+                "title": "Reunión de equipo",
+                "start_ts": int(datetime(2026, 10, 30, 9, 0, tzinfo=tz).timestamp()),
+                "end_ts": int(datetime(2026, 10, 30, 10, 0, tzinfo=tz).timestamp()),
+                "location": "Oficina",
+                "all_day": False,
+            },
+            {
+                "uid": "cal1:evt3",
+                "calendar_id": "cal1",
+                "google_id": "evt3",
+                "title": "Dentista",
+                "start_ts": int(datetime(2026, 10, 30, 14, 30, tzinfo=tz).timestamp()),
+                "end_ts": int(datetime(2026, 10, 30, 15, 30, tzinfo=tz).timestamp()),
+                "location": None,
+                "all_day": False,
+            },
+        ]
+        msg = format_daily_summary(events, "30/10/2026", store=None)
+
+        # Verify structure matches the spec
+        assert "🌅 Cumpleaños de Juan" in msg
+        assert "📍 Casa de Juan" in msg
+        assert "- 09:00 Reunión de equipo" in msg
+        assert "📍 Oficina" in msg
+        assert "- 14:30 Dentista" in msg
+
+        # Order: all-day first, then timed by time
+        assert msg.index("Cumpleaños") < msg.index("Reunión")
+        assert msg.index("Reunión") < msg.index("Dentista")
