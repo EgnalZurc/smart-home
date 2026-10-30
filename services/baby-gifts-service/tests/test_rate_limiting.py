@@ -14,7 +14,6 @@ class TestRateLimiting:
     def test_within_limit_allowed(self, tmp_data_dir):
         """Requests within limit should be allowed."""
         import config
-
         from gifts_controller import check_rate_limit
 
         ip = "192.168.1.2"
@@ -27,7 +26,6 @@ class TestRateLimiting:
     def test_exceeding_limit_blocked(self, tmp_data_dir):
         """Requests exceeding limit should be blocked."""
         import config
-
         from gifts_controller import check_rate_limit
 
         ip = "192.168.1.3"
@@ -43,7 +41,6 @@ class TestRateLimiting:
     def test_different_ips_independent(self, tmp_data_dir):
         """Different IPs should have independent limits."""
         import config
-
         from gifts_controller import check_rate_limit
 
         ip1 = "192.168.1.4"
@@ -77,7 +74,6 @@ class TestRateLimitWindowReset:
         from datetime import datetime, timedelta
 
         import config
-
         from gifts_controller import (
             _get_db,
             check_rate_limit,
