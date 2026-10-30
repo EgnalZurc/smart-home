@@ -27,6 +27,10 @@ INVITATION_EXPIRY_DAYS: int = int(os.environ.get("INVITATION_EXPIRY_DAYS", "180"
 # FAMILIA_USERS: Comma-separated list of usernames with elevated privileges.
 # These users can see hidden gifts and toggle gift visibility.
 # Default: "egnal,virchu" (the parents).
+#
+# L4 NOTE: This default is intentionally hardcoded for this family registry app.
+# For other deployments, set FAMILIA_USERS environment variable to customize.
+# Example: FAMILIA_USERS="parent1,parent2" in docker-compose.yml or .env
 _familia_raw: str = os.environ.get("FAMILIA_USERS", "egnal,virchu") or ""
 FAMILIA_USERS: set[str] = {
     u.strip().lower() for u in _familia_raw.split(",") if u.strip()
