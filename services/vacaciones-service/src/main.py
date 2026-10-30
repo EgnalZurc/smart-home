@@ -405,9 +405,15 @@ def health() -> dict[str, str | bool]:
 def _serve_html(filename: str) -> HTMLResponse:
     """Serve an HTML file with cache-busting headers.
 
-    Reads the HTML file, injects a version comment for cache-busting,
-    and returns it with no-cache headers to ensure the browser always
-    fetches the latest version.
+    Reads the HTML file, injects a version comment based on the content hash
+    for deterministic cache-busting, and returns it with no-cache headers to
+    ensure the browser always fetches the latest version.
+
+    The content hash approach is superior to timestamps because:
+    - Same content always produces the same version (deterministic builds)
+    - Avoids unnecessary cache invalidation on redeploys without changes
+    - Works correctly in containerized environments where file timestamps
+      may vary between builds
 
     Args:
         filename: Name of the HTML file in the static directory.
@@ -427,7 +433,9 @@ def _serve_html(filename: str) -> HTMLResponse:
     except OSError as e:
         logger.error("Error reading static file %s: %s", filename, e)
         raise HTTPException(status_code=404, detail="Page not found")
-    content = content.replace("</head>", f"<!-- v:{int(time.time())} -->\n</head>")
+    # Use content hash for deterministic cache-busting (first 8 chars of SHA256)
+    content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:8]
+    content = content.replace("</head>", f"<!-- v:{content_hash} -->\n</head>")
     return HTMLResponse(
         content=content,
         headers={

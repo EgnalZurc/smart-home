@@ -5,7 +5,29 @@ uvicorn==0.34.2
 # Internal shared library (follows smart-home versioning)
 smart_home_common
 
-# TODO: Pin transitive dependencies for full reproducibility
-# Currently relying on pip's resolver for: pydantic, starlette, httptools, etc.
-# Consider using pip-compile (pip-tools) to generate a fully-pinned lockfile
-# or migrating to poetry/pdm for deterministic builds.
+# Transitive dependencies - not pinned directly
+# ─────────────────────────────────────────────────────────────────────────────
+# The following packages are installed transitively via fastapi/uvicorn.
+# We rely on pip's resolver to select compatible versions. For full
+# reproducibility in production, consider:
+#
+# Option 1: pip-compile (pip-tools)
+#   pip install pip-tools
+#   pip-compile requirements.txt -o requirements.lock
+#   pip install -r requirements.lock
+#
+# Option 2: pip freeze after install
+#   pip install -r requirements.txt
+#   pip freeze > requirements.lock
+#
+# Key transitive dependencies:
+#   - pydantic (via fastapi) - data validation
+#   - starlette (via fastapi) - ASGI framework
+#   - httptools (via uvicorn) - HTTP parsing
+#   - watchfiles (via uvicorn) - file watching for reload
+#   - python-multipart (via fastapi) - form parsing
+#
+# Current approach: Accept minor version drift in dev/CI. Docker images
+# pin at build time via pip freeze in the final layer. If version drift
+# causes issues, generate a lockfile and commit it.
+# ─────────────────────────────────────────────────────────────────────────────
