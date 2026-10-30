@@ -84,6 +84,9 @@ from pydantic import BaseModel
 from smart_home_common.rate_limiter import InMemoryRateLimiter
 from starlette.middleware.base import RequestResponseEndpoint
 
+# ZIP file magic bytes (PK\x03\x04 for standard, PK\x05\x06 for empty archive)
+ZIP_MAGIC_BYTES = (b"PK\x03\x04", b"PK\x05\x06")
+
 
 class ConfigUpdateRequest(BaseModel):
     """Request body for updating server configuration."""
@@ -134,6 +137,14 @@ server_control_limiter = InMemoryRateLimiter(
     max_entries=RATE_LIMIT_MAX_ENTRIES,
 )
 
+# Rate limiter for logs endpoint - separate from server control since logs
+# can return large amounts of data (up to 10MB) and needs protection from abuse
+logs_limiter = InMemoryRateLimiter(
+    max_requests=RATE_LIMIT_MAX_REQUESTS,
+    window_seconds=RATE_LIMIT_WINDOW_SECONDS,
+    max_entries=RATE_LIMIT_MAX_ENTRIES,
+)
+
 # Compiled regex patterns for validation
 _WORLD_NAME_RE = re.compile(WORLD_NAME_PATTERN)
 _SERVER_NAME_RE = re.compile(SERVER_NAME_PATTERN)
@@ -171,6 +182,44 @@ def _check_rate_limit(request: Request) -> None:
             detail="Too many requests. Try again later.",
             headers={"Retry-After": str(int(status.reset_at.timestamp()))},
         )
+
+
+def _check_logs_rate_limit(request: Request) -> None:
+    """Check if the request exceeds the rate limit for logs endpoint."""
+    client_ip = request.client.host if request.client else "unknown"
+    if not logs_limiter.is_allowed(client_ip):
+        status = logs_limiter.get_status(client_ip)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many log requests. Try again later.",
+            headers={"Retry-After": str(int(status.reset_at.timestamp()))},
+        )
+
+
+async def _post_files_to_pc_agent(
+    path: str,
+    files: dict[str, tuple[str, bytes, str]] | list[tuple[str, tuple[str, bytes, str]]],
+) -> dict[str, Any]:
+    """POST multipart file upload to pc-agent using httpx directly.
+
+    AsyncServiceClient.post() does not support files= parameter, so this helper
+    uses httpx.AsyncClient directly for multipart file uploads.
+    """
+    url = f"{PC_AGENT_URL}{path}"
+    headers = {_client_config.token_header: PC_AGENT_TOKEN}
+    try:
+        async with httpx.AsyncClient(timeout=PC_AGENT_TIMEOUT) as client:
+            response = await client.post(url, files=files, headers=headers)
+            response.raise_for_status()
+            return response.json()
+    except httpx.ConnectError as e:
+        logger.warning("Service unreachable for upload: %s - %s", url, e)
+        raise HTTPException(503, "Service unreachable")
+    except httpx.TimeoutException:
+        logger.warning("Service timeout for upload: %s", url)
+        raise HTTPException(504, "Service timeout")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, e.response.text)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -893,10 +942,18 @@ async def upload_world_v1(file: UploadFile) -> dict[str, Any]:
     if len(content) < 10:
         raise HTTPException(status_code=400, detail="File is empty or too small")
 
+    # Validate ZIP magic bytes (PK\x03\x04 or PK\x05\x06 for empty archive)
+    if not content.startswith(ZIP_MAGIC_BYTES):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid ZIP file: magic bytes validation failed",
+        )
+
     logger.info("Uploading V1 world: %s (%d bytes)", safe_filename, len(content))
 
     # Forward the file to pc-agent with sanitized filename
-    result = await pc_agent.post(
+    # Uses _post_files_to_pc_agent because AsyncServiceClient doesn't support files=
+    result = await _post_files_to_pc_agent(
         "/valheim/worlds/upload",
         files={"file": (safe_filename, content, "application/zip")},
     )
@@ -979,6 +1036,7 @@ async def upload_world_legacy(files: list[UploadFile]) -> dict[str, Any]:
     )
 
     # Forward files to pc-agent with sanitized filenames
+    # Uses _post_files_to_pc_agent because AsyncServiceClient doesn't support files=
     files_payload = [
         (
             "files",
@@ -986,7 +1044,9 @@ async def upload_world_legacy(files: list[UploadFile]) -> dict[str, Any]:
         )
         for fname, content in file_data
     ]
-    result = await pc_agent.post("/valheim/worlds/upload-legacy", files=files_payload)
+    result = await _post_files_to_pc_agent(
+        "/valheim/worlds/upload-legacy", files=files_payload
+    )
     logger.info("Legacy world upload completed: %s", result.get("world", "unknown"))
     return result
 
@@ -1017,11 +1077,12 @@ async def get_network_info() -> dict[str, Any]:
     try:
         return await pc_agent.get("/valheim/network")
     except HTTPException:
-        # Return sensible defaults if pc-agent is unreachable
-        logger.debug("get_network_info: pc-agent unreachable, returning defaults")
+        # Return null values if pc-agent is unreachable (L1: no hardcoded fallback IPs)
+        logger.debug("get_network_info: pc-agent unreachable, returning nulls")
         return {
-            "local_ip": "192.168.1.164",
-            "port": 2456,
+            "local_ip": None,
+            "port": None,
+            "error": "pc_agent_unreachable",
         }
 
 
