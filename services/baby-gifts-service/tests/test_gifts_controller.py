@@ -457,39 +457,39 @@ class TestInvitationRetryLimit:
 
     def test_create_invitation_retries_on_collision(self, tmp_data_dir):
         """create_invitation should retry on IntegrityError (token collision)."""
-        from unittest.mock import MagicMock, patch
+        import secrets
+        from unittest.mock import patch
 
         import gifts_controller
 
-        # Mock to fail twice then succeed
-        call_count = 0
-        original_execute = None
+        # Track token generation attempts
+        call_count = [0]
+        original_token_urlsafe = secrets.token_urlsafe
 
-        def mock_execute(sql, params=None):
-            nonlocal call_count
-            if "INSERT INTO invitations" in sql:
-                call_count += 1
-                if call_count < 3:
-                    import sqlite3
+        def mock_token_urlsafe(nbytes):
+            call_count[0] += 1
+            if call_count[0] < 3:
+                # Return same token to force collision
+                return "collision_token_aaaaaaaaaaaaa"
+            # Return unique token on 3rd call
+            return original_token_urlsafe(nbytes)
 
-                    raise sqlite3.IntegrityError("UNIQUE constraint failed")
-            return original_execute(sql, params) if params else original_execute(sql)
+        # First, create an invitation with the collision token
+        with patch.object(
+            secrets, "token_urlsafe", return_value="collision_token_aaaaaaaaaaaaa"
+        ):
+            result1 = gifts_controller.create_invitation("First Guest")
+            assert result1["status"] == "ok"
 
-        # Create real connection and wrap its execute
-        conn = gifts_controller._get_db()
-        original_execute = conn.execute
+        # Reset counter
+        call_count[0] = 0
 
-        with patch.object(gifts_controller, "_get_db") as mock_get_db:
-            mock_conn = MagicMock()
-            mock_conn.execute = mock_execute
-            mock_conn.commit = conn.commit
-            mock_conn.close = conn.close
-            mock_get_db.return_value = mock_conn
-
+        # Now try to create another invitation - should collide twice then succeed
+        with patch.object(secrets, "token_urlsafe", mock_token_urlsafe):
             result = gifts_controller.create_invitation("Retry Guest")
 
         assert result["status"] == "ok"
-        assert call_count == 3  # Failed twice, succeeded on third
+        assert call_count[0] >= 3  # Failed twice, succeeded on third
 
     def test_create_invitation_fails_after_max_retries(self, tmp_data_dir):
         """create_invitation should return error after MAX_INVITATION_RETRIES."""

@@ -1349,6 +1349,10 @@ class TestRateLimitCleanup:
 
         import gifts_controller
 
+        # Initialize the DB by calling _get_db() (creates tables)
+        init_conn = gifts_controller._get_db()
+        init_conn.close()
+
         # Insert a stale entry directly
         conn = sqlite3.connect(str(gifts_controller.DB_FILE))
         old_time = (datetime.now() - timedelta(hours=1)).isoformat()
@@ -1385,6 +1389,10 @@ class TestRateLimitCleanup:
         from datetime import datetime
 
         import gifts_controller
+
+        # Initialize the DB by calling _get_db() (creates tables)
+        init_conn = gifts_controller._get_db()
+        init_conn.close()
 
         # Insert a recent entry
         conn = sqlite3.connect(str(gifts_controller.DB_FILE))
