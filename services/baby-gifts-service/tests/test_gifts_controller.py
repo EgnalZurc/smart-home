@@ -452,7 +452,6 @@ class TestAtomicSave:
         assert tmp_data_dir.joinpath("gifts.json").exists()
 
 
-
 class TestInvitationRetryLimit:
     """Tests for invitation creation retry limit."""
 
@@ -494,9 +493,8 @@ class TestInvitationRetryLimit:
 
     def test_create_invitation_fails_after_max_retries(self, tmp_data_dir):
         """create_invitation should return error after MAX_INVITATION_RETRIES."""
-        from unittest.mock import MagicMock, patch
-
         import sqlite3
+        from unittest.mock import MagicMock, patch
 
         import gifts_controller
 
@@ -514,9 +512,8 @@ class TestInvitationRetryLimit:
 
     def test_create_invitation_logs_error_on_max_retries(self, tmp_data_dir, caplog):
         """create_invitation should log error when max retries reached."""
-        from unittest.mock import MagicMock, patch
-
         import sqlite3
+        from unittest.mock import MagicMock, patch
 
         import gifts_controller
 

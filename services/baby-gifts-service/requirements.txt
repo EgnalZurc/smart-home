@@ -1,3 +1,4 @@
 fastapi==0.116.2
 uvicorn==0.34.2
 httpx==0.28.1  # Required by libs/notifications/telegram.py; pinned for reproducibility
+python-json-logger==2.0.7  # Structured JSON logging for log aggregation (L3)

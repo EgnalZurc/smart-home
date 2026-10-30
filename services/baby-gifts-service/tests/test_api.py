@@ -342,7 +342,9 @@ class TestGuestEndpoints:
         # Reserve the legacy gift as guest - this was failing with 400
         response = client.post(f"/api/baby-gifts/guest/{token}/reserve/{legacy_id}")
 
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.json()}"
+        assert response.status_code == 200, (
+            f"Expected 200, got {response.status_code}: {response.json()}"
+        )
         assert response.json()["status"] == "ok"
 
     def test_guest_unreserve_own_gift(
@@ -1199,3 +1201,318 @@ class TestInvitationRateLimiting:
         finally:
             config.RATE_LIMIT_ATTEMPTS = original_attempts
             config.RATE_LIMIT_WINDOW_SECONDS = original_window
+
+
+class TestClientIPValidation:
+    """Tests for _get_client_ip edge cases and IP format validation (L2)."""
+
+    def test_get_client_ip_missing_client(self, client):
+        """_get_client_ip should return 'unknown' when request.client is None."""
+        from unittest.mock import MagicMock
+
+        from main import _get_client_ip
+
+        mock_request = MagicMock()
+        mock_request.client = None
+        mock_request.headers.get.return_value = None
+
+        result = _get_client_ip(mock_request)
+        assert result == "unknown"
+
+    def test_get_client_ip_malformed_x_forwarded_for(self, client):
+        """_get_client_ip should fall back to client IP for malformed X-Forwarded-For."""
+        from unittest.mock import MagicMock
+
+        from main import _get_client_ip
+
+        mock_request = MagicMock()
+        mock_request.client.host = "127.0.0.1"  # Trusted proxy
+        mock_request.headers.get.return_value = "not-an-ip-address"
+
+        result = _get_client_ip(mock_request)
+        assert result == "127.0.0.1"  # Falls back to client IP
+
+    def test_get_client_ip_malformed_x_forwarded_for_special_chars(self, client):
+        """_get_client_ip should reject X-Forwarded-For with special characters."""
+        from unittest.mock import MagicMock
+
+        from main import _get_client_ip
+
+        mock_request = MagicMock()
+        mock_request.client.host = "127.0.0.1"  # Trusted proxy
+        mock_request.headers.get.return_value = "<script>alert(1)</script>"
+
+        result = _get_client_ip(mock_request)
+        assert result == "127.0.0.1"  # Falls back to client IP
+
+    def test_get_client_ip_empty_x_forwarded_for(self, client):
+        """_get_client_ip should handle empty X-Forwarded-For gracefully."""
+        from unittest.mock import MagicMock
+
+        from main import _get_client_ip
+
+        mock_request = MagicMock()
+        mock_request.client.host = "127.0.0.1"
+        mock_request.headers.get.return_value = ""
+
+        result = _get_client_ip(mock_request)
+        assert result == "127.0.0.1"
+
+    def test_get_client_ip_valid_ipv4_x_forwarded_for(self, client):
+        """_get_client_ip should accept valid IPv4 in X-Forwarded-For."""
+        from unittest.mock import MagicMock
+
+        from main import _get_client_ip
+
+        mock_request = MagicMock()
+        mock_request.client.host = "127.0.0.1"  # Trusted proxy
+        mock_request.headers.get.return_value = "192.168.1.100"
+
+        result = _get_client_ip(mock_request)
+        assert result == "192.168.1.100"
+
+    def test_get_client_ip_valid_ipv6_x_forwarded_for(self, client):
+        """_get_client_ip should accept valid IPv6 in X-Forwarded-For."""
+        from unittest.mock import MagicMock
+
+        from main import _get_client_ip
+
+        mock_request = MagicMock()
+        mock_request.client.host = "127.0.0.1"  # Trusted proxy
+        mock_request.headers.get.return_value = "2001:db8::1"
+
+        result = _get_client_ip(mock_request)
+        assert result == "2001:db8::1"
+
+    def test_get_client_ip_chain_takes_first(self, client):
+        """_get_client_ip should take first IP from X-Forwarded-For chain."""
+        from unittest.mock import MagicMock
+
+        from main import _get_client_ip
+
+        mock_request = MagicMock()
+        mock_request.client.host = "127.0.0.1"  # Trusted proxy
+        mock_request.headers.get.return_value = "10.0.0.1, 192.168.1.1, 172.16.0.1"
+
+        result = _get_client_ip(mock_request)
+        assert result == "10.0.0.1"
+
+    def test_get_client_ip_untrusted_proxy_ignores_header(self, client):
+        """_get_client_ip should ignore X-Forwarded-For from untrusted proxy."""
+        from unittest.mock import MagicMock
+
+        from main import _get_client_ip
+
+        mock_request = MagicMock()
+        mock_request.client.host = "192.168.1.50"  # Not a trusted proxy
+        mock_request.headers.get.return_value = "10.0.0.1"
+
+        result = _get_client_ip(mock_request)
+        assert result == "192.168.1.50"  # Uses direct client IP
+
+    def test_validate_ip_format_valid_ipv4(self, client):
+        """_validate_ip_format should accept valid IPv4 addresses."""
+        from main import _validate_ip_format
+
+        assert _validate_ip_format("192.168.1.1") is True
+        assert _validate_ip_format("10.0.0.1") is True
+        assert _validate_ip_format("255.255.255.255") is True
+        assert _validate_ip_format("0.0.0.0") is True
+
+    def test_validate_ip_format_valid_ipv6(self, client):
+        """_validate_ip_format should accept valid IPv6 addresses."""
+        from main import _validate_ip_format
+
+        assert _validate_ip_format("::1") is True
+        assert _validate_ip_format("2001:db8::1") is True
+        assert _validate_ip_format("fe80::1") is True
+
+    def test_validate_ip_format_invalid(self, client):
+        """_validate_ip_format should reject invalid addresses."""
+        from main import _validate_ip_format
+
+        assert _validate_ip_format("") is False
+        assert _validate_ip_format("not-an-ip") is False
+        assert _validate_ip_format("192.168.1.256") is False  # Octet > 255
+        assert _validate_ip_format("192.168.1") is False  # Incomplete
+        assert _validate_ip_format("<script>") is False
+        assert _validate_ip_format("192.168.1.1.1") is False  # Too many octets
+
+
+class TestRateLimitCleanup:
+    """Tests for M2: Rate limit stale entry cleanup."""
+
+    def test_cleanup_removes_stale_entries(self, client, tmp_data_dir):
+        """Cleanup should remove entries older than rate limit window."""
+        import sqlite3
+        from datetime import datetime, timedelta
+
+        import gifts_controller
+
+        # Insert a stale entry directly
+        conn = sqlite3.connect(str(gifts_controller.DB_FILE))
+        old_time = (datetime.now() - timedelta(hours=1)).isoformat()
+        conn.execute(
+            "INSERT INTO rate_limits (ip, attempts, window_start) VALUES (?, ?, ?)",
+            ("stale_ip", 5, old_time),
+        )
+        conn.commit()
+
+        # Verify entry exists
+        row = conn.execute(
+            "SELECT * FROM rate_limits WHERE ip = ?", ("stale_ip",)
+        ).fetchone()
+        assert row is not None
+
+        # Trigger cleanup
+        from gifts_controller import _cleanup_stale_rate_limits
+
+        deleted = _cleanup_stale_rate_limits(conn)
+        conn.commit()
+
+        # Verify entry was removed
+        row = conn.execute(
+            "SELECT * FROM rate_limits WHERE ip = ?", ("stale_ip",)
+        ).fetchone()
+        assert row is None
+        assert deleted >= 1
+
+        conn.close()
+
+    def test_cleanup_keeps_recent_entries(self, client, tmp_data_dir):
+        """Cleanup should keep recent entries."""
+        import sqlite3
+        from datetime import datetime
+
+        import gifts_controller
+
+        # Insert a recent entry
+        conn = sqlite3.connect(str(gifts_controller.DB_FILE))
+        recent_time = datetime.now().isoformat()
+        conn.execute(
+            "INSERT INTO rate_limits (ip, attempts, window_start) VALUES (?, ?, ?)",
+            ("recent_ip", 3, recent_time),
+        )
+        conn.commit()
+
+        # Trigger cleanup
+        from gifts_controller import _cleanup_stale_rate_limits
+
+        _cleanup_stale_rate_limits(conn)
+        conn.commit()
+
+        # Verify entry still exists
+        row = conn.execute(
+            "SELECT * FROM rate_limits WHERE ip = ?", ("recent_ip",)
+        ).fetchone()
+        assert row is not None
+
+        conn.close()
+
+
+class TestTokenMaxLength:
+    """Tests for H1: Token path parameter max_length validation."""
+
+    def test_token_too_long_returns_422(self, client, sample_invitation_name):
+        """Endpoints should reject tokens exceeding max_length with 422."""
+        # Create a valid invitation first
+        client.post(
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
+        )
+
+        # Try with oversized token (> 64 chars)
+        long_token = "a" * 100
+
+        # Test guest get endpoint
+        response = client.get(f"/api/baby-gifts/guest/{long_token}")
+        assert response.status_code == 422
+
+        # Test serve guest endpoint
+        response = client.get(f"/guest/baby-gifts/{long_token}")
+        assert response.status_code == 422
+
+    def test_valid_token_length_accepted(self, client, sample_invitation_name):
+        """Endpoints should accept tokens within max_length."""
+        # Create a valid invitation
+        inv_resp = client.post(
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
+        )
+        token = inv_resp.json()["token"]
+
+        # Token should be 32 chars (secrets.token_urlsafe(24))
+        assert len(token) == 32
+
+        # Should be accepted
+        response = client.get(f"/api/baby-gifts/guest/{token}")
+        assert response.status_code == 200
+
+
+class TestCreateInvitationIterative:
+    """Tests for M4: create_invitation uses iterative loop instead of recursion."""
+
+    def test_create_invitation_handles_collisions(
+        self, client, tmp_data_dir, monkeypatch
+    ):
+        """create_invitation should handle token collisions via iteration."""
+        import secrets
+
+        import gifts_controller
+
+        # Track how many times token_urlsafe is called
+        call_count = [0]
+        original_token_urlsafe = secrets.token_urlsafe
+
+        def mock_token_urlsafe(nbytes):
+            call_count[0] += 1
+            if call_count[0] < 3:
+                # Return same token to force collision
+                return "collision_token_aaaaaaaaaaaaa"
+            # Return unique token on 3rd call
+            return original_token_urlsafe(nbytes)
+
+        monkeypatch.setattr(secrets, "token_urlsafe", mock_token_urlsafe)
+
+        # First call succeeds
+        result1 = gifts_controller.create_invitation("Guest 1")
+        assert result1["status"] == "ok"
+
+        # Second call should retry and eventually succeed
+        result2 = gifts_controller.create_invitation("Guest 2")
+        assert result2["status"] == "ok"
+        assert call_count[0] >= 3  # Had to retry due to collision
+
+
+class TestGDPRLogging:
+    """Tests for M3: GDPR-compliant logging with hashed names."""
+
+    def test_hash_name_for_log_produces_consistent_hash(self, client):
+        """_hash_name_for_log should produce consistent hashes."""
+        from main import _hash_name_for_log
+
+        name = "Tía María"
+        hash1 = _hash_name_for_log(name)
+        hash2 = _hash_name_for_log(name)
+
+        assert hash1 == hash2
+        assert hash1.startswith("guest_")
+        assert len(hash1) == 14  # "guest_" + 8 hex chars
+
+    def test_hash_name_for_log_different_names_different_hashes(self, client):
+        """Different names should produce different hashes."""
+        from main import _hash_name_for_log
+
+        hash1 = _hash_name_for_log("Guest A")
+        hash2 = _hash_name_for_log("Guest B")
+
+        assert hash1 != hash2
+
+    def test_hash_name_for_log_empty_name(self, client):
+        """Empty name should return placeholder."""
+        from main import _hash_name_for_log
+
+        assert _hash_name_for_log("") == "guest_unknown"
+        assert _hash_name_for_log(None) == "guest_unknown"
