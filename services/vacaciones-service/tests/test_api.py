@@ -651,7 +651,6 @@ class TestCSRFProtection:
             importlib.reload(main)
 
 
-
 # TODO: Add edge case tests for the following API scenarios:
 # - Rate limiting with X-Forwarded-For header (proxy client IP extraction)
 # - Malformed JSON payloads (should return 422, not 500)
