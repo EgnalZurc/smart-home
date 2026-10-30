@@ -1,10 +1,10 @@
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Presence Service - Production Dockerfile
 # Multi-stage build for a minimal image.
 #
 # Build context: repository root (to access libs/)
 #   docker build -f services/presence-service/Dockerfile .
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 FROM python:3.12-slim AS builder
 WORKDIR /build
@@ -23,6 +23,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 COPY --chown=appuser:appuser services/presence-service/src/ .
+COPY --chown=appuser:appuser services/presence-service/settings.example.toml /app/settings.example.toml
 # Ship the shared notifications package under LIBS_PATH (/app/libs) so the
 # notifier can `import notifications` (TelegramNotifier) at runtime.
 COPY --chown=appuser:appuser libs/notifications/ /app/libs/notifications/
