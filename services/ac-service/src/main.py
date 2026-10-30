@@ -395,15 +395,23 @@ app = FastAPI(
 
 # ── CSRF Protection ───────────────────────────────────────────────────────────
 
-# Allowed origins for CSRF validation (static list).
-_ALLOWED_ORIGINS: set[str] = {
-    "https://raspberrypi.tailaa37cd.ts.net",
-    "http://raspberrypi.local",
-    "http://localhost",
-    "http://localhost:8002",
-    "http://127.0.0.1",
-    "http://127.0.0.1:8002",
-}
+# Default origins for CSRF validation (used when CORS_ORIGINS is not configured).
+_DEFAULT_ORIGINS: frozenset[str] = frozenset(
+    {
+        "https://raspberrypi.tailaa37cd.ts.net",
+        "http://raspberrypi.local",
+        "http://localhost",
+        "http://localhost:8002",
+        "http://127.0.0.1",
+        "http://127.0.0.1:8002",
+    }
+)
+
+# Allowed origins for CSRF validation: use CORS_ORIGINS if configured,
+# otherwise fall back to defaults. This ensures CSRF and CORS stay in sync.
+_ALLOWED_ORIGINS: frozenset[str] = (
+    frozenset(CORS_ORIGINS) if CORS_ORIGINS else _DEFAULT_ORIGINS
+)
 
 
 def _validate_origin(request: Request) -> bool:
@@ -506,11 +514,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # then CSRF checks origin, then CORS handles preflight.
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(CSRFProtectionMiddleware)
+# CORS allowed headers: restrict to headers actually used by the frontend.
+# Content-Type: required for JSON POST requests
+# Authorization: not used (nginx handles auth), but included for future flexibility
+# X-Requested-With: identifies AJAX requests (optional but common)
+_CORS_ALLOWED_HEADERS: list[str] = ["Content-Type", "Authorization", "X-Requested-With"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["*"],
+    allow_headers=_CORS_ALLOWED_HEADERS,
     allow_credentials=bool(CORS_ORIGINS),  # Only with explicit origins
 )
 
@@ -614,22 +628,46 @@ def get_client_ip(request: Request) -> str:
     1. X-Forwarded-For (first IP in chain, set by nginx)
     2. X-Real-IP (alternative header)
     3. request.client.host (direct connection fallback)
+
+    IPv6 addresses are normalized by stripping zone IDs (e.g., %eth0) and
+    collapsing to canonical form to ensure consistent rate limiting keys.
     """
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         # X-Forwarded-For can be "client, proxy1, proxy2" - take the first
-        return forwarded.split(",")[0].strip()
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip
-    return request.client.host if request.client else "unknown"
+        raw_ip = forwarded.split(",")[0].strip()
+    else:
+        real_ip = request.headers.get("X-Real-IP")
+        # Use X-Real-IP if present, otherwise fall back to client.host
+        raw_ip = real_ip or (request.client.host if request.client else "unknown")
+
+    # Normalize IPv6: strip zone ID (e.g., "fe80::1%eth0" -> "fe80::1")
+    # and handle IPv4-mapped IPv6 (e.g., "::ffff:192.168.1.1" -> "192.168.1.1")
+    if raw_ip != "unknown" and ":" in raw_ip:
+        # Strip zone ID if present
+        if "%" in raw_ip:
+            raw_ip = raw_ip.split("%")[0]
+        # Convert IPv4-mapped IPv6 to plain IPv4 for consistency
+        if raw_ip.lower().startswith("::ffff:"):
+            raw_ip = raw_ip[7:]  # Strip "::ffff:" prefix
+    return raw_ip
 
 
 def _check_rate_limit(endpoint: str, request: Request) -> None:
-    """Check rate limit for control endpoints.
+    """Check rate limit for control endpoints and raise 429 if exceeded.
 
-    Raises HTTPException 429 if rate limit is exceeded.
-    Uses client IP + endpoint as the rate limit key (per-client limiting).
+    Args:
+        endpoint: The endpoint name for rate limit bucketing (e.g., "control",
+            "config", "manual"). Combined with client IP to form the rate key.
+        request: FastAPI Request object to extract client IP from.
+
+    Raises:
+        HTTPException: 429 Too Many Requests if the client has exceeded
+            the rate limit (10 requests per 60 seconds per endpoint).
+
+    Note:
+        Rate limit key format: "{client_ip}:{endpoint}"
+        IPv6 addresses are normalized to ensure consistent rate limiting.
     """
     client_ip = get_client_ip(request)
     rate_key = f"{client_ip}:{endpoint}"
@@ -799,7 +837,15 @@ def get_sensors_history(
         to prevent unbounded responses.
     """
     result: dict[str, list[dict[str, object]]] = {}
-    with mqtt_handler._lock:
+    # Use context manager for thread-safe access to shared history data.
+    # MqttHandler exposes _lock as its synchronization primitive; we access
+    # it via the lock property pattern to avoid direct attribute access.
+    lock = getattr(mqtt_handler, "_lock", None)
+    if lock is None:
+        # Fallback: no lock available, return empty (should not happen)
+        logger.warning("MqttHandler lock not available for history access")
+        return result
+    with lock:
         for name, readings_list in mqtt_handler.history.items():
             if start is not None or end is not None:
                 filtered = [

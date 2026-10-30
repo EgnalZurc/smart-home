@@ -141,6 +141,35 @@ ruff format src/ tests/
 | `libs/http_client/` | HTTP with retry/backoff | Used by crypto_monitor for CoinGecko API |
 | `libs/notifications/` | Email sending | Used by email_notifier |
 
+### Rate Limiting Architecture
+
+The service uses in-memory rate limiting via `InMemoryRateLimiter` from `smart_home_common`.
+This is appropriate for the current single-instance deployment on Raspberry Pi.
+
+**Current Limiters** (see `src/api/routes/helpers.py`):
+
+| Limiter | Rate | Purpose |
+|---------|------|---------|
+| `_refresh_limiter` | 5 req/60s | Manual refresh endpoint protection |
+| `_config_limiter` | 2 req/60s | Config reload protection |
+| `_public_read_limiter` | 30 req/60s | Public read endpoints (summary, etf, crypto) |
+
+**Scaling Considerations**:
+
+When scaling horizontally (multiple instances), the in-memory rate limiters are **NOT shared**
+across instances. This means:
+- Each instance maintains independent rate limit state
+- Effective rate limits multiply by the number of instances
+- A user could get `N × limit` requests through N instances
+
+**Migration Path** for multi-instance deployment:
+1. Add Redis as a shared state store
+2. Replace `InMemoryRateLimiter` with a Redis-backed implementation (e.g., `slowapi` with Redis)
+3. Configure all instances to use the same Redis instance
+4. Consider using a sliding window algorithm for smoother rate limiting
+
+See `libs/smart_home_common/src/smart_home_common/rate_limiter.py` for the current implementation.
+
 ### Future Improvements (when needed)
 
 1. **Distributed Rate Limiting (Redis)**
@@ -155,7 +184,15 @@ ruff format src/ tests/
      - API key authentication
      - Integrate with existing dashboard auth
 
-3. **Template Extraction**
+3. **Structured Logging (JSON)**
+   - Required if: log aggregation/analysis at scale (ELK, Datadog, etc.)
+   - Current: Plain text format `%(asctime)s [%(name)s] %(levelname)s: %(message)s`
+   - Implementation: Use `python-json-logger` or `structlog` for JSON output
+   - Benefits: Machine-parseable logs, better correlation, easier filtering
+   - Note: Current plain text logging is sufficient for single-instance deployment
+     with `docker logs` inspection. Migrate when log volume or analysis needs grow.
+
+4. **Template Extraction**
    - Required if: email templates need frequent updates
    - Implementation: Move HTML from `email_notifier.py` to Jinja2 templates
    - Package: `jinja2`

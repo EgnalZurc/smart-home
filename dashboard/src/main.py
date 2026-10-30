@@ -18,7 +18,7 @@ from api import alert_reads_db, auth_routes, routes, trust_routes
 from api.auth import admin as auth_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from middleware import CSPNonceMiddleware, get_csp_nonce
 from profiles import db as profiles_db
@@ -245,8 +245,6 @@ class CSRFProtectionMiddleware(BaseHTTPMiddleware):
                     logger.warning(
                         "CSRF validation failed: origin=%s, host=%s", origin, host
                     )
-                    from fastapi.responses import JSONResponse
-
                     return JSONResponse(
                         {"error": "CSRF validation failed"}, status_code=403
                     )
@@ -415,6 +413,16 @@ app.include_router(routes.router)
 
 # Template cache: stores raw file content to avoid reading from disk on every request.
 # Key: filename, Value: (content, mtime). Content is re-read if file mtime changes.
+#
+# LIMITATION: The cache invalidates based on file mtime, which works correctly for
+# normal deployments (new Docker image = new files = new mtime). However, during
+# development with hot reload (uvicorn --reload), Python module reloads do NOT
+# clear this cache. If templates are modified while the server is running with
+# --reload, changes may not appear until the server is restarted or the mtime
+# actually changes. This is acceptable because:
+# 1. Production uses Docker images where each deploy is a fresh container
+# 2. Development can restart uvicorn if template changes don't appear
+# 3. Adding a reload hook would complicate the simple mtime-based invalidation
 _template_cache: dict[str, tuple[str, float]] = {}
 
 
@@ -494,8 +502,6 @@ def _serve_html(filename: str, request: Request) -> HTMLResponse:
 @app.get("/", include_in_schema=False)
 async def serve_root():
     """Redirect / to /smart-home dashboard."""
-    from fastapi.responses import RedirectResponse
-
     return RedirectResponse(url="/smart-home", status_code=301)
 
 
@@ -534,6 +540,4 @@ def health():
 @app.get("/auth/login", include_in_schema=False)
 async def legacy_auth_login():
     """Redirect old /auth/login to /api/auth/login."""
-    from fastapi.responses import RedirectResponse
-
     return RedirectResponse(url="/api/auth/login", status_code=301)

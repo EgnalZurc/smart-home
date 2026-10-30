@@ -18,5 +18,7 @@ google-auth-httplib2>=0.1.1
 
 # Test dependencies (included here for dev convenience; CI uses same file)
 # In a larger project these would go in requirements-dev.txt
+# L13: These are installed in production Docker image too. Acceptable for this
+# single-user home project, but adds ~5MB to image size.
 pytest==8.3.5
 pytest-asyncio==0.24.0

@@ -4,6 +4,22 @@ Users are stored in SQLite with: id (UUID), username, password_hash, display_nam
 The id and username are immutable once created.
 Password hash uses apr_md5_crypt format for nginx compatibility.
 Trusted device requests are persisted for admin approval via email links.
+
+DESIGN NOTE: Synchronous SQLite in async context
+------------------------------------------------
+This module uses synchronous SQLite operations within async FastAPI endpoints.
+This is an intentional design choice (accepted risk) because:
+
+1. SQLite operations are local I/O against a small database (<1MB typically),
+   completing in microseconds to low milliseconds.
+2. The WAL mode and connection pooling pattern minimizes lock contention.
+3. Adding asyncio.to_thread() would add complexity and context-switching
+   overhead that exceeds the actual I/O time for these fast operations.
+4. This pattern is standard in FastAPI applications with SQLite (see FastAPI
+   docs on SQL databases with synchronous engines).
+
+If the database grows significantly or contention becomes measurable, consider
+migrating to aiosqlite or databases with proper async support.
 """
 
 import hashlib

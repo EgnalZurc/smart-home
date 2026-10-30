@@ -188,7 +188,22 @@ def create_device_token(
 
 
 class VerifyResult:
-    """Result of verify_and_rotate_device_token()."""
+    """Result of verify_and_rotate() device token verification.
+
+    Encapsulates the outcome of a device token verification attempt, indicating
+    whether authentication succeeded and providing relevant metadata for the
+    caller to act upon.
+
+    Attributes:
+        ok: True if the device token was valid and authentication succeeded.
+            When True, the caller should issue a fresh JWT session cookie.
+        username: The authenticated username if ok=True, empty string otherwise.
+        new_cookie_value: The rotated device cookie value to set on the response.
+            Empty string if no rotation occurred (e.g., grace window hit or failure).
+        theft_detected: True if the token hash didn't match, indicating potential
+            cookie theft. When True, the caller should invalidate the session,
+            clear all cookies, and redirect to login with a security alert.
+    """
 
     __slots__ = ("new_cookie_value", "ok", "theft_detected", "username")
 

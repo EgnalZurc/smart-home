@@ -85,9 +85,43 @@ def _sanitize_error(msg: str) -> str:
     return _API_KEY_PATTERN.sub(r"\1=[REDACTED]", msg)
 
 
+# Cache key safety pattern - only allow alphanumeric, hyphen, underscore
+_VALID_COINGECKO_ID = re.compile(r"^[a-z0-9_-]+$", re.IGNORECASE)
+
+
+def _validate_coingecko_id(coingecko_id: str) -> bool:
+    """Validate coingecko_id to prevent cache key collisions or injection.
+
+    CoinGecko IDs should only contain alphanumeric characters, hyphens, and
+    underscores. This prevents cache key collisions from malformed IDs.
+
+    Args:
+        coingecko_id: The CoinGecko coin identifier to validate.
+
+    Returns:
+        True if the ID is valid, False otherwise.
+    """
+    if not coingecko_id:
+        return False
+    return bool(_VALID_COINGECKO_ID.match(coingecko_id))
+
+
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Circuit Breaker â€” prevent cascading failures to upstream APIs
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────────────
+# Circuit Breaker Constants
+# ─────────────────────────────────────────────────────────────────────────────
+# Default configuration for circuit breakers. Adjust these based on the
+# reliability characteristics of each external service.
+CIRCUIT_BREAKER_DEFAULT_MAX_FAILURES = 5  # Number of failures before opening
+CIRCUIT_BREAKER_DEFAULT_RESET_TIMEOUT = 60.0  # Seconds before half-open retry
+CIRCUIT_BREAKER_COINGECKO_MAX_FAILURES = 5  # CoinGecko-specific threshold
+CIRCUIT_BREAKER_COINGECKO_RESET_TIMEOUT = 60.0  # CoinGecko reset timeout
+CIRCUIT_BREAKER_FEAR_GREED_MAX_FAILURES = 3  # Fear & Greed is less critical
+CIRCUIT_BREAKER_FEAR_GREED_RESET_TIMEOUT = 60.0  # Fear & Greed reset timeout
+
+
 class CircuitBreaker:
     """Simple circuit breaker for external API calls.
 
@@ -97,7 +131,11 @@ class CircuitBreaker:
     Thread-safe: uses a lock to protect state mutations.
     """
 
-    def __init__(self, max_failures: int = 5, reset_timeout: float = 60.0):
+    def __init__(
+        self,
+        max_failures: int = CIRCUIT_BREAKER_DEFAULT_MAX_FAILURES,
+        reset_timeout: float = CIRCUIT_BREAKER_DEFAULT_RESET_TIMEOUT,
+    ):
         self._max_failures = max_failures
         self._reset_timeout = reset_timeout
         self._failures = 0
@@ -141,8 +179,14 @@ class CircuitBreaker:
 
 
 # Circuit breakers for external APIs
-_coingecko_circuit = CircuitBreaker(max_failures=5, reset_timeout=60.0)
-_fear_greed_circuit = CircuitBreaker(max_failures=3, reset_timeout=60.0)
+_coingecko_circuit = CircuitBreaker(
+    max_failures=CIRCUIT_BREAKER_COINGECKO_MAX_FAILURES,
+    reset_timeout=CIRCUIT_BREAKER_COINGECKO_RESET_TIMEOUT,
+)
+_fear_greed_circuit = CircuitBreaker(
+    max_failures=CIRCUIT_BREAKER_FEAR_GREED_MAX_FAILURES,
+    reset_timeout=CIRCUIT_BREAKER_FEAR_GREED_RESET_TIMEOUT,
+)
 
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -177,8 +221,17 @@ def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
     if not coingecko_ids:
         return {}
 
+    # Validate all IDs to prevent cache key collisions
+    valid_ids = [cid for cid in coingecko_ids if _validate_coingecko_id(cid)]
+    if not valid_ids:
+        logger.warning("No valid coingecko_ids in batch request")
+        return {}
+    if len(valid_ids) < len(coingecko_ids):
+        invalid = set(coingecko_ids) - set(valid_ids)
+        logger.warning("Rejected invalid coingecko_ids: %s", list(invalid)[:5])
+
     # Create a stable cache key from sorted IDs
-    ids_sorted = sorted(set(coingecko_ids))
+    ids_sorted = sorted(set(valid_ids))
     cache_key = ",".join(ids_sorted)
 
     # Check cache first
@@ -219,8 +272,27 @@ def fetch_market_batch(coingecko_ids: list[str]) -> dict[str, Any]:
         return {}
 
 
+# Maximum days allowed for OHLC requests (CoinGecko API limit)
+_MAX_OHLC_DAYS = 365
+
+
 def fetch_ohlc(coingecko_id: str, days: int = 30) -> list[list[float]]:
-    """Fetch OHLC data for sparkline charts."""
+    """Fetch OHLC data for sparkline charts.
+
+    Args:
+        coingecko_id: CoinGecko coin identifier.
+        days: Number of days of history (capped at _MAX_OHLC_DAYS).
+
+    Returns:
+        OHLC data as list of [timestamp, open, high, low, close].
+    """
+    # Validate coingecko_id to prevent cache key collisions
+    if not _validate_coingecko_id(coingecko_id):
+        logger.warning("Invalid coingecko_id rejected: %s", coingecko_id[:50])
+        return []
+
+    # Validate days parameter to prevent API abuse
+    days = min(days, _MAX_OHLC_DAYS)
     cache_key = f"{coingecko_id}:{days}"
 
     # Check cache first

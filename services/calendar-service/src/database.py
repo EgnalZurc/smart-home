@@ -525,6 +525,8 @@ class CalendarStore:
         Includes confirmed and tentative (shared calendar) events.
         Used by the reminder tick loop to find events needing reminders soon.
         """
+        # M7: Cap max_offset_s to 7 days to prevent DoS via large window queries.
+        max_offset_s = min(max_offset_s, 604800)
         now = int(time.time()) if now is None else now
         window_end = now + max_offset_s
         with self._db.connect() as conn:
