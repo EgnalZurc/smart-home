@@ -414,26 +414,71 @@ def _validate_origin(request: Request) -> bool:
 
     origin = request.headers.get("origin")
 
-    # No Origin header - could be same-origin request or non-browser client
-    # For internal APIs, we allow requests without Origin (curl, scripts, etc.)
-    # Browsers ALWAYS send Origin for cross-origin POST requests
-    if not origin:
+    # Check if origin is in the allowed list when present
+    if origin and origin not in _ALLOWED_ORIGINS:
+        return False
+
+    return True
+
+
+# Sensitive endpoints that require X-Requested-With header for CSRF protection.
+# These endpoints modify state and should only be called from our frontend JS.
+# Using frozenset for immutability and O(1) lookup.
+_CSRF_PROTECTED_PATHS: frozenset[str] = frozenset(
+    {
+        "/api/casita/dismiss",
+        "/api/casita/undismiss",
+        "/api/casita/mark-viewed",
+        "/api/casita/save-comment",
+        "/api/casita/schedule",
+        "/api/casita/run-scraping",
+        "/api/casita/run-gmail-check",
+        "/api/casita/run-fotocasa-check",
+        "/api/casita/run-summary",
+    }
+)
+
+
+def _validate_csrf_header(request: Request) -> bool:
+    """Validate X-Requested-With header for sensitive POST endpoints.
+
+    For endpoints in _CSRF_PROTECTED_PATHS, requires X-Requested-With header.
+    This is a defense-in-depth measure: browsers don't allow setting custom
+    headers in cross-origin requests without CORS preflight, so the presence
+    of this header proves the request came from JavaScript on an allowed origin.
+
+    This protects against CSRF even when Origin header is missing (same-origin
+    requests from browsers don't always include Origin).
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        True if the request is allowed, False if it should be blocked.
+    """
+    # Only check state-changing methods on protected paths
+    if request.method not in ("POST", "PUT", "DELETE", "PATCH"):
         return True
 
-    # Check if origin is in the allowed list
-    return origin in _ALLOWED_ORIGINS
+    if request.url.path not in _CSRF_PROTECTED_PATHS:
+        return True
+
+    # Require X-Requested-With header for protected endpoints
+    # Value doesn't matter, just needs to be present (conventionally "XMLHttpRequest")
+    return request.headers.get("x-requested-with") is not None
 
 
 @app.middleware("http")
 async def csrf_protection_middleware(request: Request, call_next):
-    """CSRF protection via Origin header validation.
+    """CSRF protection via Origin header and X-Requested-With validation.
 
-    Blocks POST/PUT/DELETE/PATCH requests with an Origin header that doesn't
-    match the allowed origins list. Requests without Origin header are allowed
-    to support non-browser clients (curl, scripts, internal services).
+    Two-layer protection:
+    1. Blocks requests with an Origin header not in the allowed list
+    2. For sensitive endpoints, requires X-Requested-With header
 
     Returns:
-        403 Forbidden if Origin is present but not allowed.
+        403 Forbidden if Origin is present but not allowed, or if
+        X-Requested-With is missing on a protected endpoint.
         Normal response otherwise.
     """
     if not _validate_origin(request):
@@ -447,6 +492,17 @@ async def csrf_protection_middleware(request: Request, call_next):
             status_code=403,
             content={"error": "Forbidden: invalid origin"},
         )
+
+    if not _validate_csrf_header(request):
+        logger.warning(
+            "[http] CSRF protection: missing X-Requested-With header for %s",
+            request.url.path,
+        )
+        return JSONResponse(
+            status_code=403,
+            content={"error": "Forbidden: missing X-Requested-With header"},
+        )
+
     return await call_next(request)
 
 
@@ -1345,9 +1401,16 @@ def main() -> None:
     # Arrancar servidor con uvicorn - lifespan maneja init/shutdown del scheduler
     # y arranca el thread de telegram polling con db disponible
     logger.info("[main] Servidor HTTP en puerto %d", STATUS_PORT)
+    # SECURITY NOTE: Host 0.0.0.0 is intentional for container networking.
+    # This service runs inside Docker on the Pi and is NOT exposed to the
+    # internet directly. Access is restricted by:
+    # 1. Docker network isolation (only nginx can reach casita-suenos:8001)
+    # 2. nginx reverse proxy with Tailscale auth_request
+    # 3. Tailscale VPN (only authenticated devices can reach the Pi)
+    # See: docker-compose.prod.yml (networks), infrastructure/nginx/conf.d/smart-home.conf
     uvicorn.run(
         app,
-        host="0.0.0.0",  # nosec B104 - internal container network
+        host="0.0.0.0",  # nosec B104 - internal container network, see comment above
         port=STATUS_PORT,
         log_level="warning",
         access_log=False,
