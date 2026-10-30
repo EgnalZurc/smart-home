@@ -19,6 +19,22 @@ from starlette.responses import Response
 
 logger: logging.Logger = logging.getLogger(__name__)
 
+__all__ = [
+    "AUTH_SECRET",
+    "AUTH_SESSION_TTL",
+    "AUTH_TRUSTED_TTL",
+    "COOKIE_NAME",
+    "ALGORITHM",
+    "verify_password",
+    "create_token",
+    "decode_token",
+    "decode_token_expired_ok",
+    "get_token_from_cookie",
+    "get_current_user",
+    "set_session_cookie",
+    "clear_session_cookie",
+]
+
 # ---------------------------------------------------------------------------
 # Configuration (injected from main.py lifespan)
 # ---------------------------------------------------------------------------

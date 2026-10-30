@@ -14,6 +14,12 @@ import os
 # Configurable via HEALTH_CACHE_TTL environment variable (default: 5.0 seconds).
 HEALTH_CACHE_TTL_SECONDS: float = float(os.environ.get("HEALTH_CACHE_TTL", "5.0"))
 
+# Maximum number of entries allowed in the health cache. Provides an upper bound
+# to prevent unbounded memory growth from orphaned service keys. In practice,
+# the cache holds ~15 entries (one per monitored service), so 100 is generous.
+# Configurable via HEALTH_CACHE_MAX_ENTRIES environment variable.
+HEALTH_CACHE_MAX_ENTRIES: int = int(os.environ.get("HEALTH_CACHE_MAX_ENTRIES", "100"))
+
 # -- WebSocket Broadcast Configuration -----------------------------------------
 #
 # Interval between health status broadcasts to connected WebSocket clients.
@@ -42,3 +48,9 @@ LOGIN_RATE_LIMIT_WINDOW_SECONDS: int = int(
 # Configurable via EGNALPC_MAC environment variable.
 # Used for Wake-on-LAN functionality.
 EGNALPC_MAC: str = os.environ.get("EGNALPC_MAC", "04:7C:16:EB:72:4E")
+
+# -- IP Address Constants ------------------------------------------------------
+#
+# Placeholder for unknown client IP addresses. Used when the IP cannot be
+# determined from request headers (e.g., missing X-Forwarded-For behind proxy).
+UNKNOWN_IP: str = "unknown"

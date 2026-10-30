@@ -21,6 +21,41 @@ The proxy endpoints now call ``require_super(request)`` for admin operations.
 Unit tests that call these functions directly (not via TestClient with a real
 auth flow) need to bypass this check. The ``mock_require_super`` fixture patches
 the auth check to always succeed, returning a fake admin username.
+
+Overriding autouse fixtures
+---------------------------
+Several fixtures in this file use ``autouse=True`` for convenience:
+
+- ``mock_require_super``: Bypasses auth checks for all tests
+- ``clear_health_cache``: Resets health cache before/after each test
+
+To DISABLE an autouse fixture for a specific test or test class:
+
+1. **For a single test**: Define a fixture with the same name that does nothing::
+
+       def test_real_auth_flow(self, mock_require_super):
+           # Override the fixture to do nothing - auth checks are active
+           pass
+
+       @pytest.fixture
+       def mock_require_super(self):
+           # No-op: don't patch auth, let real checks run
+           yield
+
+2. **For a test class**: Define the override fixture at class level::
+
+       class TestRealAuthFlow:
+           @pytest.fixture(autouse=True)
+           def mock_require_super(self):
+               yield  # No-op
+
+           def test_unauthorized_rejected(self, client):
+               # Real auth checks apply here
+               ...
+
+3. **Use TestClient with proper auth**: For integration tests that need real
+   auth, use httpx.AsyncClient or TestClient with proper session cookies
+   instead of calling endpoint functions directly.
 """
 
 import gc
