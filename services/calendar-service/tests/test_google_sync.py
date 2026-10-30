@@ -109,9 +109,8 @@ class TestSecretSanitizationInErrors:
         """Ensure client_secret is redacted if it appears in build() error."""
         import logging
 
-        from httplib2 import HttpLib2Error
-
         from google_sync import GoogleCalendarClient
+        from httplib2 import HttpLib2Error
 
         # Create a token file
         token_path = tmp_path / "token.json"
