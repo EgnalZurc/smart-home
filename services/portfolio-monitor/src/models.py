@@ -2,6 +2,18 @@
 Portfolio Monitor — Data models and enums.
 """
 
+__all__ = [
+    "AlertLevel",
+    "Signal",
+    "ETFAnalysis",
+    "CryptoAnalysis",
+    "SavingsAnalysis",
+    "DeFiAnalysis",
+    "ScheduledAlert",
+    "PortfolioSummary",
+    "MonitorState",
+]
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import IntEnum
@@ -262,33 +274,62 @@ class MonitorState:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "MonitorState":
-        """Create from dict.
+        """Create from dict with validation.
 
         Args:
             data: Dictionary with optional last_etf_run and last_crypto_run keys.
                   Timestamps can be ISO format strings with or without timezone.
 
         Returns:
-            MonitorState instance with parsed timestamps.
+            MonitorState instance with parsed timestamps. Invalid timestamps
+            are logged and treated as None rather than raising an exception.
 
         Note:
             Timestamps without timezone info are assumed to be UTC.
             This ensures consistent behavior across different sources.
         """
+        import logging
         from datetime import timezone as tz
 
+        logger = logging.getLogger(__name__)
         state = cls()
 
-        def _parse_timestamp(value: str | None) -> datetime | None:
-            """Parse ISO timestamp, ensuring UTC timezone."""
+        def _parse_timestamp(value: str | None, field_name: str) -> datetime | None:
+            """Parse ISO timestamp, ensuring UTC timezone.
+
+            Args:
+                value: ISO timestamp string or None.
+                field_name: Name of the field being parsed (for error logging).
+
+            Returns:
+                Parsed datetime with UTC timezone, or None if invalid/empty.
+            """
             if not value:
                 return None
-            dt = datetime.fromisoformat(value)
-            # If no timezone info, assume UTC
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=tz.utc)
-            return dt
+            try:
+                dt = datetime.fromisoformat(value)
+                # If no timezone info, assume UTC
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=tz.utc)
+                return dt
+            except (ValueError, TypeError) as e:
+                logger.warning(
+                    "Invalid timestamp for %s: %r (%s)",
+                    field_name,
+                    value,
+                    e,
+                )
+                return None
 
-        state.last_etf_run = _parse_timestamp(data.get("last_etf_run"))
-        state.last_crypto_run = _parse_timestamp(data.get("last_crypto_run"))
+        try:
+            state.last_etf_run = _parse_timestamp(
+                data.get("last_etf_run"), "last_etf_run"
+            )
+            state.last_crypto_run = _parse_timestamp(
+                data.get("last_crypto_run"), "last_crypto_run"
+            )
+        except Exception as e:
+            logger.error("Unexpected error parsing MonitorState: %s", e)
+            # Return state with whatever was successfully parsed
+
         return state

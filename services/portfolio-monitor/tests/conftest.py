@@ -63,7 +63,11 @@ def temp_data_dir(tmp_path):
 
 @pytest.fixture
 def sample_etf_config():
-    """Sample ETF configuration for testing."""
+    """Sample ETF configuration for testing.
+
+    Note: Dates use ISO 8601 format with explicit UTC timezone (+00:00)
+    to ensure consistent behavior across different test environments.
+    """
     return {
         "IUIT": {
             "id": "IUIT",
@@ -74,7 +78,7 @@ def sample_etf_config():
             "units": 33.547411,
             "monthly_contrib": 50.0,
             "phase2_contrib": 500.0,
-            "start_date": "2024-01-01",
+            "start_date": "2024-01-01T00:00:00+00:00",
             "color": "#3A7BD5",
         }
     }
@@ -82,7 +86,11 @@ def sample_etf_config():
 
 @pytest.fixture
 def sample_crypto_position():
-    """Sample crypto position for testing."""
+    """Sample crypto position for testing.
+
+    Note: Dates use ISO 8601 format with explicit UTC timezone (+00:00)
+    to ensure consistent behavior across different test environments.
+    """
     return {
         "symbol": "ETH",
         "name": "Ethereum",
@@ -91,8 +99,8 @@ def sample_crypto_position():
         "apy": 2.14,
         "type": "flexible",
         "rescue_days": 5,
-        "start_date": "2024-01-01",
-        "next_distribution": "2024-01-03",
+        "start_date": "2024-01-01T00:00:00+00:00",
+        "next_distribution": "2024-01-03T00:00:00+00:00",
         "distribution_freq_days": 2,
         "coingecko_id": "ethereum",
     }
@@ -100,7 +108,11 @@ def sample_crypto_position():
 
 @pytest.fixture
 def sample_savings_account():
-    """Sample savings account for testing."""
+    """Sample savings account for testing.
+
+    Note: Dates use ISO 8601 format with explicit UTC timezone (+00:00)
+    to ensure consistent behavior across different test environments.
+    """
     return {
         "id": "emergency-fund",
         "name": "Emergency Fund",
@@ -108,7 +120,7 @@ def sample_savings_account():
         "balance": 10000.0,
         "apy": 3.0,
         "type": "remunerada",
-        "start_date": "2024-01-01",
+        "start_date": "2024-01-01T00:00:00+00:00",
         "payment_day": 25,
     }
 
@@ -127,12 +139,16 @@ def irpf_2025_brackets():
 
 @pytest.fixture
 def mock_yfinance_response():
-    """Mock yfinance ticker response."""
-    from datetime import datetime
+    """Mock yfinance ticker response.
+
+    Note: Uses timezone-aware UTC datetime to ensure consistent behavior
+    across different test environments.
+    """
+    from datetime import datetime, timezone
 
     import pandas as pd
 
-    dates = pd.date_range(end=datetime.now(), periods=252, freq="D")
+    dates = pd.date_range(end=datetime.now(timezone.utc), periods=252, freq="D")
     prices = [100 + i * 0.1 for i in range(252)]
 
     return pd.DataFrame(

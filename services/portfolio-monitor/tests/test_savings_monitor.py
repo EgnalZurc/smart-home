@@ -298,9 +298,7 @@ class TestAccountIdSanitization:
 
         # Injection attempts sanitized (quotes, semicolons, brackets, spaces removed)
         # Note: dashes and underscores are intentionally allowed
-        assert (
-            _sanitize_account_id("<script>alert(1)</script>") == "scriptalert1script"
-        )
+        assert _sanitize_account_id("<script>alert(1)</script>") == "scriptalert1script"
         # The -- remains because dashes are valid chars in account IDs
         assert _sanitize_account_id("'; DROP TABLE--") == "DROPTABLE--"
 
