@@ -342,7 +342,9 @@ class TestGuestEndpoints:
         # Reserve the legacy gift as guest - this was failing with 400
         response = client.post(f"/api/baby-gifts/guest/{token}/reserve/{legacy_id}")
 
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.json()}"
+        assert response.status_code == 200, (
+            f"Expected 200, got {response.status_code}: {response.json()}"
+        )
         assert response.json()["status"] == "ok"
 
     def test_guest_unreserve_own_gift(

@@ -1,5 +1,7 @@
 """Unit tests for gifts_controller module."""
 
+from unittest.mock import patch
+
 import pytest
 
 
@@ -415,7 +417,6 @@ class TestAtomicSave:
         last good data (every reservation would otherwise be lost) and no stray
         .tmp file should remain.
         """
-        from unittest.mock import patch
 
         import gifts_controller
         from gifts_controller import add_gift, get_gifts_data
@@ -452,13 +453,12 @@ class TestAtomicSave:
         assert tmp_data_dir.joinpath("gifts.json").exists()
 
 
-
 class TestInvitationRetryLimit:
     """Tests for invitation creation retry limit."""
 
     def test_create_invitation_retries_on_collision(self, tmp_data_dir):
         """create_invitation should retry on IntegrityError (token collision)."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
         import gifts_controller
 
@@ -494,9 +494,8 @@ class TestInvitationRetryLimit:
 
     def test_create_invitation_fails_after_max_retries(self, tmp_data_dir):
         """create_invitation should return error after MAX_INVITATION_RETRIES."""
-        from unittest.mock import MagicMock, patch
-
         import sqlite3
+        from unittest.mock import MagicMock
 
         import gifts_controller
 
@@ -514,9 +513,8 @@ class TestInvitationRetryLimit:
 
     def test_create_invitation_logs_error_on_max_retries(self, tmp_data_dir, caplog):
         """create_invitation should log error when max retries reached."""
-        from unittest.mock import MagicMock, patch
-
         import sqlite3
+        from unittest.mock import MagicMock
 
         import gifts_controller
 
