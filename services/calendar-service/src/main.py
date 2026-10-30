@@ -30,6 +30,7 @@ from config import (
     CALENDAR_API_KEY,
     CALENDAR_AUTH_DISABLED,
     CALENDAR_SEED,
+    DAILY_SUMMARY_HOUR,
     DEFAULT_OFFSETS,
     GOOGLE_OAUTH_CLIENT_ID,
     GOOGLE_OAUTH_CLIENT_SECRET,
@@ -60,7 +61,7 @@ if _LIBS_PATH not in sys.path:
 
 from database import CalendarStore  # noqa: E402
 from models import HealthResponse  # noqa: E402
-from reminder_engine import check_and_send_reminders  # noqa: E402
+from reminder_engine import check_and_send_reminders, format_daily_summary  # noqa: E402
 
 try:
     from google_sync import GoogleAuthError, GoogleCalendarClient, InvalidSyncToken
@@ -308,8 +309,7 @@ def _parse_event_time_str(time_str: str | None) -> int:
 def _reminder_loop() -> None:
     """Check for due reminders every REMINDER_TICK_S seconds.
 
-    This is a background thread that runs the reminder check loop. Type hint
-    explicitly returns None as per PEP 484 best practices for void functions.
+    This background thread sends the 1-hour-before individual reminders.
     """
     global _last_reminder_tick_ts
     logger.info("Reminder loop started (interval=%ds)", REMINDER_TICK_S)
@@ -328,6 +328,114 @@ def _reminder_loop() -> None:
             _last_reminder_tick_ts = time.monotonic()
         _shutdown.wait(REMINDER_TICK_S)
     logger.info("Reminder loop stopped")
+
+
+def _seconds_until_next_summary() -> int:
+    """Calculate seconds until the next daily summary time (DAILY_SUMMARY_HOUR).
+
+    Returns seconds until DAILY_SUMMARY_HOUR:00 in LOCAL_TZ.
+    If that time has already passed today, returns seconds until tomorrow.
+    """
+    now = datetime.now(LOCAL_TZ)
+    target = now.replace(hour=DAILY_SUMMARY_HOUR, minute=0, second=0, microsecond=0)
+    if now >= target:
+        # Already past target time today, schedule for tomorrow
+        target = target.replace(day=target.day + 1)
+        # Handle month rollover via timedelta
+        from datetime import timedelta
+
+        target = now.replace(
+            hour=DAILY_SUMMARY_HOUR, minute=0, second=0, microsecond=0
+        ) + timedelta(days=1)
+    delta = target - now
+    return max(1, int(delta.total_seconds()))
+
+
+def _daily_summary_loop() -> None:
+    """Send daily summary at DAILY_SUMMARY_HOUR every day.
+
+    This background thread:
+    1. Calculates seconds until next DAILY_SUMMARY_HOUR:00
+    2. Sleeps until that time
+    3. Queries today's events
+    4. Sends a single summary message via Telegram
+    5. Records in dedup ledger to avoid double-sending
+    6. Repeats
+    """
+    global _last_reminder_tick_ts
+    logger.info(
+        "Daily summary loop started (sends at %02d:00 %s)",
+        DAILY_SUMMARY_HOUR,
+        LOCAL_TZ.key,
+    )
+
+    while not _shutdown.is_set():
+        # Calculate sleep time until next summary
+        sleep_seconds = _seconds_until_next_summary()
+        logger.debug("Daily summary: sleeping %d seconds until next run", sleep_seconds)
+
+        # Sleep in small chunks to check shutdown flag periodically
+        waited = 0
+        while waited < sleep_seconds and not _shutdown.is_set():
+            chunk = min(60, sleep_seconds - waited)  # Check shutdown every minute
+            _shutdown.wait(chunk)
+            waited += chunk
+
+        if _shutdown.is_set():
+            break
+
+        # Time to send the daily summary
+        try:
+            if not NOTIFY_ENABLED or not telegram_notifier:
+                logger.debug("Daily summary skipped: notifications disabled")
+                continue
+
+            # Get today's date boundaries in local timezone
+            now = datetime.now(LOCAL_TZ)
+            start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_of_day = start_of_day.replace(hour=23, minute=59, second=59)
+            date_str = now.strftime("%d/%m/%Y")
+
+            # Deduplication key: "daily_summary:YYYY-MM-DD"
+            dedup_key = f"daily_summary:{now.strftime('%Y-%m-%d')}"
+
+            # Try to record in dedup ledger FIRST (using special offset -1 for daily)
+            # This uses the existing reminders_sent table with a sentinel event_uid
+            recorded = store.try_record_reminder(
+                event_uid=dedup_key,
+                offset_s=-1,  # Sentinel value for daily summary
+                event_start=int(start_of_day.timestamp()),
+            )
+
+            if not recorded:
+                # Already sent today (by this or previous run)
+                logger.debug("Daily summary already sent for %s", date_str)
+                continue
+
+            # Query events for today
+            events = store.get_events_in_window(
+                int(start_of_day.timestamp()), int(end_of_day.timestamp())
+            )
+
+            # Format and send
+            message = format_daily_summary(events, date_str, store)
+            result = telegram_notifier.send(message)
+
+            if result.success:
+                logger.info(
+                    "Sent daily summary for %s (%d events)", date_str, len(events)
+                )
+            else:
+                logger.warning("Failed to send daily summary: %s", result.message)
+
+        except (DatabaseError, OperationalError) as exc:
+            logger.exception("Daily summary loop DB error: %s", exc)
+        except OSError as exc:
+            logger.exception("Daily summary loop network error: %s", exc)
+        finally:
+            _last_reminder_tick_ts = time.monotonic()
+
+    logger.info("Daily summary loop stopped")
 
 
 def _prune_loop() -> None:
@@ -424,6 +532,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     threads = [
         threading.Thread(target=_sync_loop, daemon=True, name="sync-loop"),
         threading.Thread(target=_reminder_loop, daemon=True, name="reminder-loop"),
+        threading.Thread(
+            target=_daily_summary_loop, daemon=True, name="daily-summary-loop"
+        ),
         threading.Thread(target=_prune_loop, daemon=True, name="prune-loop"),
     ]
     for t in threads:

@@ -42,6 +42,7 @@ __all__ = [
     "OFFSETS_DEFAULT",
     "get_applicable_rules",
     "format_reminder_message",
+    "format_daily_summary",
     "check_and_send_reminders",
 ]
 
@@ -64,8 +65,8 @@ logger = logging.getLogger(__name__)
 SECONDS_PER_DAY = 86400
 SECONDS_PER_HOUR = 3600
 
-# Default offsets (seconds before event start): 1 day, 2 hours, 30 minutes
-OFFSETS_DEFAULT = [SECONDS_PER_DAY, 2 * SECONDS_PER_HOUR, 30 * 60]
+# Default offset: 1 hour before event. Daily summary replaces 24h/30min reminders.
+OFFSETS_DEFAULT = [SECONDS_PER_HOUR]
 
 # ── Localized strings (Spanish) ──────────────────────────────────────────────
 # These could be moved to a config file or i18n system for multi-language support
@@ -203,6 +204,45 @@ def format_reminder_message(
                 cal = store.get_calendar_by_id(calendar_id)
                 if cal:
                     lines.append(f"📆 {cal.label}")
+
+    return "\n".join(lines)
+
+
+def format_daily_summary(
+    events: list[EventRow],
+    date_str: str,
+    store: CalendarStore | None = None,
+) -> str:
+    """Format a daily summary message for Telegram with emojis.
+
+    Args:
+        events: List of events for the day, sorted by start_ts.
+        date_str: Date string in dd/mm/yyyy format.
+        store: Optional CalendarStore to look up calendar labels.
+
+    Returns:
+        Formatted string with emojis ready for Telegram.
+    """
+    lines = [f"📅 Eventos de hoy {date_str}:", ""]
+
+    if not events:
+        lines.append("No hay eventos programados para hoy")
+    else:
+        tz = ZoneInfo(TZ)
+        for event in events:
+            # Time in HH:MM format
+            start_ts = event.get("start_ts", 0)
+            event_dt = datetime.fromtimestamp(start_ts, tz=tz)
+            time_str = event_dt.strftime("%H:%M")
+
+            # Title
+            title = event.get("title") or MSG_NO_TITLE
+            lines.append(f"- [{time_str}] {title}")
+
+            # Location (indented, if present)
+            location = event.get("location")
+            if location:
+                lines.append(f"  📍 {location}")
 
     return "\n".join(lines)
 

@@ -14,6 +14,7 @@ from database import CalendarStore
 from reminder_engine import (
     OFFSETS_DEFAULT,
     check_and_send_reminders,
+    format_daily_summary,
     format_reminder_message,
     get_applicable_rules,
 )
@@ -196,3 +197,99 @@ class TestCheckAndSendReminders:
         assert stats["sent"] == 1
         assert stats["skipped"] == 1
         assert mock_notifier.send.call_count == 1
+
+
+class TestFormatDailySummary:
+    def test_empty_day(self):
+        """No events produces the 'no events' message."""
+        msg = format_daily_summary([], "30/10/2026", store=None)
+        assert "📅 Eventos de hoy 30/10/2026:" in msg
+        assert "No hay eventos programados para hoy" in msg
+
+    def test_single_event(self):
+        """Single event is listed with time and title."""
+        # October 30, 2026 09:00 Madrid time
+        from zoneinfo import ZoneInfo
+
+        from config import TZ
+
+        tz = ZoneInfo(TZ)
+        from datetime import datetime
+
+        event_dt = datetime(2026, 10, 30, 9, 0, 0, tzinfo=tz)
+        events = [
+            {
+                "uid": "cal1:evt1",
+                "calendar_id": "cal1",
+                "google_id": "evt1",
+                "title": "Morning standup",
+                "start_ts": int(event_dt.timestamp()),
+                "end_ts": int(event_dt.timestamp()) + 1800,
+                "location": None,
+            }
+        ]
+        msg = format_daily_summary(events, "30/10/2026", store=None)
+        assert "📅 Eventos de hoy 30/10/2026:" in msg
+        assert "[09:00] Morning standup" in msg
+        assert "No hay eventos" not in msg
+
+    def test_event_with_location(self):
+        """Event with location shows the location line."""
+        from zoneinfo import ZoneInfo
+
+        from config import TZ
+
+        tz = ZoneInfo(TZ)
+        from datetime import datetime
+
+        event_dt = datetime(2026, 10, 30, 14, 30, 0, tzinfo=tz)
+        events = [
+            {
+                "uid": "cal1:evt1",
+                "calendar_id": "cal1",
+                "google_id": "evt1",
+                "title": "Team meeting",
+                "start_ts": int(event_dt.timestamp()),
+                "end_ts": int(event_dt.timestamp()) + 3600,
+                "location": "Sala A",
+            }
+        ]
+        msg = format_daily_summary(events, "30/10/2026", store=None)
+        assert "[14:30] Team meeting" in msg
+        assert "📍 Sala A" in msg
+
+    def test_multiple_events(self):
+        """Multiple events are listed in order."""
+        from zoneinfo import ZoneInfo
+
+        from config import TZ
+
+        tz = ZoneInfo(TZ)
+        from datetime import datetime
+
+        events = [
+            {
+                "uid": "cal1:evt1",
+                "calendar_id": "cal1",
+                "google_id": "evt1",
+                "title": "Morning coffee",
+                "start_ts": int(datetime(2026, 10, 30, 8, 0, tzinfo=tz).timestamp()),
+                "end_ts": int(datetime(2026, 10, 30, 8, 30, tzinfo=tz).timestamp()),
+                "location": None,
+            },
+            {
+                "uid": "cal1:evt2",
+                "calendar_id": "cal1",
+                "google_id": "evt2",
+                "title": "Lunch with team",
+                "start_ts": int(datetime(2026, 10, 30, 13, 0, tzinfo=tz).timestamp()),
+                "end_ts": int(datetime(2026, 10, 30, 14, 0, tzinfo=tz).timestamp()),
+                "location": "Cafeteria",
+            },
+        ]
+        msg = format_daily_summary(events, "30/10/2026", store=None)
+        assert "[08:00] Morning coffee" in msg
+        assert "[13:00] Lunch with team" in msg
+        assert "📍 Cafeteria" in msg
+        # Check order (Morning before Lunch)
+        assert msg.index("Morning coffee") < msg.index("Lunch with team")

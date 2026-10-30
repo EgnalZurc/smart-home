@@ -26,6 +26,7 @@ __all__ = [
     "REMINDER_TICK_S",
     "DEFAULT_OFFSETS",
     "NOTIFY_ENABLED",
+    "DAILY_SUMMARY_HOUR",
     "EVENT_RETENTION_DAYS",
     "REMINDER_RETENTION_DAYS",
     "PRUNE_INTERVAL_S",
@@ -71,11 +72,16 @@ SYNC_HORIZON_DAYS = int(os.environ.get("CALENDAR_SYNC_HORIZON_DAYS", "30"))
 # â”€â”€ Reminder loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Reminder tick cadence (design default 60 s).
 REMINDER_TICK_S = int(os.environ.get("CALENDAR_REMINDER_TICK_S", "60"))
-# Default reminder offsets seeded as global rules on first run: 30 min, 1 h, 1 day.
-_DEFAULT_OFFSETS_RAW = os.environ.get("CALENDAR_DEFAULT_OFFSETS", "1800,3600,86400")
+# Default reminder offset: 1 hour (3600s) before event.
+# Daily summary at 3 AM replaces the previous 24h and 30min reminders.
+_DEFAULT_OFFSETS_RAW = os.environ.get("CALENDAR_DEFAULT_OFFSETS", "3600")
 DEFAULT_OFFSETS = [int(o.strip()) for o in _DEFAULT_OFFSETS_RAW.split(",") if o.strip()]
-# Master switch for sending Telegram reminders.
+# Master switch for sending Telegram notifications (including daily summary).
 NOTIFY_ENABLED = os.environ.get("CALENDAR_NOTIFY_ENABLED", "true").lower() == "true"
+
+# ── Daily summary ─────────────────────────────────────────────────────────────
+# Hour (0-23) in LOCAL_TZ when the daily summary is sent (default: 3 AM).
+DAILY_SUMMARY_HOUR = int(os.environ.get("CALENDAR_DAILY_SUMMARY_HOUR", "3"))
 
 # â”€â”€ Retention (design Â§3.3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Drop events whose end_ts is older than this (short tail for "today so far").

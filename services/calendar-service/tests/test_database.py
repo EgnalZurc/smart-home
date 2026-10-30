@@ -69,9 +69,9 @@ class TestPruneOldReminders:
 
         # Both should still exist
         with store._db.connect() as conn:
-            count = conn.execute(
-                "SELECT COUNT(*) AS n FROM reminders_sent"
-            ).fetchone()["n"]
+            count = conn.execute("SELECT COUNT(*) AS n FROM reminders_sent").fetchone()[
+                "n"
+            ]
         assert count == 2
 
     def test_empty_table_returns_zero(self, store):
