@@ -463,7 +463,7 @@ async def get_passwords_health() -> dict[str, Any]:
     async def _check() -> dict:
         try:
             async with httpx.AsyncClient(timeout=3.0) as client:
-                resp = await client.get("http://vaultwarden:80/passwords/")
+                resp = await client.get("http://vaultwarden:80/passwords/alive")
                 if resp.status_code == 200:
                     return {"online": True}
                 # Vaultwarden may return redirects, that's still "online"
