@@ -36,7 +36,10 @@ Serves:
 Port: 8004
 """
 
+import hashlib
+import ipaddress
 import logging
+import re
 from collections.abc import Callable
 from html import escape as html_escape
 from pathlib import Path
@@ -44,6 +47,7 @@ from typing import Any
 
 from config import TRUSTED_PROXY_IPS
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Path as PathParam
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from gifts_controller import (
@@ -106,17 +110,26 @@ except ImportError:  # pragma: no cover
     sys.path.insert(0, str(__file__).replace("\\", "/").split("/services/")[0])
     from libs.html_serving import serve_html
 
-# TODO: Consider structured JSON logging for better log aggregation.
-# Current format is human-readable but less machine-parseable.
-# To enable JSON logging, add python-json-logger to requirements.txt and:
-#   from pythonjsonlogger import jsonlogger
-#   handler = logging.StreamHandler()
-#   handler.setFormatter(jsonlogger.JsonFormatter())
-#   logging.root.addHandler(handler)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-)
+# Structured logging using python-json-logger for better log aggregation.
+# JSON format enables easier parsing by log management systems (ELK, Grafana Loki).
+try:
+    from pythonjsonlogger import jsonlogger
+
+    handler = logging.StreamHandler()
+    formatter = jsonlogger.JsonFormatter(
+        fmt="%(asctime)s %(name)s %(levelname)s %(message)s",
+        rename_fields={"asctime": "timestamp", "levelname": "level"},
+    )
+    handler.setFormatter(formatter)
+    logging.root.handlers.clear()
+    logging.root.addHandler(handler)
+    logging.root.setLevel(logging.INFO)
+except ImportError:
+    # Fallback to text format if python-json-logger not installed
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    )
 logger: logging.Logger = logging.getLogger(__name__)
 
 app: FastAPI = FastAPI(
@@ -186,6 +199,9 @@ MAX_INVITATION_NAME_LENGTH: int = 100
 TOKEN_PREVIEW_LENGTH: int = 4
 # Prefix for authenticated user tokens (distinguishes from guest invitation tokens)
 USER_TOKEN_PREFIX: str = "user:"
+# Max length for tokens in path parameters (H1: prevent DoS via oversized tokens)
+# secrets.token_urlsafe(24) produces 32 chars; allow some margin for future changes
+MAX_TOKEN_LENGTH: int = 64
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -280,6 +296,50 @@ class InvitationCreate(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════════
 _STATIC_DIR: Path = Path(__file__).parent / "static"
 
+# Regex for validating IP format in X-Forwarded-For header (M5)
+# Matches both IPv4 (dotted decimal) and IPv6 (colon-separated hex)
+_IP_FORMAT_PATTERN: re.Pattern[str] = re.compile(
+    r"^(?:(?:\d{1,3}\.){3}\d{1,3}|[0-9a-fA-F:]+)$"
+)
+
+
+def _validate_ip_format(ip: str) -> bool:
+    """Validate that a string looks like a valid IP address.
+
+    Uses the ipaddress module for strict validation, which correctly handles
+    both IPv4 and IPv6 addresses including edge cases (leading zeros, etc.).
+
+    Args:
+        ip: String to validate as IP address.
+
+    Returns:
+        True if valid IPv4 or IPv6 address, False otherwise.
+    """
+    if not ip or not _IP_FORMAT_PATTERN.match(ip):
+        return False
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
+
+
+def _hash_name_for_log(name: str) -> str:
+    """Hash a guest name for GDPR-compliant logging (M3).
+
+    Uses SHA256 truncated to 8 chars for pseudonymization while still
+    allowing correlation of actions by the same guest within logs.
+
+    Args:
+        name: Guest name to hash.
+
+    Returns:
+        Truncated SHA256 hash (8 chars) prefixed with 'guest_'.
+    """
+    if not name:
+        return "guest_unknown"
+    return f"guest_{hashlib.sha256(name.encode()).hexdigest()[:8]}"
+
 
 def _get_client_ip(request: Request) -> str:
     """Get client IP from request, considering trusted proxies only.
@@ -290,9 +350,6 @@ def _get_client_ip(request: Request) -> str:
     Note: Full IP is logged for rate limiting enforcement. This is necessary
     for security (abuse prevention) and is a legitimate interest under GDPR
     Article 6(1)(f). IPs are not stored long-term beyond the rate limit window.
-
-    TODO: Add tests for edge cases (missing client, malformed X-Forwarded-For,
-    multiple proxies in chain, IPv6 addresses).
     """
     # GDPR Art. 6(1)(f): IP logged for rate limiting (legitimate interest).
     # Retained only in memory, not persisted.
@@ -301,7 +358,15 @@ def _get_client_ip(request: Request) -> str:
 
     # Only trust X-Forwarded-For if request comes from trusted proxy
     if forwarded and client_ip in TRUSTED_PROXY_IPS:
-        return forwarded.split(",")[0].strip()
+        # Extract first IP and validate format (M5)
+        first_ip: str = forwarded.split(",")[0].strip()
+        if _validate_ip_format(first_ip):
+            return first_ip
+        # Invalid format - fall back to direct client IP
+        logger.warning(
+            f"Invalid X-Forwarded-For format: {first_ip[:50]}..., "
+            f"falling back to client_ip={client_ip}"
+        )
 
     return client_ip
 
@@ -426,30 +491,33 @@ async def serve_admin(request: Request) -> HTMLResponse:
 
 
 @app.get("/guest/baby-gifts/{token}")
-async def serve_guest(token: str, request: Request) -> HTMLResponse:
+async def serve_guest(
+    token: str = PathParam(..., max_length=MAX_TOKEN_LENGTH),
+    client_ip: str = Depends(require_rate_limit),
+) -> HTMLResponse:
     """Serve the guest SPA (public, token-validated).
 
-    NOTE: No rate limiting here - we only validate token once on page load.
-    Rate limiting is done on API calls instead.
+    H2 FIX: Rate limiting applied BEFORE token validation to prevent
+    timing attacks and DoS via invalid token enumeration.
 
     Args:
-        token: Invitation token from URL path.
-        request: FastAPI request object.
+        token: Invitation token from URL path (max 64 chars).
+        client_ip: Resolved client IP (injected by rate limit dependency).
 
     Returns:
         HTMLResponse: Rendered baby-gifts.html with guest token.
 
     Raises:
-        HTTPException: 404 if token is invalid or expired.
+        HTTPException: 429 if rate limited, 404 if token is invalid or expired.
     """
     guest: dict[str, Any] | None = validate_invitation(token)
     if not guest:
         raise HTTPException(status_code=404, detail="Enlace no válido o expirado")
 
-    client_ip: str = _get_client_ip(request)
+    # M3: Log with hashed name for GDPR compliance
     logger.info(
-        f"Guest access: {guest['name']} (token: {_truncate_token(token)}) "
-        f"from {client_ip}"
+        f"Guest access: {_hash_name_for_log(guest['name'])} "
+        f"(token: {_truncate_token(token)}) from {client_ip}"
     )
     return serve_html(_STATIC_DIR, "baby-gifts.html", guest_token=token)
 
@@ -644,7 +712,8 @@ def create_new_invitation(
 
 @app.delete("/api/baby-gifts/invitations/{token}")
 def remove_invitation(
-    token: str, username: str = Depends(require_auth_user)
+    token: str = PathParam(..., max_length=MAX_TOKEN_LENGTH),
+    username: str = Depends(require_auth_user),
 ) -> dict[str, Any]:
     """Delete an invitation completely (admin only).
 
@@ -666,7 +735,8 @@ def remove_invitation(
 
 @app.post("/api/baby-gifts/invitations/{token}/revoke")
 def revoke_inv(
-    token: str, username: str = Depends(require_auth_user)
+    token: str = PathParam(..., max_length=MAX_TOKEN_LENGTH),
+    username: str = Depends(require_auth_user),
 ) -> dict[str, Any]:
     """Revoke an invitation without deleting it (admin only).
 
@@ -859,7 +929,7 @@ def user_toggle_visibility(gift_id: str, request: Request) -> dict[str, Any]:
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/baby-gifts/guest/{token}")
 def get_gifts_for_guest(
-    token: str,
+    token: str = PathParam(..., max_length=MAX_TOKEN_LENGTH),
     client_ip: str = Depends(require_rate_limit),
 ) -> dict[str, Any]:
     """Get gifts for a guest via invitation token.
@@ -916,8 +986,8 @@ def get_gifts_for_guest(
 
 @app.post("/api/baby-gifts/guest/{token}/reserve/{gift_id}")
 def guest_reserve(
-    token: str,
     gift_id: str,
+    token: str = PathParam(..., max_length=MAX_TOKEN_LENGTH),
     client_ip: str = Depends(require_rate_limit),
 ) -> dict[str, Any]:
     """Reserve a gift as a guest.
@@ -948,8 +1018,8 @@ def guest_reserve(
 
 @app.post("/api/baby-gifts/guest/{token}/unreserve/{gift_id}")
 def guest_unreserve(
-    token: str,
     gift_id: str,
+    token: str = PathParam(..., max_length=MAX_TOKEN_LENGTH),
     client_ip: str = Depends(require_rate_limit),
 ) -> dict[str, Any]:
     """Cancel own reservation as a guest.
