@@ -50,6 +50,12 @@ __all__ = [
 try:
     from smart_home_common.sqlite_helpers import SqliteHelper
 except ImportError:  # pragma: no cover - import fallback outside the container
+    # NOTE [L6 - dev-only path manipulation]:
+    # This fallback is for local development only. In production, the Docker
+    # image sets PYTHONPATH to include /app/libs where smart_home_common lives.
+    # The fallback allows running tests or scripts from the repo root without
+    # needing to set PYTHONPATH manually. The path is computed relative to this
+    # file's location and is safe: it only adds the repo's own libs/ directory.
     import sys
     from pathlib import Path
 
@@ -315,6 +321,33 @@ class EnergyStore:
             ).fetchone()
         return int(power["n"]) + int(energy["n"])
 
+    def latest_power_max(
+        self, channel: str | None = None, since: int | None = None
+    ) -> float | None:
+        """Return the maximum power_max value from power_samples.
+
+        This is a PUBLIC method to avoid direct access to the private _db
+        attribute (M4 encapsulation fix). Use it instead of querying _db directly.
+
+        Args:
+            channel: Optional channel filter. When None, returns max across all.
+            since: Optional unix timestamp; only consider samples at/after this.
+
+        Returns:
+            The peak power_max value in watts, or None if no samples exist.
+        """
+        query = "SELECT MAX(power_max) AS pmax FROM power_samples WHERE 1=1"
+        args: list[object] = []
+        if channel is not None:
+            query += " AND channel = ?"
+            args.append(channel)
+        if since is not None:
+            query += " AND ts >= ?"
+            args.append(since)
+        with self._db.connect() as conn:
+            row = conn.execute(query, args).fetchone()
+        return None if row is None or row["pmax"] is None else float(row["pmax"])
+
     # ── Aggregation (design §4.3) ─────────────────────────────────────────────
     def _cumulative_at(
         self, conn: sqlite3.Connection, channel: str | None, boundary: int
@@ -442,14 +475,8 @@ class EnergyStore:
                 peak_daily_kwh = v
                 peak_day = int(d["period_start"])
 
-        with self._db.connect() as conn:
-            row = conn.execute(
-                "SELECT MAX(power_max) AS pmax FROM power_samples WHERE ts >= ?",
-                (month_start,),
-            ).fetchone()
-        peak_power_w = (
-            None if row is None or row["pmax"] is None else float(row["pmax"])
-        )
+        # Use public method instead of accessing _db directly (M4 encapsulation)
+        peak_power_w = self.latest_power_max(since=month_start)
 
         return {
             "month_start": month_start,
