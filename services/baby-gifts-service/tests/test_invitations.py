@@ -20,7 +20,6 @@ class TestInvitationCreation:
     def test_create_invitation_sets_expiry(self, tmp_data_dir):
         """create_invitation should set expiry to 6 months."""
         import config
-
         from gifts_controller import create_invitation
 
         result = create_invitation("Expiring Guest")
@@ -241,7 +240,6 @@ class TestReservationCounting:
         assert count == 0
 
 
-
 class TestInvitationExpiry:
     """Tests for invitation expiry functionality."""
 
@@ -301,9 +299,7 @@ class TestInvitationExpiry:
         created = create_invitation("Valid Guest")
 
         invitations = list_invitations()
-        valid_inv = next(
-            inv for inv in invitations if inv["token"] == created["token"]
-        )
+        valid_inv = next(inv for inv in invitations if inv["token"] == created["token"])
         assert valid_inv["expired"] is False
 
 
