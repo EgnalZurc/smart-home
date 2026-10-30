@@ -415,10 +415,7 @@ def _validate_origin(request: Request) -> bool:
     origin = request.headers.get("origin")
 
     # Check if origin is in the allowed list when present
-    if origin and origin not in _ALLOWED_ORIGINS:
-        return False
-
-    return True
+    return not (origin and origin not in _ALLOWED_ORIGINS)
 
 
 # Sensitive endpoints that require X-Requested-With header for CSRF protection.
