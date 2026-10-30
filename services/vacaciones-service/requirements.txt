@@ -2,8 +2,10 @@
 fastapi==0.115.12
 uvicorn==0.34.2
 
-# Internal shared library (follows smart-home versioning)
-smart_home_common
+# Internal shared library: NOT a PyPI package. It is installed separately from
+# the local path libs/smart_home_common/ in the Dockerfile (repo-root build
+# context) and via `pip install -e libs/smart_home_common` in CI. Do not list it
+# here or `pip install -r requirements.txt` fails trying to resolve it on PyPI.
 
 # Transitive dependencies - not pinned directly
 # ─────────────────────────────────────────────────────────────────────────────
