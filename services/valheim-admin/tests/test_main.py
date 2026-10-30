@@ -781,7 +781,7 @@ class TestNetworkEndpoint:
             assert data["port"] == 2456
 
     def test_get_network_returns_defaults_on_failure(self):
-        """Network endpoint should return defaults when pc-agent unreachable."""
+        """Network endpoint should return nulls when pc-agent unreachable."""
         from src.main import app, pc_agent
 
         with patch.object(
@@ -795,8 +795,10 @@ class TestNetworkEndpoint:
 
             assert response.status_code == 200
             data = response.json()
-            assert data["local_ip"] == "192.168.1.164"
-            assert data["port"] == 2456
+            # L1: Return null values instead of hardcoded defaults
+            assert data["local_ip"] is None
+            assert data["port"] is None
+            assert data["error"] == "pc_agent_unreachable"
 
 
 # ── World Upload Endpoints ────────────────────────────────────────────────────
@@ -807,16 +809,16 @@ class TestWorldUploadV1Endpoint:
 
     def test_upload_v1_success(self):
         """Upload V1 should accept valid zip and forward to pc-agent."""
-        from src.main import app, pc_agent
+        from src.main import app
 
-        with patch.object(
-            pc_agent,
-            "post",
+        with patch(
+            "src.main._post_files_to_pc_agent",
             new_callable=AsyncMock,
             return_value={"world": "TestWorld", "message": "Imported"},
         ) as mock_post:
             client = TestClient(app)
-            fake_zip = b"PK" + b"\x00" * 100
+            # Valid ZIP magic bytes: PK\x03\x04
+            fake_zip = b"PK\x03\x04" + b"\x00" * 100
 
             response = client.post(
                 "/api/worlds/upload",
@@ -859,11 +861,10 @@ class TestWorldUploadLegacyEndpoint:
 
     def test_upload_legacy_success(self):
         """Upload legacy should accept valid db+fwl pair."""
-        from src.main import app, pc_agent
+        from src.main import app
 
-        with patch.object(
-            pc_agent,
-            "post",
+        with patch(
+            "src.main._post_files_to_pc_agent",
             new_callable=AsyncMock,
             return_value={
                 "world": "TestWorld",
