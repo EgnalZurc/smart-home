@@ -46,12 +46,28 @@ def _pc_agent_headers() -> dict[str, str]:
 # services. We cache each service's result for a short TTL so repeated polls
 # within the window reuse the last known result instead of issuing a new request.
 
-from api.constants import HEALTH_CACHE_TTL_SECONDS
+from api.constants import HEALTH_CACHE_MAX_ENTRIES, HEALTH_CACHE_TTL_SECONDS
 
 HEALTH_CACHE_TTL = HEALTH_CACHE_TTL_SECONDS
 
 # Maps a service key -> (timestamp, data) of the last successful check.
 _health_cache: dict[str, tuple[float, dict]] = {}
+
+
+def _evict_oldest_cache_entries() -> None:
+    """Evict oldest cache entries when exceeding MAX_CACHE_ENTRIES.
+
+    Removes entries beyond the limit, keeping the most recently updated.
+    This prevents unbounded memory growth from orphaned service keys.
+    """
+    if len(_health_cache) <= HEALTH_CACHE_MAX_ENTRIES:
+        return
+
+    # Sort by timestamp (oldest first) and remove excess
+    sorted_keys = sorted(_health_cache.keys(), key=lambda k: _health_cache[k][0])
+    excess_count = len(_health_cache) - HEALTH_CACHE_MAX_ENTRIES
+    for key in sorted_keys[:excess_count]:
+        del _health_cache[key]
 
 
 async def _cached_health_check(
@@ -88,6 +104,7 @@ async def _cached_health_check(
     data = await check_fn()
     latency_ms = int((time.monotonic() - start) * 1000)
     _health_cache[key] = (time.monotonic(), data)
+    _evict_oldest_cache_entries()
     return {**data, "latency_ms": latency_ms}
 
 
