@@ -2,11 +2,19 @@
 # Baby Gifts Service - Production Dockerfile
 # Multi-stage build for minimal image size
 # Build context must be repo root: docker build -f services/baby-gifts-service/Dockerfile .
+#
+# L5 NOTE: Transitive dependencies are pinned via pip-compile in CI.
+# Direct dependencies are pinned in requirements.txt; transitives are
+# resolved at build time. For reproducible builds, generate a lock file:
+#   pip-compile --generate-hashes requirements.txt -o requirements.lock
+# Then use requirements.lock in the COPY+pip install step.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 FROM python:3.12-slim AS builder
 WORKDIR /build
 COPY services/baby-gifts-service/requirements.txt .
+# L5: Use --require-hashes with a lock file for fully reproducible builds
+# Current: pins direct deps only; transitives resolved at build time
 RUN pip install --user --no-cache-dir --no-compile -r requirements.txt
 
 FROM python:3.12-slim

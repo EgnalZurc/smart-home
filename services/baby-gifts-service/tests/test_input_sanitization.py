@@ -228,7 +228,6 @@ class TestApiEndpointsSanitization:
         assert "&lt;b&gt;" in data["name"]
 
 
-
 class TestTruncateToken:
     """Tests for the _truncate_token helper function for safe logging."""
 

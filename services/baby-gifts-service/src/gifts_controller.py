@@ -502,49 +502,55 @@ def is_familia_user(username: str) -> bool:
 MAX_INVITATION_RETRIES: int = 3
 
 
-def create_invitation(name: str, _retries: int = 0) -> dict[str, Any]:
+def create_invitation(name: str) -> dict[str, Any]:
     """Create a new invitation with a unique token. Expires in 6 months.
+
+    M4 FIX: Uses iterative loop instead of recursion to avoid stack overflow
+    on extremely unlikely repeated token collisions.
 
     Args:
         name: Guest name for the invitation.
-        _retries: Internal retry counter (do not set manually).
 
     Returns:
         Dict with status 'ok' and invitation details, or status 'error' if
         token generation fails after MAX_INVITATION_RETRIES attempts.
     """
-    if _retries >= MAX_INVITATION_RETRIES:
-        logger.error(
-            "Failed to create invitation after %d retries for name=%s",
-            MAX_INVITATION_RETRIES,
-            name,
-        )
-        return {"status": "error", "message": "Failed to generate unique token"}
+    for attempt in range(MAX_INVITATION_RETRIES):
+        token: str = secrets.token_urlsafe(INVITATION_TOKEN_BYTES)  # 32 chars
+        now: datetime = datetime.now()
+        expires_at: datetime = now + timedelta(days=config.INVITATION_EXPIRY_DAYS)
 
-    token: str = secrets.token_urlsafe(INVITATION_TOKEN_BYTES)  # 32 chars
-    now: datetime = datetime.now()
-    expires_at: datetime = now + timedelta(days=config.INVITATION_EXPIRY_DAYS)
+        conn: sqlite3.Connection = _get_db()
+        try:
+            conn.execute(
+                "INSERT INTO invitations (token, name, created_at, expires_at) "
+                "VALUES (?, ?, ?, ?)",
+                (token, name, now.isoformat(), expires_at.isoformat()),
+            )
+            conn.commit()
+            return {
+                "status": "ok",
+                "token": token,
+                "name": name,
+                "created_at": now.isoformat(),
+                "expires_at": expires_at.isoformat(),
+            }
+        except sqlite3.IntegrityError:
+            # Token collision (extremely unlikely), continue to next attempt
+            logger.warning(
+                f"Token collision on attempt {attempt + 1}/{MAX_INVITATION_RETRIES} "
+                f"for invitation name={name}"
+            )
+            continue
+        finally:
+            conn.close()
 
-    conn: sqlite3.Connection = _get_db()
-    try:
-        conn.execute(
-            "INSERT INTO invitations (token, name, created_at, expires_at) "
-            "VALUES (?, ?, ?, ?)",
-            (token, name, now.isoformat(), expires_at.isoformat()),
-        )
-        conn.commit()
-        return {
-            "status": "ok",
-            "token": token,
-            "name": name,
-            "created_at": now.isoformat(),
-            "expires_at": expires_at.isoformat(),
-        }
-    except sqlite3.IntegrityError:
-        # Token collision (extremely unlikely), retry with incremented counter
-        return create_invitation(name, _retries + 1)
-    finally:
-        conn.close()
+    logger.error(
+        "Failed to create invitation after %d retries for name=%s",
+        MAX_INVITATION_RETRIES,
+        name,
+    )
+    return {"status": "error", "message": "Failed to generate unique token"}
 
 
 def validate_invitation(token: str) -> dict[str, Any] | None:
@@ -656,11 +662,68 @@ def get_invitation_reservations(token: str) -> int:
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 
+# Counter for rate limit operations to trigger periodic cleanup (M2)
+_rate_limit_ops_counter: int = 0
+# Cleanup stale rate limits every N operations to prevent unbounded table growth
+RATE_LIMIT_CLEANUP_INTERVAL: int = 100
+
+
+def _cleanup_stale_rate_limits(conn: sqlite3.Connection) -> int:
+    """Remove stale rate limit entries from SQLite (M2 fix).
+
+    Deletes entries whose window_start is older than the rate limit window,
+    preventing unbounded table growth from abandoned IPs.
+
+    Args:
+        conn: Active database connection.
+
+    Returns:
+        Number of rows deleted.
+    """
+    # Calculate cutoff time (entries older than this are stale)
+    # Use the larger of the two windows to be safe
+    max_window: int = max(
+        config.RATE_LIMIT_WINDOW_SECONDS,
+        config.INVITATION_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    cutoff: datetime = datetime.now() - timedelta(seconds=max_window * 2)
+
+    # Cleanup both rate limit tables
+    deleted: int = 0
+    result: sqlite3.Cursor = conn.execute(
+        "DELETE FROM rate_limits WHERE window_start < ?",
+        (cutoff.isoformat(),),
+    )
+    deleted += result.rowcount
+
+    # Also cleanup invitation_rate_limits if it exists
+    try:
+        result = conn.execute(
+            "DELETE FROM invitation_rate_limits WHERE window_start < ?",
+            (cutoff.isoformat(),),
+        )
+        deleted += result.rowcount
+    except sqlite3.OperationalError:
+        pass  # Table doesn't exist yet
+
+    if deleted > 0:
+        conn.commit()
+        logger.info(f"Cleaned up {deleted} stale rate limit entries")
+
+    return deleted
+
 
 def check_rate_limit(ip: str) -> bool:
     """Check if IP is rate limited. Returns True if allowed, False if blocked."""
+    global _rate_limit_ops_counter
     conn: sqlite3.Connection = _get_db()
     try:
+        # M2: Periodic cleanup of stale entries
+        _rate_limit_ops_counter += 1
+        if _rate_limit_ops_counter >= RATE_LIMIT_CLEANUP_INTERVAL:
+            _rate_limit_ops_counter = 0
+            _cleanup_stale_rate_limits(conn)
+
         now: datetime = datetime.now()
         row: sqlite3.Row | None = conn.execute(
             "SELECT attempts, window_start FROM rate_limits WHERE ip = ?", (ip,)
