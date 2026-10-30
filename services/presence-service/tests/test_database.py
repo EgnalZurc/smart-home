@@ -214,3 +214,29 @@ def test_history_rejects_invalid_person_id(store):
     """history should reject invalid person_id filter."""
     with pytest.raises(ValueError, match="Invalid person_id"):
         store.history(person_id="<script>alert(1)</script>")
+
+
+# L3: db_ok() failure path tests
+
+
+def test_db_ok_returns_false_on_sqlite_error(tmp_path, monkeypatch):
+    import sqlite3
+
+    store = PresenceStore(str(tmp_path / "presence.db"))
+    assert store.db_ok() is True
+
+    def mock_count_error():
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(store, "count_transitions", mock_count_error)
+    assert store.db_ok() is False
+
+
+def test_db_ok_returns_false_on_os_error(tmp_path, monkeypatch):
+    store = PresenceStore(str(tmp_path / "presence.db"))
+
+    def mock_os_error():
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(store, "count_transitions", mock_os_error)
+    assert store.db_ok() is False

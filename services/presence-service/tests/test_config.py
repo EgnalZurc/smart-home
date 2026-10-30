@@ -129,3 +129,34 @@ class TestRouterModeValidation:
         for mode in ("arpsweep", "openwrt_ssh", "fritzbox", "mikrotik"):
             result = cfg._validate_router_mode(mode)
             assert result == mode
+
+
+# L2: Night Window Wraparound Tests
+
+
+class TestNightWindowValidation:
+    def test_wraparound_window_accepted(self):
+        import importlib, sys
+
+        if "config" in sys.modules:
+            del sys.modules["config"]
+        cfg = importlib.import_module("config")
+        assert cfg._validate_night_window("23:00-08:00") == "23:00-08:00"
+
+    def test_invalid_format_rejected(self):
+        import importlib, sys
+
+        if "config" in sys.modules:
+            del sys.modules["config"]
+        cfg = importlib.import_module("config")
+        with pytest.raises(ValueError, match="HH:MM-HH:MM"):
+            cfg._validate_night_window("23:00")
+
+    def test_invalid_hour_rejected(self):
+        import importlib, sys
+
+        if "config" in sys.modules:
+            del sys.modules["config"]
+        cfg = importlib.import_module("config")
+        with pytest.raises(ValueError, match="invalid time"):
+            cfg._validate_night_window("25:00-08:00")
