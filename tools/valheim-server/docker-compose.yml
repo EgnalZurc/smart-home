@@ -14,7 +14,7 @@
 
 services:
   valheim-server:
-    image: lloesche/valheim-server:latest
+    image: lloesche/valheim-server:0.165.4
     container_name: valheim-server
     restart: "no"
     stop_grace_period: 120s
