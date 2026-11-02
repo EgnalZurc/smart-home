@@ -24,7 +24,7 @@ services:
       - cuchi-casa
 
   zigbee2mqtt:
-    image: koenkk/zigbee2mqtt:latest
+    image: koenkk/zigbee2mqtt:1.40.2
     container_name: zigbee2mqtt
     restart: unless-stopped
     mem_limit: 128m

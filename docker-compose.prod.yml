@@ -118,7 +118,7 @@ services:
   # See services/metrics-service/README.md for full documentation.
   # ─────────────────────────────────────────────────────────────────────────────
   docker-socket-proxy:
-    image: ghcr.io/tecnativa/docker-socket-proxy:latest
+    image: ghcr.io/tecnativa/docker-socket-proxy:0.3.0
     container_name: docker-socket-proxy
     restart: on-failure:5
     # Increased from 32m based on 61% usage (19MB)
