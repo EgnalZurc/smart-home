@@ -16,35 +16,16 @@ Example: TELEGRAM_CHAT_IDS=123456789,987654321
 from __future__ import annotations
 
 import logging
-import sys
 from typing import TYPE_CHECKING, Literal
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# Import TelegramNotifier from shared lib.
-#
-# Path resolution strategy:
-# - Production (Docker): PYTHONPATH includes /app which contains libs/
-# - CI (pytest): PYTHONPATH=src is set, and conftest.py adds the repo root
-# - Local development: May not have libs/ in path, so we fall back to dynamic
-#   path insertion based on the known repo structure (services/<name>/src/).
-#
-# The fallback uses sys.path.insert(0, ...) to prepend the repo root, which
-# allows `from libs.notifications import ...` to resolve. This is intentional
-# rather than using relative imports because:
-# 1. libs/ is a shared library, not part of this service's package
-# 2. The Dockerfile copies libs/ to /app/libs, not into the service directory
-# 3. This pattern is used consistently across all services that use shared libs
-try:
-    from libs.notifications import TelegramNotifier
-except ImportError:
-    # Local development fallback: derive repo root from this file's known location
-    # (/repo/services/baby-gifts-service/src/notifier.py → /repo)
-    sys.path.insert(0, str(__file__).replace("\\", "/").split("/services/")[0])
-    from libs.notifications import TelegramNotifier
+# Import TelegramNotifier from the unified smart_home_common library.
+from smart_home_common.telegram import TelegramNotifier, TelegramResult
 
 if TYPE_CHECKING:
-    from libs.notifications import NotificationResult, TelegramNotifier
+    # Alias for backwards compatibility with existing type hints
+    NotificationResult = TelegramResult
 
 
 # Module-level notifier instance (lazy initialization)
