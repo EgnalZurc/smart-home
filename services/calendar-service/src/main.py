@@ -23,7 +23,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlite3 import DatabaseError, OperationalError
 
 from config import (
@@ -349,14 +349,11 @@ def _seconds_until_next_summary() -> int:
     now = datetime.now(LOCAL_TZ)
     target = now.replace(hour=DAILY_SUMMARY_HOUR, minute=0, second=0, microsecond=0)
     if now >= target:
-        # Already past target time today, schedule for tomorrow
-        target = target.replace(day=target.day + 1)
-        # Handle month rollover via timedelta
-        from datetime import timedelta
-
-        target = now.replace(
-            hour=DAILY_SUMMARY_HOUR, minute=0, second=0, microsecond=0
-        ) + timedelta(days=1)
+        # Already past target time today → schedule for tomorrow. Use timedelta,
+        # never target.replace(day=day+1): on the last day of a month that would
+        # raise ValueError (day out of range), and the daily-summary thread only
+        # catches DB/OS errors — a ValueError would kill it permanently.
+        target = target + timedelta(days=1)
     delta = target - now
     return max(1, int(delta.total_seconds()))
 

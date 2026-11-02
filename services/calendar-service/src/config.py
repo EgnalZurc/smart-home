@@ -64,8 +64,15 @@ GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
 # â”€â”€ Sync loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # One sync every CALENDAR_SYNC_INTERVAL_S seconds. Design default 600 s (10 min),
-# tunable within the requested 5-15 min (300-900 s) range.
-SYNC_INTERVAL_S = int(os.environ.get("CALENDAR_SYNC_INTERVAL_S", "600"))
+# tunable within the requested 5-15 min (300-900 s) range. Also honour the
+# legacy unsuffixed CALENDAR_SYNC_INTERVAL name (used by docker-compose.prod.yml)
+# so that override is not silently ignored; the _S name wins when both are set.
+SYNC_INTERVAL_S = int(
+    os.environ.get(
+        "CALENDAR_SYNC_INTERVAL_S",
+        os.environ.get("CALENDAR_SYNC_INTERVAL", "600"),
+    )
+)
 # How far ahead to cache events (design default 30 days).
 SYNC_HORIZON_DAYS = int(os.environ.get("CALENDAR_SYNC_HORIZON_DAYS", "30"))
 
