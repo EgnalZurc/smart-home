@@ -472,6 +472,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("Initial store check failed: %s", exc)
 
     store.seed_default_rules(offsets=DEFAULT_OFFSETS)
+    # Reconcile global rules to the configured offsets on every startup so a DB
+    # seeded with an older default set (e.g. [86400, 7200, 1800]) does not keep
+    # firing extra reminders after DEFAULT_OFFSETS is narrowed.
+    store.reconcile_global_rules(DEFAULT_OFFSETS)
 
     if CALENDAR_SEED:
         try:
