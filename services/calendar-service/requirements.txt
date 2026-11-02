@@ -14,6 +14,8 @@ cryptography>=42.0.0
 # Google Calendar API (OAuth2 installed-app flow, read-only) — design §2
 google-api-python-client>=2.100.0
 google-auth-oauthlib>=1.1.0
+# Imported directly in google_sync.py (AuthorizedHttp) to attach a timeout
+# transport to authenticated requests — keep it explicit, not transitive.
 google-auth-httplib2>=0.1.1
 
 # Test dependencies (included here for dev convenience; CI uses same file)

@@ -559,9 +559,7 @@ class TestReportedBugScenarios:
                 "calendar_id": "cal1",
                 "google_id": "curso",
                 "title": "curso",
-                "start_ts": int(
-                    datetime(2026, 10, 31, 8, 0, tzinfo=tz).timestamp()
-                ),
+                "start_ts": int(datetime(2026, 10, 31, 8, 0, tzinfo=tz).timestamp()),
                 "end_ts": int(datetime(2026, 10, 31, 9, 0, tzinfo=tz).timestamp()),
                 "location": None,
                 "all_day": False,

@@ -41,6 +41,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from httplib2 import Http, HttpLib2Error
@@ -371,13 +372,18 @@ class GoogleCalendarClient:
                 self._credentials = None
                 return False
 
-        # Build the API service with timeout-enabled HTTP transport
+        # Build the API service with timeout-enabled HTTP transport.
+        # googleapiclient.build() forbids passing both `http` and `credentials`
+        # ("Arguments http and credentials are mutually exclusive"), so when we
+        # need a custom (timeout-enforcing) transport we must authorize it
+        # ourselves with AuthorizedHttp and pass only `http`.
         try:
-            http = TimeoutHttp(timeout=self._timeout)
+            http = AuthorizedHttp(
+                self._credentials, http=TimeoutHttp(timeout=self._timeout)
+            )
             self._service = build(
                 "calendar",
                 "v3",
-                credentials=self._credentials,
                 cache_discovery=False,
                 http=http,
             )
