@@ -4,7 +4,7 @@ uvicorn==0.34.2
 httpx==0.28.1
 
 # Test dependencies
-pytest==8.3.5
+pytest==8.4.0
 # pytest-asyncio 1.x dropped the deprecated event_loop fixture (removed in 1.0.0).
 # This codebase uses asyncio_mode=auto and does not rely on event_loop, so the
 # upgrade is safe. Pinned to 1.4.x for stability; unpinning may pull in breaking
