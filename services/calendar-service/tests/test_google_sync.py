@@ -171,13 +171,21 @@ class TestTimeoutInApiCalls:
         mock_build.return_value = MagicMock()
         client.authenticate()
 
-        # Verify build was called with http parameter
+        # Verify build was called with an authorized http carrying our timeout
+        # transport, and WITHOUT a `credentials` kwarg. googleapiclient rejects
+        # passing both `http` and `credentials` ("Arguments http and credentials
+        # are mutually exclusive"), which previously broke auth in production.
         mock_build.assert_called_once()
         call_kwargs = mock_build.call_args[1]
         assert "http" in call_kwargs
+        assert "credentials" not in call_kwargs
+        from google_auth_httplib2 import AuthorizedHttp
+
         http_obj = call_kwargs["http"]
-        assert isinstance(http_obj, TimeoutHttp)
-        assert http_obj._timeout == 25.0
+        assert isinstance(http_obj, AuthorizedHttp)
+        # The authorized http must wrap our timeout-enforcing transport.
+        assert isinstance(http_obj.http, TimeoutHttp)
+        assert http_obj.http._timeout == 25.0
 
     def test_default_timeout_from_config(self, tmp_path):
         """Verify default timeout comes from config."""
