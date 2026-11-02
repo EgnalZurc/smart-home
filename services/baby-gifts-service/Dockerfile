@@ -28,7 +28,7 @@ COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 COPY --chown=appuser:appuser services/baby-gifts-service/src/ .
 COPY --chown=appuser:appuser libs/notifications/ /app/libs/notifications/
 COPY --chown=appuser:appuser libs/html_serving/ /app/libs/html_serving/
-COPY --chown=appuser:appuser smart_home_common/ /app/smart_home_common/
+COPY --chown=appuser:appuser libs/smart_home_common/ /app/smart_home_common/
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8004
