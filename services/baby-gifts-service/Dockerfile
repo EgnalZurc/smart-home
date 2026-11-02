@@ -10,14 +10,14 @@
 # Then use requirements.lock in the COPY+pip install step.
 # ═══════════════════════════════════════════════════════════════════════════════
 
-FROM python:3.12-slim AS builder
+FROM python:3.12.7-slim AS builder
 WORKDIR /build
 COPY services/baby-gifts-service/requirements.txt .
 # L5: Use --require-hashes with a lock file for fully reproducible builds
 # Current: pins direct deps only; transitives resolved at build time
 RUN pip install --user --no-cache-dir --no-compile -r requirements.txt
 
-FROM python:3.12-slim
+FROM python:3.12.7-slim
 RUN adduser --disabled-password --gecos '' --uid 1000 appuser
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
