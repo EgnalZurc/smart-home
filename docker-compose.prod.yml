@@ -199,7 +199,6 @@ services:
       - MQTT_PORT=${MQTT_PORT:-1883}
       - MQTT_TLS_ENABLED=${MQTT_TLS_ENABLED:-false}
       - MQTT_TLS_CA_CERTS=${MQTT_TLS_CA_CERTS:-/app/certs/ca.crt}
-      - MQTT_ALLOW_ANONYMOUS=true
     networks:
       - smart-home
     healthcheck:
