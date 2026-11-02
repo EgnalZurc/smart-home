@@ -2,8 +2,8 @@
 # Versiones fijas para reproducibilidad en la Raspberry
 
 # Web framework
-fastapi==0.115.0
-uvicorn==0.30.6
+fastapi==0.115.12
+uvicorn==0.34.2
 pydantic==2.9.2
 
 # HTTP y scraping
