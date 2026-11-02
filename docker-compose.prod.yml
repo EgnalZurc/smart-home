@@ -496,7 +496,9 @@ services:
       - ./data/calendar-service:/app/data
     environment:
       - TZ=Europe/Madrid
-      - CALENDAR_SYNC_INTERVAL=${CALENDAR_SYNC_INTERVAL:-300}
+      # Canonical name read by config.py is CALENDAR_SYNC_INTERVAL_S; the code
+      # also falls back to the legacy CALENDAR_SYNC_INTERVAL for safety.
+      - CALENDAR_SYNC_INTERVAL_S=${CALENDAR_SYNC_INTERVAL_S:-${CALENDAR_SYNC_INTERVAL:-300}}
     # Google OAuth credentials and Telegram for reminders: GOOGLE_CLIENT_ID,
     # GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, TELEGRAM_BOT_TOKEN,
     # TELEGRAM_CHAT_IDS from .env.
