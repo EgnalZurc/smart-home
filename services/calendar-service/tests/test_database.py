@@ -273,3 +273,76 @@ class TestClearCalendarEvents:
         assert "calendar-2" not in cal_ids
         assert "calendar-1" in cal_ids
         assert "calendar-3" in cal_ids
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# reconcile_global_rules tests (Scenario 1 root cause)
+# ══════════════════════════════════════════════════════════════════════════════
+class TestReconcileGlobalRules:
+    """reconcile_global_rules makes enabled global rules match the config set."""
+
+    def _global_offsets(self, store):
+        with store._db.connect() as conn:
+            rows = conn.execute(
+                "SELECT offset_s FROM reminder_rules "
+                "WHERE scope = 'global' AND enabled = 1"
+            ).fetchall()
+        return sorted(r["offset_s"] for r in rows)
+
+    def test_narrows_stale_seed_to_single_offset(self, store):
+        """A DB seeded with [86400, 7200, 1800] is reduced to [3600]."""
+        store.seed_default_rules(offsets=[86400, 7200, 1800])
+        assert self._global_offsets(store) == [1800, 7200, 86400]
+
+        changed = store.reconcile_global_rules([3600])
+        assert changed is True
+        assert self._global_offsets(store) == [3600]
+
+    def test_noop_when_already_matching(self, store):
+        """Reconcile is a no-op (returns False) when rules already match."""
+        store.seed_default_rules(offsets=[3600])
+        changed = store.reconcile_global_rules([3600])
+        assert changed is False
+        assert self._global_offsets(store) == [3600]
+
+    def test_creates_rules_on_empty_db(self, store):
+        """With no rules yet, reconcile installs the configured offsets."""
+        changed = store.reconcile_global_rules([3600])
+        assert changed is True
+        assert self._global_offsets(store) == [3600]
+
+    def test_leaves_scoped_rules_untouched(self, store):
+        """Calendar/person-scoped overrides survive reconciliation."""
+        store.seed_default_rules(offsets=[86400, 1800])
+        store.add_rule("calendar", "cal1", 900)
+        store.add_rule("person", "alice", 600)
+
+        store.reconcile_global_rules([3600])
+
+        assert self._global_offsets(store) == [3600]
+        with store._db.connect() as conn:
+            scoped = conn.execute(
+                "SELECT scope, scope_id, offset_s FROM reminder_rules "
+                "WHERE scope != 'global' ORDER BY scope"
+            ).fetchall()
+        rows = [(r["scope"], r["scope_id"], r["offset_s"]) for r in scoped]
+        assert ("calendar", "cal1", 900) in rows
+        assert ("person", "alice", 600) in rows
+
+    def test_removes_stale_disabled_global_rows(self, store):
+        """Disabled stale global rows are cleared, not left to resurface."""
+        store.seed_default_rules(offsets=[86400, 3600])
+        # Disable one rule directly
+        with store._db.connect() as conn:
+            conn.execute(
+                "UPDATE reminder_rules SET enabled = 0 "
+                "WHERE scope = 'global' AND offset_s = 86400"
+            )
+        store.reconcile_global_rules([3600])
+        with store._db.connect() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) AS n FROM reminder_rules WHERE scope = 'global'"
+            ).fetchone()["n"]
+        # Exactly one global row (the configured 3600), no lingering disabled row
+        assert total == 1
+        assert self._global_offsets(store) == [3600]

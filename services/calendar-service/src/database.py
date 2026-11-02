@@ -427,6 +427,49 @@ class CalendarStore:
                 created += 1
             return created
 
+    def reconcile_global_rules(self, offsets: list[int]) -> bool:
+        """Make the set of enabled global rules exactly match ``offsets``.
+
+        Unlike ``seed_default_rules`` (which is a no-op once any global rule
+        exists), this reconciles the stored global rules to the configured
+        offsets every startup. It fixes databases seeded with an older default
+        set (e.g. [86400, 7200, 1800]) that would otherwise keep firing extra
+        reminders even after ``DEFAULT_OFFSETS`` is narrowed to [3600].
+
+        Only global rules are touched; calendar/person-scoped rules are left
+        untouched so manual overrides survive. Returns True if anything changed.
+        """
+        target = set(offsets)
+        with self._db.connect() as conn:
+            rows = conn.execute(
+                "SELECT offset_s, enabled FROM reminder_rules WHERE scope = 'global'"
+            ).fetchall()
+            enabled_current = {r["offset_s"] for r in rows if r["enabled"]}
+            # Already correct only when the enabled set matches AND there are no
+            # extra global rows (stale disabled rows would otherwise linger and
+            # could be re-enabled later, resurfacing the bug).
+            if enabled_current == target and len(rows) == len(target):
+                return False
+            current = enabled_current
+
+            # Drop every global rule (enabled or not) and re-insert the target
+            # set, so stale disabled rows don't linger and resurface.
+            conn.execute("DELETE FROM reminder_rules WHERE scope = 'global'")
+            for offset_s in offsets:
+                conn.execute(
+                    """
+                    INSERT INTO reminder_rules (scope, scope_id, offset_s, enabled)
+                    VALUES ('global', NULL, ?, 1)
+                    """,
+                    (offset_s,),
+                )
+            logger.info(
+                "Reconciled global reminder rules: %s -> %s",
+                sorted(current),
+                sorted(target),
+            )
+            return True
+
     # â”€â”€ Reminders Sent (dedup ledger) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def try_record_reminder(
         self, event_uid: str, offset_s: int, event_start: int

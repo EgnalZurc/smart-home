@@ -414,3 +414,162 @@ class TestFormatDailySummary:
         # Order: all-day first, then timed by time
         assert msg.index("Cumpleaños") < msg.index("Reunión")
         assert msg.index("Reunión") < msg.index("Dentista")
+
+
+class TestReportedBugScenarios:
+    """Regression tests for the four reported calendar-service bugs.
+
+    Scenario 1 & 4: events notified twice / "en 59 min" + "en 29 min" because
+      more than one global offset was active (1800 and 3600). With a single
+      [3600] offset exactly one reminder fires.
+    Scenario 2: all-day birthdays fired a "before" reminder on the PREVIOUS day
+      (offset before midnight lands the day before) — they must be skipped and
+      appear only in the daily summary.
+    Scenario 3: a single timed event rendered directly under an all-day event,
+      reading as its sub-line — a blank line must separate the two groups.
+    """
+
+    def test_single_offset_fires_once(self, store, mock_notifier):
+        """Scenario 1 & 4: with only the 1h rule, a timed event fires once."""
+        now = int(time.time())
+        event_start = now + 3600  # exactly 1h away
+        store.add_rule("global", None, 3600)
+        store.upsert_event(
+            {
+                "uid": "cal1:evt1",
+                "calendar_id": "cal1",
+                "google_id": "evt1",
+                "title": "curso",
+                "start_ts": event_start,
+                "end_ts": event_start + 3600,
+                "all_day": False,
+            }
+        )
+        stats = check_and_send_reminders(store, mock_notifier, now=now)
+        assert stats["sent"] == 1
+        assert mock_notifier.send.call_count == 1
+
+    def test_two_offsets_fire_twice_without_fix(self, store, mock_notifier):
+        """Scenario 4 root cause: two active offsets => two notifications.
+
+        Documents the behaviour the reconcile fix prevents: when both 3600 and
+        1800 are active, a timed event is announced twice (at 1h and 30min).
+        """
+        now = int(time.time())
+        event_start = now + 3600
+        store.add_rule("global", None, 3600)
+        store.add_rule("global", None, 1800)
+        store.upsert_event(
+            {
+                "uid": "cal1:evt1",
+                "calendar_id": "cal1",
+                "google_id": "evt1",
+                "title": "curso",
+                "start_ts": event_start,
+                "end_ts": event_start + 3600,
+                "all_day": False,
+            }
+        )
+        stats = check_and_send_reminders(store, mock_notifier, now=now)
+        # 3600 fires now; 1800 is 30 min away, not yet due
+        assert stats["sent"] == 1
+        # Advance to 30 min before start: the second offset also fires
+        stats2 = check_and_send_reminders(store, mock_notifier, now=event_start - 1800)
+        assert stats2["sent"] == 1
+        # Same event announced twice in total — the duplicate the user reported
+        assert mock_notifier.send.call_count == 2
+
+    def test_all_day_event_never_fires_before_reminder(self, store, mock_notifier):
+        """Scenario 2: an all-day birthday must not fire a timed reminder.
+
+        The birthday starts at local midnight; a 1h offset would land at 23:00
+        the previous day. The engine must skip all-day events entirely.
+        """
+        now = int(time.time())
+        midnight = now + 3600  # pretend "midnight" is 1h away
+        store.add_rule("global", None, 3600)
+        store.upsert_event(
+            {
+                "uid": "cal1:bday",
+                "calendar_id": "cal1",
+                "google_id": "bday",
+                "title": "🎂 Eva Ariza",
+                "start_ts": midnight,
+                "end_ts": midnight + 86400,
+                "all_day": True,
+            }
+        )
+        stats = check_and_send_reminders(store, mock_notifier, now=now)
+        assert stats["sent"] == 0
+        assert not mock_notifier.send.called
+
+    def test_timed_event_still_fires_when_all_day_present(self, store, mock_notifier):
+        """A timed event is unaffected by the all-day skip on the same tick."""
+        now = int(time.time())
+        start = now + 3600
+        store.add_rule("global", None, 3600)
+        store.upsert_event(
+            {
+                "uid": "cal1:bday",
+                "calendar_id": "cal1",
+                "google_id": "bday",
+                "title": "🎂 Eva Ariza",
+                "start_ts": start,
+                "end_ts": start + 86400,
+                "all_day": True,
+            }
+        )
+        store.upsert_event(
+            {
+                "uid": "cal1:curso",
+                "calendar_id": "cal1",
+                "google_id": "curso",
+                "title": "curso",
+                "start_ts": start,
+                "end_ts": start + 3600,
+                "all_day": False,
+            }
+        )
+        stats = check_and_send_reminders(store, mock_notifier, now=now)
+        assert stats["sent"] == 1
+        assert mock_notifier.send.call_count == 1
+
+    def test_summary_separates_all_day_from_timed(self):
+        """Scenario 3: a blank line separates the all-day and timed blocks."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from config import TZ
+
+        tz = ZoneInfo(TZ)
+        midnight = datetime(2026, 10, 31, 0, 0, 0, tzinfo=tz)
+        events = [
+            {
+                "uid": "cal1:bday",
+                "calendar_id": "cal1",
+                "google_id": "bday",
+                "title": "🎂 Eva Ariza",
+                "start_ts": int(midnight.timestamp()),
+                "end_ts": int(midnight.timestamp()) + 86400,
+                "location": None,
+                "all_day": True,
+            },
+            {
+                "uid": "cal1:curso",
+                "calendar_id": "cal1",
+                "google_id": "curso",
+                "title": "curso",
+                "start_ts": int(
+                    datetime(2026, 10, 31, 8, 0, tzinfo=tz).timestamp()
+                ),
+                "end_ts": int(datetime(2026, 10, 31, 9, 0, tzinfo=tz).timestamp()),
+                "location": None,
+                "all_day": False,
+            },
+        ]
+        msg = format_daily_summary(events, "31/10/2026", store=None)
+        # The timed event line must not be glued to the all-day line.
+        assert "🌅 🎂 Eva Ariza\n\n- 08:00 curso" in msg
+        # Both events still present and distinct
+        assert "🌅 🎂 Eva Ariza" in msg
+        assert "- 08:00 curso" in msg

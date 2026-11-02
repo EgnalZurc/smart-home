@@ -247,6 +247,12 @@ def format_daily_summary(
             if location:
                 lines.append(f"  📍 {location}")
 
+        # Blank line between the all-day block and the timed block so a timed
+        # event is not read as a sub-line of the last all-day event (a birthday
+        # with a single morning event looked like one entry otherwise).
+        if all_day_events and timed_events:
+            lines.append("")
+
         # Timed events (with - bullet and HH:MM)
         for event in timed_events:
             start_ts = event.get("start_ts", 0)
@@ -299,6 +305,13 @@ def check_and_send_reminders(
     stats = {"checked": 0, "sent": 0, "skipped": 0, "failed": 0}
 
     for event in events:
+        # All-day events (birthdays, holidays) must NOT fire "X before" reminders:
+        # an offset before a midnight start lands on the PREVIOUS day, which the
+        # user sees as being warned a day early. They surface only in the daily
+        # summary ("Eventos de hoy").
+        if event.get("all_day"):
+            continue
+
         offsets = get_applicable_rules(event, store)
         start_ts = event["start_ts"]
         event_uid = event["uid"]
