@@ -27,7 +27,7 @@ from alert_store import AlertStore
 from alerts import AlertEngine
 
 if TYPE_CHECKING:
-    from libs.notifications import TelegramNotifier
+    from smart_home_common.telegram import TelegramNotifier
 from config import (
     ALERT_HISTORY_RETENTION_DAYS,
     ALERTS_ENABLED,
@@ -55,24 +55,14 @@ BYTES_PER_MB = 1024 * 1024
 
 
 def _make_notifier() -> TelegramNotifier:
-    """Build a TelegramNotifier from the environment, tolerating import layout.
-
-    In the container ``/app/libs`` is on ``sys.path`` (set by ``main.py`` /
-    ``LIBS_PATH``), so ``notifications`` is a top-level package. Under pytest the
-    repo root is on ``sys.path`` instead, so the package is ``libs.notifications``.
-    Try both so the engine is wired identically in prod and in tests.
+    """Build a TelegramNotifier from the environment.
 
     Returns:
         TelegramNotifier: Configured notifier instance (may be disabled if env
             vars are missing).
-
-    Raises:
-        ImportError: If neither import path resolves (broken installation).
     """
-    try:
-        from notifications import TelegramNotifier
-    except ImportError:  # pragma: no cover - exercised only under pytest layout
-        from libs.notifications import TelegramNotifier
+    from smart_home_common.telegram import TelegramNotifier
+
     return TelegramNotifier.from_env()
 
 
