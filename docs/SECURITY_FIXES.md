@@ -21,6 +21,15 @@ Each entry follows this format:
 
 ## Fixed Issues
 
+### [dashboard] Auth Endpoint Rate Limiting (M2)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #531
+- **Fixed Date**: 2026-11-03
+- **Description**: Auth endpoint `/api/auth/token` used custom InMemoryRateLimiter which was less robust than slowapi used by other services
+- **Fix Applied**: Replaced InMemoryRateLimiter with slowapi's `@limiter.limit("5/minute")` decorator on POST `/api/auth/token`, matching pattern used by calendar-service and portfolio-monitor
+- **Verification**: Send 6 rapid POST requests to `/api/auth/token`; the 6th should return HTTP 429
+
 ### [energy-monitor] SSRF Validation for Shelly Device IPs (M1)
 - **Severity**: MEDIUM
 - **Status**: FIXED
