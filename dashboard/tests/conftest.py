@@ -184,10 +184,13 @@ def clear_rate_limiter():
     """
     try:
         from api.auth_routes import limiter
+        from limits.storage import MemoryStorage
 
-        # Clear the internal storage if it exists
-        if hasattr(limiter, "_storage"):
-            limiter._storage = {}
+        # Reset the limiter's storage to get a clean state
+        if hasattr(limiter, "reset"):
+            limiter.reset()
+        elif hasattr(limiter, "_storage"):
+            limiter._storage = MemoryStorage()
     except (ImportError, AttributeError):
         pass
 
@@ -195,8 +198,11 @@ def clear_rate_limiter():
 
     try:
         from api.auth_routes import limiter
+        from limits.storage import MemoryStorage
 
-        if hasattr(limiter, "_storage"):
-            limiter._storage = {}
+        if hasattr(limiter, "reset"):
+            limiter.reset()
+        elif hasattr(limiter, "_storage"):
+            limiter._storage = MemoryStorage()
     except (ImportError, AttributeError):
         pass

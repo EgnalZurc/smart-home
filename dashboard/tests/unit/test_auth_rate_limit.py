@@ -14,9 +14,13 @@ from X-Forwarded-For or request.client.host. In TestClient, this always returns
 For per-IP isolation testing, integration tests with real HTTP clients are needed.
 """
 
-import sys
+import os
 
 import pytest
+
+
+# Set env var before any imports that might need it
+os.environ.setdefault("AUTH_SECRET", "test-secret-key-32-chars-minimum-length-here")
 
 
 class TestAuthTokenRateLimitConfiguration:
@@ -40,19 +44,6 @@ class TestAuthTokenRateLimitConfiguration:
 
     def test_limiter_attached_to_app(self, monkeypatch):
         """Verify the limiter is attached to app state."""
-        # Set required env vars before importing main
-        monkeypatch.setenv("AUTH_SECRET", "test-secret-key-32-chars-minimum-length-here")
-
-        # Clear cached modules to ensure fresh import with env var
-        modules_to_clear = [
-            mod
-            for mod in list(sys.modules.keys())
-            if mod.startswith(("main", "api."))
-        ]
-        for mod in modules_to_clear:
-            if mod in sys.modules:
-                del sys.modules[mod]
-
         import main
 
         assert hasattr(main.app.state, "limiter")
@@ -63,67 +54,58 @@ class TestAuthTokenRateLimitBehavior:
     """Test rate limiting behavior on POST /api/auth/token endpoint.
 
     These tests verify that the rate limiter is functional. Since TestClient
-    uses "testclient" as the IP for all requests, and the rate limiter may
-    have state from other tests, we use unique request patterns.
+    uses "testclient" as the IP for all requests, we need to ensure the limiter
+    storage is cleared before testing to avoid state pollution from other tests.
     """
 
     @pytest.fixture
-    def fresh_app_client(self, monkeypatch):
-        """Create a completely fresh FastAPI app with rate limiter for testing.
+    def clean_limiter_client(self, monkeypatch):
+        """Create a test client with a clean rate limiter state.
 
-        This fixture creates an isolated app instance to avoid state pollution
-        from other tests.
+        The key insight is that slowapi decorators bind to the limiter at
+        decoration time (module import), so we need to clear the SAME limiter's
+        storage rather than replacing it.
         """
         from unittest.mock import patch
 
-        # Set required env vars
-        monkeypatch.setenv("AUTH_SECRET", "test-secret-key-32-chars-minimum-length-here")
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from limits.storage import MemoryStorage
+        from slowapi import _rate_limit_exceeded_handler
+        from slowapi.errors import RateLimitExceeded
 
-        # Clear ALL modules that might cache state
-        modules_to_clear = [
-            mod
-            for mod in list(sys.modules.keys())
-            if mod.startswith(("api.", "main", "auth", "slowapi"))
-        ]
-        for mod in modules_to_clear:
-            if mod in sys.modules:
-                del sys.modules[mod]
+        from api import auth_routes
 
-        # Patch auth_users BEFORE importing
+        # Get the ACTUAL limiter that the decorator is bound to
+        limiter = auth_routes.limiter
+
+        # Reset the limiter's storage to get a clean state
+        # Method 1: If limiter has reset() method
+        if hasattr(limiter, "reset"):
+            limiter.reset()
+        # Method 2: Replace storage with fresh MemoryStorage
+        elif hasattr(limiter, "_storage"):
+            limiter._storage = MemoryStorage()
+        # Method 3: If limiter has _limiter attribute with storage
+        elif hasattr(limiter, "_limiter") and hasattr(limiter._limiter, "storage"):
+            limiter._limiter.storage = MemoryStorage()
+
+        # Create a test app with the router
+        app = FastAPI()
+        app.state.limiter = limiter
+        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+        app.include_router(auth_routes.router)
+
+        # Mock authenticate_user to return False (invalid credentials)
         with patch("auth_users.authenticate_user", return_value=False):
-            from fastapi import FastAPI
-            from fastapi.testclient import TestClient
-            from slowapi import Limiter, _rate_limit_exceeded_handler
-            from slowapi.errors import RateLimitExceeded
-            from slowapi.util import get_remote_address
-
-            # Create a fresh limiter and app
-            fresh_limiter = Limiter(key_func=get_remote_address)
-
-            # Need to re-import and patch auth_routes limiter
-            from api import auth_routes
-
-            # Replace the module's limiter with our fresh one
-            original_limiter = auth_routes.limiter
-            auth_routes.limiter = fresh_limiter
-
-            # Create fresh app with the router
-            app = FastAPI()
-            app.state.limiter = fresh_limiter
-            app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-            app.include_router(auth_routes.router)
-
             yield TestClient(app)
 
-            # Restore original limiter
-            auth_routes.limiter = original_limiter
-
-    def test_rate_limit_triggered_after_threshold(self, fresh_app_client):
+    def test_rate_limit_triggered_after_threshold(self, clean_limiter_client):
         """Verify that exceeding rate limit returns HTTP 429.
 
         The endpoint is limited to 5 requests per minute.
         """
-        client = fresh_app_client
+        client = clean_limiter_client
 
         # Make exactly 5 requests (the limit)
         for i in range(5):
@@ -134,7 +116,7 @@ class TestAuthTokenRateLimitBehavior:
                     "password": "wrongpassword",
                 },
             )
-            # Should not be rate limited yet
+            # Should not be rate limited yet (200 for success page, 303 for redirect)
             assert response.status_code in (
                 200,
                 303,
