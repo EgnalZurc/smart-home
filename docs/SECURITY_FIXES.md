@@ -650,6 +650,20 @@ For services with stable inline scripts, CSP hashes ('sha256-...') can replace u
 - **Setup**: SCP to Pi, chmod +x, add to crontab: `0 3 * * * /home/pi/scripts/backup-vaultwarden.sh`
 - **Verification**: Run `./backup-vaultwarden.sh --dry-run` on Pi
 
+### [calendar-service] Rate Limiter Unbounded Memory
+- **Severity**: MEDIUM
+- **Status**: ACCEPTED_RISK
+- **Reason**: slowapi's in-memory storage can grow unbounded under IP rotation attacks, but this is mitigated by nginx's upstream rate limiting
+- **Mitigations**:
+  - nginx rate limiting at ingress (limit_req zone=general, burst=20)
+  - Tailscale-only access (no public internet exposure)
+  - Single-household deployment (very limited IP diversity)
+  - Docker container memory limits provide hard ceiling
+  - slowapi lacks native max_entries; Redis storage would add operational complexity for minimal benefit
+- **Documentation**: Comment added in main.py near Limiter instantiation
+- **Review Date**: 2026-11-03
+- **Next Review**: 2027-05-03 (6 months)
+
 ---
 
 ## Fixed Issues (2026-10-22)
