@@ -429,10 +429,13 @@ def _serve_html(filename: str) -> HTMLResponse:
         content = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         logger.warning("Static file not found: %s", filename)
-        raise HTTPException(status_code=404, detail="Page not found")
-    except OSError as e:
-        logger.error("Error reading static file %s: %s", filename, e)
-        raise HTTPException(status_code=404, detail="Page not found")
+        raise HTTPException(status_code=404, detail="File not found")
+    except PermissionError:
+        logger.error("Permission denied reading %s", filename)
+        raise HTTPException(status_code=500, detail="Server configuration error")
+    except Exception as e:
+        logger.exception("Error serving %s", filename, e)
+        raise HTTPException(status_code=500, detail="Internal server error")
     # Use content hash for deterministic cache-busting (first 8 chars of SHA256)
     content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:8]
     content = content.replace("</head>", f"<!-- v:{content_hash} -->\n</head>")
