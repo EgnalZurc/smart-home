@@ -214,16 +214,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 
 class CSRFProtectionMiddleware(BaseHTTPMiddleware):
-    """Validate Origin header on state-changing requests to prevent CSRF attacks.
+    """Validate Origin/Referer header on state-changing requests to prevent CSRF.
 
     For POST, PUT, DELETE requests:
-    - If Origin header is present, validate it matches the Host header
+    - Requires at least Origin OR Referer header (fail-closed)
+    - If Origin present, validate it matches the Host header
     - Allow requests from Tailscale domains (*.ts.net) for internal access
-    - Reject mismatched origins with 403
+    - Reject mismatched origins or missing headers with 403
 
     GET/HEAD/OPTIONS are safe methods and always allowed.
-    Requests without Origin header are allowed (same-origin requests from older
-    browsers may not send Origin).
     """
 
     async def dispatch(
@@ -232,8 +231,19 @@ class CSRFProtectionMiddleware(BaseHTTPMiddleware):
         """Validate CSRF for state-changing methods."""
         if request.method in ("POST", "PUT", "DELETE"):
             origin = request.headers.get("origin")
+            referer = request.headers.get("referer")
             host = request.headers.get("host")
 
+            # H4 fix: require at least Origin or Referer (fail-closed)
+            if not origin and not referer:
+                logger.warning(
+                    "CSRF validation failed: missing Origin/Referer for %s %s",
+                    request.method,
+                    request.url.path,
+                )
+                return Response("Missing Origin/Referer header", status_code=403)
+
+            # Validate Origin if present
             if origin:
                 # Extract hostname from origin (remove scheme and path)
                 origin_host = (
@@ -244,6 +254,21 @@ class CSRFProtectionMiddleware(BaseHTTPMiddleware):
                 if origin_host != host and not origin_host.endswith(".ts.net"):
                     logger.warning(
                         "CSRF validation failed: origin=%s, host=%s", origin, host
+                    )
+                    return JSONResponse(
+                        {"error": "CSRF validation failed"}, status_code=403
+                    )
+
+            # If only Referer is present (no Origin), validate it similarly
+            elif referer:
+                # Extract hostname from referer URL
+                referer_host = (
+                    referer.replace("https://", "").replace("http://", "").split("/")[0]
+                )
+
+                if referer_host != host and not referer_host.endswith(".ts.net"):
+                    logger.warning(
+                        "CSRF validation failed: referer=%s, host=%s", referer, host
                     )
                     return JSONResponse(
                         {"error": "CSRF validation failed"}, status_code=403

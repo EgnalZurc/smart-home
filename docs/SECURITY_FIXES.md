@@ -21,6 +21,24 @@ Each entry follows this format:
 
 ## Fixed Issues
 
+### [dashboard] CORS Permissive Default (H3)
+- **Severity**: HIGH
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-03
+- **Description**: If CORS_ORIGINS env var was empty, CORSMiddleware was added with empty allow_origins which could be permissive
+- **Fix Applied**: Fail-closed: if CORS_ORIGINS is empty, CORSMiddleware is not added at all, with warning logged
+- **Verification**: Set CORS_ORIGINS="" and check logs show "CORS_ORIGINS not set - CORS disabled (fail-closed)" and no CORS headers are returned
+
+### [dashboard] CSRF Missing Origin/Referer Bypass (H4)
+- **Severity**: HIGH
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-03
+- **Description**: Requests without Origin header passed CSRF validation (intended for legacy browser support but weakens protection)
+- **Fix Applied**: Fail-closed: state-changing requests (POST/PUT/DELETE) now require at least Origin OR Referer header. If neither present, returns 403. Both headers are validated against Host/Tailscale domains.
+- **Verification**: `curl -X POST http://localhost:8000/api/auth/logout` without Origin/Referer returns 403 "Missing Origin/Referer header"
+
 ### [nginx] postMessage Wildcard Origin (Initial report)
 - **Severity**: HIGH
 - **Status**: FIXED

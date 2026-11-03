@@ -75,11 +75,41 @@ class TestCSRFProtection:
         assert response.status_code == 403
         assert response.json() == {"error": "CSRF validation failed"}
 
-    def test_post_request_allowed_without_origin(self, client):
-        """POST without Origin header should pass (same-origin fallback)."""
+    def test_post_request_blocked_without_origin_or_referer(self, client):
+        """POST without Origin or Referer header should be rejected (H4 fix)."""
         response = client.post("/api/auth/logout")
+        assert response.status_code == 403
+        assert b"Missing Origin/Referer header" in response.content
+
+    def test_post_request_allowed_with_referer_only(self, client):
+        """POST with only Referer header (matching host) should pass."""
+        response = client.post(
+            "/api/auth/logout",
+            headers={"Referer": "http://testserver/dashboard", "Host": "testserver"},
+        )
         # May get auth error, but not CSRF error
         assert response.status_code != 403
+
+    def test_post_request_allowed_with_tailscale_referer(self, client):
+        """POST with Tailscale Referer should be allowed."""
+        response = client.post(
+            "/api/auth/logout",
+            headers={
+                "Referer": "https://raspberrypi.tailaa37cd.ts.net/dashboard",
+                "Host": "testserver",
+            },
+        )
+        # May get auth error, but not CSRF error
+        assert response.status_code != 403
+
+    def test_post_request_blocked_mismatched_referer(self, client):
+        """POST with mismatched Referer (no Origin) should be rejected."""
+        response = client.post(
+            "/api/auth/logout",
+            headers={"Referer": "https://evil.com/page", "Host": "testserver"},
+        )
+        assert response.status_code == 403
+        assert response.json() == {"error": "CSRF validation failed"}
 
 
 class TestSwaggerDisabledInProduction:
