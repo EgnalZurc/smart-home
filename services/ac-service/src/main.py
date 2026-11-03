@@ -124,12 +124,13 @@ MQTT_TLS_CA_CERTS = os.environ.get("MQTT_TLS_CA_CERTS", DEFAULT_MQTT_TLS_CA_CERT
 # When MQTT_ALLOW_ANONYMOUS is true, skip the credentials warning (broker
 # configured with allow_anonymous). Default false for safety.
 MQTT_ALLOW_ANONYMOUS = os.environ.get("MQTT_ALLOW_ANONYMOUS", "false").lower() == "true"
-if not MQTT_USER or not MQTT_PASSWORD:
-    if not MQTT_ALLOW_ANONYMOUS:
-        logger.warning(
-            "MQTT credentials not set - connecting without auth. "
+if not MQTT_ALLOW_ANONYMOUS:
+    if not MQTT_USER or not MQTT_PASSWORD:
+        logger.error(
+            "MQTT credentials required when MQTT_ALLOW_ANONYMOUS=false. "
             "Set MQTT_USER and MQTT_PASSWORD, or MQTT_ALLOW_ANONYMOUS=true."
         )
+        raise RuntimeError("MQTT credentials required")
 MQTT_CONNECT_RETRIES = int(
     os.environ.get("MQTT_CONNECT_RETRIES", str(DEFAULT_MQTT_CONNECT_RETRIES))
 )
