@@ -739,17 +739,23 @@ async def update_config(config: ConfigUpdateRequest) -> dict[str, Any]:
 
 
 @app.get("/api/logs")
-async def get_logs(lines: int = LOGS_DEFAULT_LINES) -> dict[str, Any]:
+async def get_logs(request: Request, lines: int = LOGS_DEFAULT_LINES) -> dict[str, Any]:
     """Get recent Valheim server log entries.
 
     Retrieves the most recent log lines from the Valheim server via pc-agent.
-    The number of lines is capped to prevent excessive memory usage.
+    The number of lines is capped to prevent excessive memory usage. Rate
+    limited to prevent abuse since log retrieval can return large amounts
+    of data.
 
     Args:
+        request: The incoming request (used for rate limiting).
         lines: Number of log lines to retrieve (default: 80, max: 10000).
 
     Returns:
         Dictionary containing log entries from pc-agent.
+
+    Raises:
+        HTTPException: 429 if rate limit exceeded.
 
     Example response::
 
@@ -760,6 +766,7 @@ async def get_logs(lines: int = LOGS_DEFAULT_LINES) -> dict[str, Any]:
             ]
         }
     """
+    _check_logs_rate_limit(request)
     lines = max(LOGS_MIN_LINES, min(lines, LOGS_MAX_LINES))
     return await pc_agent.get("/valheim/logs", params={"lines": str(lines)})
 
