@@ -21,10 +21,19 @@ Each entry follows this format:
 
 ## Fixed Issues
 
+### [energy-monitor] SSRF Validation for Shelly Device IPs (M1)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #530
+- **Fixed Date**: 2026-11-03
+- **Description**: ENERGY_DEVICES configuration accepted any IP address without validation, creating potential SSRF surface if attacker could control the config
+- **Fix Applied**: Added `is_private_ip()` validator in config.py that checks IPs against RFC 1918 private ranges (192.168.x.x, 10.x.x.x, 172.16-31.x.x, 127.x.x.x, localhost). `parse_devices()` in collector.py now validates each device IP and raises RuntimeError at startup if any public IP is detected (fail-closed)
+- **Verification**: Set ENERGY_DEVICES='[{"id":"test","ip":"8.8.8.8"}]' and start service; should fail with "SSRF protection: Shelly device IPs must be private network addresses"
+
 ### [ac-service] MQTT Credentials Fail-Fast (M1)
 - **Severity**: MEDIUM
 - **Status**: FIXED
-- **PR**: #TBD
+- **PR**: #529
 - **Fixed Date**: 2026-11-03
 - **Description**: When MQTT_USER/MQTT_PASSWORD were missing and MQTT_ALLOW_ANONYMOUS=false, service only logged a warning but continued to start, potentially connecting without auth
 - **Fix Applied**: Fail-fast: if MQTT_ALLOW_ANONYMOUS is false and credentials are missing, log error and raise RuntimeError to prevent startup

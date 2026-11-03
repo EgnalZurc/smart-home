@@ -13,8 +13,66 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+from urllib.parse import urlparse
 
 _logger = logging.getLogger(__name__)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SSRF Mitigation - Private IP Validation (M1 fix)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_PRIVATE_IP_PATTERNS = [
+    re.compile(r"^localhost$", re.IGNORECASE),
+    re.compile(r"^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$"),
+    re.compile(r"^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$"),
+    re.compile(r"^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$"),
+    re.compile(r"^192\.168\.\d{1,3}\.\d{1,3}$"),
+]
+"""Regex patterns matching internal/private network addresses (RFC 1918)."""
+
+
+def is_private_ip(ip_or_url: str) -> bool:
+    """Check if an IP address or URL points to a private network address.
+
+    Validates that the hostname/IP matches one of:
+    - localhost
+    - 127.x.x.x (loopback)
+    - 10.x.x.x (Class A private)
+    - 172.16-31.x.x (Class B private)
+    - 192.168.x.x (Class C private)
+
+    This prevents SSRF attacks by ensuring Shelly device IPs cannot be
+    configured to point to external services. ENERGY_DEVICES should only
+    contain local IoT devices on the home network.
+
+    Args:
+        ip_or_url: An IP address string (e.g., "192.168.1.50") or a URL
+            (e.g., "http://192.168.1.50:80").
+
+    Returns:
+        True if the IP/hostname is a private address, False otherwise.
+
+    Example:
+        >>> is_private_ip("192.168.1.50")
+        True
+        >>> is_private_ip("http://10.0.0.1:8080")
+        True
+        >>> is_private_ip("8.8.8.8")
+        False
+        >>> is_private_ip("http://evil.com")
+        False
+    """
+    # Handle both bare IPs and URLs
+    if ip_or_url.startswith(("http://", "https://")):
+        parsed = urlparse(ip_or_url)
+        hostname = parsed.hostname or ""
+    else:
+        hostname = ip_or_url
+
+    return any(p.match(hostname) for p in _PRIVATE_IP_PATTERNS)
+
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -149,4 +207,6 @@ __all__ = [
     "SHELLY_PASSWORD",
     "SHELLY_USER",
     "TARIFF_MODE",
+    # SSRF mitigation
+    "is_private_ip",
 ]
