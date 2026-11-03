@@ -932,3 +932,52 @@ class TestRateLimiterBoundedSize:
         assert hasattr(server_control_limiter, "_max_entries") or hasattr(
             server_control_limiter, "max_entries"
         ), "Rate limiter should have max_entries configured"
+
+
+    def test_logs_limiter_has_max_entries(self):
+        """Logs rate limiter should be configured with max_entries."""
+        from src.main import logs_limiter
+
+        # Verify max_entries was passed (check the internal attribute)
+        assert hasattr(logs_limiter, "_max_entries") or hasattr(
+            logs_limiter, "max_entries"
+        ), "Logs rate limiter should have max_entries configured"
+
+
+# ── Logs Rate Limiting ────────────────────────────────────────────────────────
+
+
+class TestLogsRateLimiting:
+    """Tests for /api/logs rate limiting."""
+
+    def test_get_logs_rate_limited(self):
+        """Logs endpoint should enforce rate limiting."""
+        from src.config import RATE_LIMIT_MAX_REQUESTS
+        from src.main import app, logs_limiter, pc_agent
+
+        # Reset the limiter to start fresh
+        with logs_limiter._lock:
+            logs_limiter._data.clear()
+
+        with patch.object(
+            pc_agent,
+            "get",
+            new_callable=AsyncMock,
+            return_value={"logs": ["line1", "line2"]},
+        ):
+            client = TestClient(app)
+
+            # Make requests up to the limit
+            for _ in range(RATE_LIMIT_MAX_REQUESTS):
+                response = client.get("/api/logs")
+                assert response.status_code == 200
+
+            # Next request should be rate limited
+            response = client.get("/api/logs")
+            assert response.status_code == 429
+            assert "Retry-After" in response.headers
+            assert "too many" in response.json()["detail"].lower()
+
+        # Clean up
+        with logs_limiter._lock:
+            logs_limiter._data.clear()
