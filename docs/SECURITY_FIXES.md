@@ -21,6 +21,15 @@ Each entry follows this format:
 
 ## Fixed Issues
 
+### [ac-service] MQTT Credentials Fail-Fast (M1)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-03
+- **Description**: When MQTT_USER/MQTT_PASSWORD were missing and MQTT_ALLOW_ANONYMOUS=false, service only logged a warning but continued to start, potentially connecting without auth
+- **Fix Applied**: Fail-fast: if MQTT_ALLOW_ANONYMOUS is false and credentials are missing, log error and raise RuntimeError to prevent startup
+- **Verification**: Unset MQTT_USER and MQTT_PASSWORD with MQTT_ALLOW_ANONYMOUS=false, service should fail to start with "MQTT credentials required"
+
 ### [dashboard] CORS Permissive Default (H3)
 - **Severity**: HIGH
 - **Status**: FIXED
