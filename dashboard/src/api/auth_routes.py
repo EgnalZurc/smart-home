@@ -51,9 +51,10 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 # ---------------------------------------------------------------------------
 # Using in-memory rate limiter (resets on restart, but provides protection)
 # 5 failed attempts per 5 minutes per IP
-from smart_home_common import InMemoryRateLimiter
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
-_login_limiter = InMemoryRateLimiter(max_requests=5, window_seconds=300)
+limiter = Limiter(key_func=get_remote_address)
 
 # ---------------------------------------------------------------------------
 # Injected configuration (set by main.py lifespan)
@@ -226,6 +227,7 @@ async def get_login(request: Request):
 
 
 @router.post("/token")
+@limiter.limit("5/minute")
 async def post_token(
     request: Request,
     username: str = Form(...),
@@ -247,22 +249,10 @@ async def post_token(
 
     Sanitises the next_url redirect to relative paths only.
 
-    Rate limiting: 5 attempts per 5 minutes per IP address.
+    Rate limiting: 5 attempts per minute per IP address (slowapi).
     """
     client_ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("User-Agent", "unknown")
-
-    # Rate limiting check
-    if not _login_limiter.is_allowed(client_ip):
-        logger.warning(
-            "LOGIN BLOCKED (rate limit): endpoint=/api/auth/token user=%r ip=%s",
-            username,
-            client_ip,
-        )
-        return _serve_login_html(
-            request,
-            error="Demasiados intentos. Espera unos minutos e inténtalo de nuevo.",
-        )
 
     if not auth_users.authenticate_user(username, password):
         logger.warning(

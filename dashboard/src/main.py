@@ -22,6 +22,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from middleware import CSPNonceMiddleware, get_csp_nonce
 from profiles import db as profiles_db
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse as StarletteRedirect
@@ -418,6 +420,11 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
     allow_credentials=bool(CORS_ORIGINS),  # Only with explicit origins
 )
+
+# slowapi rate limiter - attach to app state for auth endpoint protection
+# The limiter instance is defined in auth_routes.py; we just wire up the handler
+app.state.limiter = auth_routes.limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Auth routes (API endpoints under /api/auth)
 app.include_router(auth_routes.router)
