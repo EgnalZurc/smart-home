@@ -2,18 +2,20 @@
 
 All tunables live here so the engine, sources, storage and MQTT handler import
 a single source of truth. Defaults match the design document
-(``docs/designs/presence-service-design.md`` Â§6).
+(``docs/designs/presence-service-design.md`` §6).
 """
 
 from __future__ import annotations
 
 import ipaddress
+import json
 import logging
 import os
 import re
 from re import Pattern
+from typing import Any
 
-# â”€â”€ Validation helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Validation helpers ───────────────────────────────────────────────────────
 
 _NIGHT_WINDOW_RE: Pattern[str] = re.compile(r"^\d{2}:\d{2}-\d{2}:\d{2}$")
 _HOSTNAME_RE: Pattern[str] = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?$")
@@ -166,7 +168,7 @@ def validate_mqtt_topic(value: str, *, allow_wildcards: bool = False) -> str:
     return value
 
 
-# â”€â”€ Rate Limiting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Rate Limiting ────────────────────────────────────────────────────────────
 # Health endpoints execute DB queries, so rate limiting prevents DoS via spam.
 # ── Network / Host Binding ───────────────────────────────────────────────────
 # L1: Make the host binding configurable (default 0.0.0.0 for container use).
@@ -185,37 +187,37 @@ MAX_RATE_LIMIT_ENTRIES: int = int(
     os.environ.get("PRESENCE_MAX_RATE_LIMIT_ENTRIES", "1000")
 )
 
-# â”€â”€ Logging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Logging ──────────────────────────────────────────────────────────────────
 LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO").upper()
 
-# â”€â”€ Service â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Service ──────────────────────────────────────────────────────────────────
 SERVICE_NAME: str = "presence-service"
 PORT: int = int(os.environ.get("PRESENCE_PORT", "8013"))
 
-# â”€â”€ SQLite (tier 2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── SQLite (tier 2) ──────────────────────────────────────────────────────────
 DB_PATH: str = os.environ.get("PRESENCE_DB_PATH", "/app/data/presence.db")
 
-# â”€â”€ Loops â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Loops ────────────────────────────────────────────────────────────────────
 # Router poll cadence (design: 30 s) and the engine recompute tick (design: 5 s).
 ROUTER_POLL_INTERVAL_S: int = int(
     os.environ.get("PRESENCE_ROUTER_POLL_INTERVAL_S", "30")
 )
 ENGINE_TICK_S: int = int(os.environ.get("PRESENCE_ENGINE_TICK_S", "5"))
 
-# â”€â”€ Source TTLs (evidence freshness, seconds) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Source TTLs (evidence freshness, seconds) ────────────────────────────────
 ROUTER_TTL_S: int = int(os.environ.get("PRESENCE_ROUTER_TTL_S", "180"))
 BLE_TTL_S: int = int(os.environ.get("PRESENCE_BLE_TTL_S", "60"))
 MOTION_OCCUPANCY_TTL_S: int = int(
     os.environ.get("PRESENCE_MOTION_OCCUPANCY_TTL_S", "600")
 )
 
-# â”€â”€ Fusion weights & threshold â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Fusion weights & threshold ───────────────────────────────────────────────
 WEIGHT_ROUTER: float = float(os.environ.get("PRESENCE_WEIGHT_ROUTER", "0.6"))
 WEIGHT_BLE: float = float(os.environ.get("PRESENCE_WEIGHT_BLE", "0.5"))
 WEIGHT_MOTION: float = float(os.environ.get("PRESENCE_WEIGHT_MOTION", "0.2"))
 PRESENT_THRESHOLD: float = float(os.environ.get("PRESENCE_PRESENT_THRESHOLD", "0.5"))
 
-# â”€â”€ Debounce / state timeouts (seconds) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Debounce / state timeouts (seconds) ──────────────────────────────────────
 ARRIVAL_DEBOUNCE_S: int = int(os.environ.get("PRESENCE_ARRIVAL_DEBOUNCE_S", "30"))
 DEPARTURE_GRACE_S: int = int(os.environ.get("PRESENCE_DEPARTURE_GRACE_S", "300"))
 SLEEP_INACTIVITY_S: int = int(os.environ.get("PRESENCE_SLEEP_INACTIVITY_S", "2700"))
@@ -224,7 +226,7 @@ NIGHT_WINDOW: str = _validate_night_window(
 )
 SLEEP_ZONE: str = os.environ.get("PRESENCE_SLEEP_ZONE", "bedroom")
 
-# â”€â”€ Router access (one mode) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Router access (one mode) ─────────────────────────────────────────────────
 # SECURITY NOTE: arpsweep mode requires NET_RAW capability (see docs/SECURITY_FIXES.md).
 # This is an accepted risk - the container is isolated and only accessible via Tailscale.
 # Prefer SSH-based modes (openwrt_ssh, fritzbox, mikrotik) when available, as they
@@ -255,7 +257,7 @@ ARP_SUBNET: str = _validate_subnet(
     os.environ.get("PRESENCE_ARP_SUBNET", "192.168.1.0/24")
 )
 
-# â”€â”€ MQTT (shared broker) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── MQTT (shared broker) ─────────────────────────────────────────────────────
 # SECURITY: MQTT credentials rotation policy
 #   - MQTT_USER / MQTT_PASSWORD are injected via environment variables from .env.
 #   - Rotate credentials at least every 90 days or immediately after a suspected
@@ -283,7 +285,7 @@ MQTT_PUBLISH_PREFIX: str = validate_mqtt_topic(
     os.environ.get("PRESENCE_MQTT_PUBLISH_PREFIX", "presence"), allow_wildcards=False
 )
 
-# â”€â”€ Notifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Notifications ────────────────────────────────────────────────────────────
 # Delivery is driven by libs/notifications.TelegramNotifier.from_env(), which
 # reads TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_IDS. If unset, the notifier is a
 # no-op (transitions still persist + publish, just no message is sent).
@@ -297,18 +299,48 @@ NOTIFY_EVENTS: list[str] = [
     if e.strip()
 ]
 
-# â”€â”€ Seed people on first run (empty â†’ manage via API) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Seed people on first run (empty -> manage via API) ────────────────────────
 # JSON array of {id, name, devices:[{mac,label}], beacons:[{ble_id,label}]}.
-PEOPLE_SEED: str = os.environ.get("PRESENCE_PEOPLE_SEED", "")
+_people_seed_raw: str = os.environ.get("PRESENCE_PEOPLE_SEED", "")
 
-# â”€â”€ Retention â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Transition audit trail retention (design Â§7.3: 1 year).
+# Logger for config validation warnings/errors (used before app startup).
+_config_logger: logging.Logger = logging.getLogger(__name__)
+
+
+def _validate_people_seed(raw: str) -> list[dict[str, Any]]:
+    """Validate PRESENCE_PEOPLE_SEED is valid JSON array.
+
+    Args:
+        raw: The raw string from the environment variable.
+
+    Returns:
+        Parsed list of people dictionaries, or empty list if not set.
+
+    Raises:
+        RuntimeError: If the JSON is malformed or not an array.
+    """
+    if not raw or not raw.strip():
+        return []
+    try:
+        parsed: Any = json.loads(raw)
+        if not isinstance(parsed, list):
+            raise ValueError("PRESENCE_PEOPLE_SEED must be a JSON array")
+        return parsed
+    except json.JSONDecodeError as e:
+        _config_logger.error("Invalid PRESENCE_PEOPLE_SEED JSON: %s", e)
+        raise RuntimeError(f"Invalid PRESENCE_PEOPLE_SEED: {e}") from e
+    except ValueError as e:
+        _config_logger.error("Invalid PRESENCE_PEOPLE_SEED: %s", e)
+        raise RuntimeError(str(e)) from e
+
+
+# ── Retention ────────────────────────────────────────────────────────────────
+# Transition audit trail retention (design S7.3: 1 year).
 RETENTION_DAYS: int = int(os.environ.get("PRESENCE_RETENTION_DAYS", "365"))
 PRUNE_INTERVAL_S: int = int(os.environ.get("PRESENCE_PRUNE_INTERVAL_S", str(24 * 3600)))
 
-# â”€â”€ MQTT Credential Rotation Warning â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── MQTT Credential Rotation Warning ─────────────────────────────────────────
 # Log a warning if MQTT credentials appear to be using defaults or are missing.
-_config_logger: logging.Logger = logging.getLogger(__name__)
 _mqtt_user = os.environ.get("MQTT_USER", "")
 _mqtt_pass = os.environ.get("MQTT_PASSWORD", "")
 if not _mqtt_user or not _mqtt_pass:
@@ -318,14 +350,25 @@ if not _mqtt_user or not _mqtt_pass:
         "infrastructure/mosquitto/docs/credential-rotation.md"
     )
 
-# â”€â”€ Router Password Validation Warning â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Log warnings if ROUTER_PASSWORD is empty or too short for security.
+# ── Router Password Validation ───────────────────────────────────────────────
+# M1: ROUTER_PASSWORD is REQUIRED for SSH-based modes (openwrt_ssh, fritzbox, mikrotik).
+# Only arpsweep mode can work without router credentials.
 ROUTER_PASSWORD: str = os.environ.get("ROUTER_PASSWORD", "")
 if ROUTER_PASSWORD and len(ROUTER_PASSWORD) < 8:
     _config_logger.warning(
         "ROUTER_PASSWORD is short (<%d chars) - consider a stronger password", 8
     )
 if not ROUTER_PASSWORD:
-    _config_logger.warning(
-        "ROUTER_PASSWORD is empty - router integration will not work"
-    )
+    if ROUTER_MODE == "arpsweep":
+        _config_logger.warning(
+            "ROUTER_PASSWORD is empty - router integration disabled, using arpsweep"
+        )
+    else:
+        _config_logger.error(
+            "ROUTER_PASSWORD is required for ROUTER_MODE=%s - cannot authenticate",
+            ROUTER_MODE,
+        )
+        raise RuntimeError(f"ROUTER_PASSWORD is required for ROUTER_MODE={ROUTER_MODE}")
+
+# M2: Validate PEOPLE_SEED JSON at startup - fail fast if malformed.
+PEOPLE_SEED: list[dict[str, Any]] = _validate_people_seed(_people_seed_raw)
