@@ -56,13 +56,15 @@ def test_parse_devices_valid():
 
 
 def test_parse_devices_defaults_gen_and_channels():
-    devices = parse_devices('[{"id":"d","ip":"1.2.3.4"}]')
+    # Use private IP to pass validation
+    devices = parse_devices('[{"id":"d","ip":"192.168.1.1"}]')
     assert devices[0]["gen"] == 1
     assert devices[0]["channels"] == {}
 
 
 def test_parse_devices_skips_malformed_entries():
-    raw = '[{"ip":"1.2.3.4"}, {"id":"ok","ip":"5.6.7.8"}, "garbage", 42]'
+    # Note: entries without "id" are skipped as malformed
+    raw = '[{"ip":"192.168.1.1"}, {"id":"ok","ip":"192.168.1.2"}, "garbage", 42]'
     devices = parse_devices(raw)
     assert [d["id"] for d in devices] == ["ok"]
 
@@ -74,6 +76,63 @@ def test_parse_devices_invalid_json():
 
 def test_parse_devices_not_a_list():
     assert parse_devices('{"id":"x","ip":"y"}') == []
+
+
+# ── SSRF validation tests (M1 fix) ────────────────────────────────────────────
+def test_parse_devices_accepts_private_ips():
+    """Private IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x) are accepted."""
+    raw = """[
+        {"id":"d1","ip":"192.168.1.50"},
+        {"id":"d2","ip":"10.0.0.100"},
+        {"id":"d3","ip":"172.16.0.1"},
+        {"id":"d4","ip":"127.0.0.1"}
+    ]"""
+    devices = parse_devices(raw)
+    assert len(devices) == 4
+    assert devices[0]["ip"] == "192.168.1.50"
+    assert devices[1]["ip"] == "10.0.0.100"
+    assert devices[2]["ip"] == "172.16.0.1"
+    assert devices[3]["ip"] == "127.0.0.1"
+
+
+def test_parse_devices_rejects_public_ips():
+    """Public IPs raise RuntimeError to prevent SSRF."""
+    raw = '[{"id":"evil","ip":"8.8.8.8"}]'
+    with pytest.raises(RuntimeError, match="SSRF protection"):
+        parse_devices(raw)
+
+
+def test_parse_devices_rejects_hostnames():
+    """Hostnames (except localhost) raise RuntimeError."""
+    raw = '[{"id":"evil","ip":"evil.com"}]'
+    with pytest.raises(RuntimeError, match="SSRF protection"):
+        parse_devices(raw)
+
+
+def test_parse_devices_accepts_localhost():
+    """localhost hostname is accepted as private."""
+    raw = '[{"id":"local","ip":"localhost"}]'
+    devices = parse_devices(raw)
+    assert len(devices) == 1
+    assert devices[0]["ip"] == "localhost"
+
+
+def test_parse_devices_mixed_private_and_public_rejects_all():
+    """If any device has public IP, entire config is rejected."""
+    raw = """[
+        {"id":"good","ip":"192.168.1.50"},
+        {"id":"evil","ip":"8.8.8.8"}
+    ]"""
+    with pytest.raises(RuntimeError, match="evil=8.8.8.8"):
+        parse_devices(raw)
+
+
+def test_parse_devices_validate_ips_disabled():
+    """validate_ips=False allows public IPs (for testing only)."""
+    raw = '[{"id":"test","ip":"8.8.8.8"}]'
+    devices = parse_devices(raw, validate_ips=False)
+    assert len(devices) == 1
+    assert devices[0]["ip"] == "8.8.8.8"
 
 
 # ── tick ──────────────────────────────────────────────────────────────────────

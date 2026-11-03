@@ -82,3 +82,70 @@ def test_negative_threshold_logs_warning(monkeypatch, caplog):
     # Clean up
     monkeypatch.delenv("ENERGY_POWER_ALERT_W", raising=False)
     importlib.reload(cfg)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SSRF Mitigation Tests (M1 fix)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestIsPrivateIp:
+    """Tests for is_private_ip() SSRF mitigation function."""
+
+    def test_private_class_c(self, monkeypatch):
+        """192.168.x.x addresses are private."""
+        cfg = _reload_config(monkeypatch)
+        assert cfg.is_private_ip("192.168.1.50") is True
+        assert cfg.is_private_ip("192.168.0.1") is True
+        assert cfg.is_private_ip("192.168.255.255") is True
+
+    def test_private_class_a(self, monkeypatch):
+        """10.x.x.x addresses are private."""
+        cfg = _reload_config(monkeypatch)
+        assert cfg.is_private_ip("10.0.0.1") is True
+        assert cfg.is_private_ip("10.255.255.255") is True
+
+    def test_private_class_b(self, monkeypatch):
+        """172.16-31.x.x addresses are private."""
+        cfg = _reload_config(monkeypatch)
+        assert cfg.is_private_ip("172.16.0.1") is True
+        assert cfg.is_private_ip("172.31.255.255") is True
+        # 172.15.x.x is NOT private
+        assert cfg.is_private_ip("172.15.0.1") is False
+        # 172.32.x.x is NOT private
+        assert cfg.is_private_ip("172.32.0.1") is False
+
+    def test_loopback(self, monkeypatch):
+        """127.x.x.x and localhost are private."""
+        cfg = _reload_config(monkeypatch)
+        assert cfg.is_private_ip("127.0.0.1") is True
+        assert cfg.is_private_ip("127.255.255.255") is True
+        assert cfg.is_private_ip("localhost") is True
+        assert cfg.is_private_ip("LOCALHOST") is True  # case insensitive
+
+    def test_public_ips_rejected(self, monkeypatch):
+        """Public IPs are not private."""
+        cfg = _reload_config(monkeypatch)
+        assert cfg.is_private_ip("8.8.8.8") is False
+        assert cfg.is_private_ip("1.1.1.1") is False
+        assert cfg.is_private_ip("93.184.216.34") is False  # example.com
+
+    def test_hostnames_rejected(self, monkeypatch):
+        """Hostnames (except localhost) are not private."""
+        cfg = _reload_config(monkeypatch)
+        assert cfg.is_private_ip("evil.com") is False
+        assert cfg.is_private_ip("google.com") is False
+        assert cfg.is_private_ip("shelly.local") is False  # mDNS not allowed
+
+    def test_url_with_private_ip(self, monkeypatch):
+        """URLs with private IPs are accepted."""
+        cfg = _reload_config(monkeypatch)
+        assert cfg.is_private_ip("http://192.168.1.50:80") is True
+        assert cfg.is_private_ip("http://10.0.0.1:8080/status") is True
+        assert cfg.is_private_ip("https://172.16.0.1/api") is True
+
+    def test_url_with_public_ip(self, monkeypatch):
+        """URLs with public IPs are rejected."""
+        cfg = _reload_config(monkeypatch)
+        assert cfg.is_private_ip("http://8.8.8.8:80") is False
+        assert cfg.is_private_ip("http://evil.com/steal-data") is False
