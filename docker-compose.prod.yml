@@ -199,6 +199,8 @@ services:
       - MQTT_PORT=${MQTT_PORT:-1883}
       - MQTT_TLS_ENABLED=${MQTT_TLS_ENABLED:-false}
       - MQTT_TLS_CA_CERTS=${MQTT_TLS_CA_CERTS:-/app/certs/ca.crt}
+      # Mosquitto is configured with allow_anonymous=true (no auth required)
+      - MQTT_ALLOW_ANONYMOUS=true
     networks:
       - smart-home
     healthcheck:
