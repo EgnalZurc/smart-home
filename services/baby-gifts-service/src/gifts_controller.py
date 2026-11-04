@@ -47,11 +47,22 @@ logger: logging.Logger = logging.getLogger(__name__)
 # ── Constants ─────────────────────────────────────────────────────────────────
 DB_TIMEOUT_SECONDS: float = 5.0
 
-# Number of random bytes used to generate invitation tokens via secrets.token_urlsafe().
-# token_urlsafe(n) produces ceil(n * 8 / 6) characters (base64url encoding), so:
-# - 24 bytes → 32 characters (24 * 8 / 6 = 32)
-# This provides 192 bits of entropy, which is cryptographically secure for
-# invitation tokens (brute-force infeasible even at billions of attempts/second).
+# Number of random bytes for invitation tokens via secrets.token_urlsafe().
+#
+# How it works:
+#   secrets.token_urlsafe(n) generates n cryptographically random bytes and
+#   encodes them as base64url (RFC 4648), producing ceil(n * 8 / 6) characters.
+#
+# With 24 bytes:
+#   - Output length: 24 * 8 / 6 = 32 characters
+#   - Entropy: 24 * 8 = 192 bits
+#   - Security: 2^192 possible tokens — brute-force is infeasible even at
+#     billions of attempts per second (would take ~10^40 years)
+#
+# Why 24 bytes?
+#   - Exceeds OWASP minimum of 128 bits for session tokens
+#   - 32-char URL-safe string is compact enough for invitation links
+#   - Matches the entropy level used by major platforms (e.g., GitHub tokens)
 INVITATION_TOKEN_BYTES: int = 24
 
 _lock: threading.Lock = threading.Lock()
