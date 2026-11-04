@@ -86,3 +86,55 @@ class TestDoSync:
         main._do_sync()
 
         fake_client.sync_events.assert_not_called()
+
+
+class TestCalendarSeedValidation:
+    """Tests for CALENDAR_SEED validation during startup (lifespan)."""
+
+    def test_valid_seed_entries_are_inserted(self, store):
+        """Valid calendar IDs in CALENDAR_SEED are inserted into the database."""
+        seed_data = [
+            {"id": "primary", "label": "Primary Calendar"},
+            {"id": "work@company.com", "label": "Work"},
+        ]
+        for entry in seed_data:
+            if main.CALENDAR_ID_PATTERN.match(entry["id"]):
+                store.upsert_calendar(id=entry["id"], label=entry["label"], enabled=True)
+
+        assert store.get("primary") is not None
+        assert store.get("work@company.com") is not None
+
+    def test_invalid_seed_entries_are_skipped(self, store):
+        """Invalid/malicious calendar IDs in CALENDAR_SEED are rejected."""
+        seed_data = [
+            {"id": "http://169.254.169.254/latest/meta-data", "label": "SSRF attempt"},
+            {"id": "javascript:alert(1)", "label": "XSS attempt"},
+            {"id": "../../../etc/passwd", "label": "Path traversal"},
+        ]
+        for entry in seed_data:
+            if main.CALENDAR_ID_PATTERN.match(entry["id"]):
+                store.upsert_calendar(id=entry["id"], label=entry["label"], enabled=True)
+
+        # None of the malicious entries should be in the database
+        for entry in seed_data:
+            assert store.get(entry["id"]) is None
+
+    def test_mixed_seed_only_valid_inserted(self, store):
+        """When CALENDAR_SEED has both valid and invalid, only valid are inserted."""
+        seed_data = [
+            {"id": "primary", "label": "Primary"},
+            {"id": "http://evil.com/ssrf", "label": "Bad"},
+            {"id": "user@example.com", "label": "User"},
+            {"id": "not a valid id!", "label": "Also bad"},
+        ]
+        seeded_count = 0
+        for entry in seed_data:
+            if main.CALENDAR_ID_PATTERN.match(entry["id"]):
+                store.upsert_calendar(id=entry["id"], label=entry["label"], enabled=True)
+                seeded_count += 1
+
+        assert seeded_count == 2
+        assert store.get("primary") is not None
+        assert store.get("user@example.com") is not None
+        assert store.get("http://evil.com/ssrf") is None
+        assert store.get("not a valid id!") is None

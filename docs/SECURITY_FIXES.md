@@ -21,6 +21,15 @@ Each entry follows this format:
 
 ## Fixed Issues
 
+### [calendar-service] CALENDAR_SEED Regex Pattern Validation (L1)
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-04
+- **Description**: CALENDAR_SEED env var entries were validated with simple string checks instead of the same CALENDAR_ID_PATTERN regex used elsewhere, creating potential SSRF surface if malformed IDs were seeded
+- **Fix Applied**: Added CALENDAR_ID_PATTERN.match() validation in lifespan() before upsert_calendar(). Invalid seed entries are logged with warning and skipped. Added TestCalendarSeedValidation test class with 3 tests covering valid, invalid, and mixed scenarios
+- **Verification**: Set CALENDAR_SEED='[{"id":"http://169.254.169.254/meta","label":"bad"}]' and start service; check logs show "CALENDAR_SEED entry 0 has invalid calendar ID format, skipping"
+
 ### [dashboard] Auth Endpoint Rate Limiting (M2)
 - **Severity**: MEDIUM
 - **Status**: FIXED
