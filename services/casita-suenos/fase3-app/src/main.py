@@ -45,7 +45,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Rate limiters ────────────────────────────────────────────────────────────
-# Redis URL from env or default to compose service name
+# Redis URL for distributed rate limiting.
+# Default: "redis://redis:6379/0" - the 'redis' hostname resolves to the Redis
+# container in the Docker Compose network (see docker-compose.prod.yml).
+# For local development outside Docker, set REDIS_URL env var explicitly
+# (e.g., "redis://localhost:6379/0") or leave unset to use in-memory fallback.
+# Redis is optional: if unavailable, rate limiting falls back to in-memory.
 _REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 
 
