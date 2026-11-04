@@ -152,10 +152,7 @@ def is_internal_url(url: str) -> bool:
     # Reject hostnames (including localhost) - vulnerable to DNS rebinding
     # Only allow explicit IPv4 addresses to prevent an attacker's DNS from
     # initially resolving to a safe IP then switching to an internal one
-    if not _is_private_ipv4(hostname):
-        return False
-
-    return True
+    return _is_private_ipv4(hostname)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
