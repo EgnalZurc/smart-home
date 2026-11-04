@@ -30,6 +30,15 @@ Each entry follows this format:
 - **Fix Applied**: db_ok() now uses a dedicated short-timeout (2s) SQLite connection with PRAGMA integrity_check(1) instead of reusing the main connection, ensuring the health check fails fast and returns db_ok=false rather than hanging. The 2s timeout is shorter than Docker HEALTHCHECK's 5s timeout, allowing proper failure reporting.
 - **Verification**: Check `services/presence-service/src/database.py` db_ok() method uses `sqlite3.connect(self.db_path, timeout=timeout_s)` with default timeout_s=2.0 and PRAGMA integrity_check(1)
 
+### [infrastructure/mosquitto] ACL Wildcard Too Broad for ac-service
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-04
+- **Description**: ac-service had `topic read zigbee2mqtt/bridge/#` which granted read access to ALL bridge topics (state, config, log, info, extensions, request, response) when it only needs `bridge/devices` for sensor discovery
+- **Fix Applied**: Tightened ACL to specific topics: `topic read zigbee2mqtt/bridge/devices` (to receive device list) and `topic write zigbee2mqtt/bridge/request/devices` (to request discovery). Removed overly broad `bridge/#` wildcard.
+- **Verification**: `docker exec mosquitto mosquitto_pub -u ac-service -P <password> -t 'zigbee2mqtt/bridge/config' -m 'test'` should fail with "not authorized"
+
 ### [dashboard] Auth Endpoint Rate Limiting (M2)
 - **Severity**: MEDIUM
 - **Status**: FIXED
@@ -928,7 +937,7 @@ Each service now catches specific exception types appropriate to the operations 
 |--------|-----------|--------------|
 | Complexity | Simple, no infra | Requires Redis container |
 | Latency | ~0.1ms | ~1-5ms per check |
-| Multi-instance | ❌ Each instance has own state | ✅ Shared state |
+| Multi-instance | âŒ Each instance has own state | âœ… Shared state |
 | Failure mode | Graceful (limits per-instance) | Redis down = limits fail |
 | Memory | Per-process (~50KB at max) | Centralized |
 
@@ -989,7 +998,7 @@ These are code quality improvements: type hints, documentation, constants extrac
 
 #### [casita-suenos] Code Quality (7 issues)
 - **PR**: #417
-- **Changes**: Lambdas replaced with explicit code, dead code removed, string check fix ("b" -> "búsqueda")
+- **Changes**: Lambdas replaced with explicit code, dead code removed, string check fix ("b" -> "bÃºsqueda")
 
 ### Batch 3: Remaining Services (20 LOW - PRs #418-#421)
 
