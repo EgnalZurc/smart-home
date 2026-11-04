@@ -398,40 +398,56 @@ class AlertEngine:
         return sorted(labels)
 
     # ── Message formatting ────────────────────────────────────────────────────
+    # ┌─────────────────────────────────────────────────────────────────────────┐
+    # │  DEPLOYMENT-SPECIFIC STRINGS (Spanish)                                  │
+    # │                                                                         │
+    # │  These strings are intentionally hardcoded in Spanish because this      │
+    # │  deployment targets a Spanish-speaking household. The alert messages    │
+    # │  are delivered via Telegram and displayed in the dashboard UI.          │
+    # │                                                                         │
+    # │  Future i18n: To support multiple languages, these dictionaries should  │
+    # │  be externalized to a locale file (e.g., locales/es.json) and loaded    │
+    # │  based on a METRICS_LOCALE environment variable. The template format    │
+    # │  ({target}, {value}, {unit}, {threshold}) is already i18n-friendly.     │
+    # │                                                                         │
+    # │  Tracking: docs/SECURITY_FIXES.md backlog, LOW priority.                │
+    # └─────────────────────────────────────────────────────────────────────────┘
 
-    # Human-readable descriptions for rule keys (used in alert messages).
+    # Human-readable descriptions for rule keys (used in Telegram alert messages).
     # Maps rule_key -> (firing_template, resolved_template).
     # Templates use {target}, {value}, {unit}, {threshold} placeholders.
-    #
-    # TODO(i18n): These hardcoded Spanish strings should be externalized to a
-    # locale file or config when internationalization support is added. Currently
-    # Telegram alerts target a Spanish-speaking household, so hardcoding is
-    # acceptable. Tracking: docs/SECURITY_FIXES.md backlog, LOW priority.
     RULE_DESCRIPTIONS: ClassVar[dict[str, tuple[str, str]]] = {
+        # Spanish: "RAM usage at {value}{unit} (max {threshold}{unit})"
         "host_ram": (
             "Uso de RAM en {value}{unit} (máx {threshold}{unit})",
             "Uso de RAM normalizado",
         ),
+        # Spanish: "Swap usage at {value}{unit} (max {threshold}{unit})"
         "host_swap": (
             "Uso de swap en {value}{unit} (máx {threshold}{unit})",
             "Uso de swap normalizado",
         ),
+        # Spanish: "Temperature at {value}{unit} (max {threshold}{unit})"
         "host_temp": (
             "Temperatura en {value}{unit} (máx {threshold}{unit})",
             "Temperatura normalizada",
         ),
+        # Spanish: "Disk at {value}{unit} (max {threshold}{unit})"
         "host_disk": (
             "Disco al {value}{unit} (máx {threshold}{unit})",
             "Espacio en disco normalizado",
         ),
+        # Spanish: "Container *{target}* using {value}{unit} memory (max {threshold}{unit})"
         "container_mem": (
             "Contenedor *{target}* usando {value}{unit} de memoria (máx {threshold}{unit})",
             "Contenedor *{target}*: memoria normalizada",
         ),
+        # Spanish: "Service *{target}* not responding"
         "service_online": (
             "Servicio *{target}* no responde",
             "Servicio *{target}* vuelve a responder",
         ),
+        # Spanish: "Service *{target}* slow: {value}{unit} (max {threshold}{unit})"
         "service_latency": (
             "Servicio *{target}* lento: {value}{unit} (máx {threshold}{unit})",
             "Servicio *{target}* responde con normalidad",
@@ -557,17 +573,21 @@ class AlertEngine:
     # ── Read helpers for the API ────────────────────────────────────────────────
 
     # Plain-text descriptions for dashboard titles (no markdown).
-    #
-    # TODO(i18n): Same as RULE_DESCRIPTIONS above — hardcoded Spanish strings
-    # acceptable for current single-household deployment. Externalize to locale
-    # file when i18n support is added.
+    # See DEPLOYMENT-SPECIFIC STRINGS block above for i18n notes.
     RULE_TITLES: ClassVar[dict[str, tuple[str, str]]] = {
+        # Spanish: "RAM: {value}{unit}"
         "host_ram": ("RAM: {value}{unit}", "host"),
+        # Spanish: "Swap: {value}{unit}"
         "host_swap": ("Swap: {value}{unit}", "host"),
+        # Spanish: "Temperature: {value}{unit}"
         "host_temp": ("Temperatura: {value}{unit}", "host"),
+        # Spanish: "Disk: {value}{unit}"
         "host_disk": ("Disco: {value}{unit}", "host"),
+        # Spanish: "{target}: {value}{unit} memory"
         "container_mem": ("{target}: {value}{unit} memoria", "container"),
+        # Spanish: "{target} not responding"
         "service_online": ("{target} no responde", "service"),
+        # Spanish: "{target} slow: {value}{unit}"
         "service_latency": ("{target} lento: {value}{unit}", "service"),
     }
 
