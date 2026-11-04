@@ -61,44 +61,98 @@ from urllib.parse import urlparse
 # SSRF Mitigation - Internal URL Validation
 # ══════════════════════════════════════════════════════════════════════════════
 
-_INTERNAL_PATTERNS = [
-    re.compile(r"^localhost$", re.IGNORECASE),
+_INTERNAL_IPV4_PATTERNS = [
     re.compile(r"^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$"),
     re.compile(r"^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$"),
     re.compile(r"^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$"),
     re.compile(r"^192\.168\.\d{1,3}\.\d{1,3}$"),
 ]
-"""Regex patterns matching internal/private network addresses."""
+"""Regex patterns matching internal/private IPv4 network addresses."""
+
+
+def _is_ipv6_address(hostname: str) -> bool:
+    """Check if hostname is an IPv6 address (including bracketed form).
+
+    Args:
+        hostname: The hostname to check.
+
+    Returns:
+        True if it appears to be an IPv6 address.
+    """
+    # IPv6 in URLs can be bracketed [::1] or bare for some parsers
+    # urlparse().hostname strips brackets, so we check for colons
+    # IPv4 addresses don't contain colons, IPv6 always does
+    return ":" in hostname
+
+
+def _is_private_ipv4(hostname: str) -> bool:
+    """Check if hostname is a private IPv4 address.
+
+    Args:
+        hostname: The hostname to check.
+
+    Returns:
+        True if it matches a private/internal IPv4 range.
+    """
+    return any(p.match(hostname) for p in _INTERNAL_IPV4_PATTERNS)
 
 
 def is_internal_url(url: str) -> bool:
     """Check if a URL points to an internal network address.
 
     Validates that the hostname in the URL matches one of:
-    - localhost
     - 127.x.x.x (loopback)
     - 10.x.x.x (Class A private)
     - 172.16-31.x.x (Class B private)
     - 192.168.x.x (Class C private)
 
-    This prevents SSRF attacks by ensuring PC_AGENT_URL cannot be
-    configured to point to external services.
+    SSRF Protection - This function REJECTS:
+    - IPv6 addresses (e.g., ::1, ::ffff:127.0.0.1) - could bypass IPv4 checks
+    - 0.0.0.0 - binds to all interfaces, not a valid target
+    - localhost/hostnames - vulnerable to DNS rebinding attacks
+    - External IPs - obvious SSRF vector
+
+    Only explicit private IPv4 addresses are allowed to prevent DNS rebinding
+    where an attacker's DNS server returns an internal IP after initial
+    validation.
 
     Args:
         url: The URL to validate.
 
     Returns:
-        True if the URL hostname is an internal address, False otherwise.
+        True if the URL hostname is an allowed internal IPv4 address,
+        False otherwise.
 
     Example:
         >>> is_internal_url("http://192.168.1.164:8090")
         True
         >>> is_internal_url("http://evil.com:8090")
         False
+        >>> is_internal_url("http://[::1]:8090")
+        False
+        >>> is_internal_url("http://localhost:8090")
+        False
     """
     parsed = urlparse(url)
     hostname = parsed.hostname or ""
-    return any(p.match(hostname) for p in _INTERNAL_PATTERNS)
+
+    # Reject empty hostname
+    if not hostname:
+        return False
+
+    # Reject IPv6 addresses - they can bypass IPv4-based filtering
+    # Examples: ::1 (localhost), ::ffff:127.0.0.1 (IPv4-mapped), etc.
+    if _is_ipv6_address(hostname):
+        return False
+
+    # Reject 0.0.0.0 - not a valid target address
+    if hostname == "0.0.0.0":  # nosec B104 - rejecting, not using
+        return False
+
+    # Reject hostnames (including localhost) - vulnerable to DNS rebinding
+    # Only allow explicit IPv4 addresses to prevent an attacker's DNS from
+    # initially resolving to a safe IP then switching to an internal one
+    return _is_private_ipv4(hostname)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
