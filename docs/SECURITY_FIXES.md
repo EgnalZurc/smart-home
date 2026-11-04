@@ -728,17 +728,18 @@ For services with stable inline scripts, CSP hashes ('sha256-...') can replace u
 - **Next Review**: 2027-05-03 (6 months)
 
 ### [portfolio-monitor] AUTH_TOKEN Disabled by Default (M2)
-- **Severity**: MEDIUM
-- **Status**: ACCEPTED_RISK
-- **Reason**: The /api/portfolio/* endpoints accept requests without authentication when AUTH_TOKEN is not configured (the default). An attacker with Tailscale network access could read portfolio summary data.
-- **Mitigations**:
-  - Service runs exclusively behind Tailscale VPN, limiting exposure to authorized network users
-  - AUTH_TOKEN is opt-in; users who need auth can enable it via environment variable
-  - Endpoints are read-only; no state-changing operations are exposed unauthenticated
-  - Implementing mandatory auth would require config changes across all deployments
-- **Documentation**: Enable AUTH_TOKEN in production if sensitive portfolio data is exposed. Monitor Tailscale access logs for anomalies.
+- **Severity**: MEDIUM → **FALSE_POSITIVE**
+- **Status**: NOT_AN_ISSUE
+- **Audit Finding**: The audit flagged that /api/portfolio/* endpoints lack AUTH_TOKEN authentication.
+- **Actual State**: The service is **already protected** by nginx `auth_request` directive:
+  - All `/smart-home/portfolio` and `/api/portfolio/*` routes require valid dashboard session
+  - nginx calls `/_auth_check` which verifies session cookie against the dashboard backend
+  - Unauthenticated requests are redirected to login (`@login_redirect`)
+- **Evidence**:
+  - `infrastructure/nginx/conf.d/smart-home.conf` lines for `/smart-home/portfolio` and `/api/portfolio/` include `auth_request /_auth_check`
+  - The service also implements CSRF protection via Origin header validation in `main.py`
+- **Conclusion**: AUTH_TOKEN is unnecessary - the service correctly uses the platform's session-based auth pattern via nginx. No code changes required.
 - **Review Date**: 2026-11-04
-- **Next Review**: 2027-05-04 (6 months)
 
 ---
 
