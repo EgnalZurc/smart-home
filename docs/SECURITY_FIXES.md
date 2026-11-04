@@ -21,6 +21,15 @@ Each entry follows this format:
 
 ## Fixed Issues
 
+### [ac-service] CSRF Missing Origin/Referer Bypass
+- **Severity**: HIGH
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-04
+- **Description**: CSRF middleware allowed state-changing requests (POST/PUT/DELETE) without Origin header, intended for non-browser clients but could be bypassed by browsers with crafted requests
+- **Fix Applied**: Fail-closed validation: state-changing requests now require either Origin OR Referer header from allowed origins. Health check paths (/health, /api/health/ac) are exempt. If neither header present, returns 403 "Missing Origin/Referer header". Both headers validated against allowed origins list.
+- **Verification**: `curl -X POST http://localhost:8002/api/ac/control -d '{"mode":"auto"}' -H "Content-Type: application/json"` without Origin/Referer returns 403 "Missing Origin/Referer header"
+
 ### [dashboard] Auth Endpoint Rate Limiting (M2)
 - **Severity**: MEDIUM
 - **Status**: FIXED

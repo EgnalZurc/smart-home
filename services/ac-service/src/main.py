@@ -415,41 +415,111 @@ _ALLOWED_ORIGINS: frozenset[str] = (
 )
 
 
-def _validate_origin(request: Request) -> bool:
-    """Validate request origin for CSRF protection.
+# Paths exempt from Origin/Referer requirement (health checks, internal callers).
+_CSRF_EXEMPT_PATHS: frozenset[str] = frozenset(
+    {
+        "/health",
+        "/api/health/ac",
+    }
+)
+
+
+def _extract_origin_from_referer(referer: str) -> str | None:
+    """Extract origin (scheme://host[:port]) from Referer header.
+
+    Args:
+        referer: The Referer header value.
+
+    Returns:
+        Origin string if extraction succeeds, None otherwise.
+    """
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(referer)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+    except Exception:
+        pass
+    return None
+
+
+def _validate_origin(request: Request) -> tuple[bool, str | None]:
+    """Validate request origin for CSRF protection (fail-closed).
 
     Rules:
         - GET/HEAD/OPTIONS: always allowed (safe methods)
-        - POST/PUT/DELETE/PATCH without Origin header: allowed (non-browser client)
-        - POST/PUT/DELETE/PATCH with Origin header: must be in _ALLOWED_ORIGINS
+        - Health check paths: exempt from Origin/Referer requirement
+        - POST/PUT/DELETE/PATCH: require Origin OR Referer header
+          - If Origin present: must be in _ALLOWED_ORIGINS
+          - If only Referer present: extracted origin must be in _ALLOWED_ORIGINS
+          - If neither present: reject (fail-closed)
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        Tuple of (is_valid, rejection_reason). If is_valid is True,
+        rejection_reason is None.
     """
+    # Safe methods always pass
     if request.method in ("GET", "HEAD", "OPTIONS"):
-        return True
+        return True, None
+
+    # Exempt health check paths from Origin/Referer requirement
+    if request.url.path in _CSRF_EXEMPT_PATHS:
+        return True, None
+
     origin = request.headers.get("Origin")
-    if origin is None:
-        # Non-browser clients (curl, httpx, etc.) don't send Origin
-        return True
-    return origin in _ALLOWED_ORIGINS
+    referer = request.headers.get("Referer")
+
+    # Fail-closed: require at least Origin OR Referer for state-changing requests
+    if origin is None and referer is None:
+        return False, "Missing Origin/Referer header"
+
+    # Validate Origin if present
+    if origin is not None:
+        if origin in _ALLOWED_ORIGINS:
+            return True, None
+        return False, "Invalid origin"
+
+    # Fallback: validate Referer if Origin not present
+    if referer is not None:
+        extracted_origin = _extract_origin_from_referer(referer)
+        if extracted_origin and extracted_origin in _ALLOWED_ORIGINS:
+            return True, None
+        return False, "Invalid referer origin"
+
+    # Should not reach here, but fail-closed
+    return False, "CSRF validation failed"
 
 
 # ── Security Middlewares ──────────────────────────────────────────────────────
 
 
 class CSRFProtectionMiddleware(BaseHTTPMiddleware):
-    """CSRF protection middleware that validates Origin header on state-changing requests."""
+    """CSRF protection middleware that validates Origin/Referer on state-changing requests.
+
+    Fail-closed behavior: state-changing requests (POST/PUT/DELETE/PATCH) must include
+    either an Origin or Referer header from an allowed origin. Requests without either
+    header are rejected (except for exempt paths like health checks).
+    """
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Response]
     ) -> Response:
         """Check origin before processing request."""
-        if not _validate_origin(request):
+        is_valid, rejection_reason = _validate_origin(request)
+        if not is_valid:
             logger.warning(
-                "CSRF: blocked request from origin %s to %s",
-                request.headers.get("Origin"),
+                "CSRF: blocked request to %s - %s (Origin: %s, Referer: %s)",
                 request.url.path,
+                rejection_reason,
+                request.headers.get("Origin"),
+                request.headers.get("Referer"),
             )
             response = Response(
-                content='{"detail":"Invalid origin"}',
+                content=f'{{"detail":"{rejection_reason}"}}',
                 status_code=403,
                 media_type="application/json",
             )
