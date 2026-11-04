@@ -21,6 +21,15 @@ Each entry follows this format:
 
 ## Fixed Issues
 
+### [presence-service] Health Check Timeout (L2)
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-04
+- **Description**: The db_ok() health check method could hang indefinitely if the SQLite database was locked or slow, potentially causing Docker HEALTHCHECK to timeout without returning a meaningful response
+- **Fix Applied**: db_ok() now uses a dedicated short-timeout (2s) SQLite connection with PRAGMA integrity_check(1) instead of reusing the main connection, ensuring the health check fails fast and returns db_ok=false rather than hanging. The 2s timeout is shorter than Docker HEALTHCHECK's 5s timeout, allowing proper failure reporting.
+- **Verification**: Check `services/presence-service/src/database.py` db_ok() method uses `sqlite3.connect(self.db_path, timeout=timeout_s)` with default timeout_s=2.0 and PRAGMA integrity_check(1)
+
 ### [calendar-service] CALENDAR_SEED Regex Pattern Validation (L1)
 - **Severity**: LOW
 - **Status**: FIXED
@@ -946,7 +955,7 @@ Each service now catches specific exception types appropriate to the operations 
 |--------|-----------|--------------|
 | Complexity | Simple, no infra | Requires Redis container |
 | Latency | ~0.1ms | ~1-5ms per check |
-| Multi-instance | ❌ Each instance has own state | ✅ Shared state |
+| Multi-instance | âŒ Each instance has own state | âœ… Shared state |
 | Failure mode | Graceful (limits per-instance) | Redis down = limits fail |
 | Memory | Per-process (~50KB at max) | Centralized |
 
@@ -1007,7 +1016,7 @@ These are code quality improvements: type hints, documentation, constants extrac
 
 #### [casita-suenos] Code Quality (7 issues)
 - **PR**: #417
-- **Changes**: Lambdas replaced with explicit code, dead code removed, string check fix ("b" -> "búsqueda")
+- **Changes**: Lambdas replaced with explicit code, dead code removed, string check fix ("b" -> "bÃºsqueda")
 
 ### Batch 3: Remaining Services (20 LOW - PRs #418-#421)
 
