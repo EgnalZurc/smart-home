@@ -981,3 +981,94 @@ class TestLogsRateLimiting:
         # Clean up
         with logs_limiter._lock:
             logs_limiter._data.clear()
+
+
+# ── SSRF URL Validation ───────────────────────────────────────────────────────
+
+
+class TestIsInternalUrl:
+    """Tests for is_internal_url SSRF mitigation."""
+
+    def test_accepts_private_ipv4_ranges(self):
+        """Should accept valid private IPv4 addresses."""
+        from src.config import is_internal_url
+
+        # Class A private (10.x.x.x)
+        assert is_internal_url("http://10.0.0.1:8090") is True
+        assert is_internal_url("http://10.255.255.255:8090") is True
+
+        # Class B private (172.16-31.x.x)
+        assert is_internal_url("http://172.16.0.1:8090") is True
+        assert is_internal_url("http://172.31.255.255:8090") is True
+
+        # Class C private (192.168.x.x)
+        assert is_internal_url("http://192.168.1.164:8090") is True
+        assert is_internal_url("http://192.168.0.1:80") is True
+
+        # Loopback (127.x.x.x)
+        assert is_internal_url("http://127.0.0.1:8090") is True
+        assert is_internal_url("http://127.255.255.255:8090") is True
+
+    def test_rejects_ipv6_addresses(self):
+        """Should reject IPv6 addresses to prevent IPv4 filter bypass."""
+        from src.config import is_internal_url
+
+        # IPv6 loopback
+        assert is_internal_url("http://[::1]:8090") is False
+        # IPv4-mapped IPv6 (could bypass IPv4 checks)
+        assert is_internal_url("http://[::ffff:127.0.0.1]:8090") is False
+        assert is_internal_url("http://[::ffff:192.168.1.1]:8090") is False
+        # IPv6 private addresses
+        assert is_internal_url("http://[fd00::1]:8090") is False
+        assert is_internal_url("http://[fe80::1]:8090") is False
+
+    def test_rejects_zero_address(self):
+        """Should reject 0.0.0.0 which binds to all interfaces."""
+        from src.config import is_internal_url
+
+        assert is_internal_url("http://0.0.0.0:8090") is False
+
+    def test_rejects_localhost_hostname(self):
+        """Should reject 'localhost' to prevent DNS rebinding."""
+        from src.config import is_internal_url
+
+        assert is_internal_url("http://localhost:8090") is False
+        assert is_internal_url("http://LOCALHOST:8090") is False
+        assert is_internal_url("http://LocalHost:8090") is False
+
+    def test_rejects_external_hostnames(self):
+        """Should reject external hostnames (DNS rebinding risk)."""
+        from src.config import is_internal_url
+
+        assert is_internal_url("http://evil.com:8090") is False
+        assert is_internal_url("http://attacker.example.com:8090") is False
+        assert is_internal_url("http://internal.attacker.com:8090") is False
+
+    def test_rejects_external_ips(self):
+        """Should reject public/external IP addresses."""
+        from src.config import is_internal_url
+
+        assert is_internal_url("http://8.8.8.8:8090") is False
+        assert is_internal_url("http://1.1.1.1:8090") is False
+        assert is_internal_url("http://203.0.113.1:8090") is False
+
+    def test_rejects_non_private_172_range(self):
+        """Should reject 172.x outside 16-31 range (not private)."""
+        from src.config import is_internal_url
+
+        assert is_internal_url("http://172.15.0.1:8090") is False
+        assert is_internal_url("http://172.32.0.1:8090") is False
+
+    def test_rejects_empty_hostname(self):
+        """Should reject URLs with empty hostname."""
+        from src.config import is_internal_url
+
+        assert is_internal_url("http://:8090") is False
+        assert is_internal_url("") is False
+
+    def test_handles_urls_without_port(self):
+        """Should handle URLs without explicit port."""
+        from src.config import is_internal_url
+
+        assert is_internal_url("http://192.168.1.1") is True
+        assert is_internal_url("http://evil.com") is False

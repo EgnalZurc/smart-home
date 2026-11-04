@@ -21,14 +21,23 @@ Each entry follows this format:
 
 ## Fixed Issues
 
-### [presence-service] Health Check Timeout (L2)
+### [infrastructure/mosquitto] ACL Wildcard Too Broad for ac-service
 - **Severity**: LOW
 - **Status**: FIXED
 - **PR**: #TBD
 - **Fixed Date**: 2026-11-04
-- **Description**: The db_ok() health check method could hang indefinitely if the SQLite database was locked or slow, potentially causing Docker HEALTHCHECK to timeout without returning a meaningful response
-- **Fix Applied**: db_ok() now uses a dedicated short-timeout (2s) SQLite connection with PRAGMA integrity_check(1) instead of reusing the main connection, ensuring the health check fails fast and returns db_ok=false rather than hanging. The 2s timeout is shorter than Docker HEALTHCHECK's 5s timeout, allowing proper failure reporting.
-- **Verification**: Check `services/presence-service/src/database.py` db_ok() method uses `sqlite3.connect(self.db_path, timeout=timeout_s)` with default timeout_s=2.0 and PRAGMA integrity_check(1)
+- **Description**: ac-service had `topic read zigbee2mqtt/bridge/#` which granted read access to ALL bridge topics (state, config, log, info, extensions, request, response) when it only needs `bridge/devices` for sensor discovery
+- **Fix Applied**: Tightened ACL to specific topics: `topic read zigbee2mqtt/bridge/devices` (to receive device list) and `topic write zigbee2mqtt/bridge/request/devices` (to request discovery). Removed overly broad `bridge/#` wildcard.
+- **Verification**: `docker exec mosquitto mosquitto_pub -u ac-service -P <password> -t 'zigbee2mqtt/bridge/config' -m 'test'` should fail with "not authorized"
+
+### [presence-service] Credentials Stored in Memory (L1)
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-04
+- **Description**: ROUTER_PASSWORD and MQTT credentials are loaded from environment variables and stored as module-level globals for the process lifetime, which could expose plaintext passwords in memory dumps
+- **Fix Applied**: Added comprehensive security documentation in config.py explaining the risk, mitigations in place (never logged, container isolation, env vars only), and recommended future enhancements (secrets manager, SSH key auth)
+- **Verification**: Check `services/presence-service/src/config.py` contains "SECURITY: Credentials in memory" comment block with risk analysis and mitigation recommendations
 
 ### [dashboard] Auth Endpoint Rate Limiting (M2)
 - **Severity**: MEDIUM

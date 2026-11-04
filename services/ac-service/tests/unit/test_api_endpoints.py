@@ -30,10 +30,61 @@ with patch.dict(
     from main import app
 
 
+# Default Origin header for CSRF-protected endpoints
+_TEST_ORIGIN = "http://localhost:8002"
+
+
+class CSRFTestClient:
+    """Wrapper around TestClient that adds Origin header to POST/PUT/DELETE/PATCH."""
+
+    def __init__(self, client: TestClient):
+        self._client = client
+
+    def get(self, url, **kwargs):
+        return self._client.get(url, **kwargs)
+
+    def post(self, url, **kwargs):
+        headers = kwargs.pop("headers", {})
+        if "Origin" not in headers and "Referer" not in headers:
+            headers["Origin"] = _TEST_ORIGIN
+        return self._client.post(url, headers=headers, **kwargs)
+
+    def put(self, url, **kwargs):
+        headers = kwargs.pop("headers", {})
+        if "Origin" not in headers and "Referer" not in headers:
+            headers["Origin"] = _TEST_ORIGIN
+        return self._client.put(url, headers=headers, **kwargs)
+
+    def delete(self, url, **kwargs):
+        headers = kwargs.pop("headers", {})
+        if "Origin" not in headers and "Referer" not in headers:
+            headers["Origin"] = _TEST_ORIGIN
+        return self._client.delete(url, headers=headers, **kwargs)
+
+    def patch(self, url, **kwargs):
+        headers = kwargs.pop("headers", {})
+        if "Origin" not in headers and "Referer" not in headers:
+            headers["Origin"] = _TEST_ORIGIN
+        return self._client.patch(url, headers=headers, **kwargs)
+
+
 @pytest.fixture
 def client():
-    """Create test client without lifespan."""
+    """Create test client without lifespan.
+
+    Returns a wrapper that automatically adds Origin header for CSRF protection.
+    """
     # Override the lifespan to do nothing for tests
+    raw_client = TestClient(app, raise_server_exceptions=False)
+    return CSRFTestClient(raw_client)
+
+
+@pytest.fixture
+def raw_client():
+    """Create raw test client without CSRF Origin header wrapper.
+
+    Use this for testing CSRF rejection of requests without Origin/Referer.
+    """
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -1151,15 +1202,39 @@ class TestCSRFProtection:
 
         assert response.status_code == 200
 
-    def test_csrf_allows_no_origin(self, client, mock_components):
-        """POST without Origin header should succeed (non-browser client)."""
+    def test_csrf_blocks_missing_origin_and_referer(self, raw_client, mock_components):
+        """POST without Origin or Referer header should be blocked (fail-closed)."""
+        response = raw_client.post(
+            "/api/ac/control",
+            json={"mode": "auto"},
+            # No Origin or Referer header - raw_client doesn't add one
+        )
+
+        assert response.status_code == 403
+        data = response.json()
+        assert data["detail"] == "Missing Origin/Referer header"
+
+    def test_csrf_allows_valid_referer_without_origin(self, client, mock_components):
+        """POST with valid Referer but no Origin should succeed."""
         response = client.post(
             "/api/ac/control",
             json={"mode": "auto"},
-            # No Origin header
+            headers={"Referer": "https://raspberrypi.tailaa37cd.ts.net/some/page"},
         )
 
         assert response.status_code == 200
+
+    def test_csrf_blocks_invalid_referer(self, client, mock_components):
+        """POST with invalid Referer and no Origin should be blocked."""
+        response = client.post(
+            "/api/ac/control",
+            json={"mode": "auto"},
+            headers={"Referer": "https://malicious-site.com/some/page"},
+        )
+
+        assert response.status_code == 403
+        data = response.json()
+        assert data["detail"] == "Invalid referer"
 
     def test_csrf_allows_get_with_any_origin(self, client, mock_components):
         """GET requests should be allowed regardless of Origin."""
@@ -1169,6 +1244,38 @@ class TestCSRFProtection:
         )
 
         assert response.status_code == 200
+
+    def test_csrf_allows_health_check_without_origin(self, client):
+        """Health check endpoints are exempt from Origin/Referer requirement."""
+        response = client.get("/health")
+        assert response.status_code == 200
+
+        response = client.get("/api/health/ac")
+        assert response.status_code == 200
+
+    def test_csrf_origin_takes_precedence_over_referer(self, client, mock_components):
+        """When both Origin and Referer present, Origin is checked first."""
+        # Valid Origin, invalid Referer -> should pass (Origin wins)
+        response = client.post(
+            "/api/ac/control",
+            json={"mode": "auto"},
+            headers={
+                "Origin": "https://raspberrypi.tailaa37cd.ts.net",
+                "Referer": "https://malicious-site.com/page",
+            },
+        )
+        assert response.status_code == 200
+
+        # Invalid Origin, valid Referer -> should fail (Origin checked first)
+        response = client.post(
+            "/api/ac/control",
+            json={"mode": "auto"},
+            headers={
+                "Origin": "https://malicious-site.com",
+                "Referer": "https://raspberrypi.tailaa37cd.ts.net/page",
+            },
+        )
+        assert response.status_code == 403
 
 
 class TestSecurityHeaders:
