@@ -895,26 +895,17 @@ class CasitaScheduler:
         """Envía el resumen semanal por Telegram y lo guarda en DB."""
         logger.info("[casita] Enviando resumen semanal")
         try:
-            top = self._db.get_top_scored(limit=5, min_score=_ALERT_THRESHOLD)
-            self._notifier.send_weekly_summary(top)
-            stats = self._db.count_by_zone_radar(min_score=_ALERT_THRESHOLD)
-            radar_total = self._db.count_radar_properties(min_score=_ALERT_THRESHOLD)
-            status_msg = f"📊 Propiedades en radar: {radar_total}\n" + "\n".join(
-                f"  • {z}: {n}" for z, n in stats.items()
-            )
-            self._notifier.send_status(status_msg)
+            radar_count = self._db.count_radar_properties(min_score=_ALERT_THRESHOLD)
+            pending_count = self._db.count_radar_pending(min_score=_ALERT_THRESHOLD)
+            self._notifier.send_weekly_summary(radar_count, pending_count)
 
             # Guardar resumen en DB para mostrarlo en la UI
-            summary_lines = ["📋 Resumen semanal — Casita Sueños", ""]
-            for i, p in enumerate(top, 1):
-                summary_lines.append(
-                    f"{i}. {p.get('score_total', 0):.1f}pts — "
-                    f"{p.get('price', 0):,}€ — "
-                    f"{p.get('zone_id', '').replace('_', ' ').title()}"
-                )
-                summary_lines.append(f"   {p.get('url', '')}")
-            summary_lines.append("")
-            summary_lines.append(status_msg)
+            date_str = datetime.now().strftime("%d/%m/%y")
+            summary_lines = [
+                f"Resumen semanal de casas {date_str}",
+                f"{radar_count} propiedades en el radar",
+                f"{pending_count} pendientes de revisar",
+            ]
             self._db.save_weekly_summary("\n".join(summary_lines))
         except (
             sqlite3.Error,

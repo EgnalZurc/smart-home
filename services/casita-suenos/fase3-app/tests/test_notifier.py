@@ -230,44 +230,25 @@ class TestPriceDropAlert:
 class TestWeeklySummary:
     """Tests for weekly summary formatting."""
 
-    def test_format_empty_summary(self):
-        """Should handle empty properties list."""
+    def test_format_summary_basic(self):
+        """Should format summary with counts."""
         from notifier import _format_weekly_summary
 
-        result = _format_weekly_summary([])
+        result = _format_weekly_summary(radar_count=5, pending_count=2)
 
-        assert "Resumen semanal" in result
-        assert "Sin propiedades destacadas" in result
+        assert "Resumen semanal de casas" in result
+        assert "5 propiedades en el radar" in result
+        assert "2 pendientes de revisar" in result
 
-    def test_format_summary_with_properties(self):
-        """Should format summary with top properties."""
+    def test_format_summary_zero_counts(self):
+        """Should handle zero counts."""
         from notifier import _format_weekly_summary
 
-        properties = [
-            {
-                "price": 250000,
-                "score_total": 72.5,
-                "rooms": 3,
-                "size_m2": 120,
-                "zone_id": "test_zone",
-                "url": "https://example.com/1",
-            },
-            {
-                "price": 200000,
-                "score_total": 68.0,
-                "rooms": 2,
-                "size_m2": 90,
-                "zone_id": "another_zone",
-                "url": "https://example.com/2",
-            },
-        ]
+        result = _format_weekly_summary(radar_count=0, pending_count=0)
 
-        result = _format_weekly_summary(properties)
-
-        assert "Resumen semanal" in result
-        assert "72.5pts" in result
-        assert "250.000€" in result
-        assert "test zone" in result
+        assert "Resumen semanal de casas" in result
+        assert "0 propiedades en el radar" in result
+        assert "0 pendientes de revisar" in result
 
 
 class TestTelegramNotifier:
@@ -388,47 +369,27 @@ class TestFormattingHelpers:
 
 
 class TestWeeklySummaryFormatting:
-    """Tests for weekly summary formatting."""
+    """Tests for weekly summary formatting (additional scenarios)."""
 
-    def test_format_weekly_summary_with_rooms_and_size(self):
-        """Test summary includes rooms and size when available."""
+    def test_format_weekly_summary_date_format(self):
+        """Test summary uses short date format DD/MM/YY."""
         from notifier import _format_weekly_summary
 
-        props = [
-            {
-                "price": 150000,
-                "score_total": 130.5,
-                "rooms": 4,
-                "size_m2": 120.0,
-                "zone_id": "zamora_meseta",
-                "url": "https://example.com/1",
-            }
-        ]
-        result = _format_weekly_summary(props)
+        result = _format_weekly_summary(radar_count=3, pending_count=1)
 
-        assert "150.000€" in result
-        assert "130.5pts" in result
-        assert "4 hab." in result
-        assert "120m²" in result
+        # Should contain date in short format (e.g., 02/11/26)
+        import re
 
-    def test_format_weekly_summary_missing_details(self):
-        """Test summary handles missing rooms/size."""
+        assert re.search(r"\d{2}/\d{2}/\d{2}", result) is not None
+
+    def test_format_weekly_summary_all_reviewed(self):
+        """Test summary when all properties have been reviewed."""
         from notifier import _format_weekly_summary
 
-        props = [
-            {
-                "price": 100000,
-                "score_total": 120.0,
-                "rooms": None,
-                "size_m2": None,
-                "zone_id": "test_zone",
-                "url": "https://example.com/2",
-            }
-        ]
-        result = _format_weekly_summary(props)
+        result = _format_weekly_summary(radar_count=10, pending_count=0)
 
-        assert "100.000€" in result
-        assert "120.0pts" in result
+        assert "10 propiedades en el radar" in result
+        assert "0 pendientes de revisar" in result
 
 
 class TestPriceDropFormatting:

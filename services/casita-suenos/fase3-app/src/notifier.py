@@ -195,27 +195,14 @@ def _format_price_drop_alert(
     return "\n".join(lines)
 
 
-def _format_weekly_summary(top_properties: list[dict]) -> str:
+def _format_weekly_summary(radar_count: int, pending_count: int) -> str:
+    """Formatea el resumen semanal simplificado."""
+    date_str = datetime.now().strftime("%d/%m/%y")
     lines: list[str] = [
-        "📋 *Resumen semanal — Casita Suenos*",
-        f"_{datetime.now().strftime('%d/%m/%Y')}_",
-        "",
+        f"Resumen semanal de casas {date_str}",
+        f"{radar_count} propiedades en el radar",
+        f"{pending_count} pendientes de revisar",
     ]
-    if not top_properties:
-        lines.append("Sin propiedades destacadas esta semana.")
-        return "\n".join(lines)
-    for i, prop in enumerate(top_properties[:5], 1):
-        price = _format_price(prop["price"])
-        score = prop["score_total"]
-        rooms = f"{prop['rooms']} hab." if prop.get("rooms") else ""
-        size = f"{prop['size_m2']:.0f}m²" if prop.get("size_m2") else ""
-        details = "  ".join(filter(None, [rooms, size]))
-        lines.append(f"{i}. {score:.1f}pts — {price}")
-        lines.append(f"   📍 {prop.get('zone_id', '').replace('_', ' ')}")
-        if details:
-            lines.append(f"   {details}")
-        lines.append(f"   {prop['url']}")
-        lines.append("")
     return "\n".join(lines)
 
 
@@ -354,13 +341,14 @@ class TelegramNotifier:
             )
         return success
 
-    def send_weekly_summary(self, top_properties: list[dict]) -> bool:
-        text = _format_weekly_summary(top_properties)
+    def send_weekly_summary(self, radar_count: int, pending_count: int) -> bool:
+        text = _format_weekly_summary(radar_count, pending_count)
         success = self._send(text)
         if success:
             logger.info(
-                "[telegram] Resumen semanal enviado (%d propiedades)",
-                len(top_properties),
+                "[telegram] Resumen semanal enviado (radar=%d, pendientes=%d)",
+                radar_count,
+                pending_count,
             )
         return success
 

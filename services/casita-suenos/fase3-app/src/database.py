@@ -618,6 +618,21 @@ class Database:
         ).fetchall()
         return {r["zone_id"]: r["cnt"] for r in rows}
 
+    def count_radar_pending(self, min_score: float = 55.0) -> int:
+        """Cuenta propiedades en el radar pendientes de revisar (no vistas).
+
+        Una propiedad está "pendiente de revisar" si:
+        - Está en el radar (score >= min_score, dismissed = 0)
+        - No ha sido marcada como vista (viewed = 0)
+        """
+        return self._conn.execute(
+            "SELECT COUNT(*) FROM scored_properties s "
+            "JOIN properties p ON p.uid = s.property_uid "
+            "WHERE s.score_total >= ? AND s.dismissed = 0 "
+            "AND COALESCE(s.viewed, 0) = 0",
+            (min_score,),
+        ).fetchone()[0]
+
     # ------------------------------------------------------------------
     # Análisis precio/m² vs media de zona
     # ------------------------------------------------------------------
