@@ -146,7 +146,7 @@ def is_internal_url(url: str) -> bool:
         return False
 
     # Reject 0.0.0.0 - not a valid target address
-    if hostname == "0.0.0.0":
+    if hostname == "0.0.0.0":  # nosec B104 - rejecting, not using
         return False
 
     # Reject hostnames (including localhost) - vulnerable to DNS rebinding
