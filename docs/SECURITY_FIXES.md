@@ -21,6 +21,15 @@ Each entry follows this format:
 
 ## Fixed Issues
 
+### [presence-service] Health Check Timeout (L2)
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-04
+- **Description**: The db_ok() health check method could hang indefinitely if the SQLite database was locked or slow, potentially causing Docker HEALTHCHECK to timeout without returning a meaningful response
+- **Fix Applied**: db_ok() now uses a dedicated short-timeout (2s) SQLite connection with PRAGMA integrity_check(1) instead of reusing the main connection, ensuring the health check fails fast and returns db_ok=false rather than hanging. The 2s timeout is shorter than Docker HEALTHCHECK's 5s timeout, allowing proper failure reporting.
+- **Verification**: Check `services/presence-service/src/database.py` db_ok() method uses `sqlite3.connect(self.db_path, timeout=timeout_s)` with default timeout_s=2.0 and PRAGMA integrity_check(1)
+
 ### [dashboard] Auth Endpoint Rate Limiting (M2)
 - **Severity**: MEDIUM
 - **Status**: FIXED
