@@ -1,7 +1,5 @@
 """Tests for configuration validation, especially MQTT topic security."""
 
-import os
-
 import pytest
 from config import VALID_ROUTER_MODES, validate_mqtt_topic
 
