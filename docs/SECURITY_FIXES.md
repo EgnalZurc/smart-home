@@ -727,6 +727,19 @@ For services with stable inline scripts, CSP hashes ('sha256-...') can replace u
 - **Review Date**: 2026-11-03
 - **Next Review**: 2027-05-03 (6 months)
 
+### [portfolio-monitor] AUTH_TOKEN Disabled by Default (M2)
+- **Severity**: MEDIUM
+- **Status**: ACCEPTED_RISK
+- **Reason**: The /api/portfolio/* endpoints accept requests without authentication when AUTH_TOKEN is not configured (the default). An attacker with Tailscale network access could read portfolio summary data.
+- **Mitigations**:
+  - Service runs exclusively behind Tailscale VPN, limiting exposure to authorized network users
+  - AUTH_TOKEN is opt-in; users who need auth can enable it via environment variable
+  - Endpoints are read-only; no state-changing operations are exposed unauthenticated
+  - Implementing mandatory auth would require config changes across all deployments
+- **Documentation**: Enable AUTH_TOKEN in production if sensitive portfolio data is exposed. Monitor Tailscale access logs for anomalies.
+- **Review Date**: 2026-11-04
+- **Next Review**: 2027-05-04 (6 months)
+
 ---
 
 ## Fixed Issues (2026-10-22)
