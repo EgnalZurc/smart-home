@@ -24,13 +24,20 @@ DB_FILE: Path = DATA_DIR / "baby_gifts.db"
 INVITATION_EXPIRY_DAYS: int = int(os.environ.get("INVITATION_EXPIRY_DAYS", "180"))
 
 # ── User permissions ──────────────────────────────────────────────────────────
-# FAMILIA_USERS: Comma-separated list of usernames with elevated privileges.
-# These users can see hidden gifts and toggle gift visibility.
-# Default: "egnal,virchu" (the parents).
+# FAMILIA_USERS: Usernames with elevated privileges (can see/toggle hidden gifts).
 #
-# L4 NOTE: This default is intentionally hardcoded for this family registry app.
-# For other deployments, set FAMILIA_USERS environment variable to customize.
-# Example: FAMILIA_USERS="parent1,parent2" in docker-compose.yml or .env
+# Default value: "egnal,virchu"
+#   These are the registry owners (the parents) for this specific deployment.
+#   This is NOT a security credential — it only controls UI visibility of
+#   hidden gifts and the toggle-visibility button.
+#
+# Customization:
+#   Set the FAMILIA_USERS environment variable to override for other deployments.
+#   Example in docker-compose.yml:
+#     environment:
+#       - FAMILIA_USERS=parent1,parent2
+#
+# Format: Comma-separated usernames (case-insensitive).
 _familia_raw: str = os.environ.get("FAMILIA_USERS", "egnal,virchu") or ""
 FAMILIA_USERS: set[str] = {
     u.strip().lower() for u in _familia_raw.split(",") if u.strip()
