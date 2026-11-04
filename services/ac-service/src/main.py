@@ -124,12 +124,13 @@ MQTT_TLS_CA_CERTS = os.environ.get("MQTT_TLS_CA_CERTS", DEFAULT_MQTT_TLS_CA_CERT
 # When MQTT_ALLOW_ANONYMOUS is true, skip the credentials warning (broker
 # configured with allow_anonymous). Default false for safety.
 MQTT_ALLOW_ANONYMOUS = os.environ.get("MQTT_ALLOW_ANONYMOUS", "false").lower() == "true"
-if not MQTT_USER or not MQTT_PASSWORD:
-    if not MQTT_ALLOW_ANONYMOUS:
-        logger.warning(
-            "MQTT credentials not set - connecting without auth. "
+if not MQTT_ALLOW_ANONYMOUS:
+    if not MQTT_USER or not MQTT_PASSWORD:
+        logger.error(
+            "MQTT credentials required when MQTT_ALLOW_ANONYMOUS=false. "
             "Set MQTT_USER and MQTT_PASSWORD, or MQTT_ALLOW_ANONYMOUS=true."
         )
+        raise RuntimeError("MQTT credentials required")
 MQTT_CONNECT_RETRIES = int(
     os.environ.get("MQTT_CONNECT_RETRIES", str(DEFAULT_MQTT_CONNECT_RETRIES))
 )
@@ -413,42 +414,105 @@ _ALLOWED_ORIGINS: frozenset[str] = (
     frozenset(CORS_ORIGINS) if CORS_ORIGINS else _DEFAULT_ORIGINS
 )
 
+# Paths exempt from Origin/Referer requirement (health checks, internal callers).
+_CSRF_EXEMPT_PATHS: frozenset[str] = frozenset(
+    {
+        "/health",
+        "/api/health/ac",
+    }
+)
 
-def _validate_origin(request: Request) -> bool:
-    """Validate request origin for CSRF protection.
+
+def _extract_origin_from_referer(referer: str) -> str | None:
+    """Extract origin (scheme://host[:port]) from Referer header.
+
+    Args:
+        referer: The Referer header value.
+
+    Returns:
+        Origin string if extraction succeeds, None otherwise.
+    """
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(referer)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+    except Exception:
+        pass
+    return None
+
+
+def _validate_origin(request: Request) -> tuple[bool, str | None]:
+    """Validate request origin for CSRF protection (fail-closed).
 
     Rules:
         - GET/HEAD/OPTIONS: always allowed (safe methods)
-        - POST/PUT/DELETE/PATCH without Origin header: allowed (non-browser client)
-        - POST/PUT/DELETE/PATCH with Origin header: must be in _ALLOWED_ORIGINS
+        - Exempt paths (health checks): always allowed
+        - POST/PUT/DELETE/PATCH: require Origin OR Referer header from allowed origins
+        - If neither header present, reject with 403 (fail-closed)
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        Tuple of (is_valid, error_message). error_message is None if valid.
     """
+    # Safe methods are always allowed
     if request.method in ("GET", "HEAD", "OPTIONS"):
-        return True
+        return True, None
+
+    # Exempt paths (health checks) are always allowed
+    if request.url.path in _CSRF_EXEMPT_PATHS:
+        return True, None
+
+    # Check Origin header first
     origin = request.headers.get("Origin")
-    if origin is None:
-        # Non-browser clients (curl, httpx, etc.) don't send Origin
-        return True
-    return origin in _ALLOWED_ORIGINS
+    if origin is not None:
+        if origin in _ALLOWED_ORIGINS:
+            return True, None
+        return False, "Invalid origin"
+
+    # Fall back to Referer header (some browsers/proxies strip Origin)
+    referer = request.headers.get("Referer")
+    if referer is not None:
+        extracted_origin = _extract_origin_from_referer(referer)
+        if extracted_origin and extracted_origin in _ALLOWED_ORIGINS:
+            return True, None
+        return False, "Invalid referer"
+
+    # No Origin and no Referer: fail-closed (reject)
+    return False, "Missing Origin/Referer header"
 
 
 # ── Security Middlewares ──────────────────────────────────────────────────────
 
 
 class CSRFProtectionMiddleware(BaseHTTPMiddleware):
-    """CSRF protection middleware that validates Origin header on state-changing requests."""
+    """CSRF protection middleware that validates Origin/Referer on state-changing requests.
+
+    Implements fail-closed validation:
+    - Safe methods (GET/HEAD/OPTIONS) always pass
+    - Exempt paths (health checks) always pass
+    - State-changing requests require Origin OR Referer from allowed origins
+    - Requests without either header are rejected (fail-closed)
+    """
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Response]
     ) -> Response:
-        """Check origin before processing request."""
-        if not _validate_origin(request):
+        """Check origin/referer before processing request."""
+        is_valid, error_msg = _validate_origin(request)
+        if not is_valid:
             logger.warning(
-                "CSRF: blocked request from origin %s to %s",
-                request.headers.get("Origin"),
+                "CSRF: blocked request to %s - %s (Origin: %s, Referer: %s)",
                 request.url.path,
+                error_msg,
+                request.headers.get("Origin"),
+                request.headers.get("Referer"),
             )
             response = Response(
-                content='{"detail":"Invalid origin"}',
+                content=f'{{"detail":"{error_msg}"}}',
                 status_code=403,
                 media_type="application/json",
             )

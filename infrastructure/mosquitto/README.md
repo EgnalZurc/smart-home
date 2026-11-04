@@ -81,15 +81,18 @@ topic <permission> <topic-pattern>
 user zigbee2mqtt
 topic readwrite zigbee2mqtt/#
 
-# AC Service - read-only sensor data
+# AC Service - sensor data + device discovery
 user ac-service
 topic read zigbee2mqtt/+
-topic read zigbee2mqtt/bridge/#
+topic read zigbee2mqtt/bridge/devices
+topic write zigbee2mqtt/bridge/request/devices
 ```
 
 **Principle of least privilege**:
 - `zigbee2mqtt` has full access to publish sensor data and handle bridge commands
-- `ac-service` can only READ sensor data, cannot publish (no device control)
+- `ac-service` can READ sensor data (`zigbee2mqtt/+`) and device list (`bridge/devices`)
+- `ac-service` can WRITE to request device discovery (`bridge/request/devices`)
+- `ac-service` cannot access other bridge topics (state, config, log, etc.)
 
 ### Adding a New Service
 

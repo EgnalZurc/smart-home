@@ -172,3 +172,37 @@ def clear_health_cache():
         health._health_cache.clear()
     except (ImportError, AttributeError):
         pass
+
+
+@pytest.fixture(autouse=True)
+def clear_rate_limiter():
+    """Reset the slowapi rate limiter before and after every test.
+
+    The rate limiter stores request counts in memory. Without this fixture,
+    rate limit tests can pollute other tests or be polluted by prior requests
+    in the session.
+    """
+    try:
+        from api.auth_routes import limiter
+        from limits.storage import MemoryStorage
+
+        # Reset the limiter's storage to get a clean state
+        if hasattr(limiter, "reset"):
+            limiter.reset()
+        elif hasattr(limiter, "_storage"):
+            limiter._storage = MemoryStorage()
+    except (ImportError, AttributeError):
+        pass
+
+    yield
+
+    try:
+        from api.auth_routes import limiter
+        from limits.storage import MemoryStorage
+
+        if hasattr(limiter, "reset"):
+            limiter.reset()
+        elif hasattr(limiter, "_storage"):
+            limiter._storage = MemoryStorage()
+    except (ImportError, AttributeError):
+        pass

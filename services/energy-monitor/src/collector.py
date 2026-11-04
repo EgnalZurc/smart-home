@@ -38,6 +38,7 @@ from config import (
     ROLLUP_INTERVAL_S,
     SHELLY_PASSWORD,
     SHELLY_USER,
+    is_private_ip,
 )
 from database import EnergyStore
 from shelly_client import GEN1, ShellyEMClient
@@ -50,12 +51,18 @@ PowerPoint = tuple[int, float, float | None, float | None]
 __all__ = ["Collector", "PowerPoint", "parse_devices"]
 
 
-def parse_devices(raw: str) -> list[dict]:
+def parse_devices(raw: str, *, validate_ips: bool = True) -> list[dict]:
     """Parse the ``ENERGY_DEVICES`` JSON string into a validated device list.
 
     Each entry must have ``id`` and ``ip``; ``gen`` defaults to 1 and
     ``channels`` to ``{}``. Malformed entries are dropped with a warning so one
     bad config line never takes the whole collector down.
+
+    SECURITY [M1 - SSRF validation]: Device IPs are validated to ensure they
+    point to private network addresses (192.168.x.x, 10.x.x.x, 172.16-31.x.x,
+    localhost, 127.x.x.x). This prevents SSRF attacks where a malicious config
+    could cause the service to make requests to public internet endpoints.
+    Devices with public IPs are rejected with a RuntimeError at startup.
 
     SECURITY: Credentials are resolved in this order:
     1. Per-device "username"/"password" in the JSON entry (highest priority)
@@ -68,18 +75,23 @@ def parse_devices(raw: str) -> list[dict]:
             ``ip`` (device address). Optional fields: ``gen`` (Shelly generation,
             defaults to 1), ``channels`` (channel-to-label mapping), ``username``
             and ``password`` (per-device authentication).
+        validate_ips: If True (default), validates that all device IPs are
+            private addresses. Set to False only in tests that need to check
+            parsing logic without IP validation.
 
     Returns:
         A list of validated device dictionaries, each containing:
         - id: Device identifier string
-        - ip: Device IP address string
+        - ip: Device IP address string (validated as private)
         - gen: Shelly generation (1 or 2)
         - channels: Dict mapping channel IDs to human labels
         - username: Authentication username (or None)
         - password: Authentication password (or None)
 
     Raises:
-        No exceptions are raised; invalid JSON or malformed entries are logged
+        RuntimeError: If validate_ips is True and any device has a non-private
+            IP address. This is a fatal error that prevents service startup.
+        No exceptions for invalid JSON or malformed entries; these are logged
         as warnings and skipped, returning an empty or partial list.
     """
     try:
@@ -91,22 +103,36 @@ def parse_devices(raw: str) -> list[dict]:
         logger.warning("ENERGY_DEVICES must be a JSON array; no devices loaded")
         return []
     devices: list[dict] = []
+    public_ips: list[str] = []
     for entry in parsed:
         if not isinstance(entry, dict) or not entry.get("id") or not entry.get("ip"):
             logger.warning("Skipping malformed device entry: %r", entry)
+            continue
+        device_ip = str(entry["ip"])
+        device_id = str(entry["id"])
+        # SECURITY [M1]: Validate IP is private to prevent SSRF
+        if validate_ips and not is_private_ip(device_ip):
+            public_ips.append(f"{device_id}={device_ip}")
             continue
         # SECURITY: Per-device credentials override global env vars
         username = entry.get("username") or SHELLY_USER or None
         password = entry.get("password") or SHELLY_PASSWORD or None
         devices.append(
             {
-                "id": str(entry["id"]),
-                "ip": str(entry["ip"]),
+                "id": device_id,
+                "ip": device_ip,
                 "gen": int(entry.get("gen", GEN1)),
                 "channels": entry.get("channels") or {},
                 "username": username,
                 "password": password,
             }
+        )
+    # SECURITY [M1]: Fail-closed if any public IPs detected
+    if public_ips:
+        raise RuntimeError(
+            f"SSRF protection: Shelly device IPs must be private network addresses. "
+            f"Public IPs detected: {', '.join(public_ips)}. "
+            f"Valid ranges: 192.168.x.x, 10.x.x.x, 172.16-31.x.x, 127.x.x.x, localhost"
         )
     return devices
 

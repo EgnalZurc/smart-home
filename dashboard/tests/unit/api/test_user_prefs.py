@@ -121,7 +121,6 @@ class TestGetPreferencesEndpoint:
         assert result == {"dark_mode": True}
 
     @pytest.mark.asyncio
-
     async def test_returns_stored_value(self, temp_auth_db):
         auth_users.create_user("alice", "pw")
         auth_users.set_user_preferences("alice", False)
@@ -131,7 +130,6 @@ class TestGetPreferencesEndpoint:
         assert result == {"dark_mode": False}
 
     @pytest.mark.asyncio
-
     async def test_requires_authentication(self, temp_auth_db):
         from fastapi import HTTPException
 
@@ -161,7 +159,6 @@ class TestUpdatePreferencesEndpoint:
         assert auth_users.get_user_preferences("alice") == {"dark_mode": False}
 
     @pytest.mark.asyncio
-
     async def test_toggle_back_to_true(self, temp_auth_db):
         auth_users.create_user("alice", "pw")
         request = make_mock_request()
@@ -171,7 +168,6 @@ class TestUpdatePreferencesEndpoint:
         assert result == {"dark_mode": True}
 
     @pytest.mark.asyncio
-
     async def test_requires_authentication(self, temp_auth_db):
         from fastapi import HTTPException
 
@@ -404,7 +400,6 @@ class TestGetWidgetConfigEndpoint:
         assert result == {"widgets": []}
 
     @pytest.mark.asyncio
-
     async def test_returns_stored_layout(self, temp_auth_db):
         auth_users.create_user("alice", "pw")
         auth_users.set_widget_config("alice", [{"widget_id": "ac", "size": "lg"}])
@@ -415,7 +410,6 @@ class TestGetWidgetConfigEndpoint:
         assert result["widgets"][0]["size"] == "lg"
 
     @pytest.mark.asyncio
-
     async def test_requires_authentication(self, temp_auth_db):
         from fastapi import HTTPException
 
@@ -451,7 +445,6 @@ class TestUpdateWidgetConfigEndpoint:
         assert auth_users.get_widget_config("alice") == result["widgets"]
 
     @pytest.mark.asyncio
-
     async def test_invalid_size_returns_422(self, temp_auth_db):
         from fastapi import HTTPException
 
@@ -464,7 +457,6 @@ class TestUpdateWidgetConfigEndpoint:
             assert exc.value.status_code == 422
 
     @pytest.mark.asyncio
-
     async def test_requires_authentication(self, temp_auth_db):
         from fastapi import HTTPException
 

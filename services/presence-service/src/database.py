@@ -314,19 +314,39 @@ class PresenceStore:
             ).fetchone()
         return int(row["n"]) if row else 0
 
-    def db_ok(self) -> bool:
-        """Check if the database is accessible and responding.
+    def db_ok(self, timeout_s: float = 2.0) -> bool:
+        """Check if the database is accessible and responding within a timeout.
 
         Executes a trivial query to verify the database connection is healthy.
         This is used by the health check endpoint to report database status.
+        Uses a dedicated short-timeout connection to prevent the health check
+        from hanging if the database is locked or slow.
+
+        Args:
+            timeout_s: Maximum seconds to wait for the database lock (default 2.0).
+                       Should be shorter than the Docker HEALTHCHECK timeout (5s)
+                       to ensure timely failure reporting.
 
         Returns:
-            True if the database responds to a simple count query, False if any
-            database-related error occurs (connection failure, corruption, etc.).
+            True if the database responds to a simple query within timeout,
+            False if any database-related error occurs (connection failure,
+            corruption, lock timeout, etc.).
         """
         try:
-            self.count_transitions()
-            return True
+            # Use a dedicated connection with explicit short timeout to avoid
+            # hanging the health check if the DB is locked by another operation.
+            # Use PRAGMA integrity_check(1) for a fast, schema-independent check
+            # that verifies the database file is accessible and not corrupted.
+            conn = sqlite3.connect(
+                self.db_path,
+                timeout=timeout_s,
+                check_same_thread=False,
+            )
+            try:
+                result = conn.execute("PRAGMA integrity_check(1)").fetchone()
+                return result is not None and result[0] == "ok"
+            finally:
+                conn.close()
         except (sqlite3.Error, OSError) as exc:  # pragma: no cover - defensive
             logger.warning("Database health check failed: %s", exc)
             return False

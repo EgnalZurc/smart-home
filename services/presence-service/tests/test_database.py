@@ -225,18 +225,31 @@ def test_db_ok_returns_false_on_sqlite_error(tmp_path, monkeypatch):
     store = PresenceStore(str(tmp_path / "presence.db"))
     assert store.db_ok() is True
 
-    def mock_count_error():
+    # Patch sqlite3.connect to raise an error (simulates locked/corrupt DB)
+    def mock_connect(*args, **kwargs):
         raise sqlite3.OperationalError("database is locked")
 
-    monkeypatch.setattr(store, "count_transitions", mock_count_error)
+    monkeypatch.setattr(sqlite3, "connect", mock_connect)
     assert store.db_ok() is False
 
 
 def test_db_ok_returns_false_on_os_error(tmp_path, monkeypatch):
+    import sqlite3
+
     store = PresenceStore(str(tmp_path / "presence.db"))
 
-    def mock_os_error():
+    # Patch sqlite3.connect to raise OSError (simulates disk I/O error)
+    def mock_connect(*args, **kwargs):
         raise OSError("No space left on device")
 
-    monkeypatch.setattr(store, "count_transitions", mock_os_error)
+    monkeypatch.setattr(sqlite3, "connect", mock_connect)
     assert store.db_ok() is False
+
+
+def test_db_ok_uses_timeout_parameter(tmp_path):
+    """Verify db_ok uses the timeout parameter correctly."""
+    store = PresenceStore(str(tmp_path / "presence.db"))
+    # Default timeout should work
+    assert store.db_ok() is True
+    # Custom timeout should also work
+    assert store.db_ok(timeout_s=1.0) is True

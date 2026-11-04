@@ -21,6 +21,87 @@ Each entry follows this format:
 
 ## Fixed Issues
 
+### [presence-service] Health Check Timeout (L2)
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-04
+- **Description**: The db_ok() health check method could hang indefinitely if the SQLite database was locked or slow, potentially causing Docker HEALTHCHECK to timeout without returning a meaningful response
+- **Fix Applied**: db_ok() now uses a dedicated short-timeout (2s) SQLite connection with PRAGMA integrity_check(1) instead of reusing the main connection, ensuring the health check fails fast and returns db_ok=false rather than hanging. The 2s timeout is shorter than Docker HEALTHCHECK's 5s timeout, allowing proper failure reporting.
+- **Verification**: Check `services/presence-service/src/database.py` db_ok() method uses `sqlite3.connect(self.db_path, timeout=timeout_s)` with default timeout_s=2.0 and PRAGMA integrity_check(1)
+
+### [calendar-service] CALENDAR_SEED Regex Pattern Validation (L1)
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-04
+- **Description**: CALENDAR_SEED env var entries were validated with simple string checks instead of the same CALENDAR_ID_PATTERN regex used elsewhere, creating potential SSRF surface if malformed IDs were seeded
+- **Fix Applied**: Added CALENDAR_ID_PATTERN.match() validation in lifespan() before upsert_calendar(). Invalid seed entries are logged with warning and skipped. Added TestCalendarSeedValidation test class with 3 tests covering valid, invalid, and mixed scenarios
+- **Verification**: Set CALENDAR_SEED='[{"id":"http://169.254.169.254/meta","label":"bad"}]' and start service; check logs show "CALENDAR_SEED entry 0 has invalid calendar ID format, skipping"
+
+### [infrastructure/mosquitto] ACL Wildcard Too Broad for ac-service
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-04
+- **Description**: ac-service had `topic read zigbee2mqtt/bridge/#` which granted read access to ALL bridge topics (state, config, log, info, extensions, request, response) when it only needs `bridge/devices` for sensor discovery
+- **Fix Applied**: Tightened ACL to specific topics: `topic read zigbee2mqtt/bridge/devices` (to receive device list) and `topic write zigbee2mqtt/bridge/request/devices` (to request discovery). Removed overly broad `bridge/#` wildcard.
+- **Verification**: `docker exec mosquitto mosquitto_pub -u ac-service -P <password> -t 'zigbee2mqtt/bridge/config' -m 'test'` should fail with "not authorized"
+
+### [presence-service] Credentials Stored in Memory (L1)
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-04
+- **Description**: ROUTER_PASSWORD and MQTT credentials are loaded from environment variables and stored as module-level globals for the process lifetime, which could expose plaintext passwords in memory dumps
+- **Fix Applied**: Added comprehensive security documentation in config.py explaining the risk, mitigations in place (never logged, container isolation, env vars only), and recommended future enhancements (secrets manager, SSH key auth)
+- **Verification**: Check `services/presence-service/src/config.py` contains "SECURITY: Credentials in memory" comment block with risk analysis and mitigation recommendations
+
+### [dashboard] Auth Endpoint Rate Limiting (M2)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #531
+- **Fixed Date**: 2026-11-03
+- **Description**: Auth endpoint `/api/auth/token` used custom InMemoryRateLimiter which was less robust than slowapi used by other services
+- **Fix Applied**: Replaced InMemoryRateLimiter with slowapi's `@limiter.limit("5/minute")` decorator on POST `/api/auth/token`, matching pattern used by calendar-service and portfolio-monitor
+- **Verification**: Send 6 rapid POST requests to `/api/auth/token`; the 6th should return HTTP 429
+
+### [energy-monitor] SSRF Validation for Shelly Device IPs (M1)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #530
+- **Fixed Date**: 2026-11-03
+- **Description**: ENERGY_DEVICES configuration accepted any IP address without validation, creating potential SSRF surface if attacker could control the config
+- **Fix Applied**: Added `is_private_ip()` validator in config.py that checks IPs against RFC 1918 private ranges (192.168.x.x, 10.x.x.x, 172.16-31.x.x, 127.x.x.x, localhost). `parse_devices()` in collector.py now validates each device IP and raises RuntimeError at startup if any public IP is detected (fail-closed)
+- **Verification**: Set ENERGY_DEVICES='[{"id":"test","ip":"8.8.8.8"}]' and start service; should fail with "SSRF protection: Shelly device IPs must be private network addresses"
+
+### [ac-service] MQTT Credentials Fail-Fast (M1)
+- **Severity**: MEDIUM
+- **Status**: FIXED
+- **PR**: #529
+- **Fixed Date**: 2026-11-03
+- **Description**: When MQTT_USER/MQTT_PASSWORD were missing and MQTT_ALLOW_ANONYMOUS=false, service only logged a warning but continued to start, potentially connecting without auth
+- **Fix Applied**: Fail-fast: if MQTT_ALLOW_ANONYMOUS is false and credentials are missing, log error and raise RuntimeError to prevent startup
+- **Verification**: Unset MQTT_USER and MQTT_PASSWORD with MQTT_ALLOW_ANONYMOUS=false, service should fail to start with "MQTT credentials required"
+
+### [dashboard] CORS Permissive Default (H3)
+- **Severity**: HIGH
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-03
+- **Description**: If CORS_ORIGINS env var was empty, CORSMiddleware was added with empty allow_origins which could be permissive
+- **Fix Applied**: Fail-closed: if CORS_ORIGINS is empty, CORSMiddleware is not added at all, with warning logged
+- **Verification**: Set CORS_ORIGINS="" and check logs show "CORS_ORIGINS not set - CORS disabled (fail-closed)" and no CORS headers are returned
+
+### [dashboard] CSRF Missing Origin/Referer Bypass (H4)
+- **Severity**: HIGH
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-03
+- **Description**: Requests without Origin header passed CSRF validation (intended for legacy browser support but weakens protection)
+- **Fix Applied**: Fail-closed: state-changing requests (POST/PUT/DELETE) now require at least Origin OR Referer header. If neither present, returns 403. Both headers are validated against Host/Tailscale domains.
+- **Verification**: `curl -X POST http://localhost:8000/api/auth/logout` without Origin/Referer returns 403 "Missing Origin/Referer header"
+
 ### [nginx] postMessage Wildcard Origin (Initial report)
 - **Severity**: HIGH
 - **Status**: FIXED
@@ -632,6 +713,20 @@ For services with stable inline scripts, CSP hashes ('sha256-...') can replace u
 - **Setup**: SCP to Pi, chmod +x, add to crontab: `0 3 * * * /home/pi/scripts/backup-vaultwarden.sh`
 - **Verification**: Run `./backup-vaultwarden.sh --dry-run` on Pi
 
+### [calendar-service] Rate Limiter Unbounded Memory
+- **Severity**: MEDIUM
+- **Status**: ACCEPTED_RISK
+- **Reason**: slowapi's in-memory storage can grow unbounded under IP rotation attacks, but this is mitigated by nginx's upstream rate limiting
+- **Mitigations**:
+  - nginx rate limiting at ingress (limit_req zone=general, burst=20)
+  - Tailscale-only access (no public internet exposure)
+  - Single-household deployment (very limited IP diversity)
+  - Docker container memory limits provide hard ceiling
+  - slowapi lacks native max_entries; Redis storage would add operational complexity for minimal benefit
+- **Documentation**: Comment added in main.py near Limiter instantiation
+- **Review Date**: 2026-11-03
+- **Next Review**: 2027-05-03 (6 months)
+
 ---
 
 ## Fixed Issues (2026-10-22)
@@ -860,7 +955,7 @@ Each service now catches specific exception types appropriate to the operations 
 |--------|-----------|--------------|
 | Complexity | Simple, no infra | Requires Redis container |
 | Latency | ~0.1ms | ~1-5ms per check |
-| Multi-instance | ❌ Each instance has own state | ✅ Shared state |
+| Multi-instance | âŒ Each instance has own state | âœ… Shared state |
 | Failure mode | Graceful (limits per-instance) | Redis down = limits fail |
 | Memory | Per-process (~50KB at max) | Centralized |
 
@@ -921,7 +1016,7 @@ These are code quality improvements: type hints, documentation, constants extrac
 
 #### [casita-suenos] Code Quality (7 issues)
 - **PR**: #417
-- **Changes**: Lambdas replaced with explicit code, dead code removed, string check fix ("b" -> "búsqueda")
+- **Changes**: Lambdas replaced with explicit code, dead code removed, string check fix ("b" -> "bÃºsqueda")
 
 ### Batch 3: Remaining Services (20 LOW - PRs #418-#421)
 
