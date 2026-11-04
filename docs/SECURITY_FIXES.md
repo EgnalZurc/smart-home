@@ -30,6 +30,15 @@ Each entry follows this format:
 - **Fix Applied**: Added CALENDAR_ID_PATTERN.match() validation in lifespan() before upsert_calendar(). Invalid seed entries are logged with warning and skipped. Added TestCalendarSeedValidation test class with 3 tests covering valid, invalid, and mixed scenarios
 - **Verification**: Set CALENDAR_SEED='[{"id":"http://169.254.169.254/meta","label":"bad"}]' and start service; check logs show "CALENDAR_SEED entry 0 has invalid calendar ID format, skipping"
 
+### [infrastructure/mosquitto] ACL Wildcard Too Broad for ac-service
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-04
+- **Description**: ac-service had `topic read zigbee2mqtt/bridge/#` which granted read access to ALL bridge topics (state, config, log, info, extensions, request, response) when it only needs `bridge/devices` for sensor discovery
+- **Fix Applied**: Tightened ACL to specific topics: `topic read zigbee2mqtt/bridge/devices` (to receive device list) and `topic write zigbee2mqtt/bridge/request/devices` (to request discovery). Removed overly broad `bridge/#` wildcard.
+- **Verification**: `docker exec mosquitto mosquitto_pub -u ac-service -P <password> -t 'zigbee2mqtt/bridge/config' -m 'test'` should fail with "not authorized"
+
 ### [dashboard] Auth Endpoint Rate Limiting (M2)
 - **Severity**: MEDIUM
 - **Status**: FIXED
