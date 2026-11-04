@@ -48,6 +48,15 @@ Each entry follows this format:
 - **Fix Applied**: Tightened ACL to specific topics: `topic read zigbee2mqtt/bridge/devices` (to receive device list) and `topic write zigbee2mqtt/bridge/request/devices` (to request discovery). Removed overly broad `bridge/#` wildcard.
 - **Verification**: `docker exec mosquitto mosquitto_pub -u ac-service -P <password> -t 'zigbee2mqtt/bridge/config' -m 'test'` should fail with "not authorized"
 
+### [presence-service] Credentials Stored in Memory (L1)
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-04
+- **Description**: ROUTER_PASSWORD and MQTT credentials are loaded from environment variables and stored as module-level globals for the process lifetime, which could expose plaintext passwords in memory dumps
+- **Fix Applied**: Added comprehensive security documentation in config.py explaining the risk, mitigations in place (never logged, container isolation, env vars only), and recommended future enhancements (secrets manager, SSH key auth)
+- **Verification**: Check `services/presence-service/src/config.py` contains "SECURITY: Credentials in memory" comment block with risk analysis and mitigation recommendations
+
 ### [dashboard] Auth Endpoint Rate Limiting (M2)
 - **Severity**: MEDIUM
 - **Status**: FIXED
