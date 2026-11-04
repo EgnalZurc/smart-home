@@ -262,6 +262,35 @@ class TestDatabase:
         counts = db.count_by_zone_radar(min_score=0.0)
         assert counts == {"zamora_meseta": 1}
 
+    def test_count_radar_pending_counts_not_viewed(self, db, sample_zone):
+        """count_radar_pending cuenta propiedades en radar no vistas."""
+        prop1 = _make_property(portal_id="p1", price=150_000)
+        prop2 = _make_property(portal_id="p2", price=200_000)
+        for p in (prop1, prop2):
+            db.upsert_property(p)
+            db.upsert_score(_make_scored(p, sample_zone))
+
+        # Ambas sin ver -> 2 pendientes
+        assert db.count_radar_pending(min_score=0.0) == 2
+
+        # Marcar una como vista -> 1 pendiente
+        db.mark_viewed(prop1.unique_id)
+        assert db.count_radar_pending(min_score=0.0) == 1
+
+        # Marcar la otra -> 0 pendientes
+        db.mark_viewed(prop2.unique_id)
+        assert db.count_radar_pending(min_score=0.0) == 0
+
+    def test_count_radar_pending_excludes_dismissed(self, db, sample_property, sample_zone):
+        """count_radar_pending no cuenta propiedades descartadas."""
+        db.upsert_property(sample_property)
+        db.upsert_score(_make_scored(sample_property, sample_zone))
+
+        assert db.count_radar_pending(min_score=0.0) == 1
+
+        db.dismiss(sample_property.unique_id)
+        assert db.count_radar_pending(min_score=0.0) == 0
+
     def test_get_top_scored_empty(self, db):
         result = db.get_top_scored()
         assert result == []

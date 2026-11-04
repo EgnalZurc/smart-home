@@ -25,6 +25,7 @@ def scheduler() -> CasitaScheduler:
     db.count_by_zone.return_value = {}
     db.count_radar_properties.return_value = 0
     db.count_by_zone_radar.return_value = {}
+    db.count_radar_pending.return_value = 0
     db.is_new.return_value = True
     db.upsert_property.return_value = None
     db.is_alerted.return_value = False
@@ -112,41 +113,25 @@ class TestSchedulingConditions:
 
 class TestWeeklySummary:
     def test_summary_calls_notifier(self, scheduler):
-        scheduler._db.get_top_scored.return_value = []
+        scheduler._db.count_radar_properties.return_value = 3
+        scheduler._db.count_radar_pending.return_value = 1
         scheduler._run_weekly_summary()
-        scheduler._notifier.send_weekly_summary.assert_called_once()
+        scheduler._notifier.send_weekly_summary.assert_called_once_with(3, 1)
 
-    def test_summary_calls_status_with_stats(self, scheduler):
-        scheduler._db.get_top_scored.return_value = []
-        # count_properties es el total monitorizado (NO debe usarse ya)
-        scheduler._db.count_properties.return_value = 1042
-        scheduler._db.count_by_zone.return_value = {"zamora": 900, "salamanca": 142}
-        # count_radar_* son las que realmente pasan el threshold
-        scheduler._db.count_radar_properties.return_value = 6
-        scheduler._db.count_by_zone_radar.return_value = {"zamora": 4, "salamanca": 2}
+    def test_summary_saves_to_db(self, scheduler):
+        scheduler._db.count_radar_properties.return_value = 5
+        scheduler._db.count_radar_pending.return_value = 2
         scheduler._run_weekly_summary()
-        scheduler._notifier.send_status.assert_called_once()
-        status_msg = scheduler._notifier.send_status.call_args[0][0]
-        # Usa el conteo de radar (6), no el total monitorizado (1042)
-        assert "6" in status_msg
-        assert "1042" not in status_msg
+        scheduler._db.save_weekly_summary.assert_called_once()
+        saved_content = scheduler._db.save_weekly_summary.call_args[0][0]
+        assert "5 propiedades en el radar" in saved_content
+        assert "2 pendientes de revisar" in saved_content
 
-    def test_summary_message_uses_radar_wording(self, scheduler):
-        """El mensaje habla de 'Propiedades en radar', no de 'Total monitorizadas'."""
-        scheduler._db.get_top_scored.return_value = []
-        scheduler._db.count_radar_properties.return_value = 6
-        scheduler._db.count_by_zone_radar.return_value = {"zamora": 6}
+    def test_summary_handles_zero_counts(self, scheduler):
+        scheduler._db.count_radar_properties.return_value = 0
+        scheduler._db.count_radar_pending.return_value = 0
         scheduler._run_weekly_summary()
-        status_msg = scheduler._notifier.send_status.call_args[0][0]
-        assert "Propiedades en radar" in status_msg
-        assert "monitorizadas" not in status_msg
-
-    def test_summary_uses_radar_count_methods(self, scheduler):
-        """El resumen consulta los métodos de radar, no los conteos globales."""
-        scheduler._db.get_top_scored.return_value = []
-        scheduler._run_weekly_summary()
-        scheduler._db.count_radar_properties.assert_called_once()
-        scheduler._db.count_by_zone_radar.assert_called_once()
+        scheduler._notifier.send_weekly_summary.assert_called_once_with(0, 0)
 
 
 # ── Tests de _infer_zone_from_url ─────────────────────────────────────────────
@@ -1262,23 +1247,15 @@ class TestScrapeIdealistaProperty:
 
 class TestWeeklySummaryExtended:
     def test_summary_saves_to_db(self, scheduler):
-        scheduler._db.get_top_scored.return_value = [
-            {
-                "score_total": 150.0,
-                "price": 120_000,
-                "zone_id": "zamora_meseta",
-                "url": "https://x/1",
-            }
-        ]
-        scheduler._db.count_by_zone.return_value = {"zamora_meseta": 5}
-        scheduler._db.count_properties.return_value = 5
+        scheduler._db.count_radar_properties.return_value = 5
+        scheduler._db.count_radar_pending.return_value = 2
         scheduler.run_summary_now()
         scheduler._db.save_weekly_summary.assert_called_once()
 
     def test_summary_handles_db_exception(self, scheduler):
         import sqlite3
 
-        scheduler._db.get_top_scored.side_effect = sqlite3.Error("db error")
+        scheduler._db.count_radar_properties.side_effect = sqlite3.Error("db error")
         # Should swallow the exception, not raise.
         scheduler.run_summary_now()
         scheduler._notifier.send_weekly_summary.assert_not_called()
