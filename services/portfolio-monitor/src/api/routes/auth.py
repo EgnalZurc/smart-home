@@ -1,9 +1,8 @@
 """
 Portfolio Monitor — Authentication dependency.
 
-Provides bearer token authentication for POST endpoints. When AUTH_TOKEN is set,
-requests must include `Authorization: Bearer <token>` header. When AUTH_TOKEN is
-empty or unset, authentication is disabled for backwards compatibility.
+Provides bearer token authentication for POST endpoints. AUTH_TOKEN must be set
+in environment; requests must include `Authorization: Bearer <token>` header.
 """
 
 import hmac
@@ -14,6 +13,32 @@ from typing import Annotated
 from fastapi import Header, HTTPException, status
 
 logger = logging.getLogger(__name__)
+
+# Module-level flag to track if token was validated at startup
+_startup_validated = False
+
+
+class AuthConfigurationError(Exception):
+    """Raised when AUTH_TOKEN is not configured."""
+
+    pass
+
+
+def validate_auth_config() -> None:
+    """Validate that AUTH_TOKEN is configured. Call at application startup.
+
+    Raises:
+        AuthConfigurationError: If AUTH_TOKEN is empty or not set.
+    """
+    global _startup_validated
+    token = os.environ.get("AUTH_TOKEN", "")
+    if not token:
+        raise AuthConfigurationError(
+            "AUTH_TOKEN environment variable is required but not set. "
+            "Set AUTH_TOKEN to enable bearer token authentication."
+        )
+    _startup_validated = True
+    logger.info("AUTH_TOKEN configured - authentication enabled")
 
 
 def _get_auth_token() -> str:
@@ -29,22 +54,26 @@ async def require_auth(
 ) -> None:
     """Dependency that enforces bearer token authentication.
 
-    If AUTH_TOKEN is not configured (empty), authentication is skipped.
-    Otherwise, the request must include a valid Authorization header.
+    AUTH_TOKEN must be configured (validated at startup).
+    Requests must include a valid Authorization header.
 
     Raises:
         HTTPException 401: Missing or invalid authorization header.
         HTTPException 403: Token mismatch.
+        HTTPException 500: AUTH_TOKEN not configured (should not happen if
+            validate_auth_config was called at startup).
     """
     token = _get_auth_token()
 
-    # Auth disabled — allow all requests (log warning for visibility)
+    # Safety check - should never happen if validate_auth_config was called
     if not token:
-        logger.warning(
-            "AUTH_TOKEN not configured - authentication is disabled. "
-            "Set AUTH_TOKEN environment variable to enable bearer token auth."
+        logger.error(
+            "AUTH_TOKEN not configured - this should have been caught at startup"
         )
-        return
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server authentication not configured",
+        )
 
     if not authorization:
         logger.warning("Auth required but no Authorization header provided")

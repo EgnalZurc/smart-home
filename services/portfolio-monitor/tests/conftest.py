@@ -1,4 +1,4 @@
-"""
+﻿"""
 Pytest configuration and fixtures for portfolio-monitor tests.
 """
 
@@ -31,6 +31,7 @@ except ModuleNotFoundError:
 # Set DATA_DIR to temp directory before any imports that use config
 _temp_dir = tempfile.mkdtemp()
 os.environ.setdefault("DATA_DIR", _temp_dir)
+os.environ.setdefault("AUTH_TOKEN", "test-auth-token-for-tests")
 
 
 @pytest.fixture(autouse=True)
@@ -185,3 +186,28 @@ def mock_coingecko_response():
             "price_change_percentage_30d_in_currency": -8,
         },
     }
+
+
+@pytest.fixture(autouse=True)
+def bypass_auth_for_tests(request):
+    """Bypass authentication for most tests.
+
+    Tests in test_auth.py handle auth testing specifically and will
+    override this behavior. Other tests focus on business logic and
+    should not need to deal with auth headers.
+    """
+    # Skip for auth tests - they need real auth behavior
+    if "test_auth" in request.node.nodeid:
+        yield
+        return
+
+    # For other tests, mock require_auth to be a no-op in all modules that import it
+    async def mock_require_auth(*args, **kwargs):
+        pass
+
+    # Patch in all modules that import require_auth
+    with patch("api.routes.auth.require_auth", mock_require_auth):
+        with patch("api.routes.alerts.require_auth", mock_require_auth):
+            with patch("api.routes.control.require_auth", mock_require_auth):
+                with patch("api.routes.notifications.require_auth", mock_require_auth):
+                    yield

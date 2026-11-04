@@ -1,7 +1,11 @@
-"""
+﻿"""
 Tests for bearer token authentication on POST endpoints.
+
+AUTH_TOKEN is required for service startup. These tests verify that
+authentication is properly enforced when the token is configured.
 """
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -32,48 +36,72 @@ def mock_orchestrator():
         yield mock_orch
 
 
-class TestAuthDisabled:
-    """Tests when AUTH_TOKEN is not configured (backwards compat)."""
+class TestAuthConfigValidation:
+    """Tests for AUTH_TOKEN configuration validation."""
 
-    @pytest.fixture
-    def client_no_auth(self):
-        """Test client with auth disabled (no AUTH_TOKEN)."""
-        with patch("api.routes.auth._get_auth_token", return_value=""):
-            from main import app
+    def test_validate_auth_config_missing_token_raises(self):
+        """validate_auth_config raises AuthConfigurationError if AUTH_TOKEN not set."""
+        from api.routes.auth import AuthConfigurationError, validate_auth_config
 
-            with TestClient(app) as client:
-                yield client
+        # Clear AUTH_TOKEN to test validation
+        old_token = os.environ.pop("AUTH_TOKEN", None)
+        try:
+            with pytest.raises(AuthConfigurationError) as exc_info:
+                validate_auth_config()
+            assert "AUTH_TOKEN environment variable is required" in str(exc_info.value)
+        finally:
+            if old_token is not None:
+                os.environ["AUTH_TOKEN"] = old_token
 
-    def test_refresh_all_no_auth_required(self, client_no_auth, mock_orchestrator):
-        """POST /refresh works without auth when AUTH_TOKEN not set."""
-        response = client_no_auth.post("/api/portfolio/refresh")
-        assert response.status_code == 200
-        assert response.json()["status"] == "refresh_started"
+    def test_validate_auth_config_empty_token_raises(self):
+        """validate_auth_config raises AuthConfigurationError if AUTH_TOKEN is empty."""
+        from api.routes.auth import AuthConfigurationError, validate_auth_config
 
-    def test_refresh_monitor_no_auth_required(self, client_no_auth, mock_orchestrator):
-        """POST /refresh/{monitor} works without auth when AUTH_TOKEN not set."""
-        response = client_no_auth.post("/api/portfolio/refresh/etf")
-        assert response.status_code == 200
-        assert response.json()["status"] == "refresh_started"
+        old_token = os.environ.get("AUTH_TOKEN")
+        os.environ["AUTH_TOKEN"] = ""
+        try:
+            with pytest.raises(AuthConfigurationError) as exc_info:
+                validate_auth_config()
+            assert "AUTH_TOKEN environment variable is required" in str(exc_info.value)
+        finally:
+            if old_token is not None:
+                os.environ["AUTH_TOKEN"] = old_token
+            else:
+                os.environ.pop("AUTH_TOKEN", None)
 
-    def test_reload_config_no_auth_required(self, client_no_auth, mock_orchestrator):
-        """POST /reload-config works without auth when AUTH_TOKEN not set."""
-        response = client_no_auth.post("/api/portfolio/reload-config")
-        assert response.status_code == 200
-        assert response.json()["status"] == "config_reloaded"
+    def test_validate_auth_config_success(self):
+        """validate_auth_config succeeds when AUTH_TOKEN is set."""
+        from api.routes.auth import validate_auth_config
+
+        # AUTH_TOKEN is set in conftest.py, so this should pass
+        validate_auth_config()
+
+    def test_require_auth_returns_500_if_token_missing_at_runtime(self):
+        """require_auth returns 500 if token somehow missing at runtime."""
+        # Temporarily set token for startup, then clear it for the request
+        from main import app
+
+        with TestClient(app, raise_server_exceptions=False) as client:
+            # Now mock _get_auth_token to return empty (simulating runtime issue)
+            with patch("api.routes.auth._get_auth_token", return_value=""):
+                response = client.post(
+                    "/api/portfolio/refresh",
+                    headers={"Authorization": "Bearer some-token"},
+                )
+                assert response.status_code == 500
+                assert "Server authentication not configured" in response.json()["detail"]
 
 
 class TestAuthEnabled:
-    """Tests when AUTH_TOKEN is configured."""
+    """Tests when AUTH_TOKEN is configured (required for all deployments)."""
 
     @pytest.fixture
     def client_with_auth(self):
-        """Test client with auth enabled (AUTH_TOKEN set)."""
-        with patch("api.routes.auth._get_auth_token", return_value="test-secret-token"):
-            from main import app
+        """Test client with auth enabled (AUTH_TOKEN set via conftest)."""
+        from main import app
 
-            with TestClient(app) as client:
-                yield client
+        with TestClient(app) as client:
+            yield client
 
     def test_missing_auth_header_returns_401(self, client_with_auth, mock_orchestrator):
         """POST without Authorization header returns 401."""
@@ -102,9 +130,10 @@ class TestAuthEnabled:
 
     def test_valid_token_allows_request(self, client_with_auth, mock_orchestrator):
         """POST with valid token succeeds."""
+        # Use the token from conftest
         response = client_with_auth.post(
             "/api/portfolio/refresh",
-            headers={"Authorization": "Bearer test-secret-token"},
+            headers={"Authorization": "Bearer test-auth-token-for-tests"},
         )
         assert response.status_code == 200
         assert response.json()["status"] == "refresh_started"
@@ -113,12 +142,12 @@ class TestAuthEnabled:
         """Bearer prefix is case-insensitive."""
         response = client_with_auth.post(
             "/api/portfolio/refresh",
-            headers={"Authorization": "BEARER test-secret-token"},
+            headers={"Authorization": "BEARER test-auth-token-for-tests"},
         )
         assert response.status_code == 200
 
     def test_refresh_monitor_requires_auth(self, client_with_auth, mock_orchestrator):
-        """POST /refresh/{monitor} requires auth when enabled."""
+        """POST /refresh/{monitor} requires auth."""
         # Without auth
         response = client_with_auth.post("/api/portfolio/refresh/etf")
         assert response.status_code == 401
@@ -126,12 +155,12 @@ class TestAuthEnabled:
         # With auth
         response = client_with_auth.post(
             "/api/portfolio/refresh/etf",
-            headers={"Authorization": "Bearer test-secret-token"},
+            headers={"Authorization": "Bearer test-auth-token-for-tests"},
         )
         assert response.status_code == 200
 
     def test_reload_config_requires_auth(self, client_with_auth, mock_orchestrator):
-        """POST /reload-config requires auth when enabled."""
+        """POST /reload-config requires auth."""
         # Without auth
         response = client_with_auth.post("/api/portfolio/reload-config")
         assert response.status_code == 401
@@ -139,7 +168,7 @@ class TestAuthEnabled:
         # With auth
         response = client_with_auth.post(
             "/api/portfolio/reload-config",
-            headers={"Authorization": "Bearer test-secret-token"},
+            headers={"Authorization": "Bearer test-auth-token-for-tests"},
         )
         assert response.status_code == 200
 
@@ -158,31 +187,15 @@ class TestAlertCompleteAuth:
                 yield
 
     @pytest.fixture
-    def client_no_auth(self, mock_alerts):
-        """Test client with auth disabled (no AUTH_TOKEN)."""
-        with patch("api.routes.auth._get_auth_token", return_value=""):
-            from main import app
-
-            with TestClient(app) as client:
-                yield client
-
-    @pytest.fixture
     def client_with_auth(self, mock_alerts):
         """Test client with auth enabled (AUTH_TOKEN set)."""
-        with patch("api.routes.auth._get_auth_token", return_value="test-secret-token"):
-            from main import app
+        from main import app
 
-            with TestClient(app) as client:
-                yield client
+        with TestClient(app) as client:
+            yield client
 
-    def test_complete_alert_no_auth_when_disabled(self, client_no_auth):
-        """POST /alerts/{id}/complete works without auth when disabled."""
-        response = client_no_auth.post("/api/portfolio/alerts/test-alert/complete")
-        assert response.status_code == 200
-        assert response.json()["status"] == "completed"
-
-    def test_complete_alert_requires_auth_when_enabled(self, client_with_auth):
-        """POST /alerts/{id}/complete requires auth when enabled."""
+    def test_complete_alert_requires_auth(self, client_with_auth):
+        """POST /alerts/{id}/complete requires auth."""
         # Without auth
         response = client_with_auth.post("/api/portfolio/alerts/test-alert/complete")
         assert response.status_code == 401
@@ -190,9 +203,10 @@ class TestAlertCompleteAuth:
         # With auth
         response = client_with_auth.post(
             "/api/portfolio/alerts/test-alert/complete",
-            headers={"Authorization": "Bearer test-secret-token"},
+            headers={"Authorization": "Bearer test-auth-token-for-tests"},
         )
         assert response.status_code == 200
+        assert response.json()["status"] == "completed"
 
 
 class TestNotificationAuth:
@@ -213,31 +227,15 @@ class TestNotificationAuth:
             yield
 
     @pytest.fixture
-    def client_no_auth(self, mock_notifier):
-        """Test client with auth disabled (no AUTH_TOKEN)."""
-        with patch("api.routes.auth._get_auth_token", return_value=""):
-            from main import app
-
-            with TestClient(app) as client:
-                yield client
-
-    @pytest.fixture
     def client_with_auth(self, mock_notifier):
         """Test client with auth enabled (AUTH_TOKEN set)."""
-        with patch("api.routes.auth._get_auth_token", return_value="test-secret-token"):
-            from main import app
+        from main import app
 
-            with TestClient(app) as client:
-                yield client
+        with TestClient(app) as client:
+            yield client
 
-    def test_notification_test_no_auth_when_disabled(self, client_no_auth):
-        """POST /notifications/test works without auth when disabled."""
-        response = client_no_auth.post("/api/portfolio/notifications/test")
-        assert response.status_code == 200
-        assert response.json()["status"] == "sent"
-
-    def test_notification_test_requires_auth_when_enabled(self, client_with_auth):
-        """POST /notifications/test requires auth when enabled."""
+    def test_notification_test_requires_auth(self, client_with_auth):
+        """POST /notifications/test requires auth."""
         # Without auth
         response = client_with_auth.post("/api/portfolio/notifications/test")
         assert response.status_code == 401
@@ -245,9 +243,10 @@ class TestNotificationAuth:
         # With auth
         response = client_with_auth.post(
             "/api/portfolio/notifications/test",
-            headers={"Authorization": "Bearer test-secret-token"},
+            headers={"Authorization": "Bearer test-auth-token-for-tests"},
         )
         assert response.status_code == 200
+        assert response.json()["status"] == "sent"
 
 
 class TestGetEndpointsNoAuth:
@@ -256,11 +255,10 @@ class TestGetEndpointsNoAuth:
     @pytest.fixture
     def client(self, mock_orchestrator):
         """Test client with auth enabled but for GET requests."""
-        with patch("api.routes.auth._get_auth_token", return_value="test-secret-token"):
-            from main import app
+        from main import app
 
-            with TestClient(app) as client:
-                yield client
+        with TestClient(app) as client:
+            yield client
 
     def test_health_no_auth(self, client):
         """GET /health works without auth even when enabled."""
