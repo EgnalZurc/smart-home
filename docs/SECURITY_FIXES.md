@@ -30,6 +30,15 @@ Each entry follows this format:
 - **Fix Applied**: db_ok() now uses a dedicated short-timeout (2s) SQLite connection with PRAGMA integrity_check(1) instead of reusing the main connection, ensuring the health check fails fast and returns db_ok=false rather than hanging. The 2s timeout is shorter than Docker HEALTHCHECK's 5s timeout, allowing proper failure reporting.
 - **Verification**: Check `services/presence-service/src/database.py` db_ok() method uses `sqlite3.connect(self.db_path, timeout=timeout_s)` with default timeout_s=2.0 and PRAGMA integrity_check(1)
 
+### [calendar-service] CALENDAR_SEED Regex Pattern Validation (L1)
+- **Severity**: LOW
+- **Status**: FIXED
+- **PR**: #TBD
+- **Fixed Date**: 2026-11-04
+- **Description**: CALENDAR_SEED env var entries were validated with simple string checks instead of the same CALENDAR_ID_PATTERN regex used elsewhere, creating potential SSRF surface if malformed IDs were seeded
+- **Fix Applied**: Added CALENDAR_ID_PATTERN.match() validation in lifespan() before upsert_calendar(). Invalid seed entries are logged with warning and skipped. Added TestCalendarSeedValidation test class with 3 tests covering valid, invalid, and mixed scenarios
+- **Verification**: Set CALENDAR_SEED='[{"id":"http://169.254.169.254/meta","label":"bad"}]' and start service; check logs show "CALENDAR_SEED entry 0 has invalid calendar ID format, skipping"
+
 ### [infrastructure/mosquitto] ACL Wildcard Too Broad for ac-service
 - **Severity**: LOW
 - **Status**: FIXED
