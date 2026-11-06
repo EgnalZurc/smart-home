@@ -282,3 +282,42 @@ async def pc_wake(request: Request):
     except OSError as e:
         logger.error("Wake-on-LAN error: %s", e)
         raise HTTPException(500, f"Failed to send wake packet: {e}")
+
+
+# ── Local AI control ──────────────────────────────────────────────────────────
+#
+# Proxy routes to pc-agent for controlling the local AI server (llama-server).
+# Requires SUPER access as this controls hardware resources on the PC.
+
+
+@router.get("/localai/status")
+async def get_localai_status(request: Request):
+    """Get Local AI server status.
+
+    Returns whether the AI server is online and what model is loaded.
+    """
+    require_super(request)
+    return await _proxy_get(
+        "/localai/status",
+        default_on_error={"online": False, "model": None, "error": "PC unreachable"},
+    )
+
+
+@router.post("/localai/start")
+async def localai_start(request: Request):
+    """Start the Local AI server.
+
+    Launches llama-server with the configured model. Takes ~11s to load.
+    """
+    require_super(request)
+    return await _proxy_post("/localai/start")
+
+
+@router.post("/localai/stop")
+async def localai_stop(request: Request):
+    """Stop the Local AI server.
+
+    Kills llama-server and frees VRAM.
+    """
+    require_super(request)
+    return await _proxy_post("/localai/stop")
