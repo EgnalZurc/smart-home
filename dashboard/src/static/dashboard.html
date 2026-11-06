@@ -945,6 +945,17 @@ const T = {
         pc_wake_timeout: 'Tiempo de espera agotado. El PC no respondió.',
         pc_sleep_err: 'Error al suspender el PC',
         pc_wake_err: 'Error al enviar Wake-on-LAN',
+        localai_title: 'Control de IA',
+        localai_online: 'IA Online',
+        localai_offline: 'IA Offline',
+        localai_start: 'Arrancar',
+        localai_stop: 'Parar',
+        localai_starting: 'Arrancando...',
+        localai_stopping: 'Parando...',
+        localai_start_ok: 'Servidor de IA arrancando (~11s)',
+        localai_stop_ok: 'Servidor de IA detenido',
+        localai_start_err: 'Error al arrancar la IA',
+        localai_stop_err: 'Error al detener la IA',
         core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
         external_services: 'Servicios externos', infrastructure: 'Infraestructura',
         ht_status: 'Estado', ht_latency: 'Latencia', ht_error: 'Error',
@@ -1000,6 +1011,17 @@ const T = {
         pc_wake_timeout: 'Timeout. PC did not respond.',
         pc_sleep_err: 'Failed to suspend PC',
         pc_wake_err: 'Failed to send Wake-on-LAN',
+        localai_title: 'AI Control',
+        localai_online: 'AI Online',
+        localai_offline: 'AI Offline',
+        localai_start: 'Start',
+        localai_stop: 'Stop',
+        localai_starting: 'Starting...',
+        localai_stopping: 'Stopping...',
+        localai_start_ok: 'AI server starting (~11s)',
+        localai_stop_ok: 'AI server stopped',
+        localai_start_err: 'Failed to start AI',
+        localai_stop_err: 'Failed to stop AI',
         core_mqtt: 'MQTT', core_zigbee: 'Zigbee',
         external_services: 'External services', infrastructure: 'Infrastructure',
         ht_status: 'Status', ht_latency: 'Latency', ht_error: 'Error',
@@ -1130,6 +1152,8 @@ function getLevel() { return currentUserData?.effective_level ?? 99; }
 // ═══════════════════════════════════════════════════════════════════════════
 let currentPcMode = null;
 let pcOnline = false;
+let localAiOnline = false;
+let localAiModel = null;
 // Lazy-load cache for PC status: we only fetch when the user opens the PC tab,
 // and we reuse the cached result for PC_STATUS_TTL ms so re-opening / switching
 // tabs doesn't re-hit pc-agent every time.
@@ -1165,9 +1189,26 @@ async function loadPcStatus() {
         } else {
             currentPcMode = null;
         }
+        
+        // Also fetch Local AI status if PC is online and user is admin
+        if (pcOnline && isAdmin()) {
+            try {
+                const aiRes = await fetch('/api/pc/localai/status').then(r => r.json());
+                localAiOnline = aiRes.online === true;
+                localAiModel = aiRes.model || null;
+            } catch {
+                localAiOnline = false;
+                localAiModel = null;
+            }
+        } else {
+            localAiOnline = false;
+            localAiModel = null;
+        }
     } catch {
         pcOnline = false;
         currentPcMode = null;
+        localAiOnline = false;
+        localAiModel = null;
         const pcTabDot = document.getElementById('pc-tab-dot');
         if (pcTabDot) pcTabDot.className = 'tab-dot bg-red-400';
     }
@@ -1238,6 +1279,29 @@ function renderPcResources() {
     }
     const modes = ['balanced', 'gaming', 'servidor'];
     const modeIcons = { balanced: '⚡', gaming: '🎮', servidor: '🖥️' };
+    
+    // Build Local AI control section (admin only)
+    const localAiSection = showPowerBtns ? `
+        <div class="mt-6 pt-4 border-t border-slate-700">
+            <p class="text-xs text-slate-500 uppercase tracking-wider mb-3">${t('localai_title')}</p>
+            <div class="flex items-center justify-center gap-3 mb-3">
+                <span class="w-2.5 h-2.5 rounded-full ${localAiOnline ? 'bg-green-500' : 'bg-red-400'}"></span>
+                <span class="${localAiOnline ? 'text-green-400' : 'text-red-400'} text-sm font-medium">
+                    ${localAiOnline ? t('localai_online') : t('localai_offline')}
+                </span>
+            </div>
+            ${localAiModel ? `<p class="text-xs text-slate-500 mb-3 truncate" title="${localAiModel}">${localAiModel}</p>` : ''}
+            <div class="flex justify-center gap-3">
+                <button id="localai-start-btn" class="pc-power-btn wake ${localAiOnline ? 'opacity-50' : ''}" ${localAiOnline ? 'disabled' : ''} data-action="localai-start">
+                    <span>🤖</span><span>${t('localai_start')}</span>
+                </button>
+                <button id="localai-stop-btn" class="pc-power-btn sleep ${!localAiOnline ? 'opacity-50' : ''}" ${!localAiOnline ? 'disabled' : ''} data-action="localai-stop">
+                    <span>⏹️</span><span>${t('localai_stop')}</span>
+                </button>
+            </div>
+        </div>
+    ` : '';
+    
     body.innerHTML = `
         <div class="text-center py-4">
             <div class="flex items-center justify-center gap-2 mb-6">
@@ -1254,6 +1318,7 @@ function renderPcResources() {
                     <span>🌙</span><span>${t('pc_sleep')}</span>
                 </button>
             </div>` : ''}
+            ${localAiSection}
         </div>
     `;
 }
@@ -1394,6 +1459,102 @@ async function pcWake() {
         }
     }
     // NOTE: Button stays disabled during polling - only re-enabled by poll completion or error
+}
+
+// ── Local AI control functions ───────────────────────────────────────────────
+
+async function localAiStart() {
+    console.log('[localAiStart] called, isAdmin:', isAdmin());
+    if (!isAdmin()) {
+        showToast(t('forbidden'), 'error');
+        return;
+    }
+
+    const btn = document.getElementById('localai-start-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span>⏳</span><span>${t('localai_starting')}</span>`;
+    }
+
+    try {
+        console.log('[localAiStart] sending POST /api/pc/localai/start');
+        const r = await fetch('/api/pc/localai/start', { method: 'POST' });
+        console.log('[localAiStart] response status:', r.status);
+        if (r.ok) {
+            showToast(t('localai_start_ok'), 'success');
+            // Poll for AI coming online (takes ~11s to load model)
+            let attempts = 0;
+            const pollInterval = setInterval(async () => {
+                attempts++;
+                await ensurePcStatus(true);
+                console.log('[localAiStart] poll attempt', attempts, 'localAiOnline:', localAiOnline);
+                if (localAiOnline) {
+                    clearInterval(pollInterval);
+                    showToast(t('localai_online'), 'success');
+                    if (currentResSource === 'pc') renderPcResources();
+                } else if (attempts >= 6) {  // ~30 seconds max
+                    clearInterval(pollInterval);
+                    if (currentResSource === 'pc') renderPcResources();
+                }
+            }, 5000);
+        } else {
+            const err = await r.json().catch(() => ({}));
+            console.error('[localAiStart] error response:', err);
+            showToast(err.detail || t('localai_start_err'), 'error');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<span>🤖</span><span>${t('localai_start')}</span>`;
+            }
+        }
+    } catch (e) {
+        console.error('[localAiStart] fetch error:', e);
+        showToast(t('localai_start_err'), 'error');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<span>🤖</span><span>${t('localai_start')}</span>`;
+        }
+    }
+}
+
+async function localAiStop() {
+    console.log('[localAiStop] called, isAdmin:', isAdmin());
+    if (!isAdmin()) {
+        showToast(t('forbidden'), 'error');
+        return;
+    }
+
+    const btn = document.getElementById('localai-stop-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span>⏳</span><span>${t('localai_stopping')}</span>`;
+    }
+
+    try {
+        console.log('[localAiStop] sending POST /api/pc/localai/stop');
+        const r = await fetch('/api/pc/localai/stop', { method: 'POST' });
+        console.log('[localAiStop] response status:', r.status);
+        if (r.ok) {
+            showToast(t('localai_stop_ok'), 'success');
+            localAiOnline = false;
+            localAiModel = null;
+            if (currentResSource === 'pc') renderPcResources();
+        } else {
+            const err = await r.json().catch(() => ({}));
+            console.error('[localAiStop] error response:', err);
+            showToast(err.detail || t('localai_stop_err'), 'error');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<span>⏹️</span><span>${t('localai_stop')}</span>`;
+            }
+        }
+    } catch (e) {
+        console.error('[localAiStop] fetch error:', e);
+        showToast(t('localai_stop_err'), 'error');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<span>⏹️</span><span>${t('localai_stop')}</span>`;
+        }
+    }
 }
 
 function openResModal() {
@@ -3282,6 +3443,17 @@ function setupEventListeners() {
         const wakeBtn = e.target.closest('[data-action="pc-wake"]');
         if (wakeBtn) {
             pcWake();
+            return;
+        }
+        // Local AI control buttons
+        const aiStartBtn = e.target.closest('[data-action="localai-start"]');
+        if (aiStartBtn) {
+            localAiStart();
+            return;
+        }
+        const aiStopBtn = e.target.closest('[data-action="localai-stop"]');
+        if (aiStopBtn) {
+            localAiStop();
             return;
         }
         // Metrics range buttons

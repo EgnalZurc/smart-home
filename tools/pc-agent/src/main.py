@@ -757,6 +757,191 @@ def system_sleep(
         raise HTTPException(500, f"Failed to initiate sleep: {e}")
 
 
+# ── Local AI control ──────────────────────────────────────────────────────────
+#
+# Control the local AI server (llama-server with Qwen3-Coder 30B) via PowerShell
+# scripts stored in D:\LocalAI\scripts\. The scripts are executed directly on
+# Windows using powershell.exe (PS5.1, not pwsh/PS7).
+
+LOCALAI_SCRIPTS_DIR: Path = Path(
+    os.environ.get("LOCALAI_SCRIPTS_DIR", r"D:\LocalAI\scripts")
+)
+LOCALAI_TIMEOUT: int = int(os.environ.get("LOCALAI_TIMEOUT", "30"))
+
+
+def _run_localai_script(script_name: str, timeout: int | None = None) -> dict[str, Any]:
+    """Execute a LocalAI PowerShell script and return parsed output.
+
+    Args:
+        script_name: Name of the script (e.g., "estado.ps1").
+        timeout: Optional timeout override in seconds.
+
+    Returns:
+        Dict with status, output, and any parsed data.
+
+    Raises:
+        HTTPException on script failure or timeout.
+    """
+    script_path = LOCALAI_SCRIPTS_DIR / script_name
+    if not script_path.exists():
+        raise HTTPException(404, f"Script not found: {script_name}")
+
+    cmd = [
+        "powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(script_path),
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout or LOCALAI_TIMEOUT,
+        )
+
+        output = result.stdout.strip()
+        stderr = result.stderr.strip()
+
+        if result.returncode != 0:
+            logger.warning(
+                "Script %s failed (exit %d): %s",
+                script_name,
+                result.returncode,
+                stderr or output,
+            )
+            return {
+                "status": "error",
+                "exit_code": result.returncode,
+                "output": output,
+                "stderr": stderr,
+            }
+
+        return {
+            "status": "ok",
+            "exit_code": 0,
+            "output": output,
+        }
+
+    except subprocess.TimeoutExpired:
+        logger.error(
+            "Script %s timed out after %ds", script_name, timeout or LOCALAI_TIMEOUT
+        )
+        raise HTTPException(
+            504, f"Script timed out after {timeout or LOCALAI_TIMEOUT}s"
+        )
+    except Exception as e:
+        logger.error("Failed to run script %s: %s", script_name, e)
+        raise HTTPException(500, f"Script execution failed: {e}")
+
+
+@app.get("/localai/status")
+def localai_status(
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, Any]:
+    """Get Local AI server status.
+
+    Runs estado.ps1 which checks if llama-server is responding and returns
+    the loaded model information.
+
+    Returns:
+        - online: whether the AI server is responding
+        - model: the currently loaded model name (if online)
+        - output: raw script output for debugging
+    """
+    require_auth(x_api_token)
+
+    result = _run_localai_script("estado.ps1")
+
+    # Parse the script output to extract status
+    output = result.get("output", "")
+    is_online = False
+    model = None
+
+    # The estado.ps1 script outputs structured info; parse it
+    if result["status"] == "ok":
+        output_lower = output.lower()
+        # Check for indicators that the server is running
+        if (
+            "online" in output_lower
+            or "running" in output_lower
+            or "qwen" in output_lower
+        ):
+            is_online = True
+        # Try to extract model name (look for common patterns)
+        for line in output.split("\n"):
+            line_lower = line.lower()
+            if "model" in line_lower or "qwen" in line_lower:
+                # Extract model info from the line
+                model = line.strip()
+                is_online = True
+                break
+
+    return {
+        "online": is_online,
+        "model": model,
+        "output": output,
+    }
+
+
+@app.post("/localai/start")
+def localai_start(
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, str]:
+    """Start the Local AI server.
+
+    Runs arrancar.ps1 which launches llama-server with Qwen3-Coder 30B.
+    The server typically takes ~11 seconds to load the model into VRAM.
+
+    Returns:
+        - status: ok/error
+        - message: human-readable status message
+    """
+    require_auth(x_api_token)
+
+    logger.info("Starting Local AI server")
+    result = _run_localai_script("arrancar.ps1", timeout=60)
+
+    if result["status"] == "ok":
+        return {"status": "ok", "message": "Local AI server starting..."}
+    else:
+        return {
+            "status": "error",
+            "message": result.get("stderr")
+            or result.get("output")
+            or "Failed to start",
+        }
+
+
+@app.post("/localai/stop")
+def localai_stop(
+    x_api_token: str | None = Header(None, alias="X-Api-Token"),
+) -> dict[str, str]:
+    """Stop the Local AI server.
+
+    Runs parar.ps1 which kills llama-server and frees VRAM.
+
+    Returns:
+        - status: ok/error
+        - message: human-readable status message
+    """
+    require_auth(x_api_token)
+
+    logger.info("Stopping Local AI server")
+    result = _run_localai_script("parar.ps1")
+
+    if result["status"] == "ok":
+        return {"status": "ok", "message": "Local AI server stopped"}
+    else:
+        return {
+            "status": "error",
+            "message": result.get("stderr") or result.get("output") or "Failed to stop",
+        }
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

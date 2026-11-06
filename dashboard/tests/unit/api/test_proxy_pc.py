@@ -11,8 +11,11 @@ import pytest
 from api.proxy.pc import (
     EGNALPC_MAC,
     WOL_BROADCAST,
+    get_localai_status,
     get_pc_mode,
     get_pc_status,
+    localai_start,
+    localai_stop,
     pc_sleep,
     pc_wake,
     router,
@@ -271,6 +274,9 @@ class TestRouteRegistration:
             "/api/pc/mode/{mode}",
             "/api/pc/sleep",
             "/api/pc/wake",
+            "/api/pc/localai/status",
+            "/api/pc/localai/start",
+            "/api/pc/localai/stop",
         ]
         for path in expected:
             assert path in paths, f"Route {path} not found in router"
@@ -278,3 +284,134 @@ class TestRouteRegistration:
     def test_router_prefix(self):
         """Router has correct prefix."""
         assert router.prefix == "/api/pc"
+
+
+# ---------------------------------------------------------------------------
+# TestLocalAiStatus
+# ---------------------------------------------------------------------------
+
+
+class TestLocalAiStatus:
+    """Tests for GET /api/pc/localai/status endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_localai_status_online(self):
+        """Returns AI status when online."""
+        data = {"online": True, "model": "Qwen3-Coder-30B", "output": "Server running"}
+        request = make_mock_request(is_super=True)
+
+        with patch("api.proxy.pc.require_super"):
+            with patch(HTTPX_PATCH) as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.get.return_value = make_mock_response(data)
+                mock_client.return_value.__aenter__.return_value = mock_instance
+
+                result = await get_localai_status(request)
+                assert result["online"] is True
+                assert result["model"] == "Qwen3-Coder-30B"
+
+    @pytest.mark.asyncio
+    async def test_localai_status_offline_returns_default(self):
+        """Returns offline status when PC/AI unreachable."""
+        import httpx
+
+        request = make_mock_request(is_super=True)
+
+        with patch("api.proxy.pc.require_super"):
+            with patch(HTTPX_PATCH) as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.get.side_effect = httpx.HTTPError("Connection refused")
+                mock_client.return_value.__aenter__.return_value = mock_instance
+
+                result = await get_localai_status(request)
+                assert result["online"] is False
+                assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_localai_status_requires_super(self):
+        """Non-super users cannot access AI status."""
+        request = make_mock_request(is_super=False)
+
+        with patch("api.proxy.pc.require_super") as mock_super:
+            mock_super.side_effect = HTTPException(403, "Admin access required")
+            with pytest.raises(HTTPException) as exc_info:
+                await get_localai_status(request)
+            assert exc_info.value.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# TestLocalAiStart
+# ---------------------------------------------------------------------------
+
+
+class TestLocalAiStart:
+    """Tests for POST /api/pc/localai/start endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_localai_start_success(self):
+        """Start AI server succeeds."""
+        data = {"status": "ok", "message": "Local AI server starting..."}
+        request = make_mock_request(is_super=True)
+
+        with patch("api.proxy.pc.require_super"):
+            with patch(HTTPX_PATCH) as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.post.return_value = make_mock_response(data)
+                mock_client.return_value.__aenter__.return_value = mock_instance
+
+                result = await localai_start(request)
+                assert result["status"] == "ok"
+
+                # Verify correct endpoint was called
+                call_args = mock_instance.post.call_args
+                assert "/localai/start" in call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_localai_start_requires_super(self):
+        """Non-super users cannot start AI server."""
+        request = make_mock_request(is_super=False)
+
+        with patch("api.proxy.pc.require_super") as mock_super:
+            mock_super.side_effect = HTTPException(403, "Admin access required")
+            with pytest.raises(HTTPException) as exc_info:
+                await localai_start(request)
+            assert exc_info.value.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# TestLocalAiStop
+# ---------------------------------------------------------------------------
+
+
+class TestLocalAiStop:
+    """Tests for POST /api/pc/localai/stop endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_localai_stop_success(self):
+        """Stop AI server succeeds."""
+        data = {"status": "ok", "message": "Local AI server stopped"}
+        request = make_mock_request(is_super=True)
+
+        with patch("api.proxy.pc.require_super"):
+            with patch(HTTPX_PATCH) as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.post.return_value = make_mock_response(data)
+                mock_client.return_value.__aenter__.return_value = mock_instance
+
+                result = await localai_stop(request)
+                assert result["status"] == "ok"
+
+                # Verify correct endpoint was called
+                call_args = mock_instance.post.call_args
+                assert "/localai/stop" in call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_localai_stop_requires_super(self):
+        """Non-super users cannot stop AI server."""
+        request = make_mock_request(is_super=False)
+
+        with patch("api.proxy.pc.require_super") as mock_super:
+            mock_super.side_effect = HTTPException(403, "Admin access required")
+            with pytest.raises(HTTPException) as exc_info:
+                await localai_stop(request)
+            assert exc_info.value.status_code == 403
