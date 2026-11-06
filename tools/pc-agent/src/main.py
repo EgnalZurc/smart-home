@@ -827,8 +827,12 @@ def _run_localai_script(script_name: str, timeout: int | None = None) -> dict[st
         }
 
     except subprocess.TimeoutExpired:
-        logger.error("Script %s timed out after %ds", script_name, timeout or LOCALAI_TIMEOUT)
-        raise HTTPException(504, f"Script timed out after {timeout or LOCALAI_TIMEOUT}s")
+        logger.error(
+            "Script %s timed out after %ds", script_name, timeout or LOCALAI_TIMEOUT
+        )
+        raise HTTPException(
+            504, f"Script timed out after {timeout or LOCALAI_TIMEOUT}s"
+        )
     except Exception as e:
         logger.error("Failed to run script %s: %s", script_name, e)
         raise HTTPException(500, f"Script execution failed: {e}")
@@ -861,7 +865,11 @@ def localai_status(
     if result["status"] == "ok":
         output_lower = output.lower()
         # Check for indicators that the server is running
-        if "online" in output_lower or "running" in output_lower or "qwen" in output_lower:
+        if (
+            "online" in output_lower
+            or "running" in output_lower
+            or "qwen" in output_lower
+        ):
             is_online = True
         # Try to extract model name (look for common patterns)
         for line in output.split("\n"):
@@ -902,7 +910,9 @@ def localai_start(
     else:
         return {
             "status": "error",
-            "message": result.get("stderr") or result.get("output") or "Failed to start",
+            "message": result.get("stderr")
+            or result.get("output")
+            or "Failed to start",
         }
 
 
