@@ -588,7 +588,10 @@ class CalendarStore:
     def get_events_in_window(self, start_ts: int, end_ts: int) -> list[EventRow]:
         """Return events that overlap with the given time window.
 
-        An event overlaps if it starts before window ends AND ends after window starts.
+        An event overlaps if it starts at/before the window ends AND ends after
+        the window starts. The end boundary is exclusive so all-day events
+        (whose stored end_ts is the exclusive next-day boundary) do not bleed
+        into the following day.
         Includes confirmed and tentative (shared calendar) events.
         Used by the /today endpoint to get day's agenda.
         """
@@ -598,7 +601,7 @@ class CalendarStore:
                 SELECT uid, calendar_id, google_id, title, description, location,
                        start_ts, end_ts, all_day, person_id, status
                 FROM events
-                WHERE status IN ('confirmed', 'tentative') AND start_ts <= ? AND end_ts >= ?
+                WHERE status IN ('confirmed', 'tentative') AND start_ts <= ? AND end_ts > ?
                 ORDER BY start_ts ASC
                 """,
                 (end_ts, start_ts),
