@@ -204,6 +204,56 @@ class TestGetEventsInWindow:
         events = store.get_events_in_window(1000, 2000)
         assert events == []
 
+    def test_event_ending_at_window_start_excluded(self, store):
+        """An event whose exclusive end equals window start does not overlap.
+
+        Reproduces the all-day duplicate bug: a Google all-day event's end is
+        the exclusive start of the next day; that boundary must not make the
+        event appear in the following day's window.
+        """
+        window_start = 1000
+        window_end = 2000
+        self._make_event(store, "test:ends_at_start", start_ts=500, end_ts=1000)
+
+        events = store.get_events_in_window(window_start, window_end)
+        uids = [e["uid"] for e in events]
+        assert "test:ends_at_start" not in uids
+
+    def test_all_day_event_not_duplicated_on_next_day(self, store):
+        """All-day event defined on day D appears on D only, not D+1.
+
+        Realistic case (reported bug): birthday on 2026-11-08 stored as an
+        all-day event with exclusive end 2026-11-09 00:00:00 local time.
+        """
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("Europe/Madrid")
+        day8_start = int(datetime(2026, 11, 8, 0, 0, 0, tzinfo=tz).timestamp())
+        day8_end = int(datetime(2026, 11, 8, 23, 59, 59, tzinfo=tz).timestamp())
+        day9_start = int(datetime(2026, 11, 9, 0, 0, 0, tzinfo=tz).timestamp())
+        day9_end = int(datetime(2026, 11, 9, 23, 59, 59, tzinfo=tz).timestamp())
+
+        # Google all-day: start = day date, end = next day (exclusive).
+        store.upsert_event(
+            {
+                "uid": "bday:raul",
+                "calendar_id": "birthdays@cal",
+                "google_id": "raul",
+                "title": "Cumpleaños Raúl García",
+                "start_ts": day8_start,
+                "end_ts": day9_start,  # exclusive boundary
+                "all_day": True,
+                "status": "confirmed",
+                "updated_ts": int(time.time()),
+            }
+        )
+
+        day8 = [e["uid"] for e in store.get_events_in_window(day8_start, day8_end)]
+        day9 = [e["uid"] for e in store.get_events_in_window(day9_start, day9_end)]
+        assert day8 == ["bday:raul"]
+        assert day9 == []
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # clear_calendar_events tests
