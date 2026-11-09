@@ -878,6 +878,17 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   # Quality Gate: verify all lint-and-test-* jobs passed
   # ─────────────────────────────────────────────────────────────────────────────
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Validate service registration (SSOT manifests + compose coverage)
+  # ─────────────────────────────────────────────────────────────────────────────
+  validate-service-registration:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate service manifests
+        shell: pwsh
+        run: ./scripts/validate-services.ps1 -Strict
   quality-gate:
     needs:
       - prepare
@@ -896,6 +907,7 @@ jobs:
       - lint-and-test-pc-agent
       - lint-and-test-async-http-client
       - lint-and-test-smart-home-common
+      - validate-service-registration
     # Run after all lint jobs complete (success, failure, or skipped), but not if workflow was cancelled
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
@@ -941,6 +953,7 @@ jobs:
           check_job "PC Agent" "${{ needs.lint-and-test-pc-agent.result }}" "${{ needs.prepare.outputs.pc-agent }}"
           check_job "Async HTTP Client" "${{ needs.lint-and-test-async-http-client.result }}" "${{ needs.prepare.outputs.async-http-client }}"
           check_job "Smart Home Common" "${{ needs.lint-and-test-smart-home-common.result }}" "${{ needs.prepare.outputs.smart-home-common }}"
+          check_job "Service Registration" "${{ needs.validate-service-registration.result }}" "true"
           
           echo "" >> $GITHUB_STEP_SUMMARY
           
