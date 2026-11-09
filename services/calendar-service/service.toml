@@ -1,0 +1,32 @@
+# Contrato de integración (complementa docker-compose.prod.yml).
+
+[service]
+key = "calendar-service"
+class = "app"
+code_path = "services/calendar-service"
+port = 8014
+data_dir = "data/calendar-service"
+docker_image = "egnal/smart-home-calendar-service"
+health_path = "/health"
+
+[dashboard]
+enabled = true
+app_key = "calendar"
+catalogue = false
+controllable = false
+deploy_service = ""
+status_url = "/api/health/calendar"
+in_all_health = true
+
+[nginx]
+exposed = false
+spa_path = ""
+api_prefix = ""
+
+[ci]
+enabled = true
+workflow_dispatch = true
+
+[docs]
+api_doc = false
+notes = "Infra-style health in dashboard + SUPER settings modal (/api/settings/calendar/*); not a user tile/controllable via APP_CATALOGUE/DEPLOY_SERVICES."
