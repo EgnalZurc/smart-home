@@ -1,0 +1,32 @@
+# Contrato de integración (complementa docker-compose.prod.yml).
+
+[service]
+key = "vaultwarden"
+class = "wrapper"
+code_path = "services/vaultwarden"
+port = 80
+data_dir = "data/vaultwarden"
+docker_image = "egnal/smart-home-vaultwarden"
+health_path = "/passwords/alive"
+
+[dashboard]
+enabled = true
+app_key = "passwords"
+catalogue = true
+controllable = true
+deploy_service = "vaultwarden"
+status_url = "/api/health/passwords"
+in_all_health = true
+
+[nginx]
+exposed = true
+spa_path = "/passwords/"
+api_prefix = "/passwords/"
+
+[ci]
+enabled = true
+workflow_dispatch = true
+
+[docs]
+api_doc = true
+notes = "Vaultwarden wrapper; dashboard catalogue key is passwords and exposes 80/3012 internally."

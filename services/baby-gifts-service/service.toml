@@ -1,0 +1,32 @@
+# Contrato de integración (complementa docker-compose.prod.yml).
+
+[service]
+key = "baby-gifts-service"
+class = "app"
+code_path = "services/baby-gifts-service"
+port = 8004
+data_dir = "data/baby-gifts-service"
+docker_image = "egnal/smart-home-baby-gifts"
+health_path = "/health"
+
+[dashboard]
+enabled = true
+app_key = "babygifts"
+catalogue = true
+controllable = true
+deploy_service = "baby-gifts"
+status_url = "/api/health/baby-gifts"
+in_all_health = true
+
+[nginx]
+exposed = true
+spa_path = "/smart-home/baby-gifts"
+api_prefix = "/api/baby-gifts/"
+
+[ci]
+enabled = true
+workflow_dispatch = true
+
+[docs]
+api_doc = true
+notes = "Guest routes /baby-gifts/i/{token}; dashboard key is babygifts while compose/container is baby-gifts-service."
