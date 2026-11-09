@@ -1,16 +1,13 @@
-<# 
-.SYNOPSIS
-  Validador mínimo de registro de servicios (SSOT: docker-compose.prod.yml + services/*/service.toml).
-.DESCRIPTION
-  Comprueba coherencia básica: manifiestos presentes, claves obligatorias (parseo simple TOML por regex),
-  keys declaradas vs servicios en docker-compose.prod.yml, directorio propio/code_path, y avisos de alta incompleta.
-  No reemplaza test_catalogue_coherence.py ni CI; es una comprobación rápida local/previa.
-#>
 [CmdletBinding()]
 param(
-  [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
-  [switch]$Strict  # falla también por avisos
+  [string]$RepoRoot = '',
+  [switch]$Strict  # falla tambi�n por avisos
 )
+
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
+elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+else { (Get-Location).Path }
+if (-not $RepoRoot) { $RepoRoot = (Resolve-Path (Join-Path $scriptDir '..')).Path }
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
