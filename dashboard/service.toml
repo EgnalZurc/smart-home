@@ -1,0 +1,33 @@
+# Contrato de integración (complementa docker-compose.prod.yml).
+# Dashboard lives in dashboard/ (own directory) and deploys as smart-home-backend.
+
+[service]
+key = "smart-home-backend"
+class = "app"
+code_path = "dashboard"
+port = 8080
+data_dir = "data/backend"
+docker_image = "egnal/smart-home-dashboard"
+health_path = "/health"
+
+[dashboard]
+enabled = false
+app_key = "backend"
+catalogue = false
+controllable = false
+deploy_service = "dashboard"
+status_url = "/api/health/backend"
+in_all_health = true
+
+[nginx]
+exposed = true
+spa_path = "/smart-home"
+api_prefix = "/api/"
+
+[ci]
+enabled = true
+workflow_dispatch = true
+
+[docs]
+api_doc = true
+notes = "Main dashboard/backend host (serves UI, auth, Swagger, and proxies). Not a controllable catalogue tile; compose key differs from directory/image naming."
