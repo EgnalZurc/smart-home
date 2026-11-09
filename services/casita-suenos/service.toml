@@ -1,0 +1,32 @@
+# Contrato de integración (complementa docker-compose.prod.yml).
+
+[service]
+key = "casita-suenos"
+class = "app"
+code_path = "services/casita-suenos"
+port = 8001
+data_dir = "data/casita-suenos"
+docker_image = "egnal/smart-home-casita-suenos"
+health_path = "/health"
+
+[dashboard]
+enabled = true
+app_key = "casita"
+catalogue = true
+controllable = true
+deploy_service = "casita"
+status_url = "/api/health/casita"
+in_all_health = true
+
+[nginx]
+exposed = true
+spa_path = "/smart-home/casita"
+api_prefix = "/api/casita"
+
+[ci]
+enabled = true
+workflow_dispatch = true
+
+[docs]
+api_doc = true
+notes = "Property scraping/alerts; SPA + /api/casita proxy routes."

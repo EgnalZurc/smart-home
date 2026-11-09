@@ -1,0 +1,32 @@
+# Contrato de integración (complementa docker-compose.prod.yml).
+
+[service]
+key = "portfolio-monitor"
+class = "app"
+code_path = "services/portfolio-monitor"
+port = 8010
+data_dir = "data/portfolio-monitor"
+docker_image = "egnal/smart-home-portfolio-monitor"
+health_path = "/health"
+
+[dashboard]
+enabled = true
+app_key = "portfolio"
+catalogue = true
+controllable = true
+deploy_service = "portfolio-monitor"
+status_url = "/api/health/portfolio"
+in_all_health = true
+
+[nginx]
+exposed = true
+spa_path = "/smart-home/portfolio"
+api_prefix = "/api/portfolio/"
+
+[ci]
+enabled = true
+workflow_dispatch = true
+
+[docs]
+api_doc = false
+notes = "ETF/crypto portfolio monitor; dashboard tile/deploy/control and unified Swagger proxy routes."

@@ -1,0 +1,32 @@
+# Contrato de integración (complementa docker-compose.prod.yml).
+
+[service]
+key = "ac-service"
+class = "app"
+code_path = "services/ac-service"
+port = 8002
+data_dir = "data/ac-service"
+docker_image = "egnal/smart-home-ac-service"
+health_path = "/health"
+
+[dashboard]
+enabled = true
+app_key = "ac"
+catalogue = true
+controllable = true
+deploy_service = "ac-service"
+status_url = "/api/health/ac"
+in_all_health = true
+
+[nginx]
+exposed = true
+spa_path = "/smart-home/ac"
+api_prefix = "/api/ac/"
+
+[ci]
+enabled = true
+workflow_dispatch = true
+
+[docs]
+api_doc = true
+notes = "Dashboard tile + controls (APP_CATALOGUE/DEPLOY_SERVICES/CONTROLLABLE_CONTAINERS). Also proxies Zigbee/MQTT status via ac-service; see ac-service steering/docs."

@@ -1,0 +1,32 @@
+# Contrato de integración (complementa docker-compose.prod.yml).
+
+[service]
+key = "energy-monitor"
+class = "app"
+code_path = "services/energy-monitor"
+port = 8012
+data_dir = "data/energy-monitor"
+docker_image = "egnal/smart-home-energy-monitor"
+health_path = "/health"
+
+[dashboard]
+enabled = true
+app_key = "energy"
+catalogue = false
+controllable = false
+deploy_service = ""
+status_url = "/api/health/energy"
+in_all_health = true
+
+[nginx]
+exposed = false
+spa_path = ""
+api_prefix = ""
+
+[ci]
+enabled = true
+workflow_dispatch = true
+
+[docs]
+api_doc = false
+notes = "Infrastructure service (Shelly EM polling). Health exposed via dashboard; no user tile/controls."

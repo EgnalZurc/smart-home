@@ -1,0 +1,32 @@
+# Contrato de integración (complementa docker-compose.prod.yml).
+
+[service]
+key = "metrics-service"
+class = "app"
+code_path = "services/metrics-service"
+port = 8011
+data_dir = "data/metrics-service"
+docker_image = "egnal/smart-home-metrics-service"
+health_path = "/health"
+
+[dashboard]
+enabled = true
+app_key = "metrics"
+catalogue = false
+controllable = false
+deploy_service = ""
+status_url = "/api/health/metrics"
+in_all_health = true
+
+[nginx]
+exposed = false
+spa_path = ""
+api_prefix = ""
+
+[ci]
+enabled = true
+workflow_dispatch = true
+
+[docs]
+api_doc = false
+notes = "Infrastructure service (Pi/container/health metrics). Health exposed via dashboard; no user tile/controls."

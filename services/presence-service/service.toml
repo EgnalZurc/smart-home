@@ -1,0 +1,32 @@
+# Contrato de integración (complementa docker-compose.prod.yml).
+
+[service]
+key = "presence-service"
+class = "app"
+code_path = "services/presence-service"
+port = 8013
+data_dir = "data/presence-service"
+docker_image = "egnal/smart-home-presence-service"
+health_path = "/health"
+
+[dashboard]
+enabled = true
+app_key = "presence"
+catalogue = false
+controllable = false
+deploy_service = ""
+status_url = "/api/health/presence"
+in_all_health = true
+
+[nginx]
+exposed = false
+spa_path = ""
+api_prefix = ""
+
+[ci]
+enabled = true
+workflow_dispatch = true
+
+[docs]
+api_doc = false
+notes = "Infrastructure service (presence detection). Health exposed via dashboard; no user tile/controls."

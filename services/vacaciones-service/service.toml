@@ -1,0 +1,32 @@
+# Contrato de integración (complementa docker-compose.prod.yml).
+
+[service]
+key = "vacaciones-service"
+class = "app"
+code_path = "services/vacaciones-service"
+port = 8003
+data_dir = "data/vacaciones-service"
+docker_image = "egnal/smart-home-vacaciones"
+health_path = "/health"
+
+[dashboard]
+enabled = true
+app_key = "vacaciones"
+catalogue = true
+controllable = true
+deploy_service = "vacaciones"
+status_url = "/api/health/vacaciones"
+in_all_health = true
+
+[nginx]
+exposed = true
+spa_path = "/smart-home/vacaciones"
+api_prefix = "/api/vacaciones"
+
+[ci]
+enabled = true
+workflow_dispatch = true
+
+[docs]
+api_doc = true
+notes = "Vacaciones SPA/API; DEPLOY_SERVICES/CI dispatch name differs from compose key."

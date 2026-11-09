@@ -1,0 +1,32 @@
+# Contrato de integración (complementa docker-compose.prod.yml).
+
+[service]
+key = "valheim-admin"
+class = "app"
+code_path = "services/valheim-admin"
+port = 8080
+data_dir = ""
+docker_image = "egnal/smart-home-valheim-admin"
+health_path = "/health"
+
+[dashboard]
+enabled = true
+app_key = "valheim"
+catalogue = true
+controllable = true
+deploy_service = "valheim-admin"
+status_url = "/api/health/valheim"
+in_all_health = true
+
+[nginx]
+exposed = true
+spa_path = "/valheim-admin/"
+api_prefix = "/valheim-admin/"
+
+[ci]
+enabled = true
+workflow_dispatch = true
+
+[docs]
+api_doc = true
+notes = "Proxies to pc-agent on the gaming PC; dashboard catalogue key is valheim."
