@@ -10,8 +10,8 @@ Procedimiento para **crear, integrar y mantener** servicios en Cuchi Casa. Aplic
 | Capa | SSOT | Decide | Regla |
 |---|---|---|---|
 | Despliegue producción | `docker-compose.prod.yml` | Contenedores/imágenes, `container_name`, red, `expose/ports`, volúmenes `./data/<svc>`, healthcheck, env, `depends_on` | **Todo** lo que corre en la Pi debe estar aquí. Es el inventario canónico. |
-| Contrato de integración (servicios propios) | `services/<nombre>/service.toml` | Clase, puerto, health, flags de dashboard/nginx/CI/deploy | Complementa compose; **no** lo reemplaza. Nuevos servicios: obligatorio. Existentes: añadir al tocarlos. |
-| Código | **Directorio propio por servicio** (`services/<nombre>/` por defecto) | Implementación, Dockerfile, tests, manifiesto | **Cada servicio debe tener su propio directorio** (no mezclar código de servicios distintos). Si el código vive fuera de `services/` (p. ej. `dashboard/`), declararlo en `service.toml` (`code_path`) y mantener un manifiesto/registro claro. |
+| Contrato de integración | `services/<nombre>/service.toml` (microservicios en `services/`) y manifiestos en directorio propio cuando el código vive fuera (p. ej. `dashboard/service.toml`) | Clase, puerto, health, `code_path`, flags de dashboard/nginx/CI/deploy | Complementa compose; **no** lo reemplaza. Nuevos componentes con integración propia: obligatorio. Existentes: añadir al tocarlos. |
+| Código | **Directorio propio por servicio/componente** | Implementación, Dockerfile, tests, manifiesto | **Cada servicio debe tener su propio directorio** (no mezclar código de servicios distintos). Por defecto `services/<nombre>/`. Si vive fuera (p. ej. `dashboard/`), declarar `code_path` y mantener `service.toml` en su directorio. |
 | Vistas/integraciones | nginx, `APP_CATALOGUE`/`DEPLOY_SERVICES`, `CONTROLLABLE_CONTAINERS`, `api/health.py`, `ci.yml`, `dev.ps1`, `docs/API.md` | Exposición, UI, control, monitorización, build | **Deben concordar** con (1)+(2). No son SSOT: si hay conflicto, corregir la vista. |
 | Estado real | `docker ps` / `/api/health/*` en Pi | Qué pasa ahora | Observabilidad, no definición. |
 
@@ -119,10 +119,11 @@ location = /api/health/<service> { /* proxy, sin auth si es health público inte
 6. Deploy: `mkdir -p`/`chown` de `data/<service>` antes de `up` cuando aplique.
 
 ## Mantenimiento de servicios existentes
-- **Conocer despliegue:** `docker-compose.prod.yml` + `scripts/validate-services.ps1`.
+- **Conocer despliegue:** `docker-compose.prod.yml` + `scripts/validate-services.ps1` (cobertura de `services/*/service.toml`, manifiestos extra conocidos como `dashboard/service.toml`, y *Info* de servicios compose sin manifiesto).
 - **Conocer integración:** tests `test_catalogue_coherence` / `test_service_contracts`.
 - **Al modificar un servicio:** si no tiene `service.toml`, crearlo; corregir drift en compose/nginx/dashboard/CI/docs en el mismo cambio.
 - **Revisión periódica:** ejecutar validador y tests de coherencia; comparar tiles/health con servicios reales de prod.
+- **Componentes fuera de `services/`:** si tienen directorio propio e integración (p. ej. `dashboard/`), añadir `service.toml` en ese directorio y registrar la ubicación en el validador si hace falta. Infra externa/oficial en compose (redis, mosquitto, nginx, zigbee2mqtt, docker-socket-proxy) puede quedar sin manifiesto por ahora.
 
 ## Notas
 - `valheim-server` (juego) y stacks externos pueden no seguir la plantilla FastAPI; documentar clase `external`/`wrapper` y registrar solo lo necesario.
