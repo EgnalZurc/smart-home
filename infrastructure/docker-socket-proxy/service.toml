@@ -1,0 +1,32 @@
+# Service integration contract (complements docker-compose.prod.yml).
+
+[service]
+key = "docker-socket-proxy"
+class = "infrastructure"
+code_path = "infrastructure/docker-socket-proxy"
+port = 2375
+data_dir = ""
+docker_image = "ghcr.io/tecnativa/docker-socket-proxy"
+health_path = ""
+
+[dashboard]
+enabled = false
+app_key = ""
+catalogue = false
+controllable = false
+deploy_service = ""
+status_url = ""
+in_all_health = false
+
+[nginx]
+exposed = false
+spa_path = ""
+api_prefix = ""
+
+[ci]
+enabled = false
+workflow_dispatch = false
+
+[docs]
+api_doc = false
+notes = "Least-privilege Docker API proxy for metrics/container control. Internal only (expose 2375, no host ports)."

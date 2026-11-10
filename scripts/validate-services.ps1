@@ -4,7 +4,7 @@
 .DESCRIPTION
   Checks basic consistency: manifests present, required keys (simple regex TOML parsing for our schema),
   declared keys vs docker-compose.prod.yml services, own-directory/code_path, and coverage.
-  Manifests: services/*/service.toml and known extra locations (e.g. dashboard/service.toml).
+  Manifests: services/*/service.toml and known extra locations (dashboard/service.toml, infrastructure/*/service.toml).
   Does not replace test_catalogue_coherence.py or CI; this is a fast local/pre-check.
 #>
 [CmdletBinding()]
@@ -121,6 +121,18 @@ foreach ($extra in $extraManifests) {
   }
 }
 
+# 2b) Infrastructure component manifests (one directory per component)
+$infraDir = Join-Path $RepoRoot 'infrastructure'
+if (Test-Path -LiteralPath $infraDir) {
+  Get-ChildItem -LiteralPath $infraDir -Directory | ForEach-Object {
+    $manifest = Join-Path $_.FullName 'service.toml'
+    if (Test-Path -LiteralPath $manifest) {
+      $label = "infrastructure/$($_.Name)/service.toml"
+      Register-Manifest -Label $label -ManifestPath $manifest -ExpectedKey '' -ManifestKeys $manifestKeys -Errors $errors -Warnings $warnings -RepoRoot $RepoRoot
+    }
+  }
+}
+
 # 3) Basic manifest <-> compose consistency
 foreach ($k in $manifestKeys.Keys) {
   $meta = $manifestKeys[$k]
@@ -131,14 +143,9 @@ foreach ($k in $manifestKeys.Keys) {
 }
 
 # 4) Compose coverage (informational)
-$knownInfraNoManifest = @('mosquitto','redis','zigbee2mqtt','nginx','docker-socket-proxy')
 foreach ($ck in $composeKeys) {
   if ($manifestKeys.ContainsKey($ck)) { continue }
-  if ($ck -in $knownInfraNoManifest) {
-    $infos.Add("Compose '${ck}': external/support infrastructure without service.toml (OK for now).")
-  } else {
-    $infos.Add("Compose '${ck}': no registered service.toml (add a manifest or declare its location per the standard).")
-  }
+  $infos.Add("Compose '${ck}': no registered service.toml (add a manifest in its own directory or declare its location per the standard).")
 }
 
 # 5) Summary

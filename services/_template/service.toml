@@ -1,36 +1,36 @@
-# Contrato de integración del servicio (complementa docker-compose.prod.yml).
-# Copiar a services/<nombre>/service.toml y ajustar. Claves desconocidas: permitidas.
-# El validador mínimo comprueba presencia y claves básicas; la coherencia profunda la dan
-# compose + tests de dashboard/CI.
-# Regla: cada servicio tiene su propio directorio (services/<nombre>/ por defecto).
+# Service integration contract (complements docker-compose.prod.yml).
+# Copy to services/<name>/service.toml and adjust. Unknown keys are allowed.
+# The minimal validator checks presence and basic keys; deeper coherence is ensured
+# by compose + dashboard/CI tests.
+# Rule: each service has its own directory (services/<name>/ by default).
 
 [service]
-key = "my-service"                 # = clave compose, container_name y carpeta en services/
+key = "my-service"                 # = compose key, container_name, and folder in services/
 class = "app"                      # app | infrastructure | wrapper | external
-code_path = "services/my-service"  # ruta al código/directorio propio; p. ej. "dashboard" si no vive en services/
-port = 0                           # puerto interno del contenedor (expose); 0 si no aplica
-data_dir = "data/my-service"       # relativo a raíz prod; "" si sin datos persistentes
-docker_image = "egnal/smart-home-my-service"  # sin :tag; "" si imagen oficial externa
-health_path = "/health"            # "" si no aplica
+code_path = "services/my-service"  # path to code/own directory; e.g. "dashboard" if not under services/
+port = 0                           # internal container port (expose); 0 if not applicable
+data_dir = "data/my-service"       # relative to prod root; "" if no persistent data
+docker_image = "egnal/smart-home-my-service"  # without :tag; "" for official external image
+health_path = "/health"            # "" if not applicable
 
 [dashboard]
-enabled = false                    # true si tiene health/proxy/integración en dashboard
-app_key = ""                       # clave lógica UI (puede diferir de service.key), ej. "babygifts"
-catalogue = false                  # tile en APP_CATALOGUE
-controllable = false               # en CONTROLLABLE_CONTAINERS
-deploy_service = ""                # nombre en DEPLOY_SERVICES / CI dispatch; "" si no
-status_url = ""                    # ej. "/api/health/my-service"
-in_all_health = false              # incluido en /api/health/all
+enabled = false                    # true if it has dashboard health/proxy/integration
+app_key = ""                       # logical UI key (may differ from service.key), e.g. "babygifts"
+catalogue = false                  # tile in APP_CATALOGUE
+controllable = false               # in CONTROLLABLE_CONTAINERS
+deploy_service = ""                # name in DEPLOY_SERVICES / CI dispatch; "" if not applicable
+status_url = ""                    # e.g. "/api/health/my-service"
+in_all_health = false              # included in /api/health/all
 
 [nginx]
-exposed = false                    # true si tiene location en nginx
-spa_path = ""                      # ej. "/smart-home/my-service"
-api_prefix = ""                    # ej. "/api/my-service/"
+exposed = false                    # true if it has a location in nginx
+spa_path = ""                      # e.g. "/smart-home/my-service"
+api_prefix = ""                    # e.g. "/api/my-service/"
 
 [ci]
-enabled = true                     # build/test en CI
-workflow_dispatch = false          # opción en workflow_dispatch
+enabled = true                     # build/test in CI
+workflow_dispatch = false          # option in workflow_dispatch
 
 [docs]
-api_doc = false                    # documentado en docs/API.md
+api_doc = false                    # documented in docs/API.md
 notes = ""
