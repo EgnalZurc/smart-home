@@ -1,0 +1,32 @@
+# Service integration contract (complements docker-compose.prod.yml).
+
+[service]
+key = "zigbee2mqtt"
+class = "infrastructure"
+code_path = "infrastructure/zigbee2mqtt"
+port = 8081
+data_dir = "data/zigbee2mqtt"
+docker_image = "koenkk/zigbee2mqtt"
+health_path = ""
+
+[dashboard]
+enabled = false
+app_key = ""
+catalogue = false
+controllable = false
+deploy_service = ""
+status_url = ""
+in_all_health = false
+
+[nginx]
+exposed = false
+spa_path = ""
+api_prefix = ""
+
+[ci]
+enabled = false
+workflow_dispatch = false
+
+[docs]
+api_doc = false
+notes = "Zigbee2MQTT bridge (pinned version). Depends on mosquitto; device/udev mapped in prod."

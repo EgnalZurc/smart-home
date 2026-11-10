@@ -1,0 +1,32 @@
+# Service integration contract (complements docker-compose.prod.yml).
+
+[service]
+key = "nginx"
+class = "infrastructure"
+code_path = "infrastructure/nginx"
+port = 80
+data_dir = ""
+docker_image = "nginx"
+health_path = ""
+
+[dashboard]
+enabled = false
+app_key = ""
+catalogue = false
+controllable = false
+deploy_service = ""
+status_url = ""
+in_all_health = false
+
+[nginx]
+exposed = true
+spa_path = "/"
+api_prefix = "/"
+
+[ci]
+enabled = false
+workflow_dispatch = false
+
+[docs]
+api_doc = false
+notes = "Reverse proxy (nginx:alpine). Config/snippets/certs in infrastructure/nginx; publishes 80 and localhost-bound 8443/8444 in prod."

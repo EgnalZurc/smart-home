@@ -11,10 +11,19 @@ This document describes all the APIs exposed by the Smart Home platform. The ser
 | Service | Internal URL | External URL (via nginx) |
 |---------|--------------|--------------------------|
 | Dashboard | http://smart-home-backend:8080 | https://raspberrypi.local/ |
-| Baby Gifts | http://baby-gifts-service:8004 | https://raspberrypi.local/smart-home/baby-gifts |
 | AC Service | http://ac-service:8002 | https://raspberrypi.local/smart-home/ac |
+| Baby Gifts | http://baby-gifts-service:8004 | https://raspberrypi.local/smart-home/baby-gifts |
 | Vacaciones | http://vacaciones-service:8003 | https://raspberrypi.local/smart-home/vacaciones |
-| Casita Sueños | http://casita-suenos:8001 | https://raspberrypi.local/api/casita/* |
+| Casita Sueños | http://casita-suenos:8001 | https://raspberrypi.local/smart-home/casita, /api/casita/* |
+| Portfolio Monitor | http://portfolio-monitor:8010 | https://raspberrypi.local/smart-home/portfolio |
+| Valheim Admin | http://valheim-admin:8080 | https://raspberrypi.local/valheim-admin/ |
+| Vaultwarden | http://vaultwarden:80 | https://raspberrypi.local/passwords/ |
+| Metrics Service | http://metrics-service:8011 | Internal only (dashboard proxy/health) |
+| Energy Monitor | http://energy-monitor:8012 | Internal only (dashboard proxy/health) |
+| Presence Service | http://presence-service:8013 | Internal only (dashboard proxy/health) |
+| Calendar Service | http://calendar-service:8014 | Internal only (dashboard proxy/health/settings) |
+
+> Canonical deployment inventory and ports: `docker-compose.prod.yml`. Each service has its own directory and `service.toml` contract per `.kiro/steering/creating-a-service.md`.
 
 ## Authentication
 
@@ -120,16 +129,23 @@ curl http://ac-service:8002/openapi.json | head -c 500
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| GET | `/health` | Service health check | No |
+| GET | `/health` | Dashboard service health check | No |
+| GET | `/api/health` | Dashboard health alias | No |
+| GET | `/api/health/all` | Aggregated health for all monitored services | No |
 | GET | `/api/health/backend` | Backend health | No |
 | GET | `/api/health/zigbee` | Zigbee/MQTT health (proxied from ac-service) | No |
 | GET | `/api/health/ac` | AC service health | No |
 | GET | `/api/health/vacaciones` | Vacaciones service health | No |
 | GET | `/api/health/immich` | Immich photo server health | No |
 | GET | `/api/health/casita` | Casita Sueños health | No |
+| GET | `/api/health/baby-gifts` | Baby Gifts service health | No |
+| GET | `/api/health/portfolio` | Portfolio Monitor health | No |
 | GET | `/api/health/passwords` | Vaultwarden health | No |
-| GET | `/api/health/valheim` | Valheim server health | No |
-| GET | `/api/health/valheim-admin` | Valheim admin health | No |
+| GET | `/api/health/valheim` | Valheim Admin/PC agent proxy health | No |
+| GET | `/api/health/metrics` | Metrics service health (infra) | No |
+| GET | `/api/health/energy` | Energy monitor health (infra) | No |
+| GET | `/api/health/presence` | Presence service health (infra) | No |
+| GET | `/api/health/calendar` | Calendar service health (infra) | No |
 
 ### Unified Alerts
 
@@ -430,6 +446,36 @@ Returns current user info:
 
 ---
 
+## Portfolio Monitor Service (Port 8010)
+
+Internal: `http://portfolio-monitor:8010`. Exposed via nginx/dashboard at `/smart-home/portfolio`.
+Dashboard health: `GET /api/health/portfolio`. Service health: `GET /health`.
+See `services/portfolio-monitor/service.toml` and service Swagger (`/swagger`, `/openapi.json`) for endpoint details.
+
+## Calendar Service (Port 8014)
+
+Internal: `http://calendar-service:8014`. Internal-only (no public nginx SPA); dashboard integrates health and SUPER settings.
+Dashboard health: `GET /api/health/calendar`. Service health: `GET /health`.
+See `services/calendar-service/service.toml` and service source/Swagger for endpoint details.
+
+## Metrics Service (Port 8011)
+
+Internal: `http://metrics-service:8011`. Infrastructure collector (Pi/container/health metrics); internal-only, dashboard health/proxy integration.
+Dashboard health: `GET /api/health/metrics`. Service health: `GET /health`.
+See `services/metrics-service/service.toml`.
+
+## Energy Monitor Service (Port 8012)
+
+Internal: `http://energy-monitor:8012`. Infrastructure collector (Shelly EM polling); internal-only, dashboard health/proxy integration.
+Dashboard health: `GET /api/health/energy`. Service health: `GET /health`.
+See `services/energy-monitor/service.toml`.
+
+## Presence Service (Port 8013)
+
+Internal: `http://presence-service:8013`. Infrastructure service (multi-signal presence detection); internal-only, dashboard health/proxy integration.
+Dashboard health: `GET /api/health/presence`. Service health: `GET /health`.
+See `services/presence-service/service.toml`.
+
 ## Validation Results (2026-09-27 21:05 UTC+2)
 
 All services validated successfully via `docker exec nginx-reverse-proxy wget`:
@@ -454,11 +500,18 @@ All services validated successfully via `docker exec nginx-reverse-proxy wget`:
 
 | Service | docker-compose name | nginx upstream |
 |---------|---------------------|----------------|
-| Dashboard | `smart-home-backend` | `http://smart-home-backend:8080` |
-| AC Service | `ac-service` | `http://ac-service:8002` |
-| Baby Gifts | `baby-gifts-service` | `http://baby-gifts-service:8004` |
-| Vacaciones | `vacaciones-service` | `http://vacaciones-service:8003` |
-| Casita Sueños | `casita-suenos` | `http://casita-suenos:8001` |
+| Dashboard | smart-home-backend | http://smart-home-backend:8080 |
+| AC Service | c-service | http://ac-service:8002 |
+| Baby Gifts | aby-gifts-service | http://baby-gifts-service:8004 |
+| Vacaciones | acaciones-service | http://vacaciones-service:8003 |
+| Casita Sueños | casita-suenos | http://casita-suenos:8001 |
+| Portfolio Monitor | portfolio-monitor | http://portfolio-monitor:8010 |
+| Valheim Admin | alheim-admin | http://valheim-admin:8080 |
+| Vaultwarden | aultwarden | http://vaultwarden:80 |
+| Metrics Service | metrics-service | http://metrics-service:8011 |
+| Energy Monitor | energy-monitor | http://energy-monitor:8012 |
+| Presence Service | presence-service | http://presence-service:8013 |
+| Calendar Service | calendar-service | http://calendar-service:8014 |
 
 ### From GitHub Actions
 
@@ -481,4 +534,11 @@ ssh pi@raspberrypi.local "cd ~/smart-home-prod && docker compose pull && docker 
 - `ac-service` - AC Controller
 - `baby-gifts-service` - Baby Gifts Registry
 - `vacaciones-service` - Vacation Planner
-- `casita-suenos` - Property Monitor
+- casita-suenos - Property Monitor
+- `portfolio-monitor` - Portfolio Monitor
+- `valheim-admin` - Valheim Admin
+- `vaultwarden` - Vaultwarden (wrapper)
+- `metrics-service` - Metrics Service
+- `energy-monitor` - Energy Monitor
+- `presence-service` - Presence Service
+- `calendar-service` - Calendar Service

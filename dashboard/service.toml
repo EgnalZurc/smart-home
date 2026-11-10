@@ -1,4 +1,4 @@
-# Contrato de integración (complementa docker-compose.prod.yml).
+# Service integration contract (complements docker-compose.prod.yml).
 # Dashboard lives in dashboard/ (own directory) and deploys as smart-home-backend.
 
 [service]

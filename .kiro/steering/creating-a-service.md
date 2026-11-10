@@ -123,7 +123,7 @@ location = /api/health/<service> { /* proxy, sin auth si es health público inte
 - **Conocer integración:** tests `test_catalogue_coherence` / `test_service_contracts`.
 - **Al modificar un servicio:** si no tiene `service.toml`, crearlo; corregir drift en compose/nginx/dashboard/CI/docs en el mismo cambio.
 - **Revisión periódica:** ejecutar validador y tests de coherencia; comparar tiles/health con servicios reales de prod.
-- **Componentes fuera de `services/`:** si tienen directorio propio e integración (p. ej. `dashboard/`), añadir `service.toml` en ese directorio y registrar la ubicación en el validador si hace falta. Infra externa/oficial en compose (redis, mosquitto, nginx, zigbee2mqtt, docker-socket-proxy) puede quedar sin manifiesto por ahora.
+- **Componentes fuera de `services/`:** cada componente con directorio propio debe tener `service.toml` en ese directorio (p. ej. `dashboard/service.toml`, `infrastructure/<componente>/service.toml`). El validador descubre `services/*/service.toml`, `dashboard/service.toml` e `infrastructure/*/service.toml`. La meta es cobertura completa de `docker-compose.prod.yml` sin infos de compose sin manifiesto.
 
 ## Notas
 - `valheim-server` (juego) y stacks externos pueden no seguir la plantilla FastAPI; documentar clase `external`/`wrapper` y registrar solo lo necesario.

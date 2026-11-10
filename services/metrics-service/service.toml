@@ -1,4 +1,4 @@
-# Contrato de integración (complementa docker-compose.prod.yml).
+# Service integration contract (complements docker-compose.prod.yml).
 
 [service]
 key = "metrics-service"

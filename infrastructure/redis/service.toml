@@ -1,0 +1,32 @@
+# Service integration contract (complements docker-compose.prod.yml).
+
+[service]
+key = "redis"
+class = "infrastructure"
+code_path = "infrastructure/redis"
+port = 6379
+data_dir = "data/redis"
+docker_image = "redis"
+health_path = ""
+
+[dashboard]
+enabled = false
+app_key = ""
+catalogue = false
+controllable = false
+deploy_service = ""
+status_url = ""
+in_all_health = false
+
+[nginx]
+exposed = false
+spa_path = ""
+api_prefix = ""
+
+[ci]
+enabled = false
+workflow_dispatch = false
+
+[docs]
+api_doc = false
+notes = "Redis 7 (alpine) cache/rate-limit support. Official image; compose healthcheck uses redis-cli ping."
