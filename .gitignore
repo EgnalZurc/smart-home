@@ -48,3 +48,7 @@ tools/tailwindcss
 # Coverage
 .coverage
 *.coverage
+
+# Local git worktrees (scratch)
+scratch/*
+!scratch/README.md
