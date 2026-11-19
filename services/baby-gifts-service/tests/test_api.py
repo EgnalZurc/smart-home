@@ -347,6 +347,69 @@ class TestGuestEndpoints:
         )
         assert response.json()["status"] == "ok"
 
+    def test_guest_reserve_second_gift_with_legacy_sequential_id(
+        self, client, sample_gift, sample_invitation_name
+    ):
+        """A guest must be able to reserve a second gift with a legacy ID.
+
+        Regression test for the reported bug: a guest with an invitation first
+        reserved a gift with a timestamp-based ID, then reserving a second gift
+        whose ID is the legacy sequential format (g009) returned HTTP 400
+        "Invalid gift_id format". Guests may reserve an unlimited number of
+        gifts, so every stored ID format must be accepted.
+        """
+        import json
+
+        import gifts_controller
+
+        inv_resp = client.post(
+            "/api/baby-gifts/invitations",
+            json={"name": sample_invitation_name},
+            headers={"X-Auth-User": "admin"},
+        )
+        token = inv_resp.json()["token"]
+
+        # First gift: created through the API -> timestamp-based ID
+        first_id = client.post(
+            "/api/baby-gifts", json=sample_gift, headers={"X-Auth-User": "admin"}
+        ).json()["gift"]["id"]
+
+        # Second gift: legacy sequential ID, as seeded in production gifts.json
+        legacy_id = "g009"
+        gifts_file = gifts_controller.GIFTS_FILE
+        data = json.loads(gifts_file.read_text(encoding="utf-8"))
+        data["gifts"].append(
+            {
+                "id": legacy_id,
+                "name": "Saco Carro CHERRY flores",
+                "description": "",
+                "url": "",
+                "price_range": "€€",
+                "priority": 2,
+                "reserved_by": None,
+                "reserved_by_name": None,
+                "reserved_at": None,
+                "hidden": False,
+            }
+        )
+        gifts_file.write_text(json.dumps(data), encoding="utf-8")
+
+        first_resp = client.post(f"/api/baby-gifts/guest/{token}/reserve/{first_id}")
+        second_resp = client.post(f"/api/baby-gifts/guest/{token}/reserve/{legacy_id}")
+
+        assert first_resp.status_code == 200, first_resp.json()
+        assert second_resp.status_code == 200, (
+            f"Expected 200, got {second_resp.status_code}: {second_resp.json()}"
+        )
+        assert second_resp.json()["gift"]["id"] == legacy_id
+
+        # Both reservations belong to the same guest
+        listing = client.get(f"/api/baby-gifts/guest/{token}").json()
+        reserved_by_me = [
+            g["id"] for g in listing["gifts"] if g.get("reserved_by_me") is True
+        ]
+        assert sorted(reserved_by_me) == sorted([first_id, legacy_id])
+
     def test_guest_unreserve_own_gift(
         self, client, sample_gift, sample_invitation_name
     ):

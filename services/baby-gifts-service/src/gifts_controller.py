@@ -146,9 +146,11 @@ def _get_db() -> sqlite3.Connection:
 
 
 # ── Gift ID validation ────────────────────────────────────────────────────────
-# Regex patterns for valid gift IDs:
-# - New format: g_<timestamp_ms>_<hex8> (e.g., g_1729432800000_a1b2c3d4)
-# - Legacy format: g_<timestamp_s_or_ms> (e.g., g_1790764472872) - no hex suffix
+# Regex patterns for the gift ID formats that exist in production gifts.json:
+# - Current format: g_<timestamp_ms>_<hex8> (e.g., g_1729432800000_a1b2c3d4)
+# - Legacy timestamp format: g_<timestamp_s_or_ms> (e.g., g_1790764472872)
+# - Legacy sequential format: g<sequence> (e.g., g001, g009) — seeded/imported
+#   rows that predate the timestamp-based generator and are still in the data.
 # timestamp: 10+ digits (seconds or milliseconds since epoch)
 # hex: 8 hex characters (from secrets.token_hex(4)) - optional for legacy
 import re
@@ -158,13 +160,19 @@ import re
 # year 3169 in milliseconds)
 _GIFT_ID_PATTERN: re.Pattern[str] = re.compile(r"^g_\d{10,20}(_[0-9a-f]{8})?$")
 
+# Legacy sequential IDs: "g" + up to 10 digits (g001, g009, ...). These are real
+# gift IDs stored in gifts.json, so they must keep working for every operation
+# (reserve, unreserve, update, delete, visibility).
+_LEGACY_SEQUENTIAL_GIFT_ID_PATTERN: re.Pattern[str] = re.compile(r"^g\d{1,10}$")
+
 
 def _validate_gift_id(gift_id: str) -> bool:
     """Validate gift_id format for security.
 
     Accepts:
     - New format: g_<timestamp_ms>_<hex8> (e.g., g_1729432800000_a1b2c3d4)
-    - Legacy format: g_<timestamp> (e.g., g_1790764472872) - no hex suffix
+    - Legacy timestamp format: g_<timestamp> (e.g., g_1790764472872) - no hex
+    - Legacy sequential format: g<sequence> (e.g., g001, g009) - seeded rows
     - UUID format: for future compatibility
 
     Rejects:
@@ -193,6 +201,10 @@ def _validate_gift_id(gift_id: str) -> bool:
 
     # Check native format: g_<timestamp>_<hex>
     if _GIFT_ID_PATTERN.match(gift_id):
+        return True
+
+    # Check legacy sequential format: g<sequence> (e.g., g001, g009)
+    if _LEGACY_SEQUENTIAL_GIFT_ID_PATTERN.match(gift_id):
         return True
 
     # Check UUID format for future compatibility
