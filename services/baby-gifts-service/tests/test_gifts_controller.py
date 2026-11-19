@@ -175,6 +175,20 @@ class TestGiftIdValidation:
         assert _validate_gift_id("g_1234567890") is True  # 10 digits
         assert _validate_gift_id("g_12345678901234567") is True  # 17 digits
 
+    def test_validate_gift_id_accepts_legacy_sequential_format(self, tmp_data_dir):
+        """_validate_gift_id should return True for legacy g<sequence> IDs.
+
+        Regression test: production gifts.json still contains seeded rows whose
+        IDs are "g" + a short sequence number (g001, g009, ...). Rejecting them
+        made reserving those gifts impossible ("Invalid gift_id format").
+        """
+        from gifts_controller import _validate_gift_id
+
+        assert _validate_gift_id("g001") is True
+        assert _validate_gift_id("g009") is True
+        assert _validate_gift_id("g0001") is True
+        assert _validate_gift_id("g1234567890") is True  # 10 digits (max)
+
     def test_validate_gift_id_rejects_invalid(self, tmp_data_dir):
         """_validate_gift_id should return False for invalid formats."""
         from gifts_controller import _validate_gift_id
@@ -186,6 +200,10 @@ class TestGiftIdValidation:
         # Invalid hex (not 8 chars)
         assert _validate_gift_id("g_1234567890123_abc") is False
         assert _validate_gift_id("") is False
+        # Legacy sequential format must be digits only
+        assert _validate_gift_id("g") is False
+        assert _validate_gift_id("gabc") is False
+        assert _validate_gift_id("g00a") is False
 
     def test_validate_gift_id_handles_none(self, tmp_data_dir):
         """_validate_gift_id should handle None gracefully."""
@@ -237,6 +255,59 @@ class TestGiftReservations:
 
         assert result["status"] == "error"
         assert "ya está reservado" in result["message"]
+
+    def test_reserve_multiple_gifts_with_legacy_sequential_ids(self, tmp_data_dir):
+        """A guest must be able to reserve several gifts, legacy IDs included.
+
+        Regression test for the reported bug: after one reservation, reserving a
+        second gift whose ID uses the legacy "g<sequence>" format (e.g. g009)
+        failed with "Invalid gift_id format". Reservations are unlimited per
+        guest, and legacy IDs must behave like any other ID.
+        """
+        import json
+
+        import gifts_controller
+        from gifts_controller import (
+            get_invitation_reservations,
+            reserve_gift,
+            unreserve_gift,
+        )
+
+        token = "sWPTtx-H7mMfHcbqB3IJNXms_ANENV_s"
+        gifts = [
+            {
+                "id": gift_id,
+                "name": name,
+                "description": "",
+                "url": "",
+                "price_range": "€€",
+                "priority": 2,
+                "reserved_by": None,
+                "reserved_by_name": None,
+                "reserved_at": None,
+                "hidden": False,
+            }
+            for gift_id, name in (
+                ("g001", "Portadocumentos CHERRY"),
+                ("g009", "Saco Carro CHERRY flores"),
+            )
+        ]
+        gifts_controller.GIFTS_FILE.write_text(
+            json.dumps({"gifts": gifts}), encoding="utf-8"
+        )
+
+        first = reserve_gift("g001", token, "Tía María")
+        second = reserve_gift("g009", token, "Tía María")
+
+        assert first["status"] == "ok"
+        assert second["status"] == "ok"
+        assert second["gift"]["reserved_by"] == token
+        # No cap on reservations per guest
+        assert get_invitation_reservations(token) == 2
+
+        # Legacy IDs must also work for cancelling a reservation
+        result = unreserve_gift("g009", token, is_admin=False)
+        assert result["status"] == "ok"
 
     def test_reserve_nonexistent_gift_fails(self, tmp_data_dir):
         """reserve_gift should fail for non-existent gift with valid ID format."""
