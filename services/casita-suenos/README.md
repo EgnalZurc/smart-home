@@ -77,6 +77,12 @@ individual por Telegram a todos los chats registrados (fallback a `TELEGRAM_CHAT
 Esto es independiente del resumen agregado de cada scraping y del resumen semanal, que
 siguen enviándose como antes.
 
+El **procesamiento de correos no se notifica**: ni el check de Idealista ni el de
+Fotocasa (ni cualquier otra plataforma que se añada) envían un resumen tipo
+«Correo X procesado». Procesar el correo es una tarea interna; el resultado queda en
+logs y dashboard. Solo llegan al móvil las alertas de propiedades, las bajadas de
+precio y los errores reales.
+
 ## Análisis precio/m² vs media de zona
 
 Cada propiedad del radar se enriquece con un análisis de su precio por metro cuadrado

@@ -969,7 +969,10 @@ class TestRunGmailCheck:
 
         scheduler._db.upsert_score.assert_called()
         scheduler._db.mark_alerted.assert_called()
-        scheduler._notifier.send_status.assert_called()
+        # La propiedad sigue notificándose...
+        scheduler._notifier.notify_high_scorer.assert_called_once()
+        # ...pero ya no se envía el resumen "Correo X procesado" a Telegram
+        scheduler._notifier.send_status.assert_not_called()
 
     def test_do_gmail_check_skips_when_no_zone(self, scheduler):
         from idealista_email_parser import IdealistaAlert
@@ -1055,6 +1058,10 @@ class TestRunFotocasaCheck:
 
         scheduler._db.upsert_score.assert_called()
         scheduler._db.mark_alerted.assert_called()
+        # La propiedad sigue notificándose...
+        scheduler._notifier.notify_high_scorer.assert_called_once()
+        # ...pero ya no se envía el resumen "Correo X procesado" a Telegram
+        scheduler._notifier.send_status.assert_not_called()
 
     def test_do_fotocasa_skips_alert_with_parse_error(self, scheduler):
         from fotocasa_email_parser import FotocasaAlert

@@ -97,30 +97,3 @@ def build_scraper_errors_message(errors: list[ScraperError]) -> str:
         "_Revisa los scrapers correspondientes y actualiza los selectores si es necesario._"
     )
     return "\n".join(lines)
-
-
-def build_email_check_summary(
-    *,
-    portal_label: str,
-    total_alerts: int,
-    total_new: int,
-    new_by_zone: dict[str, int],
-) -> str:
-    """
-    Construye el texto del resumen de un check de correo (Idealista/Fotocasa).
-    Reproduce el formato previamente inline en los jobs de Gmail/Fotocasa.
-    """
-    lines: list[str] = [
-        f"Correo {portal_label} procesado",
-        f"Anuncios analizados: {total_alerts}",
-        f"Nuevas en radar: {total_new}",
-    ]
-    if new_by_zone:
-        lines.append("")
-        for zid, cnt in sorted(new_by_zone.items(), key=lambda x: -x[1]):
-            zn = ZONES.get(zid)
-            lines.append(
-                "  - {}: {}".format(zn.name.split("(")[0].strip() if zn else zid, cnt)
-            )
-    lines += ["", CASITA_DASHBOARD_URL]
-    return "\n".join(lines)

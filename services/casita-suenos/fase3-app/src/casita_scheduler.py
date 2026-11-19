@@ -625,7 +625,7 @@ class CasitaScheduler:
                     )
             return
         logger.info("[casita] %d anuncios de Idealista desde Gmail", len(alerts))
-        processed_email_ids, total_new, new_by_zone = [], 0, {}
+        processed_email_ids, total_new = [], 0
         for alert in alerts:
             try:
                 zone = self._infer_zone_from_hint(alert.location_hint, alert.url)
@@ -650,7 +650,6 @@ class CasitaScheduler:
                         self._db.mark_alerted(prop.unique_id)
                         self._notify_high_scorer(scored, zone)
                         total_new += 1
-                        new_by_zone[zone.id] = new_by_zone.get(zone.id, 0) + 1
                         logger.info(
                             "[casita] Idealista ALERTA: %s %.1f pts",
                             prop.unique_id,
@@ -684,18 +683,17 @@ class CasitaScheduler:
                 imap_conn.logout()
             except (imaplib.IMAP4.error, OSError):
                 logger.debug("[casita] IMAP logout failed (connection may be stale)")
-        # Solo notificar si hay casas nuevas en el radar
-        if total_new > 0:
-            self._notifier.send_status(
-                formatters.build_email_check_summary(
-                    portal_label="Idealista",
-                    total_alerts=len(alerts),
-                    total_new=total_new,
-                    new_by_zone=new_by_zone,
-                )
-            )
-        else:
-            logger.info("[casita] Gmail check sin nuevas casas para el radar")
+        # NOTE: El resumen "correo procesado" NO se envía a Telegram a propósito.
+        # Procesar un correo es una tarea de mantenimiento interna: sólo se
+        # notifican las casas nuevas que superan el umbral, las bajadas de
+        # precio y los errores reales. El resultado queda en logs y dashboard.
+        logger.info(
+            "[casita] Gmail check completado: %d anuncios, %d nuevas en radar, "
+            "%d error(es)",
+            len(alerts),
+            total_new,
+            len(errors),
+        )
 
     def _run_fotocasa_check(self) -> None:
         if self._fotocasa_check_running:
@@ -756,7 +754,7 @@ class CasitaScheduler:
             return
 
         logger.info("[casita] %d anuncios de Fotocasa desde Gmail", len(alerts))
-        processed_email_ids, total_new, new_by_zone = [], 0, {}
+        processed_email_ids, total_new = [], 0
         failed_ids: set[str] = set()
 
         for alert in alerts:
@@ -830,7 +828,6 @@ class CasitaScheduler:
                         self._db.mark_alerted(prop.unique_id)
                         self._notify_high_scorer(scored, zone)
                         total_new += 1
-                        new_by_zone[zone.id] = new_by_zone.get(zone.id, 0) + 1
                         logger.info(
                             "[casita] Fotocasa ALERTA: %s %.1f pts",
                             prop.unique_id,
@@ -865,17 +862,17 @@ class CasitaScheduler:
             except (imaplib.IMAP4.error, OSError):
                 logger.debug("[casita] IMAP logout failed (connection may be stale)")
 
-        if total_new > 0:
-            self._notifier.send_status(
-                formatters.build_email_check_summary(
-                    portal_label="Fotocasa",
-                    total_alerts=len(alerts),
-                    total_new=total_new,
-                    new_by_zone=new_by_zone,
-                )
-            )
-        else:
-            logger.info("[casita] Fotocasa check sin nuevas casas para el radar")
+        # NOTE: El resumen "correo procesado" NO se envía a Telegram a propósito
+        # (ver _do_gmail_check). Sólo alertas de propiedades, bajadas de precio
+        # y errores reales llegan al móvil.
+        logger.info(
+            "[casita] Fotocasa check completado: %d anuncios, %d nuevas en radar, "
+            "%d error(es), %d fallidos",
+            len(alerts),
+            total_new,
+            len(errors),
+            len(failed_ids),
+        )
 
     def _infer_zone_from_hint(self, hint, url):
         """Delegado en :func:`scheduler.zone_inference.infer_zone_from_hint`."""
