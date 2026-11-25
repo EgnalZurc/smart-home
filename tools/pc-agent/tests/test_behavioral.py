@@ -22,7 +22,11 @@ from .conftest import TEST_TOKEN
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
-def _fake_container(status="running", started_at="2026-10-09T08:00:00Z"):
+def _fake_container(
+    status="running",
+    started_at="2026-10-09T08:00:00Z",
+    logs: bytes | None = None,
+):
     """Build a MagicMock standing in for a docker container object."""
     container = MagicMock()
     container.status = status
@@ -34,6 +38,8 @@ def _fake_container(status="running", started_at="2026-10-09T08:00:00Z"):
             "Health": {"Status": "healthy"},
         }
     }
+    if logs is not None:
+        container.logs.return_value = logs
     return container
 
 
@@ -163,6 +169,104 @@ class TestValheimStatus:
         with patch("main.get_docker", return_value=None):
             resp = client.get("/valheim/status", headers=auth_headers)
         assert resp.status_code == 503
+
+
+    def test_status_reports_ready_and_join_code_from_container_logs(
+        self, client, auth_headers
+    ):
+        logs = (
+            b"INFO - Running Valheim Server\n"
+            b"ZDOMan.LoadChunks done [4,202ms]\n"
+            b'Session "PabloMundo" registered with join code 430387\n'
+        )
+        fake = _fake_docker(_fake_container(logs=logs))
+        with (
+            patch("main.get_docker", return_value=fake),
+            patch("main._latest_log_file", return_value=None),
+            patch("main._read_env", return_value={}),
+        ):
+            body = client.get("/valheim/status", headers=auth_headers).json()
+        assert body["state"] == "ready"
+        assert body["join_code"] == "430387"
+        assert body["last_error"] is None
+
+    def test_status_reports_crash_loop(self, client, auth_headers):
+        logs = (
+            b"INFO - Running Valheim Server\n"
+            b"World load failed mid-file. Exiting without save. Check backups!\n"
+        )
+        fake = _fake_docker(_fake_container(logs=logs))
+        with (
+            patch("main.get_docker", return_value=fake),
+            patch("main._latest_log_file", return_value=None),
+            patch("main._read_env", return_value={}),
+        ):
+            body = client.get("/valheim/status", headers=auth_headers).json()
+        assert body["state"] == "error"
+        assert "World load failed" in body["last_error"]
+
+    def test_status_reports_starting_while_world_loads(self, client, auth_headers):
+        fake = _fake_docker(
+            _fake_container(logs=b"INFO - Running Valheim Server\nBepInEx started\n")
+        )
+        with (
+            patch("main.get_docker", return_value=fake),
+            patch("main._latest_log_file", return_value=None),
+            patch("main._read_env", return_value={}),
+        ):
+            body = client.get("/valheim/status", headers=auth_headers).json()
+        assert body["state"] == "starting"
+        assert body["last_error"] is None
+
+    def test_status_stopped_reports_stopped_state(self, client, auth_headers):
+        fake = _fake_docker(_fake_container(status="exited", logs=b"ignored\n"))
+        with (
+            patch("main.get_docker", return_value=fake),
+            patch("main._latest_log_file", return_value=None),
+            patch("main._read_env", return_value={}),
+        ):
+            body = client.get("/valheim/status", headers=auth_headers).json()
+        assert body["state"] == "stopped"
+
+
+class TestReadinessAssessment:
+    def test_ready_when_world_loaded(self, main_module):
+        lines = ["INFO - Running Valheim Server", "ZDOMan.LoadChunks done"]
+        assert main_module._assess_readiness(lines) == ("ready", None)
+
+    def test_error_after_failed_world_load(self, main_module):
+        lines = ["INFO - Running Valheim Server", "World load failed mid-file. Exiting"]
+        state, error = main_module._assess_readiness(lines)
+        assert state == "error"
+        assert error is not None and "World load failed" in error
+
+    def test_starting_before_world_load(self, main_module):
+        assert main_module._assess_readiness(["INFO - Running Valheim Server"])[0] == (
+            "starting"
+        )
+
+    def test_stale_failure_ignored_after_successful_reload(self, main_module):
+        lines = [
+            "World load failed mid-file",
+            "INFO - Running Valheim Server",
+            "ZDOMan.LoadChunks done",
+        ]
+        assert main_module._assess_readiness(lines) == ("ready", None)
+
+    def test_no_markers_is_ready(self, main_module):
+        assert main_module._assess_readiness(["baby server humming"]) == ("ready", None)
+
+
+class TestValheimLogs:
+    def test_logs_prefer_container_output(self, client, auth_headers):
+        fake = _fake_docker(_fake_container(logs=b"line one\nline two\n"))
+        with (
+            patch("main.get_docker", return_value=fake),
+            patch("main._latest_log_file", return_value=None),
+        ):
+            body = client.get("/valheim/logs?lines=5", headers=auth_headers).json()
+        assert body["lines"] == ["line one", "line two"]
+        assert body["file"] == "docker"
 
 
 class TestValheimStart:

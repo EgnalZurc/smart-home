@@ -75,6 +75,9 @@ VALHEIM_ENV_FILE: Path = VALHEIM_SERVER_DIR / ".env"
 VALHEIM_WORLDS_DIR: Path = VALHEIM_SERVER_DIR / "server_data" / "worlds_local"
 VALHEIM_LOGS_DIR: Path = VALHEIM_SERVER_DIR / "server_data" / "logs"
 
+# Number of recent container log lines inspected for status/readiness.
+VALHEIM_LOG_TAIL_LINES: int = 500
+
 # Power profile GUIDs (from powercfg /list)
 POWER_PROFILES: dict[str, str] = {
     "gaming": "cfd582e3-13dc-41bf-82c3-f576249cc8d2",
@@ -207,18 +210,18 @@ def valheim_status(
             except Exception:
                 pass
 
-        # Get join code and players from logs
-        join_code: str | None = None
-        players: int = 0
-        log: Path | None = _latest_log_file()
-        if log and log.exists():
-            try:
-                lines: str = log.read_text(errors="replace")
-                recent: str = "\n".join(lines.splitlines()[-500:])
-                join_code = _parse_join_code(recent)
-                players = _parse_players(recent)
-            except Exception:
-                pass
+        # Get join code, players and readiness from the live container logs.
+        # The BepInEx entrypoint no longer writes /config/logs/valheim_*.log,
+        # so the historical log directory can be weeks out of date.
+        lines: list[str] = _recent_log_lines(container)
+        recent: str = "\n".join(lines)
+        join_code: str | None = _parse_join_code(recent)
+        players: int = _parse_players(recent)
+        readiness: str
+        last_error: str | None
+        readiness, last_error = _assess_readiness(lines)
+        if container.status != "running":
+            readiness, last_error = "stopped", None
 
         # Get world info from .env
         env: dict[str, str] = _read_env()
@@ -227,6 +230,8 @@ def valheim_status(
             "container": VALHEIM_CONTAINER,
             "status": container.status,
             "running": container.status == "running",
+            "state": readiness,
+            "last_error": last_error,
             "started_at": started_at,
             "finished_at": state.get("FinishedAt"),
             "exit_code": state.get("ExitCode"),
@@ -386,6 +391,112 @@ def _latest_log_file() -> Path | None:
     return logs[0] if logs else None
 
 
+def _non_empty_lines(raw: object) -> list[str]:
+    """Split raw log output into non-empty lines, ignoring unknown types."""
+    if isinstance(raw, bytes):
+        text: str = raw.decode("utf-8", errors="replace")
+    elif isinstance(raw, str):
+        text = raw
+    else:
+        return []
+    return [line for line in text.splitlines() if line.strip()]
+
+
+def _container_log_lines(
+    container: Container | None,
+    tail: int = VALHEIM_LOG_TAIL_LINES,
+) -> list[str]:
+    """Return the last ``tail`` lines of live container output, or [].
+
+    Args:
+        container: Docker container to read from (may be ``None``).
+        tail: Maximum number of trailing lines to return.
+    """
+    if container is None:
+        return []
+    try:
+        raw: bytes | str = container.logs(tail=tail)
+    except Exception as e:  # noqa: BLE001 - Docker API raises many types
+        logger.warning("Could not read container logs: %s", e)
+        return []
+    return _non_empty_lines(raw)[-tail:]
+
+
+def _recent_log_lines(
+    container: Container | None = None,
+    tail: int = VALHEIM_LOG_TAIL_LINES,
+) -> list[str]:
+    """Return recent server log lines, preferring the live container output.
+
+    The BepInEx entrypoint stops writing ``/config/logs/valheim_*.log``, so the
+    historical log directory can be months old. ``docker logs`` always reflects
+    the process that is running right now.
+
+    Args:
+        container: Optional Docker container to read logs from.
+        tail: Maximum number of trailing lines to return.
+
+    Returns:
+        Log lines (oldest first), or an empty list when no source is readable.
+    """
+    lines: list[str] = _container_log_lines(container, tail)
+    if lines:
+        return lines
+
+    log: Path | None = _latest_log_file()
+    if log and log.exists():
+        try:
+            return _non_empty_lines(log.read_text(errors="replace"))[-tail:]
+        except OSError as e:
+            logger.warning("Could not read log file %s: %s", log, e)
+    return []
+
+
+def _truncate(text: str, limit: int = 200) -> str:
+    """Shorten a log line for status responses."""
+    text = text.strip()
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _assess_readiness(lines: list[str]) -> tuple[str, str | None]:
+    """Classify how ready the server is from recent log lines.
+
+    Valheim logs a fresh ``Running Valheim Server`` on every (re)start and
+    ``ZDOMan.LoadChunks done`` once the world is loaded. A crash loop shows up
+    as ``World load failed mid-file`` right after the world load starts.
+
+    Args:
+        lines: Recent log lines, oldest first.
+
+    Returns:
+        ``(state, last_error)`` where ``state`` is ``ready``, ``starting`` or
+        ``error``, and ``last_error`` is a short description when ``error``.
+    """
+    last_load: int = -1
+    last_start: int = -1
+    last_failure: int = -1
+    error_line: str | None = None
+
+    for index, line in enumerate(lines):
+        if "Running Valheim Server" in line:
+            last_start = index
+        elif "ZDOMan.LoadChunks done" in line:
+            last_load = index
+        elif "World load failed" in line or "Exception while loading world" in line:
+            if index > last_failure:
+                last_failure = index
+                if "World load failed" in line:
+                    error_line = line[line.find("World load failed") :]
+                elif error_line is None:
+                    error_line = line[line.find("Exception while loading world") :]
+
+    if last_failure >= 0 and last_failure > last_load:
+        return "error", _truncate(error_line or "World load failed")
+    if last_start > last_load:
+        return "starting", None
+    return "ready", None
+
+
 def _parse_join_code(log_lines: str) -> str | None:
     """Extract 6-digit join code from logs."""
     match: re.Match[str] | None = re.search(
@@ -476,15 +587,32 @@ def get_logs(
     lines: int = 80,
     x_api_token: str | None = Header(None, alias="X-Api-Token"),
 ) -> dict[str, Any]:
-    """Get recent Valheim server logs."""
+    """Get recent Valheim server logs.
+
+    Reads the live container output when Docker is available, falling back to
+    the historical log directory.
+    """
     require_auth(x_api_token)
+
+    container: Container | None = None
+    client: docker.DockerClient | None = get_docker()
+    if client:
+        try:
+            container = client.containers.get(VALHEIM_CONTAINER)
+        except Exception:  # noqa: BLE001 - container may not exist yet
+            container = None
+
+    current_lines: list[str] = _container_log_lines(container, tail=lines)
+    if current_lines:
+        return {"lines": current_lines, "file": "docker"}
+
     log: Path | None = _latest_log_file()
     if not log or not log.exists():
         return {"lines": [], "file": None}
     try:
-        all_lines: list[str] = log.read_text(errors="replace").splitlines()
+        all_lines: list[str] = _non_empty_lines(log.read_text(errors="replace"))
         return {"lines": all_lines[-lines:], "file": log.name}
-    except Exception as e:
+    except OSError as e:
         return {"lines": [], "error": str(e)}
 
 

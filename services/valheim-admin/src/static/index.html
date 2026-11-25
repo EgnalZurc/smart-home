@@ -27,6 +27,7 @@
   .status-pill { display:inline-flex; align-items:center; gap:6px; font-size:.8rem; font-weight:600; padding:4px 10px; border-radius:99px; }
   .status-pill.online  { background:rgba(34,197,94,.15); color:#86efac; }
   .status-pill.offline { background:rgba(239,68,68,.12); color:#fca5a5; }
+  .status-pill.warn    { background:rgba(245,158,11,.15); color:#fcd34d; }
   .status-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; animation:pulse 2s infinite; }
   .status-dot.green { background:#22c55e; }
   .status-dot.red   { background:#ef4444; }
@@ -311,20 +312,37 @@ function fmtUptime(secs) {
 async function loadStatus() {
     try {
         const d = await fetch('./api/status').then(r => r.json());
+        // `state` is the real readiness reported by pc-agent (ready/starting/
+        // error/stopped). Older pc-agent builds only expose `running`, so fall
+        // back to it when `state` is missing.
+        const state = d.running ? (d.state || 'ready') : 'stopped';
+        const ready = state === 'ready';
         serverRunning    = d.running;
         crossplayEnabled = d.crossplay;
         const row    = document.getElementById('status-row');
-        const uptime = fmtUptime(d.uptime_seconds);
+        const uptime = ready ? fmtUptime(d.uptime_seconds) : null;
+        const pill = {
+            ready:    { cls: 'online',  dot: 'green', label: 'Online' },
+            starting: { cls: 'warn',    dot: 'green', label: 'Iniciando…' },
+            error:    { cls: 'offline', dot: 'red',   label: 'Error' },
+            stopped:  { cls: 'offline', dot: 'red',   label: 'Offline' },
+        }[state] || { cls: 'offline', dot: 'red', label: 'Offline' };
         row.innerHTML = `
-            <span class="status-pill ${d.running ? 'online' : 'offline'}">
-                <span class="status-dot ${d.running ? 'green' : 'red'}"></span>
-                ${d.running ? 'Online' : 'Offline'}
+            <span class="status-pill ${pill.cls}">
+                <span class="status-dot ${pill.dot}"></span>
+                ${pill.label}
             </span>
             <span class="stat-item">Mundo: <strong>${d.world || '—'}</strong></span>
             ${uptime ? `<span class="stat-item">Activo: <strong>${uptime}</strong></span>` : ''}
+            ${state === 'starting' ? '<span class="stat-item">Cargando mundo…</span>' : ''}
         `;
+        if (state === 'error') {
+            row.innerHTML += `<div style="flex-basis:100%;font-size:.75rem;color:#fca5a5;margin-top:4px">
+                ${d.last_error || 'El servidor está fallando al cargar el mundo'} — revisa los logs
+            </div>`;
+        }
         const jcs = document.getElementById('join-code-section');
-        if (d.crossplay && d.join_code && d.running) {
+        if (d.crossplay && d.join_code && ready) {
             jcs.style.display = 'block';
             jcs.innerHTML = `
                 <div class="join-code-box">
@@ -337,7 +355,9 @@ async function loadStatus() {
                 </div>`;
         } else if (d.crossplay && d.running) {
             jcs.style.display = 'block';
-            jcs.innerHTML = `<div class="no-crossplay">Crossplay activo — el código aparecerá en unos segundos…</div>`;
+            jcs.innerHTML = state === 'error'
+                ? `<div class="no-crossplay">Sin código: el servidor no ha terminado de cargar.</div>`
+                : `<div class="no-crossplay">Crossplay activo — el código aparecerá en unos segundos…</div>`;
         } else {
             jcs.style.display = 'none';
         }
@@ -382,8 +402,23 @@ function copyCode(code) {
 // ── Connect instructions ───────────────────────────────────────────────────
 function renderConnectInstructions(d) {
     const el = document.getElementById('connect-instructions');
+    const state = d.running ? (d.state || 'ready') : 'stopped';
     if (!d.running) {
         el.innerHTML = '<span style="color:#475569">El servidor está parado.</span>';
+        return;
+    }
+    if (state === 'error') {
+        el.innerHTML = `
+            <p style="margin-bottom:8px"><strong style="color:#fca5a5">El servidor no ha podido cargar el mundo.</strong></p>
+            <p style="color:#64748b;font-size:.8rem">${d.last_error || 'Revisa los logs para ver el error.'}</p>`;
+        return;
+    }
+    if (state === 'starting') {
+        el.innerHTML = `
+            <p style="color:#64748b;font-size:.8rem">
+                <span class="spinner" style="width:12px;height:12px;border-width:1.5px;display:inline-block;vertical-align:middle;margin-right:6px"></span>
+                Servidor arrancando… espera a que termine de cargar el mundo antes de conectarte.
+            </p>`;
         return;
     }
     if (d.crossplay && d.join_code) {
@@ -393,7 +428,7 @@ function renderConnectInstructions(d) {
                 <li>Abre Valheim → <strong>Empezar partida</strong> → selecciona tu personaje → <strong>Empezar</strong></li>
                 <li>Pestaña <strong>Unirse a la partida</strong> → <strong>Agregar servidor</strong></li>
                 <li>Introduce el código: <strong style="color:#a5b4fc;font-size:1.1em;letter-spacing:.1em">${d.join_code}</strong> → confirma</li>
-                <li>Selecciona <strong>PabloMundo</strong> en la lista → <strong>Conectar</strong></li>
+                <li>Selecciona <strong>${d.server_name || 'el servidor'}</strong> en la lista → <strong>Conectar</strong></li>
                 <li>Contraseña: <strong style="color:#a5b4fc">la configurada en el servidor</strong></li>
             </ol>
             <p style="margin-top:8px;font-size:.75rem;color:#475569">⚠️ El código cambia cada vez que se reinicia el servidor. Consúltalo aquí antes de conectarte.</p>`;
